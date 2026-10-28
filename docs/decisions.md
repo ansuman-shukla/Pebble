@@ -13,16 +13,17 @@
 | D7 | 15 citizens in v0: town 6, band A 5, band B 4 | small enough to run and read, big enough for social dynamics | 2026-10-28 |
 | D8 | Backend/frontend organized like Associo (FastAPI + SQLModel + Alembic + Postgres + uv; Vite + React + TS + pnpm) | familiar production layout | 2026-10-28 |
 | D9 | Memory, minds and observability live in the backend | one owner for world truth and what minds see | 2026-10-28 |
+| D10 | Town look: castle town as in the reference image (stone-based keep, ~1600 style), pre-industrial technology | matches the reference and Polyfork's Medieval Japan kit | 2026-10-28 |
+| D11 | Local Postgres via `docker compose`, port 5544, data bind-mounted in `.runtime/postgres` | contained in the repo, no clash with Associo's DB | 2026-10-28 |
+| D12 | Python 3.12 | current stable for a new codebase | 2026-10-28 |
+| D13 | World radius 2 km, 1 real s = 1 game min | readable distances for 15 citizens; game day = 24 real minutes | 2026-10-28 |
+| D14 | Deaths in v0: the dead stay dead; restart from a seed when needed | no births until v2 | 2026-10-28 |
+| D15 | 3D stack: react-three-fiber + drei | fits the React frontend | 2026-10-28 |
+| D16 | Harness leaks in speech (paths, links): forbid in prompts, flag in the disclosure log, never rewrite speech | keep the experiment honest | 2026-10-28 |
+| D17 | 3D assets from Polyfork (all low-poly parts free), vendored into the frontend with a manifest | kits match the town, forests, snow, volcanic landmarks; no hotlinking | 2026-10-28 |
 
 ## Open (recommendation first)
 
 | # | Question | Recommendation | Alternatives |
 |---|---|---|---|
-| O1 | Town era and look | castle town as in the reference image (stone-based keep, ~1600 style), technology kept pre-industrial | Kamakura-era (~1300) look without a stone castle |
-| O2 | Local Postgres | `docker compose`, port 5544, data bind-mounted in `.runtime/postgres` | Homebrew Postgres with data dir in `.runtime/` |
-| O3 | Python version | 3.12 | 3.11 like Associo |
-| O4 | World size and speed | radius 2 km, 1 real s = 1 game min | bigger radius with faster game clock |
-| O5 | Deaths in v0 (no births yet) | the dead stay dead; restart the run from a seed when needed | respawn newcomers |
-| O6 | 3D stack | react-three-fiber + drei | plain three.js in a React shell |
-| O7 | Harness leaks in speech (file paths, markdown links) | forbid in persona prompts and flag in the disclosure log; don't rewrite speech | strip them before others hear |
 | O8 | Public hosting split (v1) | frontend + read-only API + DB hosted; engine and minds stay on the Mac and push events | everything on one VM (needs Devin CLI + Claude Code there) |
