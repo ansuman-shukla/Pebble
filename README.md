@@ -23,6 +23,9 @@ gitignored folders.
 
 `./scripts/pnpm.sh test` runs Playwright against the frontend on 5180 (starting it if needed). To test another
 checkout's frontend, run it on its own port and set `PLAYWRIGHT_PORT`, e.g. `PLAYWRIGHT_PORT=5190 ./scripts/pnpm.sh test`
-(the status test also needs that origin in the backend's `FRONTEND_ORIGINS`).
+(the status test also needs that origin in the backend's `FRONTEND_ORIGINS`). On macOS the tests render WebGL on the GPU
+(`--use-angle=metal`); headless Chrome's default software WebGL is too slow for the town.
 
-Status: phase A, M0 scaffold.
+Open http://localhost:5180 to walk the town (WASD, Shift run, drag to look, C camera).
+
+Status: phase A, M2 walkable town.
