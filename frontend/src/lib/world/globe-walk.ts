@@ -24,6 +24,7 @@ import {
   type WalkWorld,
 } from './collision';
 import {
+  type Globe,
   type GlobeTerrain,
   type SiteMapping,
   siteMapping,
@@ -119,8 +120,14 @@ export interface GlobeWalk {
 
 const NO_SHAPES: readonly Shape[] = [];
 
+/** What walking needs of the terrain: heights, biomes and the nearest cell. */
+export type WalkTerrain = Pick<
+  GlobeTerrain,
+  'nearestCell' | 'heightAt' | 'biomeAt'
+> & { globe: Pick<Globe, 'radius' | 'biomes'> };
+
 export function createGlobeWalk(
-  terrain: GlobeTerrain,
+  terrain: WalkTerrain,
   charts: WalkChart[],
   wildBlockers: WildBlockers | null,
 ): GlobeWalk {

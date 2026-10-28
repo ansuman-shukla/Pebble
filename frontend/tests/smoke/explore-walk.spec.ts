@@ -9,9 +9,11 @@ import {
   cellDirection,
   tangent,
   tangentFrame,
-  WATER_BIOMES,
 } from '../../src/lib/world/globe';
-import { MAX_GRADE } from '../../src/lib/world/globe-walk';
+import {
+  createGlobeWalk,
+  type WalkTerrain,
+} from '../../src/lib/world/globe-walk';
 import { pickSurface } from '../../src/lib/world/globe-pick';
 import type { ScatterInstance } from '../../src/lib/world/scatter';
 import {
@@ -141,130 +143,102 @@ test('ground cover never blocks, even tall reeds', () => {
   }
 });
 
-/** The steepest land point (rise per metre along the gradient) away from sites, sampled over the cells. */
-function slopes() {
-  const { globe } = world.terrain;
-  const sites = world.view.sites.map(
-    (site) => new Vector3(...site.anchor.position),
-  );
-  const steep: { at: Vector3; uphill: Vector3; grade: number }[] = [];
-  const gentle: typeof steep = [];
-  for (let cell = 0; cell < globe.cellCount; cell += 5) {
-    if (WATER_BIOMES.has(globe.biomes[cell]) || globe.heights[cell] < 5)
-      continue;
-    const at = cellDirection(globe, cell, new Vector3());
-    if (sites.some((site) => site.angleTo(at) * world.R < 350)) continue;
-    const { east, north } = tangentFrame(at);
-    const base = at.clone().multiplyScalar(world.R);
-    const h = (v: Vector3) => world.terrain.heightAt(v);
-    const ge = (h(base.clone().addScaledVector(east, 0.5)) - h(base)) / 0.5;
-    const gn = (h(base.clone().addScaledVector(north, 0.5)) - h(base)) / 0.5;
-    const grade = Math.hypot(ge, gn);
-    const uphill = east
-      .multiplyScalar(ge)
-      .addScaledVector(north, gn)
-      .normalize();
-    // the same slope must hold for a few metres uphill: every half metre rises by grade·0.5
-    const rises = [0, 0.5, 1, 1.5, 2, 2.5].map((d) =>
-      h(base.clone().addScaledVector(uphill, d)),
-    );
-    const grades = rises.slice(1).map((r, k) => (r - rises[k]) / 0.5);
-    if (grades.every((g) => g > 1.4) && steep.length < 4)
-      steep.push({ at, uphill, grade });
-    if (grades.every((g) => g > 0.15 && g < 0.6) && gentle.length < 4)
-      gentle.push({ at, uphill, grade });
-    if (steep.length >= 4 && gentle.length >= 4) break;
-  }
-  return { steep, gentle };
+/*
+ * Slopes on a synthetic terrain (the smoothed world has hardly any faces over 45°): east of the origin
+ * direction the ground rises gently (0.3 per metre), then from s = 0 a 58° cliff (1.6 per metre) up to a flat
+ * top at s = 30 m. Heights are exact, so a face edge sits exactly at s = 0.
+ */
+const GENTLE = 0.3;
+const CLIFF = 1.6;
+
+/** The synthetic terrain with its uphill direction turned `turn` degrees from east towards north. */
+function cliffWalk(turn = 0) {
+  const radius = 2000;
+  const angle = (turn * Math.PI) / 180;
+  /** Local metres east and north of the origin direction. */
+  const local = (direction: Vector3) => {
+    const unit = direction.clone().normalize();
+    return {
+      x: radius * Math.atan2(unit.x, unit.z),
+      y: radius * Math.asin(unit.y),
+    };
+  };
+  /** Metres uphill (across the cliff) from its foot. */
+  const across = (direction: Vector3) => {
+    const { x, y } = local(direction);
+    return x * Math.cos(angle) + y * Math.sin(angle);
+  };
+  const profile = (s: number) =>
+    s <= 0 ? 50 + GENTLE * s : 50 + CLIFF * Math.min(s, 30);
+  const terrain: WalkTerrain = {
+    globe: { radius, biomes: new Uint8Array([3]) },
+    nearestCell: () => 0,
+    heightAt: (direction) => profile(across(direction)),
+    biomeAt: () => 3,
+  };
+  const walk = createGlobeWalk(terrain, [], null);
+  /**
+   * Walks east from `s0` metres across the cliff (on its fall line) in strides of `stride` metres; returns the
+   * rise and how far the player got.
+   */
+  return (s0: number, distance: number, stride: number, travel = false) => {
+    let direction = new Vector3(
+      Math.sin((s0 * Math.cos(angle)) / radius),
+      Math.sin((s0 * Math.sin(angle)) / radius),
+      1,
+    ).normalize();
+    const start = direction.clone();
+    const steps = Math.round(distance / stride);
+    for (let k = 0; k < steps; k++) {
+      const ground = terrain.heightAt(direction);
+      const heading = tangentFrame(direction).east.multiplyScalar(stride);
+      direction = walk.move(
+        direction.clone().multiplyScalar(radius + ground),
+        heading,
+        ground,
+        travel,
+      );
+    }
+    return {
+      rise: terrain.heightAt(direction) - terrain.heightAt(start),
+      run: across(direction) - s0,
+      moved: start.angleTo(direction) * radius,
+    };
+  };
 }
 
 test('cliffs steeper than 45° cannot be climbed, gentle slopes can (travel climbs anything)', () => {
-  const walk = world.walk({ props: false });
-  const { steep, gentle } = slopes();
-  expect(steep.length).toBeGreaterThan(0);
-  expect(gentle.length).toBeGreaterThan(0);
-  const climb = (at: Vector3, uphill: Vector3, travel: boolean) => {
-    const target = at
-      .clone()
-      .multiplyScalar(world.R)
-      .addScaledVector(uphill, 2)
-      .normalize();
-    const path = walkTowards(world, walk, at, target, { steps: 80, travel });
-    const end = path[path.length - 1];
-    return {
-      rise: world.terrain.heightAt(end) - world.terrain.heightAt(at),
-      run: metres(world, at, end),
-    };
-  };
-  for (const { at, uphill } of steep) {
-    const walked = climb(at, uphill, false);
-    // never up the face: at most a contour slide gains a little height
-    expect(walked.rise).toBeLessThanOrEqual(walked.run * MAX_GRADE + 0.05);
-    expect(walked.rise).toBeLessThan(1);
-    expect(climb(at, uphill, true).rise).toBeGreaterThan(2);
-  }
-  for (const { at, uphill, grade } of gentle) {
-    const walked = climb(at, uphill, false);
-    expect(walked.run).toBeGreaterThan(1.9);
-    expect(walked.rise).toBeGreaterThan(grade * 2 * 0.5);
-  }
+  const walkEast = cliffWalk();
+  // up the gentle slope: all the way, at its grade
+  const gentle = walkEast(-10, 2, 0.05);
+  expect(gentle.run).toBeCloseTo(2, 1);
+  expect(gentle.rise).toBeCloseTo(2 * GENTLE, 1);
+  // straight at the cliff face: no height gained
+  const cliff = walkEast(10, 2, 0.05);
+  expect(cliff.rise).toBeLessThan(0.05);
+  // walking into the cliff from the gentle slope stops at its foot (sensing it half a metre ahead)
+  const foot = walkEast(-2, 4, 0.05);
+  expect(foot.run).toBeGreaterThan(1.4);
+  expect(foot.run).toBeLessThan(2.05);
+  // travel mode climbs it
+  expect(walkEast(10, 2, 0.05, true).rise).toBeGreaterThan(1.9 * CLIFF);
 });
 
-/** Points where gentle ground meets a cliff within a metre uphill (a face edge of the terrain mesh). */
-function cliffEdges() {
-  const { globe } = world.terrain;
-  const sites = world.view.sites.map(
-    (site) => new Vector3(...site.anchor.position),
-  );
-  const edges: { at: Vector3; uphill: Vector3 }[] = [];
-  for (let cell = 0; cell < globe.cellCount && edges.length < 3; cell += 2) {
-    if (WATER_BIOMES.has(globe.biomes[cell]) || globe.heights[cell] < 5)
-      continue;
-    const centre = cellDirection(globe, cell, new Vector3());
-    if (sites.some((site) => site.angleTo(centre) * world.R < 350)) continue;
-    const { east, north } = tangentFrame(centre);
-    for (let k = 0; k < 48 && edges.length < 3; k++) {
-      // points around the cell, every way
-      const base = centre
-        .clone()
-        .multiplyScalar(world.R)
-        .addScaledVector(east, ((k % 4) - 1.5) * 4)
-        .addScaledVector(north, ((Math.floor(k / 4) % 3) - 1) * 4);
-      const angle = (Math.floor(k / 12) / 4) * Math.PI * 2 + (k % 3);
-      const uphill = east
-        .clone()
-        .multiplyScalar(Math.cos(angle))
-        .addScaledVector(north, Math.sin(angle));
-      const heights = Array.from({ length: 13 }, (_, i) =>
-        world.terrain.heightAt(base.clone().addScaledVector(uphill, i * 0.1)),
-      );
-      const grade = (i: number) => (heights[i + 1] - heights[i]) / 0.1;
-      const gentle = [0, 1, 2, 3].every((i) => Math.abs(grade(i)) < 0.8);
-      const cliff = [5, 6, 7, 8, 9, 10, 11].every((i) => grade(i) > 1.4);
-      if (gentle && cliff) edges.push({ at: base.normalize(), uphill });
-    }
-  }
-  return edges;
-}
+test('walking obliquely into a cliff slides along it', () => {
+  // the cliff faces 30° off the walking direction: the step's uphill part is dropped, the rest slides on
+  const walkEast = cliffWalk(30);
+  const slide = walkEast(10, 2, 0.05);
+  expect(slide.rise).toBeLessThan(0.05);
+  expect(slide.moved).toBeGreaterThan(0.8);
+});
 
 test('a long stride from gentle ground stops at the foot of a cliff', () => {
-  const walk = world.walk({ props: false });
-  const edges = cliffEdges();
-  expect(edges.length).toBeGreaterThan(0);
-  for (const { at, uphill } of edges) {
-    // one long step (a slow frame at a run): the slope just ahead is gentle, the cliff starts 0.5 m on
-    const position = at
-      .clone()
-      .multiplyScalar(world.R + world.terrain.heightAt(at));
-    const end = walk.move(
-      position,
-      uphill.clone().multiplyScalar(1.2),
-      world.terrain.heightAt(at),
-      false,
-    );
-    const rise = world.terrain.heightAt(end) - world.terrain.heightAt(at);
-    expect(rise).toBeLessThan(0.6);
-  }
+  const walkEast = cliffWalk();
+  // one long step (a slow frame at a run): the ground just ahead is gentle, the cliff starts 0.8 m on
+  const stride = walkEast(-0.8, 1.2, 1.2);
+  // (without the per-step rise check it would end 0.4 m up the face, 0.88 m higher)
+  expect(stride.rise).toBeLessThan(0.45);
+  expect(stride.run).toBeLessThan(0.9);
 });
 
 /** World direction of a site's local point. */
