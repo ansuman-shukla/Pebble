@@ -58,7 +58,44 @@ export type PropKind =
   | 'reed_torch'
   | 'petroglyph_boulder'
   | 'fallen_log'
-  | 'rock';
+  | 'rock'
+  // biome trees and plants
+  | 'oak_tree'
+  | 'birch_tree'
+  | 'pine_tree'
+  | 'young_pine'
+  | 'snowy_spruce'
+  | 'acacia_tree'
+  | 'tree_fern'
+  | 'dead_tree'
+  | 'dwarf_pine'
+  | 'bush'
+  | 'dry_bush'
+  | 'fern'
+  | 'grass_tuft'
+  | 'dry_grass'
+  | 'dune_grass'
+  | 'wildflower'
+  | 'cattail'
+  | 'driftwood'
+  | 'termite_mound'
+  // biome rocks
+  | 'small_rock'
+  | 'boulder'
+  | 'coastal_boulder'
+  | 'rock_outcrop'
+  | 'boulder_field'
+  | 'scree'
+  | 'ice_block'
+  // landmarks
+  | 'rock_spire'
+  | 'basalt_column'
+  | 'lava_rock'
+  | 'obsidian'
+  | 'fumarole'
+  | 'geyser'
+  | 'hot_spring_pool'
+  | 'giant_tree';
 
 export const PROPS: Record<PropKind, string> = {
   castle_keep: 'tenshu-keep-2ff636',
@@ -111,7 +148,54 @@ export const PROPS: Record<PropKind, string> = {
   petroglyph_boulder: 'petroglyph-boulder-7203c3',
   fallen_log: 'fallen-log-1685fb',
   rock: 'medium-rock-e08405',
+  oak_tree: 'broadleaf-oak-997c22',
+  birch_tree: 'birch-tree-181b33',
+  pine_tree: 'tall-pine-tree-ab4108',
+  young_pine: 'young-pine-0d7695',
+  snowy_spruce: 'snow-laden-spruce-36716e',
+  acacia_tree: 'espino-cd3edd',
+  tree_fern: 'tree-fern-78320e',
+  dead_tree: 'dead-tree-6795fa',
+  dwarf_pine: 'dwarf-pine-mat-faee77',
+  bush: 'round-bush-cd2ac0',
+  dry_bush: 'sagebrush-700b03',
+  fern: 'fern-plant-1559b8',
+  grass_tuft: 'grass-tuft-a40a08',
+  dry_grass: 'grass-tuft-62e90c',
+  dune_grass: 'marram-grass-tuft-8c7a99',
+  wildflower: 'wildflower-68d3a1',
+  cattail: 'cattail-reed-6abbb3',
+  driftwood: 'driftwood-log-90340b',
+  termite_mound: 'termite-mound-9bc94b',
+  small_rock: 'small-rock-db33a7',
+  boulder: 'large-boulder-a29b99',
+  coastal_boulder: 'large-coastal-boulder-a2cab1',
+  rock_outcrop: 'rock-outcrop-158ac3',
+  boulder_field: 'boulder-field-cluster-08e364',
+  scree: 'scree-heap-42cce5',
+  ice_block: 'ice-chunk-b23ad7',
+  rock_spire: 'rock-spire-13819c',
+  basalt_column: 'basalt-column-outcrop-f1339d',
+  lava_rock: 'lava-rock-pile-d56d19',
+  obsidian: 'obsidian-shard-cluster-c8f5d3',
+  fumarole: 'fumarole-vent-8280ba',
+  geyser: 'geyser-cone-2b5033',
+  hot_spring_pool: 'hot-spring-pool-26312c',
+  giant_tree: 'oak-tree-50ee7c',
 };
+
+/**
+ * Kinds drawn larger than the asset's real-world size (the backend footprints in data/world/kinds.yaml match).
+ * The elder tree is a gnarled oak enlarged to read as ancient (D39); the ice chunk (0.9 m) is drawn as a block
+ * that can mark the ice gate.
+ */
+const KIND_SCALE: Partial<Record<string, number>> = {
+  giant_tree: 3.5,
+  ice_block: 3,
+};
+
+/** Uniform render scale of a kind (1 for everything at real size). */
+export const kindScale = (kind: string) => KIND_SCALE[kind] ?? 1;
 
 export type AnimalKind =
   | 'deer'

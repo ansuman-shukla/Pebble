@@ -1,73 +1,53 @@
 import { useGLTF } from '@react-three/drei';
 import { useEffect, useMemo } from 'react';
-import {
-  type BufferGeometry,
-  InstancedMesh,
-  type Material,
-  Matrix4,
-  type Mesh,
-  Quaternion,
-  Vector3,
-} from 'three';
+import { InstancedMesh, Matrix4, Vector3 } from 'three';
 
+import { kindParts } from '@/components/world/kind-parts';
 import type { TownPlacement } from '@/lib/client/types.gen';
-import { assetBaseY, assetUrl } from '@/lib/world/assets';
+import { assetBaseY, assetUrl, kindScale } from '@/lib/world/assets';
 import { assetIdForKind } from '@/lib/world/collision';
-import { openDoors } from '@/lib/world/doors';
+import { FLAT_MAPPING, type LocalMapping } from '@/lib/world/local-mapping';
 
 /*
  * Every placement of one kind is drawn as instances: one InstancedMesh per sub-mesh of the kind's GLB, with
  * the sub-mesh's transform inside the model baked into each instance matrix. Doors are opened on the source
  * first and models sit at assetBaseY, exactly like the walker's colliders, so what you see is what blocks you.
+ * The mapping places local metres in the world (flat on the town page, wrapped onto the planet on the globe).
  */
 
 /** Kinds lying flat on the ground: their shadows would be invisible, so they skip the shadow pass. */
 const FLAT_KINDS = new Set(['rice_paddy', 'paving_tile']);
 
-const Y_AXIS = new Vector3(0, 1, 0);
-
-function placementMatrix(placement: TownPlacement, baseY: number) {
-  return new Matrix4().compose(
-    new Vector3(placement.x, baseY, placement.z),
-    new Quaternion().setFromAxisAngle(
-      Y_AXIS,
-      (placement.rotation_deg * Math.PI) / 180,
-    ),
-    new Vector3(1, 1, 1),
-  );
-}
+type PlacementsProps = {
+  placements: TownPlacement[];
+  mapping: LocalMapping;
+  /** Extra local height per placement (e.g. to stand it on uneven terrain). */
+  lift?: (placement: TownPlacement) => number;
+};
 
 function KindInstances({
   kind,
   placements,
-}: {
-  kind: string;
-  placements: TownPlacement[];
-}) {
+  mapping,
+  lift,
+}: PlacementsProps & { kind: string }) {
   const id = assetIdForKind(kind);
   const { scene } = useGLTF(assetUrl(id));
 
   const meshes = useMemo(() => {
-    const source = scene.clone(true);
-    openDoors(source, id);
-    source.updateMatrixWorld(true);
-    const parts: {
-      geometry: BufferGeometry;
-      material: Material;
-      inModel: Matrix4;
-    }[] = [];
-    source.traverse((object) => {
-      const mesh = object as Mesh;
-      if (mesh.isMesh)
-        parts.push({
-          geometry: mesh.geometry,
-          material: mesh.material as Material,
-          inModel: mesh.matrixWorld.clone(),
-        });
-    });
+    const parts = kindParts(scene, id);
     const baseY = assetBaseY(id);
+    const scale = kindScale(kind);
     const placed = placements.map((placement) =>
-      placementMatrix(placement, baseY),
+      mapping
+        .matrix(
+          placement.x,
+          baseY + (lift?.(placement) ?? 0),
+          placement.z,
+          (placement.rotation_deg * Math.PI) / 180,
+          new Matrix4(),
+        )
+        .scale(new Vector3(scale, scale, scale)),
     );
     const matrix = new Matrix4();
     return parts.map(({ geometry, material, inModel }) => {
@@ -83,7 +63,7 @@ function KindInstances({
       instances.receiveShadow = true;
       return instances;
     });
-  }, [scene, id, kind, placements]);
+  }, [scene, id, kind, placements, mapping, lift]);
 
   // the geometry and material belong to the cached GLB; only the instance buffers are ours
   useEffect(
@@ -100,12 +80,14 @@ function KindInstances({
   );
 }
 
-/** All town placements, grouped by kind; suspends until every GLB is loaded, then calls onReady. */
+/** All placements of a place, grouped by kind; suspends until every GLB is loaded, then calls onReady. */
 export function TownPlacements({
   placements,
+  mapping = FLAT_MAPPING,
+  lift,
   onReady,
-}: {
-  placements: TownPlacement[];
+}: Omit<PlacementsProps, 'mapping'> & {
+  mapping?: LocalMapping;
   onReady?: () => void;
 }) {
   const byKind = useMemo(() => {
@@ -125,7 +107,13 @@ export function TownPlacements({
   return (
     <>
       {[...byKind].map(([kind, group]) => (
-        <KindInstances key={kind} kind={kind} placements={group} />
+        <KindInstances
+          key={kind}
+          kind={kind}
+          placements={group}
+          mapping={mapping}
+          lift={lift}
+        />
       ))}
     </>
   );

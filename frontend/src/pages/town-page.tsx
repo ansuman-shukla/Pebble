@@ -1,5 +1,5 @@
-import { Canvas, useFrame } from '@react-three/fiber';
-import { memo, Suspense, useCallback, useRef, useState } from 'react';
+import { Canvas } from '@react-three/fiber';
+import { memo, Suspense, useCallback, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { LabelOverlay, LabelProjector } from '@/components/world/labels';
@@ -9,6 +9,10 @@ import {
 } from '@/components/world/player/camera-mode';
 import type { PlayerMove } from '@/components/world/player/player-state';
 import { Walker } from '@/components/world/player/walker';
+import {
+  type RenderStats,
+  RenderStatsProbe,
+} from '@/components/world/render-stats';
 import { TownCitizens } from '@/components/world/town/town-citizens';
 import { TownGround } from '@/components/world/town/town-ground';
 import { TownPlacements } from '@/components/world/town/town-placements';
@@ -18,37 +22,10 @@ import { useTown } from '@/hooks/use-town';
 import type { TownView } from '@/lib/client/types.gen';
 import type { LabelStore } from '@/lib/world/label-store';
 
+/* The flat castle town (/town), kept for debugging the town on its own; the globe at / places it on the planet. */
+
 /** Citizen names show only this close to the camera, so the town isn't covered in labels. */
 const LABEL_DISTANCE = 40;
-/** Frames rendered after everything is ready before the renderer's counters are sampled. */
-const STATS_AFTER_FRAMES = 30;
-
-interface RenderStats {
-  calls: number;
-  triangles: number;
-}
-
-/** Samples the renderer's draw calls and triangles once, after `active` has held for a few frames. */
-function RenderStatsProbe({
-  active,
-  onSample,
-}: {
-  active: boolean;
-  onSample: (stats: RenderStats) => void;
-}) {
-  const frames = useRef(0);
-  // useFrame runs before the frame renders, so gl.info still holds the previous frame's counts
-  useFrame(({ gl }) => {
-    if (!active || frames.current < 0) return;
-    frames.current += 1;
-    if (frames.current < STATS_AFTER_FRAMES) return;
-    frames.current = -1;
-    const { calls, triangles } = gl.info.render;
-    onSample({ calls, triangles });
-  });
-  return null;
-}
-
 type TownSceneProps = {
   town: TownView;
   labels: LabelStore;
@@ -191,7 +168,7 @@ function TownWorld({ town }: { town: TownView }) {
   );
 }
 
-export function WorldPage() {
+export function TownPage() {
   const town = useTown();
   if (town.isError)
     return (

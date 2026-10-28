@@ -42,6 +42,9 @@
 | D36 | Lakes: a depression ≥ 3 m deep holds a lake that fills to its spill level when ≤ 8 m deep, else stays 8 m deep as a closed sink; other depressions fill into level flats; rivers follow the flood tree | filling every basin flooded 3 % of the planet with lakes; heights stay non-increasing along every river | 2026-10-28 |
 | D37 | Rivers the story needs (the town's mill river, the great falls and its outflow) are authored polylines cut as monotone channels; the rest emerge from flow accumulation | the town's stream and the falls must exist on every run of the spec | 2026-10-28 |
 | D38 | Noise is our own hash-based 3D gradient noise in numpy (numpy is the only new backend dependency) | same seed = same field on every numpy version; no extra package | 2026-10-28 |
+| D39 | The elder tree is the `giant_tree` kind (Medieval Village oak, 6.2 m) drawn ×3.5, the one landmark exception to real-world scale | the catalogue has no giant tree; a gnarled multi-crown oak distinct from the forest oak reads as ancient when enlarged | 2026-10-28 |
+| D40 | Kinds drawn at a non-real size go through one per-kind render scale (`KIND_SCALE` in `assets.ts`: `giant_tree` ×3.5, `ice_block` ×3); backend footprints in `data/world/kinds.yaml` are the drawn size, and a test checks every site footprint of the real world against asset size × scale | sites, scatter and the backend agree on one size per kind; scatter ranges are relative to the drawn size | 2026-10-29 |
+| D41 | Globe scatter in two reach tiers around the camera target: ground cover (grass, flowers, ferns, pebbles, reeds) within 150 m, trees, bushes and rocks within 500 m; nothing grows on slopes over 40° | full density to 600 m was ~8.7 M triangles in a forest; tiers keep the densest forest at ~1.6 M and 71 draw calls; props on cliffs float on their downhill side | 2026-10-29 |
 
 ## Open (recommendation first)
 

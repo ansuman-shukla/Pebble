@@ -1,8 +1,17 @@
 import { useFrame } from '@react-three/fiber';
 import { type RefObject, useEffect, useMemo, useRef } from 'react';
-import { type Group, type Mesh, Vector3 } from 'three';
+import { type Group, Vector3 } from 'three';
 
 import { groundHeight, useGroundProxies } from './ground';
+import {
+  MAX_FRAME,
+  MAX_STEP_UP,
+  MOVE_EVENT_INTERVAL,
+  PROBE_HEIGHT,
+  RUN_SPEED,
+  smoothing,
+  WALK_SPEED,
+} from './motion';
 import type { PlayerMove, PlayerState } from './player-state';
 import {
   axis,
@@ -13,27 +22,13 @@ import {
   RIGHT,
   useKeys,
 } from './use-keys';
+import { useVisitor } from './use-visitor';
 import {
   type Point,
   resolveMove,
   type WalkPlacement,
   type WalkWorld,
 } from '@/lib/world/collision';
-import { VISITOR_LOOK } from '@/lib/world/visitor-look';
-import { animate, type CharacterAnimation } from '@/vendor/polyfork/clips.mjs';
-import { createCharacter } from '@/vendor/polyfork/humanoid.mjs';
-
-const WALK_SPEED = 1.4;
-const RUN_SPEED = 3.5;
-/** Highest rise onto a walkable surface in one move; anything taller is a wall. */
-const MAX_STEP_UP = 0.5;
-/** Ground probes start this far above the current ground. */
-const PROBE_HEIGHT = 1;
-const MAX_FRAME = 0.1;
-const MOVE_EVENT_INTERVAL = 0.1;
-
-/** Frame-rate independent approach factor for exponential smoothing. */
-const smoothing = (rate: number, delta: number) => 1 - Math.exp(-rate * delta);
 
 function shortestTurn(from: number, to: number) {
   const turn = (to - from) % (Math.PI * 2);
@@ -65,24 +60,9 @@ export function Player({
   const proxies = useGroundProxies(placements);
   const keys = useKeys();
   const group = useRef<Group>(null);
-  const character = useMemo(() => createCharacter(VISITOR_LOOK), []);
-  const animation = useRef<CharacterAnimation | null>(null);
+  const { character, animation } = useVisitor(onReady);
   const motion = useRef({ ground: 0, speed: 0, sinceEvent: Infinity });
   const forward = useMemo(() => new Vector3(), []);
-
-  useEffect(() => {
-    let mounted = true;
-    animate(character).then((loaded) => {
-      if (!mounted) return;
-      animation.current = loaded;
-      onReady();
-    });
-    return () => {
-      mounted = false;
-      animation.current = null;
-      character.traverse((object) => (object as Mesh).geometry?.dispose());
-    };
-  }, [character, onReady]);
 
   useEffect(() => {
     const { position } = playerRef.current;

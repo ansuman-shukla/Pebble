@@ -30,6 +30,18 @@ checkout's frontend, run it on its own port and set `PLAYWRIGHT_PORT`, e.g. `PLA
 (the status test also needs that origin in the backend's `FRONTEND_ORIGINS`). On macOS the tests render WebGL on the GPU
 (`--use-angle=metal`); headless Chrome's default software WebGL is too slow for the town.
 
-Open http://localhost:5180 to walk the town (WASD, Shift run, drag to look, C camera).
+Open http://localhost:5180 for the planet: the generated world from `GET /api/v1/world`, starting at the castle
+town's main gate.
 
-Status: phase A, M2 walkable town.
+| Control | What |
+|---|---|
+| WASD, Shift | walk, run |
+| T (or the `travel` button) | travel at 25 m/s (around the planet's land loop in ~10 min) |
+| C (or the buttons) | camera: follow (third person), orbit (whole planet; zoom onto the player to walk again), fly (Q/E down/up) |
+| drag, wheel | look, zoom |
+| `time ×60` | run the clock at one game hour per second |
+| `?at=lat,lon[,bearing]` | start anywhere, e.g. `/?at=12.4,100,180` (band A camp); `?time=HH:MM` sets the town time |
+
+`/town` shows the flat town alone; `/?mock=1` uses the small test world instead of the backend's.
+
+Status: phase A, M4 planet viewer.
