@@ -1,0 +1,2104 @@
+{
+  "source": "https://polyfork.dev",
+  "note": "Pinned Polyfork assets. Files are fetched by scripts/fetch-polyfork-assets.mjs and gitignored (no redistribution).",
+  "modules": [
+    {
+      "name": "humanoid",
+      "from": "farmer-363820",
+      "url": "https://polyfork.dev/cdn/farmer-363820.mjs",
+      "path": "src/vendor/polyfork/humanoid.mjs",
+      "append": "export { createCharacter };",
+      "sha256": "c3b53f0854fc7f40c773f42ecfe6fda7df66d0aea7f6cb7a449c5869d6635d48",
+      "bytes": 1010326,
+      "patched_sha256": "9b01b4e550a7c2adab5c9c53d9cd97130d87614edeb5a09e278f94125f9e46fb"
+    },
+    {
+      "name": "clips",
+      "url": "https://polyfork.dev/cdn/clips.mjs",
+      "path": "src/vendor/polyfork/clips.mjs",
+      "sha256": "45bd336f360d8387158267bf412a6d6f6401588edbda60d06672a9bdf7d73f0c",
+      "bytes": 7544
+    }
+  ],
+  "assets": [
+    {
+      "id": "alpine-ibex-base",
+      "title": "Alpine ibex",
+      "kit": null,
+      "class": "animal",
+      "triangles": 2844,
+      "size_m": {
+        "x": 0.59,
+        "y": 1.45,
+        "z": 1.29
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/alpine-ibex-base.glb",
+          "path": "public/assets/polyfork/alpine-ibex-base/alpine-ibex-base.glb",
+          "sha256": "f1a8a867f68dae679b5c59de6ebfea451523b36172eb9ed69e44bfd1ab99ce7a",
+          "bytes": 1489584
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/alpine-ibex-base-params.json",
+          "path": "public/assets/polyfork/alpine-ibex-base/alpine-ibex-base-params.json",
+          "sha256": "3da962034816cdd7d044ebcf9cacfde377fbb171e2627a367ea69bc3d340f5fb",
+          "bytes": 3921
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/alpine-ibex-base-colliders.json",
+          "path": "public/assets/polyfork/alpine-ibex-base/alpine-ibex-base-colliders.json",
+          "sha256": "bce2ad1d22de63de96191cb3569b75930fafce7e634be7f8f2828ed618387991",
+          "bytes": 10030
+        }
+      }
+    },
+    {
+      "id": "andon-floor-lantern-b1b7ea",
+      "title": "Andon Floor Lantern",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 404,
+      "size_m": {
+        "x": 0.5,
+        "y": 0.87,
+        "z": 0.5
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/andon-floor-lantern-b1b7ea.glb",
+          "path": "public/assets/polyfork/andon-floor-lantern-b1b7ea/andon-floor-lantern-b1b7ea.glb",
+          "sha256": "f81e6fb75db15902582deb19570d79913ee8e5c9858dbb70673bb6270fe0a476",
+          "bytes": 47344
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/andon-floor-lantern-b1b7ea-params.json",
+          "path": "public/assets/polyfork/andon-floor-lantern-b1b7ea/andon-floor-lantern-b1b7ea-params.json",
+          "sha256": "c7638152befac5c889a21bab1e2aaf9092b84ccd121a8eeaefc714626010a95a",
+          "bytes": 9953
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/andon-floor-lantern-b1b7ea-colliders.json",
+          "path": "public/assets/polyfork/andon-floor-lantern-b1b7ea/andon-floor-lantern-b1b7ea-colliders.json",
+          "sha256": "08b505840307ba1b80871f33bf25228f41fd7572f3b4a9e427416d65186d1a26",
+          "bytes": 3002
+        }
+      }
+    },
+    {
+      "id": "azalea-bush-7bb14d",
+      "title": "Azalea Bush",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 1011,
+      "size_m": {
+        "x": 1,
+        "y": 0.95,
+        "z": 1
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/azalea-bush-7bb14d.glb",
+          "path": "public/assets/polyfork/azalea-bush-7bb14d/azalea-bush-7bb14d.glb",
+          "sha256": "6bfd8627810e1886027f09aa94c89fbe681804bacd9b5fe06fde198fb7c44367",
+          "bytes": 122040
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/azalea-bush-7bb14d-params.json",
+          "path": "public/assets/polyfork/azalea-bush-7bb14d/azalea-bush-7bb14d-params.json",
+          "sha256": "caa9ecf2a5f8300c75c12342106786677773ad037462982d682a0aa27b1e681d",
+          "bytes": 8604
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/azalea-bush-7bb14d-colliders.json",
+          "path": "public/assets/polyfork/azalea-bush-7bb14d/azalea-bush-7bb14d-colliders.json",
+          "sha256": "b10573b2dcd523c67a6eb97e98add930bb791eb531521491da6411951e840a56",
+          "bytes": 13969
+        }
+      }
+    },
+    {
+      "id": "bamboo-stalk-e4d362",
+      "title": "Bamboo Stalk",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 434,
+      "size_m": {
+        "x": 1.09,
+        "y": 3.01,
+        "z": 1.28
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/bamboo-stalk-e4d362.glb",
+          "path": "public/assets/polyfork/bamboo-stalk-e4d362/bamboo-stalk-e4d362.glb",
+          "sha256": "c83f48a15d94defeb14ee44a17920b10bc3d5ed2eaa2f129d720eca092890052",
+          "bytes": 56668
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/bamboo-stalk-e4d362-params.json",
+          "path": "public/assets/polyfork/bamboo-stalk-e4d362/bamboo-stalk-e4d362-params.json",
+          "sha256": "03bb6827132744fbb7eac64a3bfe0cecfbc2b2685b73654eba9684bb8e9e60a1",
+          "bytes": 9618
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/bamboo-stalk-e4d362-colliders.json",
+          "path": "public/assets/polyfork/bamboo-stalk-e4d362/bamboo-stalk-e4d362-colliders.json",
+          "sha256": "9264a7ff52be2d5fdd75e963e7beacaee04673aef27b69d2a73eed32ff1947b4",
+          "bytes": 2586
+        }
+      }
+    },
+    {
+      "id": "black-bear-adbdc7",
+      "title": "Black Bear",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "animal",
+      "triangles": 2542,
+      "size_m": {
+        "x": 0.95,
+        "y": 1.42,
+        "z": 2.09
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/black-bear-adbdc7.glb",
+          "path": "public/assets/polyfork/black-bear-adbdc7/black-bear-adbdc7.glb",
+          "sha256": "08198266bb5ee9b02aa542059680906b6a052eb5c7faa20b77ec11bd74a55892",
+          "bytes": 1562816
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/black-bear-adbdc7-params.json",
+          "path": "public/assets/polyfork/black-bear-adbdc7/black-bear-adbdc7-params.json",
+          "sha256": "b8b5b9ec7a4ae14b3bf607f4772e8a7fc7f460fcb0e067751f54a8365e844c35",
+          "bytes": 3310
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/black-bear-adbdc7-colliders.json",
+          "path": "public/assets/polyfork/black-bear-adbdc7/black-bear-adbdc7-colliders.json",
+          "sha256": "100ac24c919f7523c185c674aff99c2dc0537a355f3361ceea8bf4a21be126e6",
+          "bytes": 6665
+        }
+      }
+    },
+    {
+      "id": "buddhist-temple-hall-f0aa09",
+      "title": "Buddhist Temple Hall",
+      "kit": "medieval-japan-cb01ad",
+      "class": "building",
+      "triangles": 1676,
+      "size_m": {
+        "x": 10,
+        "y": 8.34,
+        "z": 8
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/buddhist-temple-hall-f0aa09.glb",
+          "path": "public/assets/polyfork/buddhist-temple-hall-f0aa09/buddhist-temple-hall-f0aa09.glb",
+          "sha256": "43926d9c286beac37261ea9ef7a5af0153c6353465d1d95f8b1ab5a9996dd3d9",
+          "bytes": 193860
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/buddhist-temple-hall-f0aa09-params.json",
+          "path": "public/assets/polyfork/buddhist-temple-hall-f0aa09/buddhist-temple-hall-f0aa09-params.json",
+          "sha256": "c4ba399811e725ef7dcf47b4a4798ae61e3dd676e75891b0ec85ad6581497eab",
+          "bytes": 13506
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/buddhist-temple-hall-f0aa09-colliders.json",
+          "path": "public/assets/polyfork/buddhist-temple-hall-f0aa09/buddhist-temple-hall-f0aa09-colliders.json",
+          "sha256": "6b1bc4795fe814fc105c0ce3eabbff38f3d55859dfed88a511771ddfa528f03c",
+          "bytes": 2160
+        }
+      }
+    },
+    {
+      "id": "campfire-cook-tripod-d95a1e",
+      "title": "Campfire Cook Tripod",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "prop",
+      "triangles": 470,
+      "size_m": {
+        "x": 1.5,
+        "y": 1.3,
+        "z": 1.3
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/campfire-cook-tripod-d95a1e.glb",
+          "path": "public/assets/polyfork/campfire-cook-tripod-d95a1e/campfire-cook-tripod-d95a1e.glb",
+          "sha256": "297793b67be7f44c77143832e44b2fc54caa96c174c98df5e171ac45be4e533d",
+          "bytes": 54852
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/campfire-cook-tripod-d95a1e-params.json",
+          "path": "public/assets/polyfork/campfire-cook-tripod-d95a1e/campfire-cook-tripod-d95a1e-params.json",
+          "sha256": "6096ae1b085305d92556ced798ccecc6180d5e34bcc3c8facaf6ae3c65b8e7f9",
+          "bytes": 9210
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/campfire-cook-tripod-d95a1e-colliders.json",
+          "path": "public/assets/polyfork/campfire-cook-tripod-d95a1e/campfire-cook-tripod-d95a1e-colliders.json",
+          "sha256": "980d123e494e4a257c4b7f67dd1da86d4cf73107f52f734c2ae1f7bebc441590",
+          "bytes": 3323
+        }
+      }
+    },
+    {
+      "id": "castle-gatehouse-4ed5c6",
+      "title": "Castle Gatehouse",
+      "kit": "medieval-japan-cb01ad",
+      "class": "building",
+      "triangles": 4036,
+      "size_m": {
+        "x": 6,
+        "y": 6,
+        "z": 4
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/castle-gatehouse-4ed5c6.glb",
+          "path": "public/assets/polyfork/castle-gatehouse-4ed5c6/castle-gatehouse-4ed5c6.glb",
+          "sha256": "d0b11c1b6511e062b257c1bf81214950a84d5d910a93c06cf057a751ce27eeb0",
+          "bytes": 461820
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/castle-gatehouse-4ed5c6-params.json",
+          "path": "public/assets/polyfork/castle-gatehouse-4ed5c6/castle-gatehouse-4ed5c6-params.json",
+          "sha256": "55d77aa1658b123cfdcdc681db7e396d9b24c3a021492f6196bce68df244cb2c",
+          "bytes": 8061
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/castle-gatehouse-4ed5c6-colliders.json",
+          "path": "public/assets/polyfork/castle-gatehouse-4ed5c6/castle-gatehouse-4ed5c6-colliders.json",
+          "sha256": "a1cf1e7109fd5d34ea60a97d9b55610174bd3980cb884438593090bd79efec07",
+          "bytes": 4103
+        }
+      }
+    },
+    {
+      "id": "cherry-tree-a710a9",
+      "title": "Cherry Tree",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 1448,
+      "size_m": {
+        "x": 5.99,
+        "y": 5.5,
+        "z": 5.99
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/cherry-tree-a710a9.glb",
+          "path": "public/assets/polyfork/cherry-tree-a710a9/cherry-tree-a710a9.glb",
+          "sha256": "7b9b230d8bb2bf4d96ffc06a39fc4109cd4ce84649354167b9a2f3bf953ea53c",
+          "bytes": 171296
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/cherry-tree-a710a9-params.json",
+          "path": "public/assets/polyfork/cherry-tree-a710a9/cherry-tree-a710a9-params.json",
+          "sha256": "bfec5d5e8a4f2326ec5b5d87f6bc686a04ad41ca00d655cbbb0c3b94b40f5773",
+          "bytes": 9045
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/cherry-tree-a710a9-colliders.json",
+          "path": "public/assets/polyfork/cherry-tree-a710a9/cherry-tree-a710a9-colliders.json",
+          "sha256": "179ea0b9b23dbe6d0ee78f332bb377aefc326e34044066781cf0b3f5c75d5de1",
+          "bytes": 12369
+        }
+      }
+    },
+    {
+      "id": "corner-yagura-turret-950468",
+      "title": "Corner Yagura Turret",
+      "kit": "medieval-japan-cb01ad",
+      "class": "building",
+      "triangles": 1938,
+      "size_m": {
+        "x": 6,
+        "y": 7.86,
+        "z": 6
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/corner-yagura-turret-950468.glb",
+          "path": "public/assets/polyfork/corner-yagura-turret-950468/corner-yagura-turret-950468.glb",
+          "sha256": "fb9350441533ace7b0bcc86ead1e1754d2aa5a49fee9d3cb91b5c5b29cb11bf1",
+          "bytes": 222988
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/corner-yagura-turret-950468-params.json",
+          "path": "public/assets/polyfork/corner-yagura-turret-950468/corner-yagura-turret-950468-params.json",
+          "sha256": "519325cb7b28120f5dc890b0a320fd86684b182a08e4cf4b59267e8183a3a336",
+          "bytes": 8527
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/corner-yagura-turret-950468-colliders.json",
+          "path": "public/assets/polyfork/corner-yagura-turret-950468/corner-yagura-turret-950468-colliders.json",
+          "sha256": "a009a7fc946b699bd40a97fbd1e10ad6afafcd83997426e4b87ebd3c719b670c",
+          "bytes": 3097
+        }
+      }
+    },
+    {
+      "id": "daihachiguruma-hand-cart-c026f3",
+      "title": "Daihachiguruma Hand Cart",
+      "kit": "medieval-japan-cb01ad",
+      "class": "vehicle",
+      "triangles": 1796,
+      "size_m": {
+        "x": 1.5,
+        "y": 1.19,
+        "z": 3
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/daihachiguruma-hand-cart-c026f3.glb",
+          "path": "public/assets/polyfork/daihachiguruma-hand-cart-c026f3/daihachiguruma-hand-cart-c026f3.glb",
+          "sha256": "0ebebf04afd03af29197c28d6f3851081a8306ba4ad05879950c7e2b0fde2d94",
+          "bytes": 203648
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/daihachiguruma-hand-cart-c026f3-params.json",
+          "path": "public/assets/polyfork/daihachiguruma-hand-cart-c026f3/daihachiguruma-hand-cart-c026f3-params.json",
+          "sha256": "fd4127982f7df0454ccd5dc4fcbd7ef86156d016412cd8c92e62c6f9f5fe6e6b",
+          "bytes": 8749
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/daihachiguruma-hand-cart-c026f3-colliders.json",
+          "path": "public/assets/polyfork/daihachiguruma-hand-cart-c026f3/daihachiguruma-hand-cart-c026f3-colliders.json",
+          "sha256": "52ceb8ce3e99df64ed03f976b46a9366dab1d820f47af150a385e0798adafd4e",
+          "bytes": 13766
+        }
+      }
+    },
+    {
+      "id": "dobei-plaster-wall-b75823",
+      "title": "Dobei Plaster Wall",
+      "kit": "medieval-japan-cb01ad",
+      "class": "building",
+      "triangles": 1072,
+      "size_m": {
+        "x": 2,
+        "y": 2,
+        "z": 0.65
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/dobei-plaster-wall-b75823.glb",
+          "path": "public/assets/polyfork/dobei-plaster-wall-b75823/dobei-plaster-wall-b75823.glb",
+          "sha256": "fda3477ff7b5ab2b34228f3098daaa9cdd4674a62aaa46b207deb466731d8046",
+          "bytes": 123484
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/dobei-plaster-wall-b75823-params.json",
+          "path": "public/assets/polyfork/dobei-plaster-wall-b75823/dobei-plaster-wall-b75823-params.json",
+          "sha256": "a393004399b1a74a5703dde2800fe0112b245bd2652d3eeb1010e0dcaed77766",
+          "bytes": 7889
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/dobei-plaster-wall-b75823-colliders.json",
+          "path": "public/assets/polyfork/dobei-plaster-wall-b75823/dobei-plaster-wall-b75823-colliders.json",
+          "sha256": "493f1a2b44e4de29b21488f862573cf67bf73a351e049566f756d32bc5517439",
+          "bytes": 2085
+        }
+      }
+    },
+    {
+      "id": "duck-base",
+      "title": "Duck",
+      "kit": null,
+      "class": "animal",
+      "triangles": 2958,
+      "size_m": {
+        "x": 0.37,
+        "y": 0.61,
+        "z": 0.56
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/duck-base.glb",
+          "path": "public/assets/polyfork/duck-base/duck-base.glb",
+          "sha256": "b8c0cbd8df77cfb0c11ff0bda34855397e26d97532e00a847a44cd071309244d",
+          "bytes": 1108404
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/duck-base-params.json",
+          "path": "public/assets/polyfork/duck-base/duck-base-params.json",
+          "sha256": "0700d1d1ef7deb309b5569d69f2ddae58c4e593698580aa05e30c1e505d3b4d4",
+          "bytes": 2274
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/duck-base-colliders.json",
+          "path": "public/assets/polyfork/duck-base/duck-base-colliders.json",
+          "sha256": "e451ddc5386d7fb80551e578671e765575cdbfa7224c69dea39a526a4aed84dc",
+          "bytes": 15717
+        }
+      }
+    },
+    {
+      "id": "fallen-log-1685fb",
+      "title": "Fallen Log",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "prop",
+      "triangles": 484,
+      "size_m": {
+        "x": 3.09,
+        "y": 0.9,
+        "z": 0.7
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/fallen-log-1685fb.glb",
+          "path": "public/assets/polyfork/fallen-log-1685fb/fallen-log-1685fb.glb",
+          "sha256": "3e8e3a42a51c2a576b77ea87220eb1a4f3796703468ee5211902440bb8b8dcfa",
+          "bytes": 56588
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/fallen-log-1685fb-params.json",
+          "path": "public/assets/polyfork/fallen-log-1685fb/fallen-log-1685fb-params.json",
+          "sha256": "f387ff7d5ffc92a118286aa3a6443ca8726e01977c6aca7cb96c009c8e80ff14",
+          "bytes": 4575
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/fallen-log-1685fb-colliders.json",
+          "path": "public/assets/polyfork/fallen-log-1685fb/fallen-log-1685fb-colliders.json",
+          "sha256": "a37a0b8f54bf29dbaffa8edb7ec3c4e67b10e8dccf8269a7d54263236f544ccd",
+          "bytes": 3667
+        }
+      }
+    },
+    {
+      "id": "fire-lookout-tower-714fa1",
+      "title": "Fire Lookout Tower",
+      "kit": "medieval-japan-cb01ad",
+      "class": "building",
+      "triangles": 1758,
+      "size_m": {
+        "x": 2,
+        "y": 10,
+        "z": 2
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/fire-lookout-tower-714fa1.glb",
+          "path": "public/assets/polyfork/fire-lookout-tower-714fa1/fire-lookout-tower-714fa1.glb",
+          "sha256": "bbdb1a5968ec68b7238559095e7db7a801530d86f46f6313b8be4694d80b5183",
+          "bytes": 201736
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/fire-lookout-tower-714fa1-params.json",
+          "path": "public/assets/polyfork/fire-lookout-tower-714fa1/fire-lookout-tower-714fa1-params.json",
+          "sha256": "b239c851528787b778c55b1c2cd498f73f177ffc1e1b859153fac979bb5dd011",
+          "bytes": 9597
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/fire-lookout-tower-714fa1-colliders.json",
+          "path": "public/assets/polyfork/fire-lookout-tower-714fa1/fire-lookout-tower-714fa1-colliders.json",
+          "sha256": "c2abbe28a7544f9e4c47dcd221911b6ad0694b9bf1cfb94b71ff1ee56622a085",
+          "bytes": 9041
+        }
+      }
+    },
+    {
+      "id": "firewood-stack-8a2899",
+      "title": "Firewood Stack",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "prop",
+      "triangles": 752,
+      "size_m": {
+        "x": 1.18,
+        "y": 0.76,
+        "z": 0.66
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/firewood-stack-8a2899.glb",
+          "path": "public/assets/polyfork/firewood-stack-8a2899/firewood-stack-8a2899.glb",
+          "sha256": "876c90884132e8778733fde7b96f66a21ec19ed46c7ea38e99324d67f07cb285",
+          "bytes": 87128
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/firewood-stack-8a2899-params.json",
+          "path": "public/assets/polyfork/firewood-stack-8a2899/firewood-stack-8a2899-params.json",
+          "sha256": "983d06aa57fc03d780ab9c54f83ebdd9b1326ac87650da6c44d4106c637c6cdd",
+          "bytes": 7150
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/firewood-stack-8a2899-colliders.json",
+          "path": "public/assets/polyfork/firewood-stack-8a2899/firewood-stack-8a2899-colliders.json",
+          "sha256": "12755bb687b3970a7126693dc48782cc478d53c4789033dcea1c6327cbd91a9b",
+          "bytes": 10383
+        }
+      }
+    },
+    {
+      "id": "flat-river-boat-6bac37",
+      "title": "Flat River Boat",
+      "kit": "medieval-japan-cb01ad",
+      "class": "vehicle",
+      "triangles": 1454,
+      "size_m": {
+        "x": 1.5,
+        "y": 0.74,
+        "z": 6
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/flat-river-boat-6bac37.glb",
+          "path": "public/assets/polyfork/flat-river-boat-6bac37/flat-river-boat-6bac37.glb",
+          "sha256": "0d474dcfd286626155fb5e576ca393d82cc1d6b719529217257ed401976836ef",
+          "bytes": 167580
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/flat-river-boat-6bac37-params.json",
+          "path": "public/assets/polyfork/flat-river-boat-6bac37/flat-river-boat-6bac37-params.json",
+          "sha256": "e98003523795ae3e657a26c3af90dfd109f4fcb75b13f185a95e6cb1a91ee54e",
+          "bytes": 8866
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/flat-river-boat-6bac37-colliders.json",
+          "path": "public/assets/polyfork/flat-river-boat-6bac37/flat-river-boat-6bac37-colliders.json",
+          "sha256": "21276fee0db71fdd13ed35da72e729a86ec89e3e96ad168bfebbd21e97d82a4e",
+          "bytes": 6743
+        }
+      }
+    },
+    {
+      "id": "forest-deer-fe648d",
+      "title": "Forest Deer",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "animal",
+      "triangles": 2230,
+      "size_m": {
+        "x": 0.84,
+        "y": 2.12,
+        "z": 1.44
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/forest-deer-fe648d.glb",
+          "path": "public/assets/polyfork/forest-deer-fe648d/forest-deer-fe648d.glb",
+          "sha256": "9aa7e2c706a66ff9baef95b464c854e15e62830ad7911625741e6526424e9bb6",
+          "bytes": 1423332
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/forest-deer-fe648d-params.json",
+          "path": "public/assets/polyfork/forest-deer-fe648d/forest-deer-fe648d-params.json",
+          "sha256": "f2c9405f41d3fff0b19020c45d8f04683810269cc74d1ad8d27c5473460bb021",
+          "bytes": 3468
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/forest-deer-fe648d-colliders.json",
+          "path": "public/assets/polyfork/forest-deer-fe648d/forest-deer-fe648d-colliders.json",
+          "sha256": "ebec1dbb29040590968c7d6a02b3ec136e08ec491dd35b43799755de6163cfa6",
+          "bytes": 4015
+        }
+      }
+    },
+    {
+      "id": "forest-rabbit-ea2da0",
+      "title": "Forest Rabbit",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "animal",
+      "triangles": 2074,
+      "size_m": {
+        "x": 0.2,
+        "y": 0.37,
+        "z": 0.4
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/forest-rabbit-ea2da0.glb",
+          "path": "public/assets/polyfork/forest-rabbit-ea2da0/forest-rabbit-ea2da0.glb",
+          "sha256": "f700ac3cc9b03fae5559bec4039fdff3434b25e3ff8839614b57938b1fadd6d9",
+          "bytes": 1216088
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/forest-rabbit-ea2da0-params.json",
+          "path": "public/assets/polyfork/forest-rabbit-ea2da0/forest-rabbit-ea2da0-params.json",
+          "sha256": "3df55838425903b84167e2495e029082eb14ab64870b9135e1f1f5f1ae25a73f",
+          "bytes": 3184
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/forest-rabbit-ea2da0-colliders.json",
+          "path": "public/assets/polyfork/forest-rabbit-ea2da0/forest-rabbit-ea2da0-colliders.json",
+          "sha256": "c983305bf36011cf3a3f903c3fccf124615bd9f2c89c873ca124bde12b150b87",
+          "bytes": 9262
+        }
+      }
+    },
+    {
+      "id": "goat-1dedee",
+      "title": "Goat",
+      "kit": "cozy-farm-cc979f",
+      "class": "animal",
+      "triangles": 952,
+      "size_m": {
+        "x": 0.39,
+        "y": 0.82,
+        "z": 1.01
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/goat-1dedee.glb",
+          "path": "public/assets/polyfork/goat-1dedee/goat-1dedee.glb",
+          "sha256": "56db3da32de15916ba360d77e0561a6746531120e7fd3039a461bf3fa264b9d9",
+          "bytes": 183204
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/goat-1dedee-params.json",
+          "path": "public/assets/polyfork/goat-1dedee/goat-1dedee-params.json",
+          "sha256": "8c9c25897533ccdc9103101d23e109c65332bc158d892a536c526509a481f237",
+          "bytes": 10909
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/goat-1dedee-colliders.json",
+          "path": "public/assets/polyfork/goat-1dedee/goat-1dedee-colliders.json",
+          "sha256": "a74da8dca0d02a55705c19f24e1c51f636c7afbdfdefc7481de4ce17acb85bae",
+          "bytes": 8790
+        }
+      }
+    },
+    {
+      "id": "hasa-rice-drying-rack-d545bc",
+      "title": "Hasa Rice Drying Rack",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 668,
+      "size_m": {
+        "x": 2,
+        "y": 1.21,
+        "z": 0.7
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/hasa-rice-drying-rack-d545bc.glb",
+          "path": "public/assets/polyfork/hasa-rice-drying-rack-d545bc/hasa-rice-drying-rack-d545bc.glb",
+          "sha256": "56201992bbe6b16d7d8a4e99756a9f3e41341b8aebdde3cfe56467afb86499e9",
+          "bytes": 95064
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/hasa-rice-drying-rack-d545bc-params.json",
+          "path": "public/assets/polyfork/hasa-rice-drying-rack-d545bc/hasa-rice-drying-rack-d545bc-params.json",
+          "sha256": "dd09fb72f9d7de891e0f26d8024e9a178c98736c75df3845a2dc942062a62960",
+          "bytes": 6519
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/hasa-rice-drying-rack-d545bc-colliders.json",
+          "path": "public/assets/polyfork/hasa-rice-drying-rack-d545bc/hasa-rice-drying-rack-d545bc-colliders.json",
+          "sha256": "121e9915bc1a45ceb8afadd550433063a512a64b3cf5eeadd7c1514d455e9888",
+          "bytes": 6967
+        }
+      }
+    },
+    {
+      "id": "horse-tether-rail-b26462",
+      "title": "Horse Tether Rail",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 676,
+      "size_m": {
+        "x": 2,
+        "y": 1.46,
+        "z": 1
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/horse-tether-rail-b26462.glb",
+          "path": "public/assets/polyfork/horse-tether-rail-b26462/horse-tether-rail-b26462.glb",
+          "sha256": "20bf7d243d06015c263d06e6c59b3ac9354c8f923a978ee0123f5819f24abb90",
+          "bytes": 108844
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/horse-tether-rail-b26462-params.json",
+          "path": "public/assets/polyfork/horse-tether-rail-b26462/horse-tether-rail-b26462-params.json",
+          "sha256": "e8554ff919dec16870890355688ad83bdab569792717016d7f737f2e49a917bc",
+          "bytes": 7145
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/horse-tether-rail-b26462-colliders.json",
+          "path": "public/assets/polyfork/horse-tether-rail-b26462/horse-tether-rail-b26462-colliders.json",
+          "sha256": "25bf73cbce5529f820f4068bd50ae7934cb2cadaeeea7a448ad58b5489e913cb",
+          "bytes": 6120
+        }
+      }
+    },
+    {
+      "id": "ishigaki-stone-wall-255b7e",
+      "title": "Ishigaki Stone Wall",
+      "kit": "medieval-japan-cb01ad",
+      "class": "building",
+      "triangles": 1450,
+      "size_m": {
+        "x": 2,
+        "y": 2.03,
+        "z": 2
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/ishigaki-stone-wall-255b7e.glb",
+          "path": "public/assets/polyfork/ishigaki-stone-wall-255b7e/ishigaki-stone-wall-255b7e.glb",
+          "sha256": "1e71ceacf4b11482fb7ba5ca0f21339da1e1f157090b47913f5ad8b10183534a",
+          "bytes": 166584
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/ishigaki-stone-wall-255b7e-params.json",
+          "path": "public/assets/polyfork/ishigaki-stone-wall-255b7e/ishigaki-stone-wall-255b7e-params.json",
+          "sha256": "2ae77c5ceb68da41154074d41041fbf1e11ef3ddfd0b2ca46186f28c68f95050",
+          "bytes": 9789
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/ishigaki-stone-wall-255b7e-colliders.json",
+          "path": "public/assets/polyfork/ishigaki-stone-wall-255b7e/ishigaki-stone-wall-255b7e-colliders.json",
+          "sha256": "1e429a8440d3901c5d6a052d8701d7f54b176fadf9bd32cb6917f888e550fc77",
+          "bytes": 1256
+        }
+      }
+    },
+    {
+      "id": "japanese-maple-d2fb29",
+      "title": "Japanese Maple",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 1167,
+      "size_m": {
+        "x": 4.47,
+        "y": 2.99,
+        "z": 3.99
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/japanese-maple-d2fb29.glb",
+          "path": "public/assets/polyfork/japanese-maple-d2fb29/japanese-maple-d2fb29.glb",
+          "sha256": "e3cf3bc73f1579717c688e1e67b3c0fe580335e0f50c525ffe734cc1276c1230",
+          "bytes": 140044
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/japanese-maple-d2fb29-params.json",
+          "path": "public/assets/polyfork/japanese-maple-d2fb29/japanese-maple-d2fb29-params.json",
+          "sha256": "04539f39a0f8851942379a188b9215375eb7cef6c7c55c4ebb609a3128698e5d",
+          "bytes": 6450
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/japanese-maple-d2fb29-colliders.json",
+          "path": "public/assets/polyfork/japanese-maple-d2fb29/japanese-maple-d2fb29-colliders.json",
+          "sha256": "93bada9febb3fb7ce2b5a4edfac74c84ac8754b8c59a540d92f4169ad888f8e7",
+          "bytes": 9522
+        }
+      }
+    },
+    {
+      "id": "kagaribi-fire-basket-d28c11",
+      "title": "Kagaribi Fire Basket",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 604,
+      "size_m": {
+        "x": 0.62,
+        "y": 1.24,
+        "z": 0.62
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/kagaribi-fire-basket-d28c11.glb",
+          "path": "public/assets/polyfork/kagaribi-fire-basket-d28c11/kagaribi-fire-basket-d28c11.glb",
+          "sha256": "3c12426b13ca60d34f1a38c714cbb966c128c4144446815c250a03705eb07ae6",
+          "bytes": 70832
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/kagaribi-fire-basket-d28c11-params.json",
+          "path": "public/assets/polyfork/kagaribi-fire-basket-d28c11/kagaribi-fire-basket-d28c11-params.json",
+          "sha256": "f76276724de46eaa65c2b01dd2e77e22de66564983a157938c8bd6f322c3bca6",
+          "bytes": 10156
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/kagaribi-fire-basket-d28c11-colliders.json",
+          "path": "public/assets/polyfork/kagaribi-fire-basket-d28c11/kagaribi-fire-basket-d28c11-colliders.json",
+          "sha256": "a8b6a4d77d70321a741eb44b1313fef2414d301ba7e068a2a8db29909d1a7fcc",
+          "bytes": 6473
+        }
+      }
+    },
+    {
+      "id": "kete-reed-basket-6ca36c",
+      "title": "Kete Reed Basket",
+      "kit": "easter-island-rapa-nui-368e86",
+      "class": "prop",
+      "triangles": 902,
+      "size_m": {
+        "x": 0.45,
+        "y": 0.41,
+        "z": 0.22
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/kete-reed-basket-6ca36c.glb",
+          "path": "public/assets/polyfork/kete-reed-basket-6ca36c/kete-reed-basket-6ca36c.glb",
+          "sha256": "37ba57c7fea705579a7629c0ce34ea49689635895b2212a38107cb618cbfb375",
+          "bytes": 116208
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/kete-reed-basket-6ca36c-params.json",
+          "path": "public/assets/polyfork/kete-reed-basket-6ca36c/kete-reed-basket-6ca36c-params.json",
+          "sha256": "33e250bb412a7c099e2ffd6eb08086e6d2ab98ba3b3e64a882d8523e72b42402",
+          "bytes": 4479
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/kete-reed-basket-6ca36c-colliders.json",
+          "path": "public/assets/polyfork/kete-reed-basket-6ca36c/kete-reed-basket-6ca36c-colliders.json",
+          "sha256": "c77aee828404a9127bf632c4dd9d0b6fcaf6102d8b3ed569683be50c38d8b67e",
+          "bytes": 9196
+        }
+      }
+    },
+    {
+      "id": "komodaru-sake-barrel-c5199a",
+      "title": "Komodaru Sake Barrel",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 706,
+      "size_m": {
+        "x": 0.5,
+        "y": 0.47,
+        "z": 0.49
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/komodaru-sake-barrel-c5199a.glb",
+          "path": "public/assets/polyfork/komodaru-sake-barrel-c5199a/komodaru-sake-barrel-c5199a.glb",
+          "sha256": "620d679455293a2096e8af468e4cfddef1331f87129fe508c89543f2d6414505",
+          "bytes": 82176
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/komodaru-sake-barrel-c5199a-params.json",
+          "path": "public/assets/polyfork/komodaru-sake-barrel-c5199a/komodaru-sake-barrel-c5199a-params.json",
+          "sha256": "22fae9cdd6d7588b940f5783c4d271e0176ff0f995ce559aa56ff8447433cb6f",
+          "bytes": 9376
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/komodaru-sake-barrel-c5199a-colliders.json",
+          "path": "public/assets/polyfork/komodaru-sake-barrel-c5199a/komodaru-sake-barrel-c5199a-colliders.json",
+          "sha256": "090638be55ad62a6c820db2c6992d992904e0e6afd4240f70586183b867192a4",
+          "bytes": 10719
+        }
+      }
+    },
+    {
+      "id": "kosatsu-notice-board-c9d276",
+      "title": "Kosatsu Notice Board",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 646,
+      "size_m": {
+        "x": 2,
+        "y": 2.2,
+        "z": 1
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/kosatsu-notice-board-c9d276.glb",
+          "path": "public/assets/polyfork/kosatsu-notice-board-c9d276/kosatsu-notice-board-c9d276.glb",
+          "sha256": "6e9ecb70a701416df5568f74c0e861f4e6a322013f8205af32affd02d854eb6b",
+          "bytes": 75812
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/kosatsu-notice-board-c9d276-params.json",
+          "path": "public/assets/polyfork/kosatsu-notice-board-c9d276/kosatsu-notice-board-c9d276-params.json",
+          "sha256": "d9c4ac3670d696e7861685245526eb615d91526d663fb41b2798086fb35b823f",
+          "bytes": 8436
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/kosatsu-notice-board-c9d276-colliders.json",
+          "path": "public/assets/polyfork/kosatsu-notice-board-c9d276/kosatsu-notice-board-c9d276-colliders.json",
+          "sha256": "f8401a4ccc40a26c15fcd48127cb2230251e941e9441d351a5b9cef51a7310f6",
+          "bytes": 3866
+        }
+      }
+    },
+    {
+      "id": "kura-storehouse-5c9631",
+      "title": "Kura Storehouse",
+      "kit": "medieval-japan-cb01ad",
+      "class": "building",
+      "triangles": 1696,
+      "size_m": {
+        "x": 6,
+        "y": 5.94,
+        "z": 4
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/kura-storehouse-5c9631.glb",
+          "path": "public/assets/polyfork/kura-storehouse-5c9631/kura-storehouse-5c9631.glb",
+          "sha256": "71d5fac2196ee86a559c0ab4237eaeb0cd5d94396135d8e9c9f0a1d6d0f475b6",
+          "bytes": 195724
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/kura-storehouse-5c9631-params.json",
+          "path": "public/assets/polyfork/kura-storehouse-5c9631/kura-storehouse-5c9631-params.json",
+          "sha256": "a55b90ba53db0b40eb6ad7256f1d0a9ec3d6a0e1e02d80d06559f49f58eeb3b1",
+          "bytes": 13625
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/kura-storehouse-5c9631-colliders.json",
+          "path": "public/assets/polyfork/kura-storehouse-5c9631/kura-storehouse-5c9631-colliders.json",
+          "sha256": "59ca1d9532e48317742d0bba70a59c21a9eb1c336a5e0a027766c35b849e8a86",
+          "bytes": 3983
+        }
+      }
+    },
+    {
+      "id": "lean-to-shelter-f0709f",
+      "title": "Lean-To Shelter",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "building",
+      "triangles": 848,
+      "size_m": {
+        "x": 3.02,
+        "y": 2.01,
+        "z": 2.39
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/lean-to-shelter-f0709f.glb",
+          "path": "public/assets/polyfork/lean-to-shelter-f0709f/lean-to-shelter-f0709f.glb",
+          "sha256": "c3a6f787950c833cd5d95a4049234664221bbfd3973841b1e06315025ac6305c",
+          "bytes": 98024
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/lean-to-shelter-f0709f-params.json",
+          "path": "public/assets/polyfork/lean-to-shelter-f0709f/lean-to-shelter-f0709f-params.json",
+          "sha256": "effc14b2144e62313ded0bd31857e28844b7413edcdfd06726f5e5f5ea4781ba",
+          "bytes": 5965
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/lean-to-shelter-f0709f-colliders.json",
+          "path": "public/assets/polyfork/lean-to-shelter-f0709f/lean-to-shelter-f0709f-colliders.json",
+          "sha256": "f2558954a0041d6f12681d3512f7af9f00d13f600c0da296bfba17b2893c718b",
+          "bytes": 11144
+        }
+      }
+    },
+    {
+      "id": "lion-base",
+      "title": "Lion",
+      "kit": null,
+      "class": "animal",
+      "triangles": 3982,
+      "size_m": {
+        "x": 0.91,
+        "y": 1.73,
+        "z": 2.55
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/lion-base.glb",
+          "path": "public/assets/polyfork/lion-base/lion-base.glb",
+          "sha256": "351b03d81dad328afd9dd0ea33cd6bb3e9345900e293cf9328bf1d6a1340bb0f",
+          "bytes": 1936848
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/lion-base-params.json",
+          "path": "public/assets/polyfork/lion-base/lion-base-params.json",
+          "sha256": "36bb99ee41b599f033b72cefd8dc515fad232d7db1f0573b72b993db6a72f21c",
+          "bytes": 2678
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/lion-base-colliders.json",
+          "path": "public/assets/polyfork/lion-base/lion-base-colliders.json",
+          "sha256": "6ea21136e1c41ff506fc3feef68c49aecf3d77e2e800e1bc7b28d3d7e16dddcf",
+          "bytes": 9429
+        }
+      }
+    },
+    {
+      "id": "machiya-townhouse-8ef64e",
+      "title": "Machiya Townhouse",
+      "kit": "medieval-japan-cb01ad",
+      "class": "building",
+      "triangles": 1532,
+      "size_m": {
+        "x": 8,
+        "y": 7.66,
+        "z": 4
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/machiya-townhouse-8ef64e.glb",
+          "path": "public/assets/polyfork/machiya-townhouse-8ef64e/machiya-townhouse-8ef64e.glb",
+          "sha256": "28a02ed3cc43db113356b5678c05d9f2e4d8271d33e594c4b061462f04fc29fc",
+          "bytes": 177376
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/machiya-townhouse-8ef64e-params.json",
+          "path": "public/assets/polyfork/machiya-townhouse-8ef64e/machiya-townhouse-8ef64e-params.json",
+          "sha256": "04684b9912c83f630f7761149335f3ce3e1c0161004066e9fe94cc84619cb400",
+          "bytes": 12267
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/machiya-townhouse-8ef64e-colliders.json",
+          "path": "public/assets/polyfork/machiya-townhouse-8ef64e/machiya-townhouse-8ef64e-colliders.json",
+          "sha256": "20b826377069226c44393514880c840b41322c9689a32f029c19ad81909365ff",
+          "bytes": 1792
+        }
+      }
+    },
+    {
+      "id": "medium-rock-e08405",
+      "title": "Medium Rock",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "prop",
+      "triangles": 374,
+      "size_m": {
+        "x": 1,
+        "y": 0.5,
+        "z": 0.95
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/medium-rock-e08405.glb",
+          "path": "public/assets/polyfork/medium-rock-e08405/medium-rock-e08405.glb",
+          "sha256": "c4b1389bde65131b5d66ece228ae95e14eebf957d21be4406cc27d5cdf890baf",
+          "bytes": 44008
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/medium-rock-e08405-params.json",
+          "path": "public/assets/polyfork/medium-rock-e08405/medium-rock-e08405-params.json",
+          "sha256": "d5a286bba2be3e78690923c5ac0f199a66c210f7903e514f3b4148853e4cf69f",
+          "bytes": 4552
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/medium-rock-e08405-colliders.json",
+          "path": "public/assets/polyfork/medium-rock-e08405/medium-rock-e08405-colliders.json",
+          "sha256": "287ec879970fe162ef1e625525c4e1343ff56a0259988d4ed623330507650453",
+          "bytes": 4877
+        }
+      }
+    },
+    {
+      "id": "minka-farmhouse-680475",
+      "title": "Minka Farmhouse",
+      "kit": "medieval-japan-cb01ad",
+      "class": "building",
+      "triangles": 1560,
+      "size_m": {
+        "x": 8,
+        "y": 7.27,
+        "z": 6
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/minka-farmhouse-680475.glb",
+          "path": "public/assets/polyfork/minka-farmhouse-680475/minka-farmhouse-680475.glb",
+          "sha256": "8f2a178db6ec2ceca8dd13314d920006bd400a9bab25017a6a43fabed55220f3",
+          "bytes": 180676
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/minka-farmhouse-680475-params.json",
+          "path": "public/assets/polyfork/minka-farmhouse-680475/minka-farmhouse-680475-params.json",
+          "sha256": "b67eb372459913b4a0df21aed4fa74191771191656b9d45ed6484dcb570942f4",
+          "bytes": 11215
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/minka-farmhouse-680475-colliders.json",
+          "path": "public/assets/polyfork/minka-farmhouse-680475/minka-farmhouse-680475-colliders.json",
+          "sha256": "a524dbc5decff4fe797851ba736b9e46cefc6b50e17e053425924a64be455bd1",
+          "bytes": 2214
+        }
+      }
+    },
+    {
+      "id": "moat-bridge-4fbcd9",
+      "title": "Moat Bridge",
+      "kit": "medieval-japan-cb01ad",
+      "class": "building",
+      "triangles": 1606,
+      "size_m": {
+        "x": 10,
+        "y": 3.07,
+        "z": 2
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/moat-bridge-4fbcd9.glb",
+          "path": "public/assets/polyfork/moat-bridge-4fbcd9/moat-bridge-4fbcd9.glb",
+          "sha256": "dbf24883d0a7748512db405209d2e7772ce2879f2a902cb9c6adda47f8d40b4d",
+          "bytes": 184352
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/moat-bridge-4fbcd9-params.json",
+          "path": "public/assets/polyfork/moat-bridge-4fbcd9/moat-bridge-4fbcd9-params.json",
+          "sha256": "df3cf74edbe8e01bac1ac0a0c55539f5a9918429ac079ed2b584d16482be7eba",
+          "bytes": 9553
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/moat-bridge-4fbcd9-colliders.json",
+          "path": "public/assets/polyfork/moat-bridge-4fbcd9/moat-bridge-4fbcd9-colliders.json",
+          "sha256": "8da66ef43adfd77c1e44b72b443d0aec3b36020404fa3d64fbef5171d4f2b1d4",
+          "bytes": 7768
+        }
+      }
+    },
+    {
+      "id": "moat-reed-clump-dd6b60",
+      "title": "Moat Reed Clump",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 606,
+      "size_m": {
+        "x": 1.32,
+        "y": 1.79,
+        "z": 1.49
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/moat-reed-clump-dd6b60.glb",
+          "path": "public/assets/polyfork/moat-reed-clump-dd6b60/moat-reed-clump-dd6b60.glb",
+          "sha256": "cfef63988173d0e359f34cca48a1ee5bbcf39bf3d775a57fa8fa0796ccf6c11e",
+          "bytes": 76856
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/moat-reed-clump-dd6b60-params.json",
+          "path": "public/assets/polyfork/moat-reed-clump-dd6b60/moat-reed-clump-dd6b60-params.json",
+          "sha256": "be6638b94914330061de2c1e5b35f0e592c39a0235d49e1021978e5902da42c6",
+          "bytes": 9745
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/moat-reed-clump-dd6b60-colliders.json",
+          "path": "public/assets/polyfork/moat-reed-clump-dd6b60/moat-reed-clump-dd6b60-colliders.json",
+          "sha256": "8ffd228a5d81c97079e2dbdfff1149eb7351ba0c2c176496a76b7260a74e2849",
+          "bytes": 6337
+        }
+      }
+    },
+    {
+      "id": "mountain-hare-base",
+      "title": "Mountain hare",
+      "kit": null,
+      "class": "animal",
+      "triangles": 2975,
+      "size_m": {
+        "x": 0.21,
+        "y": 0.53,
+        "z": 0.42
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/mountain-hare-base.glb",
+          "path": "public/assets/polyfork/mountain-hare-base/mountain-hare-base.glb",
+          "sha256": "c861a71ccb491419b8a753022a842c009361f4f0dc9c90bc442f953f077022dd",
+          "bytes": 1391180
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/mountain-hare-base-params.json",
+          "path": "public/assets/polyfork/mountain-hare-base/mountain-hare-base-params.json",
+          "sha256": "02a0f4f4512b5a7021e5f5b41ba1ad8f422889c9263e4083c1fa780df61db4aa",
+          "bytes": 3511
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/mountain-hare-base-colliders.json",
+          "path": "public/assets/polyfork/mountain-hare-base/mountain-hare-base-colliders.json",
+          "sha256": "e05aa97790a5d5f71e07009cce4ee7dba3f808c0af7f88fcb305e4b6666c5a84",
+          "bytes": 15293
+        }
+      }
+    },
+    {
+      "id": "nobori-banner-ae4d88",
+      "title": "Nobori Banner",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 582,
+      "size_m": {
+        "x": 1.29,
+        "y": 3.2,
+        "z": 1
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/nobori-banner-ae4d88.glb",
+          "path": "public/assets/polyfork/nobori-banner-ae4d88/nobori-banner-ae4d88.glb",
+          "sha256": "af281b323e49d3391cd8692f25da2f4b58a11302996382942628bd3b4fb40868",
+          "bytes": 67524
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/nobori-banner-ae4d88-params.json",
+          "path": "public/assets/polyfork/nobori-banner-ae4d88/nobori-banner-ae4d88-params.json",
+          "sha256": "7b151fbf87d10dcf2332e88dfcedcb73f8db7d8987f7aea929bef5b5c181f429",
+          "bytes": 8377
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/nobori-banner-ae4d88-colliders.json",
+          "path": "public/assets/polyfork/nobori-banner-ae4d88/nobori-banner-ae4d88-colliders.json",
+          "sha256": "e687f054b03021846b52e839e2f5fa87217b1d747f3bcccc211eb6819b2f8863",
+          "bytes": 3886
+        }
+      }
+    },
+    {
+      "id": "open-front-teahouse-c7dd18",
+      "title": "Open-Front Teahouse",
+      "kit": "medieval-japan-cb01ad",
+      "class": "building",
+      "triangles": 1094,
+      "size_m": {
+        "x": 4,
+        "y": 3.83,
+        "z": 4
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/open-front-teahouse-c7dd18.glb",
+          "path": "public/assets/polyfork/open-front-teahouse-c7dd18/open-front-teahouse-c7dd18.glb",
+          "sha256": "b3c6ccc5f5f7a0d43ca502bd6cb0ae0e8c17884ad6a5c9121b509061aaf42b3c",
+          "bytes": 125996
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/open-front-teahouse-c7dd18-params.json",
+          "path": "public/assets/polyfork/open-front-teahouse-c7dd18/open-front-teahouse-c7dd18-params.json",
+          "sha256": "e8c76386e439b0af2885651afa03228271d99f8588551bb19cfee80a6ae0268f",
+          "bytes": 14391
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/open-front-teahouse-c7dd18-colliders.json",
+          "path": "public/assets/polyfork/open-front-teahouse-c7dd18/open-front-teahouse-c7dd18-colliders.json",
+          "sha256": "19eb4705440e275a89ea7f097e294a87e940ec7303ca1ec38c744f828c0535d4",
+          "bytes": 2206
+        }
+      }
+    },
+    {
+      "id": "ox-cart-9c857f",
+      "title": "Ox Cart",
+      "kit": "medieval-japan-cb01ad",
+      "class": "vehicle",
+      "triangles": 1296,
+      "size_m": {
+        "x": 2,
+        "y": 1.56,
+        "z": 4
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/ox-cart-9c857f.glb",
+          "path": "public/assets/polyfork/ox-cart-9c857f/ox-cart-9c857f.glb",
+          "sha256": "77e68cb7a83c9feb668a3d0f9dca5549185c485e130039ab74c84265dcaaf704",
+          "bytes": 146292
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/ox-cart-9c857f-params.json",
+          "path": "public/assets/polyfork/ox-cart-9c857f/ox-cart-9c857f-params.json",
+          "sha256": "15f948f1436545fa30cc5a4c01d26808595ecdf54227ce93acc2faa077203dc8",
+          "bytes": 8510
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/ox-cart-9c857f-colliders.json",
+          "path": "public/assets/polyfork/ox-cart-9c857f/ox-cart-9c857f-colliders.json",
+          "sha256": "19d9a1a3d479804f9155841ab67d4947a308aaf1addc6165f6649ada615a0288",
+          "bytes": 11264
+        }
+      }
+    },
+    {
+      "id": "petroglyph-boulder-7203c3",
+      "title": "Petroglyph Boulder",
+      "kit": "easter-island-rapa-nui-368e86",
+      "class": "prop",
+      "triangles": 780,
+      "size_m": {
+        "x": 1.57,
+        "y": 1.18,
+        "z": 0.68
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/petroglyph-boulder-7203c3.glb",
+          "path": "public/assets/polyfork/petroglyph-boulder-7203c3/petroglyph-boulder-7203c3.glb",
+          "sha256": "caafb2861ebcf0926a449b172241ebd852f3b9435df879d413c0741b289a26ee",
+          "bytes": 90344
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/petroglyph-boulder-7203c3-params.json",
+          "path": "public/assets/polyfork/petroglyph-boulder-7203c3/petroglyph-boulder-7203c3-params.json",
+          "sha256": "3c765082b3baef471bbfc0a3196937cbf92ea39e554efdb3fb4c9f32a7940448",
+          "bytes": 5521
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/petroglyph-boulder-7203c3-colliders.json",
+          "path": "public/assets/polyfork/petroglyph-boulder-7203c3/petroglyph-boulder-7203c3-colliders.json",
+          "sha256": "4db8f5360578ea1fadd838803d378cb68d43c965d608e1a5f13c3a8e729e3ce4",
+          "bytes": 4384
+        }
+      }
+    },
+    {
+      "id": "pig-base",
+      "title": "Pig",
+      "kit": null,
+      "class": "animal",
+      "triangles": 2890,
+      "size_m": {
+        "x": 0.76,
+        "y": 1.1,
+        "z": 1.41
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/pig-base.glb",
+          "path": "public/assets/polyfork/pig-base/pig-base.glb",
+          "sha256": "e32e861afbf0100138856d594c88f9b753d0b348ec792b31a63aff2ba830dcdf",
+          "bytes": 1525988
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/pig-base-params.json",
+          "path": "public/assets/polyfork/pig-base/pig-base-params.json",
+          "sha256": "43e3315333b70ad0e84d0c4eefd42aed5a098e9daf3cbcbe33560be96564f40e",
+          "bytes": 3624
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/pig-base-colliders.json",
+          "path": "public/assets/polyfork/pig-base/pig-base-colliders.json",
+          "sha256": "4eadebade95ffcfaf00b2f90c9160fd964c4f9f15d9e793273541f8e7f734784",
+          "bytes": 7613
+        }
+      }
+    },
+    {
+      "id": "red-fox-5c3bc0",
+      "title": "Red Fox",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "animal",
+      "triangles": 2280,
+      "size_m": {
+        "x": 0.38,
+        "y": 0.95,
+        "z": 1.47
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/red-fox-5c3bc0.glb",
+          "path": "public/assets/polyfork/red-fox-5c3bc0/red-fox-5c3bc0.glb",
+          "sha256": "aae86226365f2b645867a76c9cb9aae67f98d4cae4b51f7736fb86eae0a23165",
+          "bytes": 1399480
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/red-fox-5c3bc0-params.json",
+          "path": "public/assets/polyfork/red-fox-5c3bc0/red-fox-5c3bc0-params.json",
+          "sha256": "7e9b8db26afb698433e3ff1a1ee6b7b166b478b6a0e39e0fb5041ea1f1d847bb",
+          "bytes": 3275
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/red-fox-5c3bc0-colliders.json",
+          "path": "public/assets/polyfork/red-fox-5c3bc0/red-fox-5c3bc0-colliders.json",
+          "sha256": "78bc35d709e8966366d3cfb20e6e604f2d75b8d2d9c6d5fc05e0977a7b97ebda",
+          "bytes": 4562
+        }
+      }
+    },
+    {
+      "id": "reed-fire-torch-f7453e",
+      "title": "Reed Fire Torch",
+      "kit": "easter-island-rapa-nui-368e86",
+      "class": "prop",
+      "triangles": 844,
+      "size_m": {
+        "x": 0.64,
+        "y": 2.9,
+        "z": 0.63
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/reed-fire-torch-f7453e.glb",
+          "path": "public/assets/polyfork/reed-fire-torch-f7453e/reed-fire-torch-f7453e.glb",
+          "sha256": "063acda2937aa7b0e399d71b38376ea3553e91902dc30001e7d0a82ce06e3002",
+          "bytes": 119104
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/reed-fire-torch-f7453e-params.json",
+          "path": "public/assets/polyfork/reed-fire-torch-f7453e/reed-fire-torch-f7453e-params.json",
+          "sha256": "bb2a6972fe527a0507012e08afb92ae88a2123272e04789ae6036184d3f1029e",
+          "bytes": 7219
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/reed-fire-torch-f7453e-colliders.json",
+          "path": "public/assets/polyfork/reed-fire-torch-f7453e/reed-fire-torch-f7453e-colliders.json",
+          "sha256": "7fcaa545e6777f8f78aa6c9908acbcf46230d45d41508a03ee91cf53e8fb313a",
+          "bytes": 8516
+        }
+      }
+    },
+    {
+      "id": "reef-fish-base",
+      "title": "Reef fish",
+      "kit": null,
+      "class": "animal",
+      "triangles": 2996,
+      "size_m": {
+        "x": 0.3,
+        "y": 0.67,
+        "z": 0.79
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/reef-fish-base.glb",
+          "path": "public/assets/polyfork/reef-fish-base/reef-fish-base.glb",
+          "sha256": "17d2a77dd2446dd39517ba5cccaaa29d6d13aee6c4634dc0eca2e91ca60084cc",
+          "bytes": 1019412
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/reef-fish-base-params.json",
+          "path": "public/assets/polyfork/reef-fish-base/reef-fish-base-params.json",
+          "sha256": "543211c9553ef465a08960ef18cb59b65b99c0ffffe4f3c8c7920fa42984157f",
+          "bytes": 2478
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/reef-fish-base-colliders.json",
+          "path": "public/assets/polyfork/reef-fish-base/reef-fish-base-colliders.json",
+          "sha256": "c53a381e2acd57ade4969b2ae15cbfb82d9927d5524074987b111bede3b7c4e4",
+          "bytes": 12429
+        }
+      }
+    },
+    {
+      "id": "reef-shark-base",
+      "title": "Reef shark",
+      "kit": null,
+      "class": "animal",
+      "triangles": 2462,
+      "size_m": {
+        "x": 0.59,
+        "y": 0.52,
+        "z": 1.6
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/reef-shark-base.glb",
+          "path": "public/assets/polyfork/reef-shark-base/reef-shark-base.glb",
+          "sha256": "d2725df080ed90e25110b25ca063c4852cfa2db360f361cedf2c834e5585247e",
+          "bytes": 898544
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/reef-shark-base-params.json",
+          "path": "public/assets/polyfork/reef-shark-base/reef-shark-base-params.json",
+          "sha256": "ab6076908968f5128ed134652e109e59616db86d7b2eaa38f829db47cae9887c",
+          "bytes": 3290
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/reef-shark-base-colliders.json",
+          "path": "public/assets/polyfork/reef-shark-base/reef-shark-base-colliders.json",
+          "sha256": "22c07e66f2fa8324a055957e5e0672b848168dccddf39c9a3670b8184e289b2e",
+          "bytes": 14193
+        }
+      }
+    },
+    {
+      "id": "rice-paddy-tile-dc727e",
+      "title": "Rice Paddy Tile",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 842,
+      "size_m": {
+        "x": 2,
+        "y": 0.12,
+        "z": 2
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/rice-paddy-tile-dc727e.glb",
+          "path": "public/assets/polyfork/rice-paddy-tile-dc727e/rice-paddy-tile-dc727e.glb",
+          "sha256": "1689b42b01bfa927163e5724d604f534da8b2b6c93ba6cd3a97496d48ab57647",
+          "bytes": 97260
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/rice-paddy-tile-dc727e-params.json",
+          "path": "public/assets/polyfork/rice-paddy-tile-dc727e/rice-paddy-tile-dc727e-params.json",
+          "sha256": "f385d7badb6701ae599bafb76680cdd94a0cb387859f6386a0e572293ce8b803",
+          "bytes": 8200
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/rice-paddy-tile-dc727e-colliders.json",
+          "path": "public/assets/polyfork/rice-paddy-tile-dc727e/rice-paddy-tile-dc727e-colliders.json",
+          "sha256": "290225acdc0e30c63718ad94d120a431ce64d7a5f581a9b61ea2447bb269a068",
+          "bytes": 960
+        }
+      }
+    },
+    {
+      "id": "roofed-well-43a2fc",
+      "title": "Roofed Well",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 744,
+      "size_m": {
+        "x": 2,
+        "y": 2.84,
+        "z": 2
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/roofed-well-43a2fc.glb",
+          "path": "public/assets/polyfork/roofed-well-43a2fc/roofed-well-43a2fc.glb",
+          "sha256": "ee5117593c4b6f99b898c1b67c408e81430c7e020bc5d2dd6845de4cd99add87",
+          "bytes": 90980
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/roofed-well-43a2fc-params.json",
+          "path": "public/assets/polyfork/roofed-well-43a2fc/roofed-well-43a2fc-params.json",
+          "sha256": "f2ff633c818d0e5b7716bca085bfef2c510a74757964c4238de4926ebad8fc33",
+          "bytes": 6282
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/roofed-well-43a2fc-colliders.json",
+          "path": "public/assets/polyfork/roofed-well-43a2fc/roofed-well-43a2fc-colliders.json",
+          "sha256": "8dacf39be515810e7267ceac8004e090d5259c4b9e4ba7d7bdab575648fc34ab",
+          "bytes": 7557
+        }
+      }
+    },
+    {
+      "id": "sculpted-pine-e45d4f",
+      "title": "Sculpted Pine",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 510,
+      "size_m": {
+        "x": 3.34,
+        "y": 3.17,
+        "z": 2.93
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/sculpted-pine-e45d4f.glb",
+          "path": "public/assets/polyfork/sculpted-pine-e45d4f/sculpted-pine-e45d4f.glb",
+          "sha256": "c86b162ef3aaa1ff7f70f98e30cb7154d19f0a2a1f48fdf3310ac4ec97cbc342",
+          "bytes": 96788
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/sculpted-pine-e45d4f-params.json",
+          "path": "public/assets/polyfork/sculpted-pine-e45d4f/sculpted-pine-e45d4f-params.json",
+          "sha256": "2d86690939d8e653be793d62110f80f9de41ab05ac7953bd30d0126714b158b9",
+          "bytes": 6392
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/sculpted-pine-e45d4f-colliders.json",
+          "path": "public/assets/polyfork/sculpted-pine-e45d4f/sculpted-pine-e45d4f-colliders.json",
+          "sha256": "2f1b77b57051101c058a139cb5c9587b53c64776f863fd1cecc88b17b681a344",
+          "bytes": 5584
+        }
+      }
+    },
+    {
+      "id": "stone-fire-pit-4136b0",
+      "title": "Stone Fire Pit",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "prop",
+      "triangles": 584,
+      "size_m": {
+        "x": 1.21,
+        "y": 0.42,
+        "z": 1.16
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/stone-fire-pit-4136b0.glb",
+          "path": "public/assets/polyfork/stone-fire-pit-4136b0/stone-fire-pit-4136b0.glb",
+          "sha256": "3f05685f5a292cf1a9f9691769d3fb4b680cb2251059f4e2f570b8e858b08418",
+          "bytes": 68528
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/stone-fire-pit-4136b0-params.json",
+          "path": "public/assets/polyfork/stone-fire-pit-4136b0/stone-fire-pit-4136b0-params.json",
+          "sha256": "5cdc22430f408bd95126feb495b7e2f545dc6636140681da8324a425bb201278",
+          "bytes": 11815
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/stone-fire-pit-4136b0-colliders.json",
+          "path": "public/assets/polyfork/stone-fire-pit-4136b0/stone-fire-pit-4136b0-colliders.json",
+          "sha256": "adf6b02e592b746a67e852eb8f60caab303486e5b104bdad854582bdc1a195e3",
+          "bytes": 6960
+        }
+      }
+    },
+    {
+      "id": "stone-paving-tile-5af0d1",
+      "title": "Stone Paving Tile",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 464,
+      "size_m": {
+        "x": 2,
+        "y": 0.05,
+        "z": 2
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/stone-paving-tile-5af0d1.glb",
+          "path": "public/assets/polyfork/stone-paving-tile-5af0d1/stone-paving-tile-5af0d1.glb",
+          "sha256": "9dca7b9908c29afef0db96dacdc9f7de0e308cb41c808d1f57799671fa2bd388",
+          "bytes": 54172
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/stone-paving-tile-5af0d1-params.json",
+          "path": "public/assets/polyfork/stone-paving-tile-5af0d1/stone-paving-tile-5af0d1-params.json",
+          "sha256": "c387d4973a024d7001ec29a82940e4f6dd4c5d2176bfca981cc6cf4714cd08a0",
+          "bytes": 8928
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/stone-paving-tile-5af0d1-colliders.json",
+          "path": "public/assets/polyfork/stone-paving-tile-5af0d1/stone-paving-tile-5af0d1-colliders.json",
+          "sha256": "f288a5fca767cf94c86a7a9f8e643d8f4b2fc3bbfebac28b7b6e94b5b5829aeb",
+          "bytes": 3076
+        }
+      }
+    },
+    {
+      "id": "stream-water-wheel-ea2d68",
+      "title": "Stream Water Wheel",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 712,
+      "size_m": {
+        "x": 4,
+        "y": 3.47,
+        "z": 2.5
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/stream-water-wheel-ea2d68.glb",
+          "path": "public/assets/polyfork/stream-water-wheel-ea2d68/stream-water-wheel-ea2d68.glb",
+          "sha256": "331ba74c263d52e86768fa3c8674fe64b69ce5f8b03724188eda23688a49b01a",
+          "bytes": 86476
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/stream-water-wheel-ea2d68-params.json",
+          "path": "public/assets/polyfork/stream-water-wheel-ea2d68/stream-water-wheel-ea2d68-params.json",
+          "sha256": "bfb3850a8c54f651458f0096a19ce775595873e2031a729548d3a1d7ff221615",
+          "bytes": 9455
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/stream-water-wheel-ea2d68-colliders.json",
+          "path": "public/assets/polyfork/stream-water-wheel-ea2d68/stream-water-wheel-ea2d68-colliders.json",
+          "sha256": "46afd599db52ca59b2a02beda84bc29b0e20f02ed519fe0c197bf9dcc9742ed3",
+          "bytes": 6989
+        }
+      }
+    },
+    {
+      "id": "takegaki-bamboo-fence-c6718b",
+      "title": "Takegaki Bamboo Fence",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 656,
+      "size_m": {
+        "x": 2,
+        "y": 1.6,
+        "z": 0.3
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/takegaki-bamboo-fence-c6718b.glb",
+          "path": "public/assets/polyfork/takegaki-bamboo-fence-c6718b/takegaki-bamboo-fence-c6718b.glb",
+          "sha256": "e74a54c2897a428141c96cb201557255d4c403f3f3f7433d760b2b23816321b9",
+          "bytes": 88852
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/takegaki-bamboo-fence-c6718b-params.json",
+          "path": "public/assets/polyfork/takegaki-bamboo-fence-c6718b/takegaki-bamboo-fence-c6718b-params.json",
+          "sha256": "d3518f223b972ddcdcd44955810115330102f654a66ff6de98c01692a5a8709a",
+          "bytes": 10190
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/takegaki-bamboo-fence-c6718b-colliders.json",
+          "path": "public/assets/polyfork/takegaki-bamboo-fence-c6718b/takegaki-bamboo-fence-c6718b-colliders.json",
+          "sha256": "401be6e6c1791ab66b69842dbb892410f2c7d295a7285e40925eb40346e6088b",
+          "bytes": 5562
+        }
+      }
+    },
+    {
+      "id": "teahouse-bench-6b34e1",
+      "title": "Teahouse Bench",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 492,
+      "size_m": {
+        "x": 1.5,
+        "y": 0.46,
+        "z": 0.5
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/teahouse-bench-6b34e1.glb",
+          "path": "public/assets/polyfork/teahouse-bench-6b34e1/teahouse-bench-6b34e1.glb",
+          "sha256": "d2d7d77eccdbddbb722d26bcc265e5ee82a7ffa81fd04bd9915cc1338175c956",
+          "bytes": 69552
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/teahouse-bench-6b34e1-params.json",
+          "path": "public/assets/polyfork/teahouse-bench-6b34e1/teahouse-bench-6b34e1-params.json",
+          "sha256": "a362da6ef91c27fd54641c3f4c3bb33a862da045246b58f9a18eb26988166dbd",
+          "bytes": 6531
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/teahouse-bench-6b34e1-colliders.json",
+          "path": "public/assets/polyfork/teahouse-bench-6b34e1/teahouse-bench-6b34e1-colliders.json",
+          "sha256": "177b81e3d3e072f5941fda5ae11876f56e17f95b592daf41b30c463640a71f09",
+          "bytes": 5516
+        }
+      }
+    },
+    {
+      "id": "temple-bell-tower-745387",
+      "title": "Temple Bell Tower",
+      "kit": "medieval-japan-cb01ad",
+      "class": "building",
+      "triangles": 1782,
+      "size_m": {
+        "x": 4,
+        "y": 6.8,
+        "z": 4
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/temple-bell-tower-745387.glb",
+          "path": "public/assets/polyfork/temple-bell-tower-745387/temple-bell-tower-745387.glb",
+          "sha256": "db1075b2a2cf1f30939f2e18f84b5ca49eba296dbb09b04e46026aed96e3778b",
+          "bytes": 210216
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/temple-bell-tower-745387-params.json",
+          "path": "public/assets/polyfork/temple-bell-tower-745387/temple-bell-tower-745387-params.json",
+          "sha256": "e6de47acfe0589edf0756508fae08ce6ddc558cd1add5141b1f507fb92fafe5d",
+          "bytes": 14005
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/temple-bell-tower-745387-colliders.json",
+          "path": "public/assets/polyfork/temple-bell-tower-745387/temple-bell-tower-745387-colliders.json",
+          "sha256": "a8737fd62cb7062a95491ab4050ed08962ff92d218ca9269b1f6b1a4ca46f8dc",
+          "bytes": 6235
+        }
+      }
+    },
+    {
+      "id": "tenshu-keep-2ff636",
+      "title": "Tenshu Keep",
+      "kit": "medieval-japan-cb01ad",
+      "class": "building",
+      "triangles": 2890,
+      "size_m": {
+        "x": 12,
+        "y": 17.51,
+        "z": 12
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/tenshu-keep-2ff636.glb",
+          "path": "public/assets/polyfork/tenshu-keep-2ff636/tenshu-keep-2ff636.glb",
+          "sha256": "881e1e6e12fea904c859ffbce18a846bcdf8b51263d305af2e7cc39330af9a55",
+          "bytes": 330720
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/tenshu-keep-2ff636-params.json",
+          "path": "public/assets/polyfork/tenshu-keep-2ff636/tenshu-keep-2ff636-params.json",
+          "sha256": "ef6da8a6d521386992e3b5eff5a876e47a81eac6f5071a309830ba3fec8c102a",
+          "bytes": 9235
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/tenshu-keep-2ff636-colliders.json",
+          "path": "public/assets/polyfork/tenshu-keep-2ff636/tenshu-keep-2ff636-colliders.json",
+          "sha256": "7a48a0ab5eee8d9c7d37a1c67e7f37956c086382473b2d49b86820f8cfffc8ef",
+          "bytes": 5349
+        }
+      }
+    },
+    {
+      "id": "terrace-stone-stair-494ef8",
+      "title": "Terrace Stone Stair",
+      "kit": "medieval-japan-cb01ad",
+      "class": "building",
+      "triangles": 1550,
+      "size_m": {
+        "x": 4,
+        "y": 3.2,
+        "z": 6
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/terrace-stone-stair-494ef8.glb",
+          "path": "public/assets/polyfork/terrace-stone-stair-494ef8/terrace-stone-stair-494ef8.glb",
+          "sha256": "e1f98124481079dd56584c3179ac55bb23b792b076bd245405400f0fe6f7436d",
+          "bytes": 177992
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/terrace-stone-stair-494ef8-params.json",
+          "path": "public/assets/polyfork/terrace-stone-stair-494ef8/terrace-stone-stair-494ef8-params.json",
+          "sha256": "b7d191317b18dfc4def8fac391c432287ad3a17628ef1e08f37dc87319ff66be",
+          "bytes": 9103
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/terrace-stone-stair-494ef8-colliders.json",
+          "path": "public/assets/polyfork/terrace-stone-stair-494ef8/terrace-stone-stair-494ef8-colliders.json",
+          "sha256": "91a0be0c182689761ddaff6c96e521a41d4235ecb5afadf02566328ef2b1bcb2",
+          "bytes": 6743
+        }
+      }
+    },
+    {
+      "id": "tiered-pagoda-f4ade0",
+      "title": "Tiered Pagoda",
+      "kit": "medieval-japan-cb01ad",
+      "class": "building",
+      "triangles": 1424,
+      "size_m": {
+        "x": 6,
+        "y": 14.02,
+        "z": 6
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/tiered-pagoda-f4ade0.glb",
+          "path": "public/assets/polyfork/tiered-pagoda-f4ade0/tiered-pagoda-f4ade0.glb",
+          "sha256": "097b3ab93e3b8ff163bc102ad195c3b2aacba0eab582691081e6a5b0424c5d39",
+          "bytes": 165240
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/tiered-pagoda-f4ade0-params.json",
+          "path": "public/assets/polyfork/tiered-pagoda-f4ade0/tiered-pagoda-f4ade0-params.json",
+          "sha256": "f5d4672edc5699ca6fc0343f8b5c76a0bfa34a603dcdcb7a420d3f3ea5d90deb",
+          "bytes": 9408
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/tiered-pagoda-f4ade0-colliders.json",
+          "path": "public/assets/polyfork/tiered-pagoda-f4ade0/tiered-pagoda-f4ade0-colliders.json",
+          "sha256": "dab0fd5f61088ce29bbb587ac486a1762942bf5ee423da12ef2fb5f386fb4739",
+          "bytes": 4402
+        }
+      }
+    },
+    {
+      "id": "tsukubai-stone-basin-677586",
+      "title": "Tsukubai Stone Basin",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 644,
+      "size_m": {
+        "x": 1,
+        "y": 0.86,
+        "z": 1
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/tsukubai-stone-basin-677586.glb",
+          "path": "public/assets/polyfork/tsukubai-stone-basin-677586/tsukubai-stone-basin-677586.glb",
+          "sha256": "6157df1dae616512eafaac36e2bb4a2da87c68cdc5683ebc646f6cf02a8dd3cc",
+          "bytes": 86568
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/tsukubai-stone-basin-677586-params.json",
+          "path": "public/assets/polyfork/tsukubai-stone-basin-677586/tsukubai-stone-basin-677586-params.json",
+          "sha256": "7c023f9353133451478efcd5a133fa6c412d06d7460d8b51d554bb065d088fc5",
+          "bytes": 11816
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/tsukubai-stone-basin-677586-colliders.json",
+          "path": "public/assets/polyfork/tsukubai-stone-basin-677586/tsukubai-stone-basin-677586-colliders.json",
+          "sha256": "776c91157bcd724a5b68738d27a84c8e1bc6236f52ba3d27c3a8980b1ed9430f",
+          "bytes": 6285
+        }
+      }
+    },
+    {
+      "id": "war-drum-on-stand-cbb91a",
+      "title": "War Drum On Stand",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 636,
+      "size_m": {
+        "x": 1,
+        "y": 1.35,
+        "z": 1
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/war-drum-on-stand-cbb91a.glb",
+          "path": "public/assets/polyfork/war-drum-on-stand-cbb91a/war-drum-on-stand-cbb91a.glb",
+          "sha256": "51938a73487356ea2bb62f9871da6a55ff339dcd8b92369ccab16a0796ec572a",
+          "bytes": 74788
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/war-drum-on-stand-cbb91a-params.json",
+          "path": "public/assets/polyfork/war-drum-on-stand-cbb91a/war-drum-on-stand-cbb91a-params.json",
+          "sha256": "d669cc483dc55a886d9601eda44e8defa25db55d7deb8d35362cdb9ad5cbb36d",
+          "bytes": 10960
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/war-drum-on-stand-cbb91a-colliders.json",
+          "path": "public/assets/polyfork/war-drum-on-stand-cbb91a/war-drum-on-stand-cbb91a-colliders.json",
+          "sha256": "69bdf45fd815cda5f8b49327f60a472d6598f52e2bc51ce4e32acb3af2a465b7",
+          "bytes": 5224
+        }
+      }
+    },
+    {
+      "id": "wolf-base",
+      "title": "Wolf",
+      "kit": null,
+      "class": "animal",
+      "triangles": 2874,
+      "size_m": {
+        "x": 0.37,
+        "y": 1.07,
+        "z": 1.36
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/wolf-base.glb",
+          "path": "public/assets/polyfork/wolf-base/wolf-base.glb",
+          "sha256": "4a84dd83f2dfb78d6b3ca976b14c9ff8a59bcc9579ad646b3d909e3d840a2d0e",
+          "bytes": 1451880
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/wolf-base-params.json",
+          "path": "public/assets/polyfork/wolf-base/wolf-base-params.json",
+          "sha256": "27e5cfc9d0d721be75b78ef2fbd80331006e5c461e8099234642ca8a97c0611c",
+          "bytes": 4038
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/wolf-base-colliders.json",
+          "path": "public/assets/polyfork/wolf-base/wolf-base-colliders.json",
+          "sha256": "b7c2750aa080181380b5220379ab2928477728e60494f6b751940d40916ca399",
+          "bytes": 5852
+        }
+      }
+    },
+    {
+      "id": "wooden-palisade-d4f4db",
+      "title": "Wooden Palisade",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 434,
+      "size_m": {
+        "x": 2,
+        "y": 2.4,
+        "z": 0.38
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/wooden-palisade-d4f4db.glb",
+          "path": "public/assets/polyfork/wooden-palisade-d4f4db/wooden-palisade-d4f4db.glb",
+          "sha256": "05ce03e5efb10225a05e4cfb1a6ab47dbdd99d76d36cb8d54f61d87d11779ec4",
+          "bytes": 50816
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/wooden-palisade-d4f4db-params.json",
+          "path": "public/assets/polyfork/wooden-palisade-d4f4db/wooden-palisade-d4f4db-params.json",
+          "sha256": "0b6b89f9a041e4e987dd5059b233b3cd130725edbb825f339b801385a0526927",
+          "bytes": 8801
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/wooden-palisade-d4f4db-colliders.json",
+          "path": "public/assets/polyfork/wooden-palisade-d4f4db/wooden-palisade-d4f4db-colliders.json",
+          "sha256": "1c79a3973469782f0f805b90d0bc4ad4451f6b122d10c12678aa4c61b5d13235",
+          "bytes": 5773
+        }
+      }
+    },
+    {
+      "id": "wooden-teoke-bucket-e65f35",
+      "title": "Wooden Teoke Bucket",
+      "kit": "medieval-japan-cb01ad",
+      "class": "prop",
+      "triangles": 526,
+      "size_m": {
+        "x": 0.4,
+        "y": 0.47,
+        "z": 0.31
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/wooden-teoke-bucket-e65f35.glb",
+          "path": "public/assets/polyfork/wooden-teoke-bucket-e65f35/wooden-teoke-bucket-e65f35.glb",
+          "sha256": "17eb349bdf7176df4ca114d0d3562573d4ab6737f6c1a323a115f82f29d1ed3c",
+          "bytes": 61596
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/wooden-teoke-bucket-e65f35-params.json",
+          "path": "public/assets/polyfork/wooden-teoke-bucket-e65f35/wooden-teoke-bucket-e65f35-params.json",
+          "sha256": "634499889b0d335c7f49e12ea752ef6cb558a4c0d7ca6911a12dd3e2222e8e64",
+          "bytes": 10026
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/wooden-teoke-bucket-e65f35-colliders.json",
+          "path": "public/assets/polyfork/wooden-teoke-bucket-e65f35/wooden-teoke-bucket-e65f35-colliders.json",
+          "sha256": "20e381401f30d8696d7111b5a8f115e4f37ed6dffbeece00b1b781642f71ccce",
+          "bytes": 6891
+        }
+      }
+    }
+  ]
+}
