@@ -15,6 +15,8 @@ import { atParam, directionOf, openGlobe, sample } from './globe-helpers';
  * A player who stands still in the follow view stands calmly: the avatar keeps its spot and its facing, plays
  * Idle, and its feet stay planted (Polyfork's Idle played on the spot pinned the hips while the legs kept the
  * captured weight shift, so the feet slid ~18 cm from side to side). On /?mock=1, at the town spawn and on a slope.
+ * From the first frame on, too: a frame that came before the player was set on the ground eased it up the slope as
+ * if it walked, and that speed played Walk for a moment (#19).
  */
 
 const view = createMockWorld();
@@ -82,7 +84,23 @@ async function pose(world: Locator): Promise<Pose> {
   };
 }
 
-/** Lets the player stand for STAND ms in the follow view and checks it stood calmly. */
+/**
+ * Records every avatar pose and clip the page reports from its first frame, as the world element's attributes
+ * change (a string: the tests' TypeScript has no DOM types).
+ */
+const RECORD_AVATAR = `
+  const reported = (window.reportedAvatar = []);
+  new MutationObserver((records) => {
+    for (const { target } of records)
+      reported.push([target.getAttribute('data-avatar') ?? '', target.getAttribute('data-avatar-clip')]);
+  }).observe(document, { subtree: true, attributes: true, attributeFilter: ['data-avatar', 'data-avatar-clip'] });
+`;
+
+interface RecordingWindow {
+  reportedAvatar: [string, string | null][];
+}
+
+/** Lets the player stand for STAND ms in the follow view and checks it stood calmly, since its first frame. */
 async function standsCalmly(page: Page, world: Locator) {
   await expect(world).toHaveAttribute('data-camera-mode', 'follow');
   await expect(world).toHaveAttribute('data-camera-flying', 'false');
@@ -111,6 +129,19 @@ async function standsCalmly(page: Page, world: Locator) {
   expect(moved).toBeLessThan(0.01);
   expect((turned * 180) / Math.PI).toBeLessThan(0.5);
   expect(slid).toBeLessThan(FOOT_DRIFT);
+
+  const reported = await page.evaluate(
+    () => (globalThis as unknown as RecordingWindow).reportedAvatar,
+  );
+  const since = reported.map(([avatar]) => {
+    const [x, y, z] = avatar.split(',').map(Number);
+    return new Vector3(x, y, z).distanceTo(first.position);
+  });
+  expect(reported.length).toBeGreaterThan(0); // the DOM changes only when the pose does
+  expect(Math.max(...since)).toBeLessThan(0.01);
+  expect(
+    new Set(reported.flatMap(([, clip]) => (clip === null ? [] : [clip]))),
+  ).toEqual(new Set(['Idle']));
 }
 
 test.describe.configure({ timeout: 120_000 });
@@ -119,6 +150,7 @@ test('the player stands still at the town spawn with planted feet', async ({
   page,
 }) => {
   const errors: string[] = [];
+  await page.addInitScript({ content: RECORD_AVATAR });
   const world = await openGlobe(page, errors, '?mock=1');
   expect((await sample(world)).site).toBe('town');
   await standsCalmly(page, world);
@@ -129,6 +161,7 @@ test('the player stands still on a slope with planted feet', async ({
   page,
 }) => {
   const errors: string[] = [];
+  await page.addInitScript({ content: RECORD_AVATAR });
   const world = await openGlobe(page, errors, `?mock=1&at=${slope()}`);
   expect(slopeAt(directionOf(await sample(world)))).toBeGreaterThan(0.3);
   await standsCalmly(page, world);

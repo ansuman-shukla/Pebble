@@ -1,5 +1,5 @@
 import { useFrame } from '@react-three/fiber';
-import { type RefObject, useEffect, useMemo, useRef } from 'react';
+import { type RefObject, useLayoutEffect, useMemo, useRef } from 'react';
 import { type Group, Matrix4, type Quaternion, Vector3 } from 'three';
 
 import {
@@ -151,7 +151,9 @@ export function GlobePlayer({
   const previous = useMemo(() => new Vector3(), []);
   const heading = useMemo(() => new Vector3(), []);
 
-  useEffect(() => {
+  // before the first frame (a passive effect could run after it): a frame that found the player off the ground
+  // eased it up as if it moved, and that speed played Walk for a moment on spawning
+  useLayoutEffect(() => {
     const player = playerRef.current;
     const direction = player.position.clone().normalize();
     player.ground = walk.groundAt(direction, player.ground);
