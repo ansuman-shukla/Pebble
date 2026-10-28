@@ -155,3 +155,17 @@ def test_walk_along_spends_the_budget_by_terrain_cost() -> None:
     assert done.arrived and done.position == c and done.cost_spent == pytest.approx(60.0)
     with pytest.raises(ValueError):
         Route(points=(a, b), costs=())
+
+
+def test_routes_between_every_pair_of_town_places_stay_on_walkable_ground(
+    sim_world: SimWorld, planner: Planner
+) -> None:
+    spots = [place.stand for place in sim_world.places.values() if place.kind == "town"]
+    spots += [structure.door for structure in sim_world.structures.values() if structure.kind == "storehouse"]
+    for start in spots:
+        for goal in spots:
+            if start == goal:
+                continue
+            route = planner.plan(start, goal)
+            assert route is not None
+            assert all(sim_world.town.walk.is_walkable(x, z) for x, z in _samples_inside_town(sim_world, route))

@@ -121,7 +121,7 @@ def test_salt_water_is_not_drinkable(new_sim: Callable[..., Simulation]) -> None
 
 def test_speech_interrupts_a_walk_with_what_was_said(new_sim: Callable[..., Simulation]) -> None:
     sim = new_sim()
-    sim.add_citizen(make_spec("caller", name="Caller", at=(0.0, 80.0)))
+    sim.add_citizen(make_spec("caller", name="Caller", at=(0.0, 96.0)))  # just inside the main gate
     walker = sim.add_citizen(make_spec("walker", age=70, at=(0.0, 150.0), knows_people=["caller"]))  # 3 minutes out
     walk = WorldApi(sim, "walker").walk_to_place("the well")
     sim.step()
