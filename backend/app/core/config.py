@@ -4,6 +4,7 @@ from pydantic import PostgresDsn, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+WORLD_DATA_DIR = REPO_ROOT / "backend" / "data"
 
 
 class Settings(BaseSettings):
