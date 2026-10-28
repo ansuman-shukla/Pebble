@@ -84,12 +84,35 @@ showed as sand (the face colouring only knew sea level).
 - `/api/v1/world`: 0.85 MB gzip (2.0 MB JSON), ~0.2 s from the stored row; generating a new row (spec change) ~1 s.
 - Ready (world decoded, town placements and walker loaded) in ~4-4.7 s from a cold page in headless Chrome.
 
+## Exploring: drops, go to, the spring arm and solid objects
+
+| Feature | How it works |
+|---|---|
+| Drop (pegman) | the click (or the drop of the dragged pegman) becomes a camera ray; `globe-pick.ts` marches it to the first point under the terrain, the town plateau or the sea surface. Water (sea, lakes, the moat, the stream) is refused with a message; on land `dropSpot` takes the nearest free spot (rings out to 12 m, so a click on a house lands beside it). The player faces along the view ray, or the camera's screen-up (north in orbit) when the camera looks down steeply. A pin follows the pointer, grey with "water" over water. |
+| Camera flight | every switch into follow (a drop, go to, C, the orbit zoom handover) flies from the current view in 1.5 s: around the planet's centre along the great circle, altitude interpolated in log space and lifted over long hops so it never cuts through the planet; the view turns to the player in the first 40 %. |
+| Go to | the town: its spawn by the main gate; camps and landmarks: the first free spot on rings 6..30 m around the anchor (south first), facing the anchor. |
+| `?at=` | rewritten with `history.replaceState` after every drop / go to (`lat,lon,bearing`, other params kept). |
+| Solid objects | `globe-walk.ts` resolves each step in a chart (D42): the town's walls and townspeople, each camp's and landmark's placements, and a wild chart of the scattered props around the player, all from Polyfork colliders; ground cover (grass, flowers, ferns, reeds, cattails, pebbles) never blocks. |
+| Spring arm | the segment from the eye (1.4 m) to the wanted camera is clipped against the same collider volumes and sampled against the ground (D43); slopes behind the player tilt the camera up instead of pulling it in. |
+| Walking | pace eases in and out (~0.3 s), slows to 40 % up and 75 % down a 45° slope, and the feet follow the terrain exactly (only real steps onto paving or a bridge are eased); the camera's eye height is smoothed so the terrain's facets don't bob the view. |
+
+Costs, measured headless with the Metal GPU: a step resolves in ~0.02 ms, the camera's reach in ~0.007 ms; the wild
+chart is rebuilt every 35 m of walking in 6-15 ms in the densest forest (~2000 collider parts). Running for 6 s at the
+spawn, in the densest forest, at band A camp, along the main street and on a slope: 60 fps, no frame over 20 ms, 68-210
+draw calls (orbit 227).
+
+Notes:
+- Low parts (under the body band's 0.3 m) are stepped over everywhere, so the fire pit's stone ring doesn't block; only
+  its logs do.
+- `hot_spring_pool` is `walk: none` in the backend world spec, so the pools don't block (the rocks around them do).
+- `/town` (the flat debugging page) still uses the old follow camera without the spring arm.
+
 ## Known limitations
 
 - No fire light or lantern glow at night yet; no seasons (no axial tilt, so the poles sit in permanent twilight).
-- Camps and landmarks have no collisions (only the town's apply).
 - The town is drawn at full detail even from orbit (no LOD); fine at 60 fps but it is most of the orbit draw calls.
-- The real terrain is rugged at 40 m cells (steep faces up to ~60°); the walker climbs any slope.
+- The real terrain is rugged at 40 m cells (steep faces up to ~60°): slopes over 45° stop the walker, so some
+  mountain flanks can only be crossed in travel mode.
 - Small plateaus (elder tree, camps: radius 40-50 m) are only one or two cells, so the ground around them still slopes.
 - The great falls outflow leaves its lake as a flat land strip at lake level (the authored channel cells are not
   lake), which reads as a causeway across the lake's south end.
