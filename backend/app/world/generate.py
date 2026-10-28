@@ -3,12 +3,15 @@
 Run `python -m app.world.generate` to generate the world, store it and print its stats.
 """
 
+import gzip
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 
 import numpy as np
+from sqlmodel import Session
 
+from app.core.db import engine
 from app.world.biomes import (
     BIOME_IDS,
     UInt8Array,
@@ -22,8 +25,9 @@ from app.world.biomes import (
 from app.world.grid import Grid, build_grid
 from app.world.hydrology import RiverPath, carve_channel, settle_water, trace_cells
 from app.world.paths import closed_loop
-from app.world.spec import BIOME_NAMES, SiteSpec, Volcano, WorldSpec
+from app.world.spec import BIOME_NAMES, SiteSpec, Volcano, WorldSpec, load_site_kinds, load_world_spec
 from app.world.sphere import FloatArray, angle_between, lat_lon, tangent_frame, unit_from_lat_lon
+from app.world.store import WorldGenerator, find_payload, save_payload, world_key
 from app.world.terrain import BoolArray, SiteArea, base_terrain, ensure_land, loop_band, shape_site
 from app.world.town import KindSpec, place_kind
 from app.world.view import Anchor, River, Site, WorldView, encode_array
@@ -216,3 +220,42 @@ def _site(site: SiteSpec, area: SiteArea, grid: Grid, walk: BoolArray, kinds: Ma
 
 def _vector(values: FloatArray) -> tuple[float, float, float]:
     return (float(values[0]), float(values[1]), float(values[2]))
+
+
+def generate_view(spec: WorldSpec, kinds: Mapping[str, KindSpec]) -> WorldView:
+    return generate_world(spec, kinds).view()
+
+
+GENERATOR = WorldGenerator(version=GENERATOR_VERSION, generate=generate_view)
+
+
+def world_stats(world: GeneratedWorld, payload: bytes) -> list[str]:
+    shares = np.bincount(world.biomes, minlength=len(BIOME_NAMES)) / world.grid.cell_count * 100
+    land = float((world.heights >= 0).mean() * 100)
+    walk = float(walkable(world.biomes).mean() * 100)
+    river_cells = sum(len(river.cells) for river in world.rivers)
+    timings = ", ".join(f"{step} {seconds:.3f} s" for step, seconds in world.timings_s.items())
+    return [
+        f"seed {world.spec.seed}, generator {GENERATOR_VERSION}, {world.grid.cell_count} cells",
+        f"land {land:.1f} %, walkable {walk:.1f} %, heights {world.heights.min():.1f} .. {world.heights.max():.1f} m",
+        f"rivers {len(world.rivers)} ({river_cells} cells), land loop {len(world.land_loop)} cells",
+        "biomes: " + ", ".join(f"{name} {share:.1f} %" for name, share in zip(BIOME_NAMES, shares, strict=True)),
+        f"timings: {timings} (total {sum(world.timings_s.values()):.2f} s)",
+        f"payload {len(payload) / 1e6:.2f} MB raw, {len(gzip.compress(payload, 6)) / 1e6:.2f} MB gzip",
+    ]
+
+
+def main() -> None:
+    spec, kinds = load_world_spec(), load_site_kinds()
+    world = generate_world(spec, kinds)
+    payload = world.view().model_dump_json().encode()
+    key = world_key(spec, kinds, GENERATOR_VERSION)
+    with Session(engine) as session:
+        existed = find_payload(session, key) is not None
+        save_payload(session, key, payload)
+    print("\n".join(world_stats(world, payload)))
+    print(f"world {'was already stored' if existed else 'stored'} (spec hash {key.spec_hash[:12]})")
+
+
+if __name__ == "__main__":
+    main()
