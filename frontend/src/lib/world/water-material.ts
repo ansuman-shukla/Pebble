@@ -113,7 +113,8 @@ const SURFACE = /* glsl */ `
   float depth = vWater.x;
   float deepMix = smoothstep(0.0, 14.0, depth);
   color = mix(shallowColor, deepColor, sqrt(deepMix));
-  height = waterWaves(vWaterWorld, t) * 0.08;
+  // long swells and short ripples (the ripples fade with distance)
+  height = waterWaves(vWaterWorld, t) * 0.08 + waterWaves(vWaterWorld * 4.3, t * 1.9) * 0.035;
   #ifdef WATER_STILL
     alpha = smoothstep(0.0, 1.6, depth) * mix(0.62, 0.93, deepMix);
     // lapping foam at the shore: bands that run up the beach, broken up by the waves
