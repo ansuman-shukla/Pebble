@@ -72,8 +72,13 @@ import {
   tangentFrame,
 } from '@/lib/world/globe';
 import { biomeColor } from '@/lib/world/globe-mesh';
-import { clipWater } from '@/lib/world/ground-shape';
+import { clipWater, TOWN_WATER_Y } from '@/lib/world/ground-shape';
 import type { LabelStore } from '@/lib/world/label-store';
+import {
+  type RiverLayout,
+  riverLayout,
+  streamChannels,
+} from '@/lib/world/river-courses';
 import { createScatter, type Scatter } from '@/lib/world/scatter';
 import type { WalkTown } from '@/lib/world/walk-charts';
 
@@ -112,11 +117,12 @@ interface Planet {
   terrain: GlobeTerrain;
   town: { mapping: SiteMapping; height: number; lon: number; grass: string };
   hole: TerrainHole;
+  rivers: RiverLayout;
   scatter: Scatter;
   volcano: { frame: ReturnType<typeof tangentFrame>; summit: number } | null;
 }
 
-function buildPlanet(view: WorldView): Planet {
+function buildPlanet(view: WorldView, town: TownView): Planet {
   const globe = decodeWorld(view);
   const terrain = buildTerrain(globe);
   const site = view.sites.find((candidate) => candidate.kind === 'town');
@@ -126,6 +132,11 @@ function buildPlanet(view: WorldView): Planet {
   const volcano = view.sites.find(
     (candidate) => candidate.id === 'smoking_mountain',
   );
+  const hole = {
+    up,
+    angle: Math.atan(TOWN_GROUND_RADIUS / (globe.radius + height)),
+  };
+  const mapping = anchorMapping(site.anchor, globe.radius);
   return {
     view,
     sites: view.sites.map((candidate) => ({
@@ -136,15 +147,21 @@ function buildPlanet(view: WorldView): Planet {
     })),
     terrain,
     town: {
-      mapping: anchorMapping(site.anchor, globe.radius),
+      mapping,
       height,
       lon: latLonFromDirection(up).lon,
       grass: biomeColor(view.biome_names[globe.biomes[site.cell]]),
     },
-    hole: {
-      up,
-      angle: Math.atan(TOWN_GROUND_RADIUS / (globe.radius + height)),
-    },
+    hole,
+    // the town lays its own ground and water: a river passing it runs through its stream, others stop at it
+    rivers: riverLayout(
+      terrain,
+      view.rivers.map((river) => river.cells),
+      {
+        hole,
+        channels: streamChannels(town.water, mapping, height, TOWN_WATER_Y),
+      },
+    ),
     scatter: createScatter({
       terrain,
       seed: view.seed,
@@ -257,7 +274,6 @@ const GlobeScene = memo(function GlobeScene({
   onStats,
 }: GlobeSceneProps) {
   const { view, terrain } = planet;
-  const rivers = useMemo(() => view.rivers.map((river) => river.cells), [view]);
   const sampleStats = useCallback(
     (sample: RenderStats) => onStats({ ...sample, mode: cameraMode }),
     [onStats, cameraMode],
@@ -284,7 +300,7 @@ const GlobeScene = memo(function GlobeScene({
       <GlobeSurface
         terrain={terrain}
         biomeNames={view.biome_names}
-        rivers={rivers}
+        rivers={planet.rivers}
         hole={planet.hole}
       />
       {planet.volcano && (
@@ -365,7 +381,7 @@ const CLICK_SLOP = 6;
 
 function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   const [params] = useSearchParams();
-  const planet = useMemo(() => buildPlanet(view), [view]);
+  const planet = useMemo(() => buildPlanet(view, town), [view, town]);
   const at = params.get('at');
   const [start] = useState(() => startFor(planet, town, at));
   const [citizenSpots] = useState<CitizenSpots>(() => new Map());

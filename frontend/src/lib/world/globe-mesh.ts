@@ -1,6 +1,6 @@
 /*
- * Geometry for the planet: the terrain (the refined surface of terrain-surface.ts, coloured by blending its
- * cells' biomes) and the rivers (ribbons that follow the terrain along their cell paths).
+ * Geometry for the planet's ground: the refined surface of terrain-surface.ts, coloured by blending its cells'
+ * biomes (the water on it is water-mesh.ts).
  */
 import {
   BufferAttribute,
@@ -10,12 +10,7 @@ import {
   Vector3,
 } from 'three';
 
-import {
-  cellDirection,
-  type GlobeTerrain,
-  WATER_BIOMES,
-  WATER_SURFACE,
-} from './globe';
+import { type GlobeTerrain, WATER_BIOMES, WATER_SURFACE } from './globe';
 
 const BIOME_COLORS: Record<string, string> = {
   deep_ocean: '#24405e',
@@ -35,8 +30,8 @@ const BIOME_COLORS: Record<string, string> = {
   volcanic: '#5e5450',
 };
 const FALLBACK_COLOR = '#ff00ff';
-/** Lakes are terrain faces flat at their surface height, drawn the colour the sea shows near its shores. */
-const LAKE_WATER = '#4284b0';
+/** Lakes are terrain faces flat at their surface height: their bed, seen through the lake's water. */
+const LAKE_BED = '#3a7396';
 /** How far a dry face touching water turns to sand: a sea beach, a lake shore. */
 const BEACH_SAND = 0.6;
 const LAKE_SHORE_SAND = 0.25;
@@ -125,7 +120,7 @@ export function terrainGeometry(
   const sand = new Color(biomeColor('beach'));
   const shallows = new Color(biomeColor('shallow_ocean'));
   const deep = new Color(biomeColor('deep_ocean'));
-  const lakeWater = new Color(LAKE_WATER);
+  const lakeBed = new Color(LAKE_BED);
   const lake = biomeNames.indexOf('lake');
   const triangleCount = triangles.length / 3;
   const interior = ((n - 1) * (n - 2)) / 2;
@@ -189,7 +184,7 @@ export function terrainGeometry(
       lakeLevel < Infinity &&
       height <= lakeLevel + LAKE_LEVEL_TOLERANCE
     ) {
-      color.copy(lakeWater);
+      color.copy(lakeBed);
     } else {
       if (total > 0) color.multiplyScalar(1 / total);
       else color.copy(sand);
@@ -268,115 +263,5 @@ export function terrainGeometry(
   geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
   geometry.setAttribute('normal', new Float32BufferAttribute(normals, 3));
   geometry.setIndex(new BufferAttribute(index, 1));
-  return geometry;
-}
-
-const RIVER_WIDTH = 6;
-const RIVER_LIFT = 0.35;
-const RIVER_STEPS = 4;
-
-/** Shore points are found to this many halvings of a path step (10 m / 2⁸ ≈ 4 cm). */
-const SHORE_REFINE = 8;
-
-/**
- * Ribbons along each river's cell path, sampled several times per cell and lifted just above the ground. A
- * ribbon stops at the shore where the river reaches the sea or a lake (and starts again where it leaves one),
- * so it never lies over water.
- */
-export function riverGeometry(terrain: GlobeTerrain, rivers: number[][]) {
-  const { globe } = terrain;
-  const { radius } = globe;
-  const vertices: number[] = [];
-  const surface = (direction: Vector3, hint: number) =>
-    direction
-      .clone()
-      .multiplyScalar(
-        radius + Math.max(terrain.heightAt(direction, hint), 0) + RIVER_LIFT,
-      );
-  const wet = (direction: Vector3, hint: number) =>
-    WATER_BIOMES.has(terrain.biomeAt(direction, hint)) ||
-    terrain.heightAt(direction, hint) <= WATER_SURFACE;
-  /** The shore between a dry and a wet point (by bisection), on the dry side. */
-  const shore = (dry: Vector3, water: Vector3, hint: number) => {
-    let [low, high] = [dry, water];
-    for (let k = 0; k < SHORE_REFINE; k++) {
-      const middle = low.clone().lerp(high, 0.5).normalize();
-      if (wet(middle, hint)) high = middle;
-      else low = middle;
-    }
-    return low;
-  };
-  type PathPoint = { direction: Vector3; cell: number };
-
-  function ribbon(path: PathPoint[]) {
-    if (path.length < 2) return;
-    const edges = path.map(({ direction, cell }, i) => {
-      const ahead = path[Math.min(i + 1, path.length - 1)].direction;
-      const behind = path[Math.max(i - 1, 0)].direction;
-      const side = new Vector3()
-        .subVectors(ahead, behind)
-        .cross(direction)
-        .normalize()
-        .multiplyScalar(RIVER_WIDTH / 2 / radius);
-      return [
-        surface(direction.clone().add(side).normalize(), cell),
-        surface(direction.clone().sub(side).normalize(), cell),
-      ];
-    });
-    for (let i = 0; i + 1 < edges.length; i++) {
-      const [a, b] = edges[i];
-      const [c, d] = edges[i + 1];
-      // a and c are on the right bank: counter-clockwise seen from above
-      vertices.push(...a.toArray(), ...c.toArray(), ...b.toArray());
-      vertices.push(...c.toArray(), ...d.toArray(), ...b.toArray());
-    }
-  }
-
-  for (const cells of rivers) {
-    if (cells.length < 2) continue;
-    const path: PathPoint[] = [];
-    for (let i = 0; i + 1 < cells.length; i++) {
-      const a = cellDirection(globe, cells[i], new Vector3());
-      const b = cellDirection(globe, cells[i + 1], new Vector3());
-      for (let s = 0; s < RIVER_STEPS; s++)
-        path.push({
-          direction: a
-            .clone()
-            .lerp(b, s / RIVER_STEPS)
-            .normalize(),
-          cell: cells[i],
-        });
-    }
-    const last = cells[cells.length - 1];
-    path.push({
-      direction: cellDirection(globe, last, new Vector3()),
-      cell: last,
-    });
-    // split the path into its dry runs, each ending exactly at the shore
-    let run: PathPoint[] = [];
-    path.forEach((point, i) => {
-      const previous = path[i - 1];
-      if (wet(point.direction, point.cell)) {
-        if (run.length > 0)
-          run.push({
-            direction: shore(previous.direction, point.direction, point.cell),
-            cell: point.cell,
-          });
-        ribbon(run);
-        run = [];
-        return;
-      }
-      if (run.length === 0 && previous)
-        run.push({
-          direction: shore(point.direction, previous.direction, point.cell),
-          cell: point.cell,
-        });
-      run.push(point);
-    });
-    ribbon(run);
-  }
-  const geometry = new BufferGeometry();
-  geometry.setAttribute('position', new Float32BufferAttribute(vertices, 3));
-  geometry.computeVertexNormals();
   return geometry;
 }

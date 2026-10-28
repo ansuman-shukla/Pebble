@@ -6,11 +6,8 @@ import {
   buildTerrain,
   decodeWorld,
   type GlobeTerrain,
-  tangentFrame,
-  WATER_BIOMES,
-  WATER_SURFACE,
 } from '../../src/lib/world/globe';
-import { riverGeometry, terrainGeometry } from '../../src/lib/world/globe-mesh';
+import { terrainGeometry } from '../../src/lib/world/globe-mesh';
 import { WORLD_URL } from './globe-helpers';
 
 /*
@@ -112,33 +109,4 @@ test('lakes above the sea are drawn as water, not sand', () => {
     expect(b, `cell ${cell}`).toBeGreaterThan(g);
   }
   expect(lakeCells).toBeGreaterThan(50);
-});
-
-test('river ribbons end at the shore instead of lying over the sea or a lake', () => {
-  const ribbons = riverGeometry(
-    terrain,
-    view.rivers.map((river) => river.cells),
-  );
-  const position = ribbons.getAttribute('position');
-  expect(position.count).toBeGreaterThan(1000);
-  const wet = (direction: Vector3) =>
-    WATER_BIOMES.has(terrain.biomeAt(direction)) ||
-    terrain.heightAt(direction) <= WATER_SURFACE;
-  const R = terrain.globe.radius;
-  let overWater = 0;
-  for (let i = 0; i < position.count; i++) {
-    const at = new Vector3().fromBufferAttribute(position, i).normalize();
-    const { east, north } = tangentFrame(at);
-    // a bank vertex may hang over the shore by the ribbon's half width, never further out
-    const around = [
-      east,
-      north,
-      east.clone().negate(),
-      north.clone().negate(),
-    ].map((axis) =>
-      at.clone().multiplyScalar(R).addScaledVector(axis, 4).normalize(),
-    );
-    if (wet(at) && around.every(wet)) overWater += 1;
-  }
-  expect(overWater).toBe(0);
 });

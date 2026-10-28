@@ -19,7 +19,7 @@ import { Color, MeshStandardMaterial, type Scene } from 'three';
 export type WaterKind = 'still' | 'flowing' | 'falling' | 'foam' | 'pool';
 
 /** How far past the water's edge (in half widths) a river ribbon's wet bank reaches. */
-const BANK_EDGE = 1.3;
+export const BANK_EDGE = 1.3;
 
 const DAY_SKY = '#a9cfea';
 /** Water over a shallow bed, over deep water, and the damp ground along a river. */
