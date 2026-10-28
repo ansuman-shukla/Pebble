@@ -3,13 +3,23 @@
  * `WS /api/v1/live`, `GET /api/v1/entities`) under the names the live modules use.
  */
 import type {
+  AnimalEntity,
   CitizenEntity,
+  FireEntity,
   LiveEvent,
   LiveLiveSchemaResponse,
   LiveState,
 } from '@/lib/client/types.gen';
 
 export type LiveCitizen = CitizenEntity;
+
+/** An animal of the feed (a registry kind of `assets.ts` `ANIMALS`). */
+export type LiveAnimal = AnimalEntity;
+
+export type AnimalActivity = AnimalEntity['activity'];
+
+/** A camp's fire pit, a town fire basket or a campfire made anywhere. */
+export type LiveFire = FireEntity;
 
 export type Activity = CitizenEntity['activity'];
 
