@@ -209,15 +209,15 @@ class EngineLoop:
             raise ValueError(f"run {self.run.id} vanished from the database")
         committed_tick = run.tick
         fresh = resume_run(
-            session,
-            self.sim.world,
-            run,
-            self.store.ids,
-            self.clock,
-            planner=self.sim.core.planner,
-            brains=bool(self.brains),
+            session, self.sim.world, run, self.store.ids, self.clock, planner=self.sim.core.planner, brains=False
         )
-        self.sim, self.store, self.brains = fresh.sim, fresh.store, fresh.brains  # brains act on the fresh sim
+        self.sim, self.store = fresh.sim, fresh.store
+        # citizens' brains act through WorldApis bound to a simulation: rebuild them on the fresh one (their notes
+        # came back with the snapshot); other hooks carry on as they are
+        self.brains = [
+            citizen_brains(fresh.sim, run.world_seed) if isinstance(hook, CitizenBrains) else hook
+            for hook in self.brains
+        ]
         self.catch_up_to = committed_tick
 
     def shut_down(self) -> None:

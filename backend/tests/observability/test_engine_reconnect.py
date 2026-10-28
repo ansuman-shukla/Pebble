@@ -106,7 +106,9 @@ def test_a_terminated_connection_mid_run_resumes_from_the_last_commit_identicall
 
     assert kills.killed == [74, 130]
     assert sleeps.delays == [RETRY_FIRST_S, RETRY_FIRST_S]  # one reconnect per kill, each on its first attempt
-    assert sum("AdminShutdown" in message for message in caplog.messages) == 2
+    # each kill is logged as a lost connection; the driver words it as AdminShutdown or, mid-pipeline, as the
+    # server closing the connection
+    assert sum("database connection lost" in message for message in caplog.messages) == 2
 
     with Session(committing_engine) as session:
         run = session.get(Run, run_id)
