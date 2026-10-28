@@ -9,6 +9,7 @@ import {
   decodeWorld,
   type GlobeTerrain,
   type SiteMapping,
+  tangentFrame,
 } from '../../src/lib/world/globe';
 import {
   atParam,
@@ -190,6 +191,37 @@ test('walking out of the main gate leads south onto the terrain', async ({
   const end = await sample(world);
   expect(fromTown(end)).toBeGreaterThan(TOWN_GROUND_RADIUS + 30);
   onTerrain(end);
+  expect(errors).toEqual([]);
+});
+
+test('the follow camera stays above a hill rising behind the player', async ({
+  page,
+}) => {
+  // the reported spot (a forest slope south of the town), facing north with the hill behind
+  const [lat, lon] = [29.18, 12.4];
+  const errors: string[] = [];
+  const world = await openGlobe(page, errors, `?at=${lat},${lon},0`);
+  await page.mouse.move(640, 400);
+  for (let i = 0; i < 20; i++) await page.mouse.wheel(0, 100); // out to 40 m
+  await page.mouse.down();
+  await page.mouse.move(640, 320, { steps: 8 }); // down to the lowest pitch
+  await page.mouse.up();
+  await page.waitForTimeout(800);
+
+  const player = await sample(world);
+  const up = directionOf(player);
+  const { north } = tangentFrame(up);
+  const pitch = 0.05;
+  const boom = new Vector3(player.x, player.y, player.z)
+    .addScaledVector(up, 1.4)
+    .addScaledVector(north, -Math.cos(pitch) * 40)
+    .addScaledVector(up, Math.sin(pitch) * 40);
+  const ground = R + terrain.heightAt(boom.clone().normalize());
+  expect(boom.length(), 'the rig alone would end under the hill').toBeLessThan(
+    ground - 1,
+  );
+  const camera = Number(await world.getAttribute('data-camera-distance'));
+  expect(camera).toBeGreaterThan(ground + 0.5);
   expect(errors).toEqual([]);
 });
 
