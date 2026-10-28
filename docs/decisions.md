@@ -27,6 +27,11 @@
 | D21 | Frontend uses Tailwind v4 (Associo uses v3) | new codebase, current shadcn default | 2026-10-28 |
 | D22 | Local ports: API 8100, frontend 5180 (Postgres 5544) | run next to Associo's 8000/5173 without clashes | 2026-10-28 |
 | D23 | Frontend uses Pebble's own pnpm 12 (`frontend/scripts/pnpm.sh`, installed in `.runtime/`) with `minimumReleaseAge` 7 days; backend uses uv `exclude-newer = "7 days"` | dependencies must be at least a week old; the global pnpm 9 can't enforce it | 2026-10-28 |
+| D24 | Polyfork files are gitignored; only the hash-pinned manifest and fetch script are committed (supersedes D20: the repo is still public) | Polyfork's licence forbids redistributing the files | 2026-10-28 |
+| D25 | Character animation clips load from Polyfork's CDN at runtime; meshes and code are vendored | clips are Mixamo-derived and may only be served by Polyfork | 2026-10-28 |
+| D26 | Citizen looks are configs for Polyfork's shared humanoid engine, authored in the frontend by look id; the backend citizens spec will reference look ids | covers Stone Age people with no custom modelling; one rig for all | 2026-10-28 |
+| D27 | Missing animals are recoloured/rescaled relatives (elk, antelope, boar, polar bear, goat); seal and snake are dropped from v0 | catalogue gaps; remix GLBs lose their animations | 2026-10-28 |
+| D28 | Milestone PRs are stacked (each branch starts from the previous milestone's branch, PR base = that branch) while earlier PRs await review | work continues without merging | 2026-10-28 |
 
 ## Open (recommendation first)
 

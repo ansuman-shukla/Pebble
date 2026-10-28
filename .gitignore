@@ -2,7 +2,7 @@
 __pycache__/
 *.pyc
 .DS_Store
-vendor/
+/vendor/
 .env
 .venv/
 .mypy_cache/
@@ -13,3 +13,6 @@ dist/
 *.tsbuildinfo
 playwright-report/
 test-results/
+# Polyfork files: fetched by frontend/scripts/fetch-polyfork-assets.mjs, never committed (licence: no redistribution)
+frontend/public/assets/polyfork/*/
+frontend/src/vendor/polyfork/*.mjs
