@@ -139,10 +139,10 @@ export function GlobeSky({
     }
     if (hemisphere.current) {
       hemisphere.current.position.copy(up);
-      hemisphere.current.intensity =
-        (0.25 + 1.1 * daylight) * (1 - space * 0.8);
+      // from space the sky fill would light both sides alike and hide the terminator
+      hemisphere.current.intensity = (0.25 + 1.1 * daylight) * (1 - space);
     }
-    if (ambient.current) ambient.current.intensity = 0.55 + space * 0.15;
+    if (ambient.current) ambient.current.intensity = 0.55 - space * 0.25;
     if (stars.current) {
       stars.current.position.copy(camera.position);
       stars.current.scale.setScalar((camera as { far?: number }).far! * 0.9);
