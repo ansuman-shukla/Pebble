@@ -25,6 +25,8 @@
 | D19 | "Navigate the town" = third-person walking through gate, bridge and streets with collisions; buildings are shells with opening doors, no interiors in v0 | Polyfork buildings have no interiors | 2026-10-28 |
 | D20 | The repo is private; vendored Polyfork files are committed | Polyfork's licence forbids redistributing the files, which a public repo would do | 2026-10-28 |
 | D21 | Frontend uses Tailwind v4 (Associo uses v3) | new codebase, current shadcn default | 2026-10-28 |
+| D22 | Local ports: API 8100, frontend 5180 (Postgres 5544) | run next to Associo's 8000/5173 without clashes | 2026-10-28 |
+| D23 | Frontend uses Pebble's own pnpm 12 (`frontend/scripts/pnpm.sh`, installed in `.runtime/`) with `minimumReleaseAge` 7 days; backend uses uv `exclude-newer = "7 days"` | dependencies must be at least a week old; the global pnpm 9 can't enforce it | 2026-10-28 |
 
 ## Open (recommendation first)
 

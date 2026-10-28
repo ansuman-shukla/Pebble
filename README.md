@@ -8,4 +8,14 @@ read.
 - Design and plan: [docs/](docs/README.md)
 - Experiment results: [docs/findings/](docs/findings/)
 
-Status: planning done, phase A (building the world) next.
+## Run locally
+
+Needs Docker, uv and Node. One-time: `backend/scripts/setup.sh` (installs Pebble's own pnpm, devin-switch and Claude
+Code into `.runtime/`).
+
+```sh
+make -C backend dev                                   # Postgres :5544 + API http://localhost:8100
+cd frontend && ./scripts/pnpm.sh install && ./scripts/pnpm.sh dev   # http://localhost:5180
+```
+
+Status: phase A, M0 scaffold.
