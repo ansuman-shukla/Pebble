@@ -649,39 +649,6 @@
       }
     },
     {
-      "id": "goat-1dedee",
-      "title": "Goat",
-      "kit": "cozy-farm-cc979f",
-      "class": "animal",
-      "triangles": 952,
-      "size_m": {
-        "x": 0.39,
-        "y": 0.82,
-        "z": 1.01
-      },
-      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
-      "files": {
-        "glb": {
-          "url": "https://polyfork.dev/cdn/goat-1dedee.glb",
-          "path": "public/assets/polyfork/goat-1dedee/goat-1dedee.glb",
-          "sha256": "56db3da32de15916ba360d77e0561a6746531120e7fd3039a461bf3fa264b9d9",
-          "bytes": 183204
-        },
-        "params": {
-          "url": "https://polyfork.dev/cdn/goat-1dedee-params.json",
-          "path": "public/assets/polyfork/goat-1dedee/goat-1dedee-params.json",
-          "sha256": "8c9c25897533ccdc9103101d23e109c65332bc158d892a536c526509a481f237",
-          "bytes": 10909
-        },
-        "colliders": {
-          "url": "https://polyfork.dev/cdn/goat-1dedee-colliders.json",
-          "path": "public/assets/polyfork/goat-1dedee/goat-1dedee-colliders.json",
-          "sha256": "a74da8dca0d02a55705c19f24e1c51f636c7afbdfdefc7481de4ce17acb85bae",
-          "bytes": 8790
-        }
-      }
-    },
-    {
       "id": "hasa-rice-drying-rack-d545bc",
       "title": "Hasa Rice Drying Rack",
       "kit": "medieval-japan-cb01ad",
