@@ -3,7 +3,8 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Mesh } from 'three';
 
 import type { CitizenLook } from '@/lib/world/citizen-looks';
-import { animate, type CharacterAnimation } from '@/vendor/polyfork/clips.mjs';
+import { animateHumanoid } from '@/lib/world/humanoid-clips';
+import type { CharacterAnimation } from '@/vendor/polyfork/clips.mjs';
 import { createCharacter } from '@/vendor/polyfork/humanoid.mjs';
 
 type CitizenModelProps = {
@@ -25,7 +26,7 @@ export function CitizenModel({
 
   useEffect(() => {
     let mounted = true;
-    animate(character).then((loaded) => {
+    animateHumanoid(character).then((loaded) => {
       if (!mounted) return;
       setAnimation(loaded);
       onReady?.(look.id);

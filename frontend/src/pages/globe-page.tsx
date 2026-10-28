@@ -514,6 +514,9 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
       data-camera={player?.camera.map((value) => value.toFixed(4)).join(',')}
       data-camera-arm={player && player.arm.toFixed(2)}
       data-camera-flying={player?.flying}
+      data-avatar={player?.avatar.map((value) => value.toFixed(4)).join(',')}
+      data-avatar-clip={player?.clip ?? undefined}
+      data-avatar-feet={player?.feet.map((value) => value.toFixed(4)).join(',')}
       data-dropping={dropping}
       data-game-minutes={Math.floor(minutes)}
       data-travel={travel}
