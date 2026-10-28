@@ -106,7 +106,7 @@ export function PeoplePanel({
     <div
       role="region"
       aria-label="People"
-      className="absolute top-16 right-3 max-h-[calc(100%-11rem)] w-96 overflow-y-auto rounded-lg bg-white/90 p-1 text-xs shadow-lg"
+      className="absolute top-16 right-3 max-h-[calc(100%-9rem)] w-96 overflow-y-auto rounded-lg bg-white/90 p-1 text-xs shadow-lg"
     >
       <ul>
         {citizens.map((citizen) => (
@@ -114,7 +114,7 @@ export function PeoplePanel({
             key={citizen.id}
             data-person={citizen.id}
             aria-current={citizen.id === followId}
-            className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-black/5 aria-[current=true]:bg-black/10"
+            className="flex items-center gap-2 rounded-md px-2 py-0.5 hover:bg-black/5 aria-[current=true]:bg-black/10"
           >
             <button
               type="button"
