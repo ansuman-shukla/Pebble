@@ -1,7 +1,6 @@
 import { useGLTF } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
 import { memo, Suspense, useCallback, useMemo, useState } from 'react';
-import { Shape, ShapeGeometry, Vector2 } from 'three';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -19,6 +18,7 @@ import {
   type WalkWater,
 } from '@/lib/world/collision';
 import { openDoors } from '@/lib/world/doors';
+import { groundShape } from '@/lib/world/ground-shape';
 
 /*
  * A tiny hand-written yard for developing and testing the walker: a plaster wall with a gatehouse in the gap,
@@ -93,15 +93,6 @@ const MOAT_SURFACE: Point[] = [
 const SPAWN: WalkSpawn = { x: 0, z: 8, heading_deg: 180 };
 const GROUND_HALF = 40;
 const WATER_Y = -0.4;
-
-/** A flat shape on the ground; Shape y is world -z because the mesh is rotated -90° about x. */
-function groundShape(outline: Point[], holes: Point[][] = []) {
-  const toShape = (points: Point[]) =>
-    new Shape(points.map(([x, z]) => new Vector2(x, -z)));
-  const shape = toShape(outline);
-  shape.holes = holes.map(toShape);
-  return new ShapeGeometry(shape);
-}
 
 function Ground() {
   const ground = useMemo(
