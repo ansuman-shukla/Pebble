@@ -72,6 +72,14 @@ export type CitizenEntity = {
      */
     heading_deg: number;
     /**
+     * Route
+     */
+    route: Array<RoutePoint>;
+    /**
+     * Speed Mps
+     */
+    speed_mps: number;
+    /**
      * Activity
      */
     activity: 'idle' | 'walking' | 'sleeping' | 'resting' | 'gathering' | 'eating' | 'drinking' | 'working' | 'talking' | 'dead';
@@ -480,6 +488,24 @@ export type River = {
      * Cells
      */
     cells: Array<number>;
+};
+
+/**
+ * RoutePoint
+ */
+export type RoutePoint = {
+    /**
+     * Unit
+     */
+    unit: [
+        number,
+        number,
+        number
+    ];
+    /**
+     * Height M
+     */
+    height_m: number;
 };
 
 /**
