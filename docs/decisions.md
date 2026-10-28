@@ -56,11 +56,11 @@
 | D50 | Body numbers 02 leaves open: need rate by age (child 0.8, teen 1.1, elder 0.9), ×1.25 walking/gathering, ×0.75 asleep, thirst ×1.5 on savanna/volcanic ground, starving −2 health/h, parched −6/h, healing +1/h (×2 asleep) only when neither hungry nor thirsty, resting +3 energy/h, a collapsed citizen sleeps until energy 30 | starvation kills in ~3 game days, thirst in ~1.5; tunable in one module | 2026-10-29 |
 | D51 | Perception v0: sight blends 150 m → 20 m as the sun goes from 0° to −6°, ×0.4 in forest, ×1.3 on hills, no occlusion; a name is learned when a visible speaker says it; a place is learned roughly when a speaker who knows it names it; placing a citizen isn't anyone "coming into view" | in-world learning with no extra actions; occlusion can come later without changing the contract | 2026-10-29 |
 | D52 | Durative actions: a new one interrupts the running one; sleep ends at sunrise, or when rested by day; sleepers wake on a shout, their name or getting hurt; gifts are accepted by anyone awake (a `GiftPolicy` hook for brains/minds) | brains can change plans at any time; towns can sleep through ordinary talk | 2026-10-29 |
+| D53 | Gifts: for now anyone awake takes what they are handed; M7 scripted brains decide through the `GiftPolicy` hook (needs, relationship); agent minds will get a pending offer to accept or refuse (was O9) | giving needs acceptance (03) without inventing an action before brains and minds exist | 2026-10-29 |
+| D54 | "Comes into view" interrupts only for strangers (people the citizen doesn't know) and animals (M6); a known person interrupts by speaking, or by walking up to you: their walk targets you or a spot within 3 m of you, and they come within 10 m (once); known people walking by don't interrupt (was O10) | 100 busy citizens had 16 400 such interrupts a game day; now 2 240, mostly housemates coming home | 2026-10-29 |
 
 ## Open (recommendation first)
 
 | # | Question | Recommendation | Alternatives |
 |---|---|---|---|
 | O8 | Public hosting split (v1) | frontend + read-only API + DB hosted; engine and minds stay on the Mac and push events | everything on one VM (needs Devin CLI + Claude Code there) |
-| O9 | Who decides whether a gift is taken | M7 brains decide from needs and relationship; agent minds get a pending offer to accept or refuse | keep auto-accept for everyone awake |
-| O10 | "Someone comes into view" interrupts constantly in a crowded town | interrupt only for strangers, animals and people who speak or approach; known people walking past are perceived but don't interrupt | keep 03's rule as is and let brains resume their action |

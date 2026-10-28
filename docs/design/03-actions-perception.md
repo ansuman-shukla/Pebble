@@ -51,8 +51,9 @@ interrupted.
 | `wait(minutes)` | durative | do nothing, stay alert |
 | `recall(about)` | instant | agent phase only: "try to remember…" (see `05-memory.md`) |
 
-**Interrupts** end a durative action early and say why: someone speaks to you or near you, a new person or animal
-comes into view, you are hurt, a need crosses a threshold, night falls, the target is gone. The result always says
+**Interrupts** end a durative action early and say why: someone speaks to you or near you, a stranger or an animal
+comes into view, someone you know walks up to you (within ~10 m), you are hurt, a need crosses a threshold, night
+falls, the target is gone. People you know merely walking by don't interrupt. The result always says
 what happened and what changed ("You stop walking: a wolf is watching you from the trees, 40 paces away.").
 
 ## Rules
