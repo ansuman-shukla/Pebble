@@ -13,7 +13,7 @@ petroglyph_boulder: {footprint: [1.6, 0.7], walk: solid}
 fallen_log: {footprint: [3.1, 0.7], walk: solid}
 rock: {footprint: [1, 1], walk: solid}
 
-# landmarks (giant_tree is the elder tree: the frontend draws it x3.5, so its footprint is the scaled size)
+# landmarks (the frontend draws giant_tree, the elder tree, x3.5 and ice_block x3: footprints are the drawn size)
 rock_spire: {footprint: [1.3, 1.5], walk: solid}
 boulder: {footprint: [2.2, 1.4], walk: solid}
 basalt_column: {footprint: [1.5, 2], walk: solid}
@@ -24,4 +24,4 @@ hot_spring_pool: {footprint: [3, 2.5], walk: none}
 obsidian: {footprint: [1, 1], walk: solid}
 giant_tree: {footprint: [18, 14.8], walk: solid, blockers: [[-1.8, -1.8, 1.8, 1.8]]}
 snowy_spruce: {footprint: [3, 3], walk: solid, blockers: [[-0.3, -0.3, 0.3, 0.3]]}
-ice_block: {footprint: [0.8, 0.9], walk: solid}
+ice_block: {footprint: [2.5, 2.6], walk: solid}

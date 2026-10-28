@@ -29,7 +29,7 @@ export interface ScatterEntry {
   kind: PropKind;
   /** Expected instances per ~40 m cell. */
   perCell: number;
-  /** Uniform scale range [min, max] applied to the model's real-world size. */
+  /** Uniform scale range [min, max] applied to the model's drawn size (real-world size x kindScale). */
   scale: [number, number];
 }
 
@@ -111,9 +111,9 @@ export const BIOME_PROPS: Record<BiomeName, ScatterEntry[]> = {
     { kind: 'snowy_spruce', perCell: 1.5, scale: [0.8, 1.2] },
     { kind: 'boulder_field', perCell: 0.4, scale: [0.8, 1.3] },
     { kind: 'rock_outcrop', perCell: 0.3, scale: [0.7, 1.3] },
-    { kind: 'ice_block', perCell: 0.3, scale: [1.2, 2.5] },
+    { kind: 'ice_block', perCell: 0.3, scale: [0.4, 0.85] },
   ],
-  ice: [{ kind: 'ice_block', perCell: 1.2, scale: [1.5, 3.5] }],
+  ice: [{ kind: 'ice_block', perCell: 1.2, scale: [0.5, 1.15] }],
   volcanic: [
     { kind: 'lava_rock', perCell: 2, scale: [0.7, 1.5] },
     { kind: 'small_rock', perCell: 1, scale: [0.8, 1.6] },

@@ -186,9 +186,13 @@ export const PROPS: Record<PropKind, string> = {
 
 /**
  * Kinds drawn larger than the asset's real-world size (the backend footprints in data/world/kinds.yaml match).
- * The elder tree is a gnarled oak enlarged to read as ancient (D39).
+ * The elder tree is a gnarled oak enlarged to read as ancient (D39); the ice chunk (0.9 m) is drawn as a block
+ * that can mark the ice gate.
  */
-const KIND_SCALE: Partial<Record<string, number>> = { giant_tree: 3.5 };
+const KIND_SCALE: Partial<Record<string, number>> = {
+  giant_tree: 3.5,
+  ice_block: 3,
+};
 
 /** Uniform render scale of a kind (1 for everything at real size). */
 export const kindScale = (kind: string) => KIND_SCALE[kind] ?? 1;
