@@ -10,8 +10,10 @@ from collections.abc import Callable
 from app.observability.events import (
     ActionEnded,
     ActorKind,
+    Died,
     EventDraft,
     EventType,
+    Injured,
     ItemLocation,
     ItemMoved,
     KnowledgeChanged,
@@ -21,13 +23,15 @@ from app.observability.events import (
 from app.sim.clock import NIGHT_ALTITUDE_DEG, daylight, sun_altitude_deg, sun_direction
 from app.sim.items import ITEMS
 from app.sim.navigation import Planner
-from app.sim.state import Citizen, GroundStack, KnowledgeLevel, PlaceKnowledge, WorldState
+from app.sim.state import Animal, Citizen, GroundStack, KnowledgeLevel, PlaceKnowledge, WorldState
 from app.sim.vec import Vec3, bearing_deg, step_towards
 from app.sim.world import SimWorld
 from app.world_api.models import ActionResult, Outcome
 
 SIGHT_DAY_M = 150.0
 SIGHT_NIGHT_M = 20.0
+SIGHT_FIRE_M = 30.0  # night sight beside a lit fire (03)
+FIRE_LIGHT_M = 12.0  # how far a lit fire lights the night
 FOREST_SIGHT = 0.4
 HILL_SIGHT = 1.3
 FOREST_BIOMES = frozenset({"broadleaf_forest", "taiga"})
@@ -57,6 +61,7 @@ class SimCore:
         self.planner = planner
         self.state = state
         self.outbox: list[EventDraft] = []
+        self.hurt: dict[str, tuple[str, int]] = {}  # citizens hurt this tick: (what happened, injured seq)
         self._sun_tick = -1
         self._sun: Vec3 = (0.0, 0.0, 1.0)
 
@@ -67,19 +72,21 @@ class SimCore:
         event_type: EventType,
         payload: Payload,
         *,
-        actor: Citizen | None = None,
+        actor: Citizen | Animal | None = None,
         actor_kind: ActorKind | None = None,
         visibility: Visibility = "public",
         cause_seq: int | None = None,
     ) -> int:
         seq = self.state.next_seq
         self.state.next_seq += 1
+        if actor_kind is None:
+            actor_kind = "world" if actor is None else "animal" if isinstance(actor, Animal) else "citizen"
         self.outbox.append(
             EventDraft(
                 seq=seq,
                 tick=self.state.tick,
                 type=event_type,
-                actor_kind=actor_kind or ("citizen" if actor is not None else "world"),
+                actor_kind=actor_kind,
                 actor_id=actor.id if actor is not None else None,
                 cell=actor.cell if actor is not None else None,
                 position=actor.position if actor is not None else None,
@@ -106,6 +113,11 @@ class SimCore:
 
     def sight_range(self, citizen: Citizen) -> float:
         base = SIGHT_NIGHT_M + (SIGHT_DAY_M - SIGHT_NIGHT_M) * daylight(self.altitude(citizen.position))
+        if base < SIGHT_FIRE_M and any(
+            fire.lit and self.distance_m(citizen.position, fire.position) <= FIRE_LIGHT_M
+            for fire in self.state.fires.values()
+        ):
+            base = SIGHT_FIRE_M
         biome = self.world.biome(citizen.cell)
         if biome in FOREST_BIOMES:
             base *= FOREST_SIGHT
@@ -130,6 +142,26 @@ class SimCore:
         citizen.position = position
         citizen.cell = self.world.nearest_cell(position, citizen.cell)
         citizen.height_m = self.world.ground_height(position, citizen.cell)
+
+    def injure(self, citizen: Citizen, amount: float, cause: str, words: str, cause_seq: int | None = None) -> int:
+        """Hurt a living citizen (an `injured` event); at no health left they die of it. `words` say what happened
+        to them ("a wolf bites you") for the interrupt (03: being hurt ends what you are doing)."""
+        body = citizen.body
+        if not body.alive:
+            raise ValueError(f"{citizen.id} is dead and can't be hurt")
+        amount = round(min(amount, body.health), 2)
+        body.health = max(0.0, body.health - amount)
+        seq = self.emit("injured", Injured(amount=amount, cause=cause), actor=citizen, cause_seq=cause_seq)
+        if body.health <= 0:
+            body.alive, body.asleep, body.cause_of_death = False, False, cause
+            died = self.emit("died", Died(cause=cause), actor=citizen, cause_seq=seq)
+            if citizen.action is not None:
+                self.end_action(citizen, "interrupted", "Everything goes dark.", cause_seq=died)
+            citizen.in_view, citizen.animals_in_view, citizen.threats = set(), set(), set()
+            self.hurt.pop(citizen.id, None)
+        else:
+            self.hurt[citizen.id] = (words, seq)
+        return seq
 
     def carried_kg(self, citizen: Citizen) -> float:
         return sum(ITEMS[item].weight_kg * count for item, count in citizen.inventory.items())

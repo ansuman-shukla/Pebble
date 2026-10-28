@@ -16,7 +16,7 @@ from numpy.typing import NDArray
 from pydantic import BaseModel, ConfigDict, Field
 from sqlmodel import Session
 
-from app.sim.items import RESOURCE_CAPS, RESOURCE_INDEX, RESOURCES, RIVER_REEDS
+from app.sim.items import RESOURCE_CAPS, RESOURCE_INDEX, RESOURCES, RIVER_FISH, RIVER_REEDS
 from app.sim.vec import Vec3, angle, as_vec, dot, normalize
 from app.world.biomes import BIOME_IDS
 from app.world.generate import GENERATOR
@@ -149,6 +149,16 @@ class Structure:
 
 
 @dataclass(frozen=True)
+class Hearth:
+    """A place built to hold a fire: a camp's fire pit or a town fire basket (id = its structure/placement id)."""
+
+    id: str
+    kind: Literal["pit", "basket"]
+    centre: Vec3
+    stand: Vec3  # a walkable spot beside it to tend it from
+
+
+@dataclass(frozen=True)
 class SimWorld:
     seed: int
     generator_version: str
@@ -166,6 +176,7 @@ class SimWorld:
     places: Mapping[str, Place]
     structures: Mapping[str, Structure]
     resource_caps: UInt8Array  # (cells, len(RESOURCES))
+    hearths: Mapping[str, Hearth]
 
     @property
     def cell_count(self) -> int:
@@ -291,6 +302,8 @@ def build_sim_world(
     reeds = caps[:, RESOURCE_INDEX["reeds"]]
     banks = river & np.isin(biomes, [BIOME_IDS[name] for name in RESOURCE_CAPS])  # rivers through living ground
     reeds[banks] = np.maximum(reeds[banks], RIVER_REEDS)
+    fish = caps[:, RESOURCE_INDEX["fish"]]
+    fish[banks] = np.maximum(fish[banks], RIVER_FISH)
     caps[in_town] = 0
 
     places: dict[str, Place] = {}
@@ -349,6 +362,17 @@ def build_sim_world(
                 site=camp.id,
             )
 
+    hearths = {
+        structure.id: Hearth(id=structure.id, kind="pit", centre=structure.centre, stand=structure.door)
+        for structure in structures.values()
+        if structure.kind == "fire_pit"
+    }
+    for placement in town_view.placements:
+        if placement.kind == "fire_basket":
+            stand = chart.to_unit(*_nearest_walkable(walk, placement.x, placement.z))
+            centre = chart.to_unit(placement.x, placement.z)
+            hearths[placement.id] = Hearth(id=placement.id, kind="basket", centre=centre, stand=stand)
+
     _, town_lon = lat_lon(chart.frame.up)
     return SimWorld(
         seed=view.seed,
@@ -367,6 +391,7 @@ def build_sim_world(
         places=places,
         structures=structures,
         resource_caps=caps,
+        hearths=dict(sorted(hearths.items())),
     )
 
 
