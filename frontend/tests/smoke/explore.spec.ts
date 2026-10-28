@@ -29,7 +29,7 @@ import {
 /*
  * Exploring the real planet at /: drop the player anywhere from orbit (click or drag the pegman), refuse
  * water, "Go to" every site, keep the follow camera out of the townhouses along the main street, and walk
- * into a lean-to, the elder tree and a townsperson without passing through them.
+ * into a lean-to and the elder tree without passing through them (citizens: live-npcs.spec.ts).
  */
 
 const FOV = 50;
@@ -387,22 +387,4 @@ test('the elder tree is solid', async ({ page }) => {
   const distances = await walkAt(page, at, centre, 6_000);
   expect(Math.min(...distances)).toBeGreaterThan(1.2);
   expect(distances[distances.length - 1]).toBeLessThan(4);
-});
-
-test('the player cannot walk through a townsperson', async ({ page }) => {
-  // the lord stands in the castle courtyard at (0, 3)
-  const lord = world.town.citizens.find(
-    (citizen) => citizen.look === 'town-lord',
-  )!;
-  const centre = townMapping
-    .toWorld(lord.x, 0, lord.z, new Vector3())
-    .normalize();
-  const distances = await walkAt(
-    page,
-    townAt(lord.x, lord.z + 4, 0, -1),
-    centre,
-    4_000,
-  );
-  expect(Math.min(...distances)).toBeGreaterThan(0.5);
-  expect(distances[distances.length - 1]).toBeLessThan(1.5);
 });

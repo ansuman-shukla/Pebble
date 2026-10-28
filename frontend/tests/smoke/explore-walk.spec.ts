@@ -29,7 +29,7 @@ import {
 
 /*
  * The globe walker's collisions outside the town and the exploring helpers, without a browser, on the real
- * world: scattered trees, camp and landmark placements and townspeople block; ground cover doesn't; cliffs
+ * world: scattered trees, camp and landmark placements and citizens block; ground cover doesn't; cliffs
  * can't be climbed; the camera's spring arm sees walls; drops refuse water. The page builds the same walk.
  */
 
@@ -276,13 +276,15 @@ test('a camp lean-to, the elder tree and a hot spring pool block from every side
   }
 });
 
-test('a townsperson blocks the way, and pushes a standing player aside', () => {
+test('a citizen blocks the way, and pushes a standing player aside', () => {
   const walk = world.walk();
-  const { townMapping: mapping, citizens } = world;
+  const { townMapping: mapping, people } = world;
   const at = (x: number, z: number) =>
     mapping.toWorld(x, 0, z, new Vector3()).normalize();
-  citizens.clear();
-  citizens.set('town-lord', [0, 70]);
+  const stand = (x: number, z: number) =>
+    people.set('genzo', mapping.toWorld(x, 0, z, new Vector3()));
+  people.clear();
+  stand(0, 70);
   const path = walkTowards(world, walk, at(0, 74), at(0, 66), { steps: 200 });
   const local = path.map((d) =>
     mapping.toLocal(d.clone().multiplyScalar(world.R + 8), new Vector3()),
@@ -290,11 +292,11 @@ test('a townsperson blocks the way, and pushes a standing player aside', () => {
   for (const point of local)
     expect(Math.hypot(point.x, point.z - 70)).toBeGreaterThan(0.55);
   // without the person the same walk passes the spot
-  citizens.clear();
+  people.clear();
   const clear = walkTowards(world, walk, at(0, 74), at(0, 66), { steps: 200 });
   expect(metres(world, clear[clear.length - 1], at(0, 66))).toBeLessThan(0.1);
   // a person walking into a standing player moves the player
-  citizens.set('town-lord', [0.2, 70]);
+  stand(0.2, 70);
   const standing = at(0, 70).multiplyScalar(world.R + 8);
   const after = walk.move(standing, new Vector3(), 8, false);
   const moved = mapping.toLocal(
@@ -302,7 +304,37 @@ test('a townsperson blocks the way, and pushes a standing player aside', () => {
     new Vector3(),
   );
   expect(Math.hypot(moved.x - 0.2, moved.z - 70)).toBeGreaterThan(0.55);
-  citizens.clear();
+  people.clear();
+});
+
+test('a citizen out in the wild blocks the way too', () => {
+  const walk = world.walk();
+  const { people, R } = world;
+  // open ground 40 m south of band A's camp (outside its chart: the wild chart resolves the steps)
+  const camp = world.site('band_a_camp');
+  const mapping = anchorMapping(camp.anchor, R);
+  const spot = [...Array(40).keys()]
+    .map((k) => mapping.toWorld(0, 0, 45 + k, new Vector3()).normalize())
+    .find(
+      (direction) =>
+        walk.isFree(direction) &&
+        walk.isFree(offset(direction, 0, 4)) &&
+        walk.isFree(offset(direction, 0, 2)),
+    )!;
+  expect(spot).toBeDefined();
+  const feet = spot.clone().multiplyScalar(R + world.terrain.heightAt(spot));
+  people.clear();
+  people.set('lio', feet);
+  const path = walkTowards(world, walk, offset(spot, 0, 4), spot, {
+    steps: 200,
+  });
+  for (const point of path)
+    expect(metres(world, point, spot)).toBeGreaterThan(0.55);
+  people.clear();
+  const clear = walkTowards(world, walk, offset(spot, 0, 4), spot, {
+    steps: 200,
+  });
+  expect(metres(world, clear[clear.length - 1], spot)).toBeLessThan(0.1);
 });
 
 test('the spring arm stops at the townhouses beside the main street and clears the camera', () => {

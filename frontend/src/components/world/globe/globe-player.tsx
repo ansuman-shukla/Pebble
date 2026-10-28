@@ -111,6 +111,7 @@ export function GlobePlayer({
   radius,
   playerRef,
   rigRef,
+  viewRigRef,
   steerable,
   travel,
   following,
@@ -121,6 +122,8 @@ export function GlobePlayer({
   radius: number;
   playerRef: RefObject<GlobePlayerState>;
   rigRef: RefObject<GlobeRig>;
+  /** The rig of the follow camera in use (a followed citizen's), for what `onMove` reports. */
+  viewRigRef: RefObject<GlobeRig>;
   /** Whether the keyboard steers the player (only in the follow camera). */
   steerable: boolean;
   travel: boolean;
@@ -238,8 +241,8 @@ export function GlobePlayer({
         town: town && { x: town[0], z: town[1] },
         cameraDistance: camera.position.length(),
         camera: [...camera.position.toArray(), ...camera.quaternion.toArray()],
-        arm: rig.arm,
-        flying: rig.flight !== null,
+        arm: viewRigRef.current.arm,
+        flying: viewRigRef.current.flight !== null,
         avatar: avatar
           ? [...avatar.position.toArray(), ...avatar.quaternion.toArray()]
           : [],

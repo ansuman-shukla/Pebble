@@ -61,6 +61,8 @@ STRUCTURE_LABELS: dict[str, str] = {  # town placements
     "castle_keep": "the keep",
 }
 CAMP_STRUCTURE_LABELS: dict[str, str] = {"lean_to": "a lean-to", "fire_pit": "the fire pit"}  # camp placements
+FIRE_SEATS = 8  # spots round a fire pit, one per member of its band
+FIRE_SEAT_M = 2.0  # from the pit's centre: clear of its stones (and of each other, 1.5 m apart)
 STRUCTURE_NAMES: dict[str, str] = {  # structures with a name of their own (by placement id)
     "main-gate": "the main gate",
     "west-gate": "the west gate",
@@ -142,6 +144,11 @@ class Structure:
     centre: Vec3
     door: Vec3
     site: str = "town"
+    seats: tuple[Vec3, ...] = ()  # spots round it to sit at (a fire pit); without them people go to the door
+
+    def spot(self, seat: int) -> Vec3:
+        """Where someone walking to it goes: their own seat round it if it has seats, else its door."""
+        return self.seats[seat % len(self.seats)] if self.seats else self.door
 
     @property
     def is_home(self) -> bool:
@@ -225,6 +232,12 @@ def site_unit(radius_m: float, site: Site, x: float, z: float) -> Vec3:
     r = radius_m + anchor.height_m
     up, east, north = np.array(anchor.position), np.array(anchor.east), np.array(anchor.north)
     return normalize(as_vec(up * r + east * x - north * z))
+
+
+def _ring(x: float, z: float, radius_m: float, count: int) -> tuple[tuple[float, float], ...]:
+    """`count` points evenly round (x, z), the first to its north."""
+    turns = (2 * math.pi * k / count for k in range(count))
+    return tuple((x + radius_m * math.sin(turn), z - radius_m * math.cos(turn)) for turn in turns)
 
 
 def _nearest_walkable(walk: WalkGrid, x: float, z: float) -> tuple[float, float]:
@@ -338,6 +351,7 @@ def build_sim_world(
                 continue
             door = placement.front(0.75)
             structure_id = f"{camp.id}:{placement.id}"
+            seats = _ring(placement.x, placement.z, FIRE_SEAT_M, FIRE_SEATS) if placement.kind == "fire_pit" else ()
             structures[structure_id] = Structure(
                 id=structure_id,
                 kind=placement.kind,
@@ -347,6 +361,7 @@ def build_sim_world(
                 centre=site_unit(view.radius_m, camp, placement.x, placement.z),
                 door=site_unit(view.radius_m, camp, *door),
                 site=camp.id,
+                seats=tuple(site_unit(view.radius_m, camp, x, z) for x, z in seats),
             )
 
     _, town_lon = lat_lon(chart.frame.up)
