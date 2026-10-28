@@ -47,8 +47,8 @@ Homes: the keep is now a home kind; camps contribute their lean-tos (`band_a_cam
  engine tick ─▶ for each citizen: alive? ─▶ last action still running? ── yes ─▶ nothing
                                                    │ no (done, interrupted, or nothing yet)
                                                    ▼
-            look_around() ─▶ senses: needs from body words, phase from time words (local sun),
-                             place words, food/water/resources in view, people by name
+            look_around() ─▶ senses: needs from body words, phase from time_of_day (local sun),
+                             place words, water/fire/plants by kind and nearness, people by name
                     ─▶ reply to / greet a known person close by (once a day each) ─▶ say + wait(2)
                     ─▶ else score options and start the best:
                          flee (animals, M6) 200 > thirst 50-110 > hunger 45-105 > exhausted sleep 90
@@ -71,8 +71,8 @@ Homes: the keep is now a home kind; camps contribute their lean-tos (`band_a_cam
   (roots, nuts, berries), with a daily chore (wood or reeds) they put down by the fire at dusk; they drink at the
   river near camp, rest by the fire at dusk and sleep in their lean-tos. Town folk eat at the storehouse at dawn and
   dusk, drink at the well, and sleep at home.
-- Time of day comes from perception's time words, which are local solar time: band A lives ~6 h ahead of the town,
-  band B ~11 h behind (it starts the first run asleep).
+- Time of day comes from perception's `time_of_day` (local solar time): band A lives ~6 h ahead of the town, band B
+  ~11 h behind (it starts the first run asleep).
 
 ## Spectator view and the live feed
 
@@ -99,23 +99,24 @@ against a scratch database give the same world (deterministic):
 
 | Day | Deaths | Storehouse rice | Food the bands carry (hunger) | Events | Decisions (look_around) | Said | Plants regrown |
 |---|---|---|---|---|---|---|---|
-| 1 | 0 | 433 | 1 503 | 5 320 | 1 142 | 60 | 66 |
-| 2 | 0 | 474 | 1 333 | 5 936 | 1 330 | 34 | 185 |
-| 3 | 0 | 527 | 1 474 | 5 822 | 1 276 | 37 | 214 |
-| 4 | 0 | 569 | 1 281 | 6 416 | 1 490 | 37 | 257 |
-| 5 | 0 | 598 | 1 505 | 6 050 | 1 351 | 28 | 253 |
-| 6 | 0 | 637 | 1 261 | 6 120 | 1 388 | 38 | 268 |
-| 7 | 0 | 688 | 1 268 | 6 092 | 1 366 | 42 | 258 |
-| 8 | 0 | 742 | 1 290 | 6 379 | 1 458 | 37 | 254 |
-| 9 | 0 | 801 | 1 359 | 6 243 | 1 411 | 31 | 259 |
-| 10 | 0 | 886 | 1 442 | 6 316 | 1 428 | 29 | 277 |
+| 1 | 0 | 433 | 1 615 | 5 322 | 1 144 | 57 | 66 |
+| 2 | 0 | 474 | 1 321 | 5 940 | 1 345 | 36 | 193 |
+| 3 | 0 | 527 | 1 421 | 5 692 | 1 224 | 38 | 212 |
+| 4 | 0 | 569 | 1 355 | 5 849 | 1 276 | 39 | 231 |
+| 5 | 0 | 598 | 1 213 | 5 905 | 1 297 | 34 | 244 |
+| 6 | 0 | 637 | 1 377 | 5 409 | 1 111 | 33 | 258 |
+| 7 | 0 | 688 | 1 373 | 5 533 | 1 147 | 37 | 272 |
+| 8 | 0 | 742 | 1 381 | 5 658 | 1 201 | 26 | 268 |
+| 9 | 0 | 801 | 1 220 | 6 115 | 1 351 | 32 | 297 |
+| 10 | 0 | 886 | 1 189 | 5 768 | 1 237 | 29 | 272 |
 
-- Nobody died; on day 10 every body is healthy (health 100, hunger and thirst under 60). The storehouse more than
-  doubled; the bands hold a steady day or two of food each and regrowth keeps pace near the camps.
-- Time shares: town workers ~45 % working, ~45 % asleep; bands ~45 % asleep, 11-19 % gathering, 15-30 % resting
-  (dusk by the fire, rests between outings; the healer rests most), 7-9 % walking. The longest awake stretch
-  without progress (only waiting or resting) is 3.0 h (Barro); the town stays under 1.8 h.
-- Tick cost without the database: simulation 0.28 ms mean (p99 0.5-0.7 ms), brains 0.55 ms mean (max 37 ms when
+- Nobody died; on day 10 every body is healthy (health 100, hunger and thirst under 60), and nobody's health
+  dips at all on the way (the living test now fails under 90). The storehouse more than doubled; the bands hold a
+  steady day or two of food each and regrowth keeps pace near the camps.
+- Time shares: town workers ~45 % working, ~45 % asleep; bands ~45 % asleep, 15-22 % gathering, 18-27 % resting
+  (dusk by the fire, rests between outings; the healer rests most), 3-7 % walking. The longest awake stretch
+  without progress (only waiting or resting) is 3.1 h (Oru); the town stays under 1.8 h.
+- Tick cost without the database: simulation 0.28 ms mean (p99 0.4-0.9 ms), brains 0.6 ms mean (max 40 ms when
   several plan walks at once). With the database: 10 game days in 65 s (~4.5 ms a tick including writes and
   hourly snapshots), 92 MB for the whole run.
 
@@ -132,9 +133,12 @@ night" guard: night's home-and-sleep options outscore foraging anyway).
 
 ## Known limits and open points
 
-- Perception lists at most 12 things, nearest first; at a busy camp the river is often not among them. Brains still
-  try `walk_to_thing("water")` (resolution looks at everything in view), but an agent mind would only see the river
-  by name if it's among the 12. Worth revisiting the cap or grouping in perception before phase B.
+- Perception used to list the 12 nearest things, so at a busy camp the river was often left out. It now groups like
+  things and tells them by importance within ~120 words (D63, D64): water, home, food, shelter and fire are always
+  told. In the 10-day run a full look would take 121 words at the median (163 at most); the budget trims 51 % of
+  looks and only ever drops other buildings, wood and reeds, or items on the ground. Letting lakes into band
+  perceptions exposed that a lake beside you was told "close by" (its cell's centre), so brains on the shore never
+  drank and went to bed parched (health down to 40); a lake or the sea next to your cell is now "right beside you".
 - Speech interrupts everyone in earshot (03), so a greeting near the fields costs a farmer the hour of tending in
   progress (nothing ripens from a cut-short session).
 - "talking" is not in snapshots: a spectator view replayed from a snapshot shows someone who spoke in the two ticks

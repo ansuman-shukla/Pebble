@@ -18,12 +18,13 @@ from app.brains.senses import (
     afternoon,
     at,
     at_home,
+    beside,
     carried_food,
     carries,
+    fire_in_view,
     food_value,
     near,
     resources_in_view,
-    sees_thing,
 )
 from app.world_api.facade import ActionHandle, WorldApi
 from app.world_api.models import Compass, Perception
@@ -34,7 +35,6 @@ STOREHOUSES = "the storehouses"
 WELL = "the well"
 MARKET = "the market"
 CASTLE = "the castle"
-FIRE = "the fire pit"
 POSTS = ("the main gate", "the west gate", "the castle", "the training ground")  # the samurai's rounds
 FOODS = ("roots", "nuts", "berries")  # wild food, most filling first
 OUTING_FOOD = 150.0  # bands head back to camp carrying about this much (a day and a half of food)
@@ -271,10 +271,10 @@ def _reach(resource: Resource) -> int:
 def _evening_chores(ctx: Context) -> list[Option]:
     """Put the day's wood and reeds down by the fire, then rest there (the rest itself is a common dusk option)."""
     p, api = ctx.perception, ctx.api
-    fire = sees_thing(p, FIRE)
-    beside = fire is not None and fire.where.startswith(("right beside you", "a few paces"))
+    fire = fire_in_view(p)
+    by_fire = fire is not None and beside(fire)
     for item in ("wood", "reeds"):
-        if carries(p, item) and beside:
+        if carries(p, item) and by_fire:
 
             def put_down(item: str = item) -> ActionHandle:
                 api.drop(item)
