@@ -22,7 +22,7 @@ import {
 
 /*
  * The live citizens on the planet: the dev/test mock feed (`?mockLive=1`) for movement, clips, speech, the
- * People panel, follow / go to, collisions and reconnecting (dropped, 1012, 4404); and the real feed
+ * People panel, follow / go to, collisions, slow ticks and reconnecting (dropped, 1012, 4404); and the real feed
  * of the running engine once.
  */
 
@@ -63,6 +63,8 @@ type MockLiveWindow = {
     dropConnections(code?: number): void;
     sayNow(actor: string, words: string): void;
     restartRun(): void;
+    setClock(change: { speed?: number; paused?: boolean }): void;
+    entities(): { tick: number };
     noRun: boolean;
   };
 };
@@ -362,6 +364,43 @@ test('the clock follows the feed, its speed buttons drive it, and a dropped feed
   await expect(world).toHaveAttribute('data-live-connects', '2');
   const resumed = await tick();
   await expect.poll(tick, { timeout: 5_000 }).toBeGreaterThan(resumed);
+  expect(errors).toEqual([]);
+});
+
+test('with ticks far apart the citizens glide the whole tick long', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  const world = await openLive(page, errors);
+  const tick = async () => Number(await world.getAttribute('data-live-tick'));
+  // a fresh run at ×1; at tick 6 the clock slows to a tick every 8 s, so tick 7 (Kenji walks 82 m to the gate)
+  // takes 8 s: the glide is derived from the feed's speed, not measured between the earlier 1 s frames
+  await page.evaluate(async () => {
+    const mock = (globalThis as unknown as MockLiveWindow).__pebbleMockLive;
+    mock.restartRun();
+    while (mock.entities().tick < 6)
+      await new Promise((done) => setTimeout(done, 20));
+    mock.setClock({ speed: 0.125 });
+  });
+  await expect.poll(tick, { timeout: 10_000 }).toBe(7);
+  // skip the first second of the glide, then watch the next 4 s (up to ~6 s into the 8 s tick)
+  await page.waitForTimeout(1_000);
+  const samples = await trackNpcs(page, 4_000);
+  expect(await tick()).toBe(7);
+  const walkers = samples[0]
+    .map((npc) => npc.id)
+    .map((id) => samples.map((all) => all.find((npc) => npc.id === id)!))
+    .filter((path) => path[0].position.distanceTo(path.at(-1)!.position) > 10);
+  expect(walkers.map((path) => path[0].id)).toContain('kenji');
+  // and keeps moving smoothly to the end of the window
+  for (const path of walkers) {
+    const steps = path
+      .slice(1)
+      .map((npc, k) => npc.position.distanceTo(path[k].position));
+    expect(Math.max(...steps)).toBeLessThan(5);
+    const lastSecond = steps.slice(-10);
+    expect(lastSecond.filter((step) => step > 0.05).length).toBeGreaterThan(5);
+  }
   expect(errors).toEqual([]);
 });
 

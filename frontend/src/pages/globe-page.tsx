@@ -328,7 +328,7 @@ const GlobeScene = memo(function GlobeScene({
       </Suspense>
       <GlobeNpcs
         citizens={live.citizens}
-        tick={live.tick}
+        speed={live.speed}
         speech={live.speech}
         terrain={terrain}
         town={walkTown}

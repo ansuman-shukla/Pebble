@@ -2,6 +2,7 @@ import { useFrame } from '@react-three/fiber';
 import {
   type RefObject,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -12,7 +13,7 @@ import { type Group, Matrix4, type Mesh, Vector3 } from 'three';
 import type { GlobePlayerState } from './globe-player';
 import { Label } from '@/components/world/labels';
 import { MAX_FRAME, smoothing } from '@/components/world/player/motion';
-import type { LiveCitizen } from '@/lib/live/live-contract';
+import { type LiveCitizen, tickMs } from '@/lib/live/live-contract';
 import type { Speech } from '@/lib/live/live-state';
 import {
   activityWords,
@@ -30,9 +31,10 @@ import { createCharacter } from '@/vendor/polyfork/humanoid.mjs';
 
 /*
  * The citizens on the planet, where the live feed says they are. Between ticks each one glides from where it
- * was drawn to the new position over one tick interval (as measured between frames), turns smoothly to its
- * heading and stands on the rendered ground (the town's plateau on its disc, else the terrain). Models load
- * only within NEAR metres of the camera (and hide again past it); clips load per activity as first needed.
+ * was drawn to the new position over one tick at the feed's speed (1 s at ×1, a minute at one tick a minute),
+ * turns smoothly to its heading and stands on the rendered ground (the town's plateau on its disc, else the
+ * terrain). Models load only within NEAR metres of the camera (and hide again past it); clips load per activity
+ * as first needed.
  */
 
 /** Full models within this distance of the camera (they hide past HIDE). */
@@ -56,8 +58,12 @@ const AGE_LABEL_SCALE: Partial<Record<string, number>> = {
 const TURN_RATE = 8;
 /** Game seconds per tick (one game minute). */
 const TICK_SECONDS = 60;
-/** Tick interval estimates are kept within these bounds (ms). */
-const INTERVAL_RANGE: [number, number] = [16, 2000];
+/** The shortest glide (ms): one frame at 60 fps. */
+const MIN_GLIDE = 16;
+
+/** How long a glide to a new frame's position takes: one tick at the feed's speed. */
+const glideMs = (speed: number) =>
+  speed > 0 ? Math.max(tickMs(speed), MIN_GLIDE) : tickMs(1);
 
 const LOOKS = new Map(CITIZEN_LOOKS.map((look) => [look.id, look]));
 const basis = new Matrix4();
@@ -295,7 +301,7 @@ function Npc({
   terrain,
   town,
   labels,
-  intervalRef,
+  interval,
   peopleRef,
   views,
   followId,
@@ -306,7 +312,8 @@ function Npc({
   terrain: GlobeTerrain;
   town: WalkTown;
   labels: LabelStore;
-  intervalRef: RefObject<number>;
+  /** Real milliseconds per tick: how long a glide to a new frame's position takes. */
+  interval: number;
   peopleRef: RefObject<Map<string, Vector3>>;
   views: NpcViews;
   followId: string | null;
@@ -329,11 +336,13 @@ function Npc({
     [activity, label],
   );
 
-  // every new frame: glide from where the citizen is drawn to the new spot over one tick interval
-  useLayoutEffect(() => {
-    startGlide(trackRef.current, citizen, intervalRef.current, radius);
-    viewRef.current.activity = citizen.activity;
-  }, [citizen, intervalRef, radius]);
+  // every new frame: glide from where the citizen is drawn to the new spot over one tick interval (a speed change
+  // alone doesn't restart the glide)
+  const glide = useEffectEvent((next: LiveCitizen) => {
+    startGlide(trackRef.current, next, interval, radius);
+    viewRef.current.activity = next.activity;
+  });
+  useLayoutEffect(() => glide(citizen), [citizen]);
 
   useEffect(() => {
     const id = citizen.id;
@@ -407,7 +416,7 @@ function Npc({
 /** Inside the Canvas: every live citizen, drawn where the feed says. */
 export function GlobeNpcs({
   citizens,
-  tick,
+  speed,
   speech,
   terrain,
   town,
@@ -418,8 +427,8 @@ export function GlobeNpcs({
   subjectRef,
 }: {
   citizens: LiveCitizen[];
-  /** The feed's tick (a change starts a new glide). */
-  tick: number;
+  /** The feed's speed (ticks per real second): how long glides between frames take. */
+  speed: number;
   speech: Speech[];
   terrain: GlobeTerrain;
   town: WalkTown;
@@ -432,19 +441,6 @@ export function GlobeNpcs({
   /** The followed citizen's pose, for the follow camera. */
   subjectRef: RefObject<GlobePlayerState>;
 }) {
-  const intervalRef = useRef(1000);
-  const lastTick = useRef<{ tick: number; at: number } | null>(null);
-  useLayoutEffect(() => {
-    const now = performance.now();
-    const last = lastTick.current;
-    if (last && tick > last.tick) {
-      const measured = (now - last.at) / (tick - last.tick);
-      const [low, high] = INTERVAL_RANGE;
-      intervalRef.current = Math.min(Math.max(measured, low), high);
-    }
-    lastTick.current = { tick, at: now };
-  }, [tick]);
-
   const latest = useMemo(() => {
     const byActor = new Map<string, Speech>();
     for (const said of speech) byActor.set(said.actorId, said);
@@ -461,7 +457,7 @@ export function GlobeNpcs({
           terrain={terrain}
           town={town}
           labels={labels}
-          intervalRef={intervalRef}
+          interval={glideMs(speed)}
           peopleRef={peopleRef}
           views={views}
           followId={followId}
