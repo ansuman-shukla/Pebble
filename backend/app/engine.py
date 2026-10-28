@@ -129,7 +129,6 @@ class EngineLoop:
         self.store.commit(self.sim.tick, self.clock.speed, self.clock.paused)
 
     def apply_commands(self) -> None:
-        """Poll `engine_commands` in a short transaction of its own, so none stays open while the loop waits."""
         commands = pending_commands(self.store.session, self.store.run_id)
         for command in commands:
             if command.kind != "clock":
@@ -140,8 +139,6 @@ class EngineLoop:
             log.info("clock now speed %s, paused %s", self.clock.speed, self.clock.paused)
         if commands:
             self.store.commit(self.sim.tick, self.clock.speed, self.clock.paused)
-        else:
-            self.store.session.commit()  # ends the read and hands the connection back to the pool (pre-pinged)
 
     def run_ticks(self, ticks: int | None, headless: bool) -> None:
         """Tick until `ticks` more ticks have run (None = forever) or a stop signal; headless never sleeps.
@@ -160,7 +157,11 @@ class EngineLoop:
                 next_at = time.monotonic()
 
     def _advance(self, next_at: float, headless: bool) -> float:
-        """One pass of the loop: apply commands, then tick, wait or heartbeat. Returns when the next tick is due."""
+        """One pass of the loop: apply commands, then tick, wait or heartbeat. Returns when the next tick is due.
+
+        No transaction stays open while the loop waits: the connection goes back to the pool, which pre-pings it
+        before the next poll (a waiting engine used to sit `idle in transaction` on the poll's read).
+        """
         self.apply_commands()
         realtime = not headless and self.sim.tick >= self.catch_up_to
         if self.clock.paused and realtime:
@@ -170,6 +171,7 @@ class EngineLoop:
         if realtime:
             delay = next_at - time.monotonic()
             if delay > 0:
+                self.store.session.commit()  # ends the poll's read
                 self.idle_sleep(min(delay, PAUSED_POLL_S))
                 return next_at
             next_at += 1.0 / self.clock.speed
