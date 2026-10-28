@@ -77,6 +77,25 @@ def test_heights_stay_in_the_contract_range(world: GeneratedWorld) -> None:
     assert 290 <= heights.max() <= 330
 
 
+def _edge_slopes_deg(world: GeneratedWorld) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    triangles = world.grid.triangles
+    edges = np.concatenate([triangles[:, [0, 1]], triangles[:, [1, 2]], triangles[:, [2, 0]]])
+    a, b = edges[edges[:, 0] < edges[:, 1]].T
+    run = np.linalg.norm(world.grid.positions[a] - world.grid.positions[b], axis=1) * world.spec.radius_m
+    return np.degrees(np.arctan(np.abs(world.heights[a] - world.heights[b]) / run)), a, b
+
+
+def test_the_land_is_calm_and_the_coasts_are_gentle(world: GeneratedWorld) -> None:
+    slopes, a, b = _edge_slopes_deg(world)
+    land = (world.heights[a] > 0) & (world.heights[b] > 0)
+    coast = (world.heights[a] > 0) != (world.heights[b] > 0)
+
+    # unsmoothed (m3.1): 10 % of land edges over 40°, p95 49°, coast p95 44°
+    assert (slopes[land] > 40).mean() < 0.015
+    assert np.percentile(slopes[land], 95) < 32
+    assert np.percentile(slopes[coast], 95) < 38
+
+
 def test_biome_shares_are_in_range(world: GeneratedWorld) -> None:
     shares = np.bincount(world.biomes, minlength=len(BIOME_NAMES)) / world.grid.cell_count
     ocean = shares[BIOME_IDS["deep_ocean"]] + shares[BIOME_IDS["shallow_ocean"]]
@@ -238,15 +257,11 @@ def test_site_placements_use_known_kinds(world: GeneratedWorld) -> None:
     assert [item.kind for item in placements["elder_tree"]].count("giant_tree") == 1
 
 
-def test_lakes_are_level_and_frozen_lakes_are_ice(world: GeneratedWorld) -> None:
-    lat, _ = lat_lon(world.grid.positions)
-
+def test_lakes_are_level(world: GeneratedWorld) -> None:
+    # the smoothed terrain leaves no depressions near the poles; frozen lakes turning to ice is tested on classify
     assert (world.heights[world.lake] >= 0).all()
     for group in _lake_groups(world):
         assert np.ptp(world.heights[group]) == 0
-    polar_lakes = world.lake & (np.abs(lat) > 80)
-    assert polar_lakes.any()
-    assert (world.biomes[polar_lakes] == BIOME_IDS["ice"]).all()
     assert (world.biomes[world.biomes == BIOME_IDS["lake"]] == BIOME_IDS["lake"]).all()
     assert world.lake[world.biomes == BIOME_IDS["lake"]].all()
 

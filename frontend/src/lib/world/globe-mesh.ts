@@ -1,12 +1,17 @@
 /*
- * Geometry for the planet: the terrain (one flat-shaded triangle per grid triangle, coloured by its corners'
- * biomes) and the rivers (ribbons that follow the terrain along their cell paths).
+ * Geometry for the planet: the terrain (the refined surface of terrain-surface.ts, coloured by blending its
+ * cells' biomes) and the rivers (ribbons that follow the terrain along their cell paths).
  */
-import { BufferGeometry, Color, Float32BufferAttribute, Vector3 } from 'three';
+import {
+  BufferAttribute,
+  BufferGeometry,
+  Color,
+  Float32BufferAttribute,
+  Vector3,
+} from 'three';
 
 import {
   cellDirection,
-  type Globe,
   type GlobeTerrain,
   WATER_BIOMES,
   WATER_SURFACE,
@@ -40,69 +45,229 @@ const LAKE_SHORE_SAND = 0.25;
 export const biomeColor = (name: string) =>
   BIOME_COLORS[name] ?? FALLBACK_COLOR;
 
-/** Small deterministic per-triangle brightness jitter for the low-poly look. */
+/** Small deterministic per-cell brightness jitter, blended across the cell like its colour. */
 function jitter(index: number) {
   let h = Math.imul(index + 1, 0x27d4eb2d);
   h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
   return (((h ^ (h >>> 13)) >>> 0) / 4294967296) * 2 - 1;
 }
 
+/** Sand fades in below this height above the sea (a beach) or above a lake's surface (a shore). */
+const BEACH_TOP = 2.5;
+const LAKE_SHORE_TOP = 1.5;
+/** Sea floor colour fades from the shallows to the deep over this depth. */
+const DEEP_FLOOR = -40;
+/** A face corner this close to a lake's surface is the lake's water. */
+const LAKE_LEVEL_TOLERANCE = 0.02;
+/** A land cell's colour counts this many times its land neighbours' colours each, so biomes fade over a cell. */
+const OWN_COLOR_WEIGHT = 3;
+
+const smoothstep = (edge0: number, edge1: number, x: number) => {
+  const t = Math.min(Math.max((x - edge0) / (edge1 - edge0), 0), 1);
+  return t * t * (3 - 2 * t);
+};
+
+/** Per cell: the area-weighted normal of the grid triangles around it (through the lifted cell points). */
+function gridNormals({ globe }: GlobeTerrain) {
+  const { positions, heights, triangles, cellCount, radius } = globe;
+  const normals = new Float64Array(cellCount * 3);
+  const corner = [new Vector3(), new Vector3(), new Vector3()];
+  const face = new Vector3();
+  const edge = new Vector3();
+  for (let t = 0; t < triangles.length / 3; t++) {
+    for (let k = 0; k < 3; k++) {
+      const cell = triangles[t * 3 + k];
+      corner[k]
+        .fromArray(positions, cell * 3)
+        .multiplyScalar(radius + heights[cell]);
+    }
+    face
+      .subVectors(corner[1], corner[0])
+      .cross(edge.subVectors(corner[2], corner[0]));
+    for (let k = 0; k < 3; k++) {
+      const cell = triangles[t * 3 + k] * 3;
+      normals[cell] += face.x;
+      normals[cell + 1] += face.y;
+      normals[cell + 2] += face.z;
+    }
+  }
+  return normals;
+}
+
 /**
- * Non-indexed terrain: every triangle gets its own vertices and one colour (flat, faceted shading). A face
- * above the sea takes the colours of its land corners (a shore face turns to sand), a face under it those
- * of its water corners, so no sea colour shows on dry land. Lakes lie above the sea at their surface height:
- * a face whose corners are all lake is the lake's water.
+ * The terrain mesh: every grid triangle split into the refined faces of `terrain.surface` (indexed, so the
+ * corners are shared and the normals smooth). Colours blend the corners' biomes across cell borders; the
+ * ground under the sea fades from sand at the waterline to the deep floor; a corner on a lake's surface is the
+ * lake's water (lakes lie above the sea, flat at their surface height); sand fades in just above the sea and
+ * a lake's surface. A corner on a grid edge only reads the edge's two cells, so both triangles agree on it.
  */
-export function terrainGeometry(globe: Globe, biomeNames: readonly string[]) {
-  const { positions, heights, biomes, triangles, radius } = globe;
+export function terrainGeometry(
+  terrain: GlobeTerrain,
+  biomeNames: readonly string[],
+) {
+  const { globe, surface } = terrain;
+  const { heights, biomes, triangles, cellCount } = globe;
+  const { divisions: n, edgeCount, triangleEdges, edgeCells } = surface;
   const palette = biomeNames.map((name) => new Color(biomeColor(name)));
+  // each land cell's colour softened towards its land neighbours', so no cell shows as a patch
+  const cellColors = Array.from({ length: cellCount }, (_, cell) => {
+    const own = palette[biomes[cell]];
+    if (WATER_BIOMES.has(biomes[cell])) return own;
+    const mixed = own.clone().multiplyScalar(OWN_COLOR_WEIGHT);
+    let total = OWN_COLOR_WEIGHT;
+    for (const neighbour of terrain.neighbours(cell)) {
+      if (WATER_BIOMES.has(biomes[neighbour])) continue;
+      mixed.add(palette[biomes[neighbour]]);
+      total += 1;
+    }
+    return mixed.multiplyScalar(1 / total);
+  });
   const sand = new Color(biomeColor('beach'));
   const shallows = new Color(biomeColor('shallow_ocean'));
-  const lake = biomeNames.indexOf('lake');
+  const deep = new Color(biomeColor('deep_ocean'));
   const lakeWater = new Color(LAKE_WATER);
-  const count = triangles.length;
-  const vertices = new Float32Array(count * 3);
-  const colors = new Float32Array(count * 3);
+  const lake = biomeNames.indexOf('lake');
+  const triangleCount = triangles.length / 3;
+  const interior = ((n - 1) * (n - 2)) / 2;
+  const edgeBase = cellCount;
+  const faceBase = cellCount + edgeCount * (n - 1);
+  const vertexCount = faceBase + triangleCount * interior;
+  const vertices = new Float32Array(vertexCount * 3);
+  const colors = new Float32Array(vertexCount * 3);
+  const normals = new Float32Array(vertexCount * 3);
+  const cellNormals = gridNormals(terrain);
+  const done = new Uint8Array(vertexCount);
   const color = new Color();
-  for (let t = 0; t < count / 3; t++) {
-    const cells = triangles.subarray(t * 3, t * 3 + 3);
-    let height = 0;
-    cells.forEach((cell, k) => {
-      const scale = radius + heights[cell];
-      for (let axis = 0; axis < 3; axis++)
-        vertices[(t * 3 + k) * 3 + axis] = positions[cell * 3 + axis] * scale;
-      height += heights[cell] / 3;
-    });
-    const dry = height > WATER_SURFACE;
-    const lakeCorners = [...cells].filter((cell) => biomes[cell] === lake);
-    if (dry && lakeCorners.length === 3) {
-      color.copy(lakeWater).multiplyScalar(1 + jitter(t) * 0.02);
-      for (let k = 0; k < 3; k++) color.toArray(colors, (t * 3 + k) * 3);
-      continue;
-    }
-    const matching = [...cells].filter(
-      (cell) => WATER_BIOMES.has(biomes[cell]) !== dry,
-    );
+  const part = new Color();
+  const position = new Float64Array(3);
+
+  /** Vertex id of lattice point (i, j) of triangle t (weights (n − i − j, i, j) / n on A, B, C). */
+  function vertexId(t: number, i: number, j: number) {
+    const k = n - i - j;
+    const corners = triangles.subarray(t * 3, t * 3 + 3);
+    if (i === 0 && j === 0) return corners[0];
+    if (i === n) return corners[1];
+    if (j === n) return corners[2];
+    // steps from the edge's first corner (A on AB, B on BC, C on CA) and the edge id
+    const onEdge = (side: number, step: number) => {
+      const edge = triangleEdges[t * 3 + side];
+      const from = edgeCells[edge * 2] === corners[side] ? step : n - step;
+      return edgeBase + edge * (n - 1) + from - 1;
+    };
+    if (j === 0) return onEdge(0, i);
+    if (k === 0) return onEdge(1, j);
+    if (i === 0) return onEdge(2, n - j);
+    // interior points in rows j = 1 .. n − 2, i = 1 .. n − 1 − j
+    let index = 0;
+    for (let row = 1; row < j; row++) index += n - 1 - row;
+    return faceBase + t * interior + index + i - 1;
+  }
+
+  function paint(t: number, i: number, j: number, offset: number) {
+    const corners = triangles.subarray(t * 3, t * 3 + 3);
+    const weights = [n - i - j, i, j].map((w) => w / n);
+    const height = surface.height(t, weights[0], weights[1], weights[2]);
+    let lakeLevel = Infinity;
+    let total = 0;
+    let shade = 0;
     color.setRGB(0, 0, 0);
-    for (const cell of matching) color.add(palette[biomes[cell]]);
-    if (matching.length > 0) color.multiplyScalar(1 / matching.length);
-    else color.copy(dry ? sand : shallows);
-    if (dry && matching.length < 3)
+    corners.forEach((cell, k) => {
+      if (weights[k] <= 0) return;
+      if (biomes[cell] === lake) lakeLevel = Math.min(lakeLevel, heights[cell]);
+      if (WATER_BIOMES.has(biomes[cell])) return;
+      const weight = weights[k];
+      color.add(part.copy(cellColors[cell]).multiplyScalar(weight));
+      shade += jitter(cell) * weight;
+      total += weight;
+    });
+    if (height <= WATER_SURFACE) {
+      color
+        .copy(shallows)
+        .lerp(deep, smoothstep(WATER_SURFACE, DEEP_FLOOR, height))
+        .lerp(sand, smoothstep(-1.5, WATER_SURFACE, height) * BEACH_SAND);
+    } else if (
+      lakeLevel < Infinity &&
+      height <= lakeLevel + LAKE_LEVEL_TOLERANCE
+    ) {
+      color.copy(lakeWater);
+    } else {
+      if (total > 0) color.multiplyScalar(1 / total);
+      else color.copy(sand);
       color.lerp(
         sand,
-        matching.length + lakeCorners.length === 3
-          ? LAKE_SHORE_SAND
-          : BEACH_SAND,
+        smoothstep(BEACH_TOP, WATER_SURFACE, height) * BEACH_SAND,
       );
-    // higher land a touch lighter, plus a little noise per face
-    const shade = 1 + jitter(t) * 0.05 + Math.max(0, height) / 1500;
-    color.multiplyScalar(shade);
-    for (let k = 0; k < 3; k++) color.toArray(colors, (t * 3 + k) * 3);
+      if (lakeLevel < Infinity)
+        color.lerp(
+          sand,
+          smoothstep(lakeLevel + LAKE_SHORE_TOP, lakeLevel, height) *
+            LAKE_SHORE_SAND,
+        );
+      // higher land a touch lighter, plus a little noise per cell
+      color.multiplyScalar(
+        1 +
+          (total > 0 ? (shade / total) * 0.04 : 0) +
+          Math.max(0, height) / 1500,
+      );
+    }
+    color.toArray(colors, offset);
+  }
+
+  /** Shading follows the grid's cell normals, blended like the colours: smooth over the patches' seams. */
+  function blendNormal(t: number, i: number, j: number, offset: number) {
+    const weights = [n - i - j, i, j];
+    let [x, y, z] = [0, 0, 0];
+    for (let k = 0; k < 3; k++) {
+      const cell = triangles[t * 3 + k] * 3;
+      x += weights[k] * cellNormals[cell];
+      y += weights[k] * cellNormals[cell + 1];
+      z += weights[k] * cellNormals[cell + 2];
+    }
+    const length = Math.hypot(x, y, z);
+    normals[offset] = x / length;
+    normals[offset + 1] = y / length;
+    normals[offset + 2] = z / length;
+  }
+
+  const index = new Uint32Array(triangleCount * n * n * 3);
+  let cursor = 0;
+  const ids: number[] = [];
+  for (let t = 0; t < triangleCount; t++) {
+    ids.length = 0;
+    for (let j = 0; j <= n; j++)
+      for (let i = 0; i + j <= n; i++) {
+        const id = vertexId(t, i, j);
+        ids.push(id);
+        if (done[id]) continue;
+        done[id] = 1;
+        surface.vertex(t, i, j, position, 0);
+        vertices.set(position, id * 3);
+        paint(t, i, j, id * 3);
+        blendNormal(t, i, j, id * 3);
+      }
+    // lattice rows: point (i, j) is ids[rowStart(j) + i]
+    let rowStart = 0;
+    for (let j = 0; j < n; j++) {
+      const next = rowStart + n - j + 1;
+      for (let i = 0; i + j < n; i++) {
+        const p = ids[rowStart + i];
+        const right = ids[rowStart + i + 1];
+        const up = ids[next + i];
+        index.set([p, right, up], cursor);
+        cursor += 3;
+        if (i + j < n - 1) {
+          index.set([right, ids[next + i + 1], up], cursor);
+          cursor += 3;
+        }
+      }
+      rowStart = next;
+    }
   }
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new Float32BufferAttribute(vertices, 3));
   geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
-  geometry.computeVertexNormals();
+  geometry.setAttribute('normal', new Float32BufferAttribute(normals, 3));
+  geometry.setIndex(new BufferAttribute(index, 1));
   return geometry;
 }
 

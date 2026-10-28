@@ -20,9 +20,10 @@ terrain:
   hills_m: 55
   ridges: {frequency: 6.0, octaves: 4}
   relief: {frequency: 3.5, octaves: 4}
-  relief_m: 150
+  relief_m: 130
   relief_threshold: 0.55
   lowland_m: 30
+  smoothing: {passes: 6, strength: 0.5}
   max_land_m: 250
   min_sea_m: -120
   shelf_m: -25
@@ -109,7 +110,7 @@ sites:
     kind: town
     name: The castle town
     at: [38, 12]
-    terrain: {type: plateau, height_m: 8, radius_m: 230, blend_m: 70}
+    terrain: {type: plateau, height_m: 8, radius_m: 270, blend_m: 70} # the 225 m ground disc plus a cell
     biome: grassland
     biome_radius_m: 300
 

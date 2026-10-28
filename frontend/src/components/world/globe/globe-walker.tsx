@@ -175,6 +175,7 @@ export function GlobeWalker({
       )}
       {cameraMode === 'follow' && (
         <GlobeFollowCamera
+          terrain={terrain}
           playerRef={playerRef}
           rigRef={rigRef}
           focusRef={focusRef}

@@ -15,7 +15,7 @@ import {
 import { useDrag } from '@/components/world/player/use-drag';
 import { MAX_FRAME, smoothing } from '@/components/world/player/motion';
 import { PLAYER_EYE_HEIGHT } from '@/components/world/player/player-state';
-import { type GlobeTerrain, tangent } from '@/lib/world/globe';
+import { type GlobeTerrain, tangent, WATER_SURFACE } from '@/lib/world/globe';
 
 /*
  * Cameras on the planet, all with "up" = the local normal under them. follow: third person behind the player;
@@ -47,14 +47,18 @@ const eye = new Vector3();
 const offset = new Vector3();
 
 const FOLLOW_DRAG = 0.005;
+/** The follow camera never dips closer than this to the ground or the water under it. */
+const FOLLOW_CLEARANCE = 1;
 const FOLLOW_PITCH: [number, number] = [0.05, 1.45];
 const FOLLOW_DISTANCE: [number, number] = [3, 40];
 
 export function GlobeFollowCamera({
+  terrain,
   playerRef,
   rigRef,
   focusRef,
 }: {
+  terrain: GlobeTerrain;
   playerRef: RefObject<GlobePlayerState>;
   rigRef: RefObject<GlobeRig>;
   focusRef: RefObject<Vector3>;
@@ -94,6 +98,12 @@ export function GlobeFollowCamera({
       .multiplyScalar(-Math.cos(rig.pitch) * rig.distance)
       .addScaledVector(up, Math.sin(rig.pitch) * rig.distance);
     camera.position.copy(eye).add(offset);
+    // behind a rise the boom would end inside the hill, which then culls away and leaves the player hanging
+    const floor =
+      terrain.globe.radius +
+      Math.max(terrain.heightAt(camera.position), WATER_SURFACE) +
+      FOLLOW_CLEARANCE;
+    if (camera.position.length() < floor) camera.position.setLength(floor);
     camera.up.copy(up);
     camera.lookAt(eye);
     focusRef.current.copy(position);

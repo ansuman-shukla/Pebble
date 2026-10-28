@@ -192,7 +192,7 @@ test('the nearest cell walk finds the true nearest cell', () => {
   }
 });
 
-test('terrain height equals cell heights at cells and the rendered triangle inside', () => {
+test('terrain height equals cell heights at cells and the rendered faces between them', () => {
   const globe = testGlobe(20);
   const terrain = buildTerrain(globe);
   const direction = new Vector3();
@@ -200,26 +200,107 @@ test('terrain height equals cell heights at cells and the rendered triangle insi
     direction.fromArray(globe.positions, i * 3);
     expect(terrain.heightAt(direction)).toBeCloseTo(globe.heights[i], 3);
   }
+  const n = terrain.surface.divisions;
+  const face = new Float64Array(9);
   const corner = [new Vector3(), new Vector3(), new Vector3()];
   const point = new Vector3();
   for (let t = 0; t < globe.triangles.length / 3; t += 5) {
-    const cells = [0, 1, 2].map((k) => globe.triangles[t * 3 + k]);
-    cells.forEach((cell, k) =>
-      corner[k]
-        .fromArray(globe.positions, cell * 3)
-        .multiplyScalar(R + globe.heights[cell]),
-    );
+    // a face of the triangle's refined lattice: the lower one at (i, j) or the upper one next to it
+    const i = t % (n - 1);
+    const j = (t >> 2) % (n - 1 - i);
+    const lattice =
+      t % 2
+        ? [
+            [i, j],
+            [i + 1, j],
+            [i, j + 1],
+          ]
+        : [
+            [i + 1, j],
+            [i + 1, j + 1],
+            [i, j + 1],
+          ];
+    lattice.forEach(([li, lj], k) => {
+      terrain.surface.vertex(t, li, lj, face, k * 3);
+      corner[k].fromArray(face, k * 3);
+    });
     const w1 = ((t * 0.37) % 0.8) + 0.05;
     const w2 = (1 - w1) * (((t * 0.61) % 0.9) + 0.05);
-    const weights = [1 - w1 - w2, w1, w2];
-    point.set(0, 0, 0);
-    corner.forEach((c, k) => point.addScaledVector(c, weights[k]));
+    point
+      .copy(corner[0])
+      .multiplyScalar(1 - w1 - w2)
+      .addScaledVector(corner[1], w1)
+      .addScaledVector(corner[2], w2);
     const hit = terrain.locate(point);
     expect(hit.height).toBeCloseTo(point.length() - R, 6);
     expect(hit.triangle).toBe(t);
-    const heights = cells.map((cell) => globe.heights[cell]);
-    const mean = weights.reduce((sum, w, k) => sum + w * heights[k], 0);
-    // a flat triangle sags below the sphere through its corners by less than edge²/(8R)
-    expect(Math.abs(hit.height - mean)).toBeLessThan(1.5);
+    const cells = [0, 1, 2].map(
+      (k) => globe.heights[globe.triangles[t * 3 + k]],
+    );
+    // the patch stays near the span of its cells (an edge middle bends by at most a quarter of its rise)
+    expect(hit.height).toBeGreaterThan(
+      Math.min(...cells) -
+        0.5 * (Math.max(...cells) - Math.min(...cells)) -
+        0.1,
+    );
+    expect(hit.height).toBeLessThan(
+      Math.max(...cells) +
+        0.5 * (Math.max(...cells) - Math.min(...cells)) +
+        0.1,
+    );
   }
+});
+
+test('the refined surface keeps flats flat and meets its neighbour patches without cracks', () => {
+  const globe = testGlobe(30);
+  globe.heights.fill(30);
+  const flat = buildTerrain(globe);
+  const direction = new Vector3();
+  for (let k = 0; k < 200; k++) {
+    directionFromLatLon(
+      Math.asin(Math.sin(k * 3.7)) * (180 / Math.PI),
+      ((k * 31.3) % 360) - 180,
+      direction,
+    );
+    // faces are chords between lattice points on the sphere (up to ~25 m apart here): they sag by a few cm only
+    const sag = 30 - flat.heightAt(direction);
+    expect(sag).toBeGreaterThanOrEqual(-1e-6);
+    expect(sag).toBeLessThan(0.05);
+  }
+  const rough = buildTerrain(testGlobe(30));
+  const { surface } = rough;
+  const n = surface.divisions;
+  const [a, b] = [new Float64Array(3), new Float64Array(3)];
+  // every grid edge's points are the same seen from both of its triangles
+  const seen = new Map<number, [number, number]>();
+  let gap = 0;
+  let shared = 0;
+  for (let t = 0; t < globe.triangles.length / 3; t++) {
+    for (let side = 0; side < 3; side++) {
+      const edge = surface.triangleEdges[t * 3 + side];
+      const other = seen.get(edge);
+      if (!other) {
+        seen.set(edge, [t, side]);
+        continue;
+      }
+      const [u, otherSide] = other;
+      // lattice point s steps from the side's first corner (A on AB, B on BC, C on CA)
+      const along = (edgeSide: number, s: number) =>
+        [
+          [s, 0],
+          [n - s, s],
+          [0, n - s],
+        ][edgeSide];
+      for (let step = 1; step < n; step++) {
+        const [i, j] = along(side, step);
+        const [oi, oj] = along(otherSide, n - step);
+        surface.vertex(t, i, j, a, 0);
+        surface.vertex(u, oi, oj, b, 0);
+        gap = Math.max(gap, Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]));
+        shared += 1;
+      }
+    }
+  }
+  expect(shared).toBe((globe.triangles.length / 2) * (n - 1));
+  expect(gap).toBeLessThan(1e-6);
 });

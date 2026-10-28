@@ -109,6 +109,13 @@ class MountainRange(_Spec):
     points: list[LatLon] = Field(min_length=2)
 
 
+class SmoothingSpec(_Spec):
+    """Laplacian passes over the base heights: each moves a cell `strength` of the way to its neighbours' mean."""
+
+    passes: int = Field(ge=0)
+    strength: float = Field(gt=0, le=1)
+
+
 class TerrainSpec(_Spec):
     sea_level: float  # threshold of the continental field: land where the field is above it
     warp: WarpSpec
@@ -123,6 +130,7 @@ class TerrainSpec(_Spec):
     relief_m: float
     relief_threshold: float  # ridged values below this add no relief
     lowland_m: float  # height reached a little inland
+    smoothing: SmoothingSpec
     max_land_m: float
     min_sea_m: float
     shelf_m: float  # ocean shallower than this is shallow_ocean
