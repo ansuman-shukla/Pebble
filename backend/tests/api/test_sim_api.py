@@ -13,9 +13,13 @@ from app.core.config import settings
 from app.db.models import EngineCommand, Run
 from app.engine import Clock, EngineLoop, open_loop
 from app.main import app
+from app.observability.replay import from_snapshot
+from app.observability.store import latest_snapshot
 from app.services.clock import read_clock
+from app.services.entities import world_at
 from app.sim.actions import walk_ahead
 from app.sim.citizens import DEV_CITIZENS
+from app.sim.snapshot import SimSnapshot
 from app.sim.vec import lat_lon_deg
 from app.sim.world import SimWorld
 from app.world.store import WorldKey
@@ -180,3 +184,15 @@ def test_runs_are_listed_newest_first(api_session: Session, sim_world: SimWorld,
     assert client.get(f"{API}/clock").json()["run_id"] == second.run.id
     assert client.get(f"{API}/clock", params={"run_id": first.run.id}).json()["run_id"] == first.run.id
     assert len(api_session.exec(select(Run)).all()) >= 2
+
+
+def test_replaying_from_the_snapshot_before_a_tick_rebuilds_the_snapshotted_world(
+    api_session: Session, loop: EngineLoop
+) -> None:
+    """Spectator endpoints share `world_at`, which starts from the snapshot before the asked tick: at a snapshot
+    tick its replay (knowledge, inventories, bodies, positions) must equal that snapshot."""
+    snapshot_row = latest_snapshot(api_session, loop.run.id, at_or_before=60)
+    assert snapshot_row is not None and snapshot_row.tick == 60
+    world = world_at(api_session, loop.run.id, at=60)
+    assert world is not None and world.tick == 60
+    assert world.state.same_as(from_snapshot(SimSnapshot.model_validate(snapshot_row.state)))
