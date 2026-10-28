@@ -2,6 +2,12 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { type RefObject, useCallback, useEffect, useRef } from 'react';
 import { Matrix4, type PerspectiveCamera, Quaternion, Vector3 } from 'three';
 
+import {
+  easeInOut,
+  FLIGHT_SECONDS,
+  flightPoint,
+  startFlight,
+} from './camera-flight';
 import type { GlobePlayerState, GlobeRig } from './globe-player';
 import {
   axis,
@@ -16,6 +22,7 @@ import { useDrag } from '@/components/world/player/use-drag';
 import { MAX_FRAME, smoothing } from '@/components/world/player/motion';
 import { PLAYER_EYE_HEIGHT } from '@/components/world/player/player-state';
 import { type GlobeTerrain, tangent } from '@/lib/world/globe';
+import type { GlobeWalk } from '@/lib/world/globe-walk';
 
 /*
  * Cameras on the planet, all with "up" = the local normal under them. follow: third person behind the player;
@@ -45,20 +52,53 @@ const useWheel = (onWheel: (deltaY: number) => void) => {
 const up = new Vector3();
 const eye = new Vector3();
 const offset = new Vector3();
+const wanted = new Vector3();
+const turnTo = new Quaternion();
+const looking = new Matrix4();
 
 const FOLLOW_DRAG = 0.005;
 const FOLLOW_PITCH: [number, number] = [0.05, 1.45];
 const FOLLOW_DISTANCE: [number, number] = [3, 40];
-
+/** The spring arm stops this far short of what it hits... */
+const ARM_MARGIN = 0.3;
+/** ...is never shorter than this (the avatar hides below 0.7 m)... */
+const MIN_ARM = 0.25;
+/** ...and eases back out at this rate (1/s) once clear; it pulls in at once. */
+const ARM_RETURN = 3;
+/** When the ground behind the player hides it, the camera tilts up in steps of this much (radians)... */
+const LIFT_STEP = 0.1;
+/** ...rising quickly and settling back slowly (1/s). */
+const LIFT_RISE = 8;
+const LIFT_FALL = 2;
+/** The camera keeps this far from walls beside it (near plane 0.1 m: its corners reach ~0.09 m). */
+const CAMERA_CLEARANCE = 0.25;
+/** The eye eases along the vertical so the view doesn't bob over the terrain's facets... */
+const EYE_SMOOTHING = 12;
+/** ...but jumps when the player is moved (a drop). */
+const EYE_JUMP = 3;
 export function GlobeFollowCamera({
   playerRef,
   rigRef,
+  walkRef,
   focusRef,
+  radius,
 }: {
   playerRef: RefObject<GlobePlayerState>;
   rigRef: RefObject<GlobeRig>;
+  /** The walk's collisions for the spring arm (null until it is built). */
+  walkRef: RefObject<GlobeWalk | null>;
   focusRef: RefObject<Vector3>;
+  radius: number;
 }) {
+  const camera = useThree((state) => state.camera);
+  const eyeHeight = useRef<number | null>(null);
+
+  useEffect(() => {
+    const rig = rigRef.current;
+    // switching into follow (C, the orbit handover) flies in from the current view
+    if (rig.settled && !rig.flight) startFlight(rig, camera);
+  }, [rigRef, camera]);
+
   useDrag(
     useCallback(
       (dx: number, dy: number) => {
@@ -83,19 +123,78 @@ export function GlobeFollowCamera({
     ),
   );
 
-  useFrame(({ camera }) => {
+  useFrame((_, frameDelta) => {
+    const delta = Math.min(frameDelta, MAX_FRAME);
     const { position, facing } = playerRef.current;
     const rig = rigRef.current;
+    const walk = walkRef.current;
     up.copy(position).normalize();
     tangent(rig.heading, up, facing);
-    eye.copy(position).addScaledVector(up, PLAYER_EYE_HEIGHT);
-    offset
-      .copy(rig.heading)
-      .multiplyScalar(-Math.cos(rig.pitch) * rig.distance)
-      .addScaledVector(up, Math.sin(rig.pitch) * rig.distance);
-    camera.position.copy(eye).add(offset);
-    camera.up.copy(up);
-    camera.lookAt(eye);
+    const eyeTarget = position.length() + PLAYER_EYE_HEIGHT;
+    const previous = eyeHeight.current;
+    const smoothed =
+      previous === null || Math.abs(eyeTarget - previous) > EYE_JUMP
+        ? eyeTarget
+        : previous + (eyeTarget - previous) * smoothing(EYE_SMOOTHING, delta);
+    eyeHeight.current = smoothed;
+    eye.copy(up).multiplyScalar(smoothed);
+    // a slope behind the player tilts the camera up over it rather than pulling it in to the head
+    let pitch = rig.pitch;
+    const aim = (angle: number) =>
+      offset
+        .copy(rig.heading)
+        .multiplyScalar(-Math.cos(angle))
+        .addScaledVector(up, Math.sin(angle));
+    while (
+      walk &&
+      pitch < FOLLOW_PITCH[1] &&
+      !walk.aboveGround(
+        eye,
+        wanted.copy(eye).addScaledVector(aim(pitch), rig.distance),
+      )
+    )
+      pitch += LIFT_STEP;
+    const lift = Math.min(pitch, FOLLOW_PITCH[1]) - rig.pitch;
+    const lifted = lift > rig.lift;
+    rig.lift +=
+      (lift - rig.lift) *
+      (rig.settled ? smoothing(lifted ? LIFT_RISE : LIFT_FALL, delta) : 1);
+    aim(rig.pitch + rig.lift);
+    wanted.copy(eye).addScaledVector(offset, rig.distance);
+    const reach = walk ? walk.cameraReach(eye, wanted) : 1;
+    const clear =
+      reach >= 1
+        ? rig.distance
+        : Math.max(reach * rig.distance - ARM_MARGIN, MIN_ARM);
+    rig.arm =
+      clear < rig.arm || !rig.settled
+        ? clear
+        : rig.arm + (clear - rig.arm) * smoothing(ARM_RETURN, delta);
+    wanted.copy(eye).addScaledVector(offset, rig.arm);
+    if (walk) walk.clearCamera(wanted, CAMERA_CLEARANCE);
+    rig.settled = true;
+
+    const flight = rig.flight;
+    if (flight) {
+      flight.elapsed += delta;
+      const t = easeInOut(Math.min(flight.elapsed / FLIGHT_SECONDS, 1));
+      flightPoint(flight.from, wanted, t, radius, camera.position);
+      if (walk) {
+        const floor = radius + walk.floorAt(camera.position) + 1;
+        if (camera.position.length() < floor) camera.position.setLength(floor);
+      }
+      camera.up.copy(camera.position).normalize();
+      looking.lookAt(camera.position, eye, camera.up);
+      turnTo.setFromRotationMatrix(looking);
+      camera.quaternion
+        .copy(flight.quaternion)
+        .slerp(turnTo, Math.min(t / 0.4, 1));
+      if (flight.elapsed >= FLIGHT_SECONDS) rig.flight = null;
+    } else {
+      camera.position.copy(wanted);
+      camera.up.copy(up);
+      camera.lookAt(eye);
+    }
     focusRef.current.copy(position);
   });
 

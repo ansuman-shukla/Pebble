@@ -1,6 +1,6 @@
 import { useFrame } from '@react-three/fiber';
 import { type RefObject, useEffect, useMemo, useRef } from 'react';
-import { type Group, Matrix4, Vector3 } from 'three';
+import { type Group, Matrix4, type Quaternion, Vector3 } from 'three';
 
 import {
   MAX_FRAME,
@@ -22,8 +22,17 @@ import { useVisitor } from '@/components/world/player/use-visitor';
 import { latLonFromDirection, tangent } from '@/lib/world/globe';
 import type { GlobeWalk } from '@/lib/world/globe-walk';
 
-/** Fast travel for reviewing the planet (T toggles it). */
+/** Fast travel for reviewing the planet (T toggles it); it skips scattered props and the slope limit. */
 const TRAVEL_SPEED = 25;
+/** How quickly the pace follows the keys (1/s): about 0.3 s from standing to a walk. */
+const ACCELERATION = 10;
+/** Pace on the steepest walkable slope, uphill and downhill, as a share of the flat pace. */
+const UPHILL_PACE = 0.4;
+const DOWNHILL_PACE = 0.75;
+/** Ground changes bigger than this in one frame (a step up onto paving or a bridge) are eased, not snapped. */
+const STEP_EASE = 0.25;
+/** The avatar hides when the camera is pulled in closer than this (it would fill the view). */
+const HIDE_ARM = 0.7;
 
 /** The player's live pose on the planet, mutated every frame and read by the cameras. */
 export interface GlobePlayerState {
@@ -35,12 +44,27 @@ export interface GlobePlayerState {
   ground: number;
 }
 
+/** The camera easing from where it was into the follow view (after a drop or a camera switch). */
+interface CameraFlight {
+  from: Vector3;
+  quaternion: Quaternion;
+  elapsed: number;
+}
+
 /** Third-person rig, kept by the walker so it survives camera switches. */
 export interface GlobeRig {
   /** Unit tangent the camera looks along (the player walks relative to it). */
   heading: Vector3;
   pitch: number;
+  /** Wanted distance of the camera from the player's eye (wheel zoom). */
   distance: number;
+  /** Extra pitch (radians) that keeps the camera above a slope behind the player. */
+  lift: number;
+  /** Spring arm: the distance actually used, shortened where something stands between camera and player. */
+  arm: number;
+  flight: CameraFlight | null;
+  /** False until the follow view has rendered once (the very first follow view doesn't fly in). */
+  settled: boolean;
 }
 
 /** What the page gets about the player, about 10 times a second. */
@@ -55,6 +79,11 @@ export interface GlobeMove {
   /** Town local metres while inside the town's chart. */
   town: { x: number; z: number } | null;
   cameraDistance: number;
+  /** Camera world position and quaternion (x, y, z, qx, qy, qz, qw). */
+  camera: number[];
+  /** Spring arm length (follow view). */
+  arm: number;
+  flying: boolean;
 }
 
 const up = new Vector3();
@@ -64,6 +93,12 @@ const step = new Vector3();
 const side = new Vector3();
 const basis = new Matrix4();
 
+/** Pace multiplier for walking along a slope of `grade` (rise per metre, negative downhill). */
+function slopePace(grade: number) {
+  const steepness = Math.min(Math.abs(grade), 1);
+  return 1 - steepness * (1 - (grade > 0 ? UPHILL_PACE : DOWNHILL_PACE));
+}
+
 export function GlobePlayer({
   walk,
   radius,
@@ -71,6 +106,7 @@ export function GlobePlayer({
   rigRef,
   steerable,
   travel,
+  following,
   onReady,
   onMove,
 }: {
@@ -81,14 +117,17 @@ export function GlobePlayer({
   /** Whether the keyboard steers the player (only in the follow camera). */
   steerable: boolean;
   travel: boolean;
+  /** In the follow view the avatar hides whenever the spring arm is very short. */
+  following: boolean;
   onReady: () => void;
   onMove?: (move: GlobeMove) => void;
 }) {
   const keys = useKeys();
   const group = useRef<Group>(null);
   const { character, animation } = useVisitor(onReady);
-  const motion = useRef({ speed: 0, sinceEvent: Infinity });
+  const motion = useRef({ speed: 0, pace: 0, sinceEvent: Infinity });
   const previous = useMemo(() => new Vector3(), []);
+  const heading = useMemo(() => new Vector3(), []);
 
   useEffect(() => {
     const player = playerRef.current;
@@ -101,45 +140,53 @@ export function GlobePlayer({
     const delta = Math.min(frameDelta, MAX_FRAME);
     const current = motion.current;
     const player = playerRef.current;
+    const rig = rigRef.current;
     const { position, facing } = player;
     previous.copy(position);
     up.copy(position).normalize();
 
-    const ahead = steerable ? axis(keys.current, BACK, FORWARD) : 0;
-    const aside = steerable ? axis(keys.current, LEFT, RIGHT) : 0;
+    const live = steerable && !rig.flight;
+    const ahead = live ? axis(keys.current, BACK, FORWARD) : 0;
+    const aside = live ? axis(keys.current, LEFT, RIGHT) : 0;
     let height = position.length();
     if (ahead || aside) {
-      tangent(forward.copy(rigRef.current.heading), up, facing);
+      tangent(forward.copy(rig.heading), up, facing);
       right.crossVectors(forward, up);
-      step
+      heading
         .copy(forward)
         .multiplyScalar(ahead)
         .addScaledVector(right, aside)
         .normalize();
-      const speed = travel
-        ? TRAVEL_SPEED
-        : isRunning(keys.current)
-          ? RUN_SPEED
-          : WALK_SPEED;
-      // turn towards the move: signed angle from facing to step about up
+      // turn towards the move: signed angle from facing to the heading about up
       const turn = Math.atan2(
-        side.crossVectors(facing, step).dot(up),
-        facing.dot(step),
+        side.crossVectors(facing, heading).dot(up),
+        facing.dot(heading),
       );
       facing.applyAxisAngle(up, turn * smoothing(12, delta));
-      const direction = walk.move(
-        position,
-        step.multiplyScalar(speed * delta),
-        player.ground,
-      );
-      player.ground = walk.groundAt(direction, player.ground);
-      position.copy(direction).multiplyScalar(height);
-      up.copy(direction);
-      tangent(facing, up, forward);
-      tangent(rigRef.current.heading, up, facing);
     }
-    height += (radius + player.ground - height) * smoothing(14, delta);
-    position.setLength(height);
+    const wanted =
+      ahead || aside
+        ? travel
+          ? TRAVEL_SPEED
+          : (isRunning(keys.current) ? RUN_SPEED : WALK_SPEED) *
+            slopePace(walk.grade(position, heading))
+        : 0;
+    current.pace += (wanted - current.pace) * smoothing(ACCELERATION, delta);
+    if (wanted === 0 && current.pace < 0.05) current.pace = 0;
+
+    // a zero step still pushes the player out of townspeople walking into it
+    step.copy(heading).multiplyScalar(current.pace * delta);
+    const direction = walk.move(position, step, player.ground, travel);
+    const moved = direction.angleTo(up) * radius;
+    player.ground = walk.groundAt(direction, player.ground);
+    up.copy(direction);
+    tangent(facing, up, forward);
+    tangent(rig.heading, up, facing);
+    const target = radius + player.ground;
+    // the terrain is continuous: follow it exactly (no sinking on slopes); ease real steps
+    if (Math.abs(target - height) <= STEP_EASE + moved * 2) height = target;
+    else height += (target - height) * smoothing(14, delta);
+    position.copy(direction).multiplyScalar(height);
     const speed = previous.distanceTo(position) / delta;
     current.speed += (speed - current.speed) * smoothing(10, delta);
 
@@ -148,6 +195,7 @@ export function GlobePlayer({
       avatar.position.copy(position);
       basis.makeBasis(side.crossVectors(up, facing), up, facing);
       avatar.quaternion.setFromRotationMatrix(basis);
+      avatar.visible = !following || rig.flight !== null || rig.arm > HIDE_ARM;
     }
     animation.current?.locomotion(Math.min(current.speed, RUN_SPEED * 1.2));
     animation.current?.update(delta);
@@ -167,6 +215,9 @@ export function GlobePlayer({
         biome: walk.biomeAt(position),
         town: town && { x: town[0], z: town[1] },
         cameraDistance: camera.position.length(),
+        camera: [...camera.position.toArray(), ...camera.quaternion.toArray()],
+        arm: rig.arm,
+        flying: rig.flight !== null,
       });
     }
   });

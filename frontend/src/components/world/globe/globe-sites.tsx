@@ -1,10 +1,12 @@
 import { useMemo } from 'react';
-import { Vector3 } from 'three';
 
-import { TownCitizens } from '@/components/world/town/town-citizens';
+import {
+  type CitizenSpots,
+  TownCitizens,
+} from '@/components/world/town/town-citizens';
 import { TownGround } from '@/components/world/town/town-ground';
 import { TownPlacements } from '@/components/world/town/town-placements';
-import type { Site, TownPlacement, TownView } from '@/lib/client/types.gen';
+import type { Site, TownView } from '@/lib/client/types.gen';
 import type { Point } from '@/lib/world/collision';
 import {
   anchorMapping,
@@ -12,6 +14,7 @@ import {
   type SiteMapping,
 } from '@/lib/world/globe';
 import type { LabelStore } from '@/lib/world/label-store';
+import { terrainLift } from '@/lib/world/walk-charts';
 
 /*
  * Sites on the planet. The town lays its own ground disc at the plateau height (the terrain leaves a hole for
@@ -37,6 +40,7 @@ export function GlobeTown({
   groundRadius,
   grass,
   labels,
+  citizenSpots,
   onPlacementsReady,
   onCitizenReady,
 }: {
@@ -46,6 +50,8 @@ export function GlobeTown({
   /** Colour of the ground disc, matched to the terrain around it. */
   grass: string;
   labels: LabelStore;
+  /** Filled with where the townspeople stand, for the walker's collisions. */
+  citizenSpots: CitizenSpots;
   onPlacementsReady: () => void;
   onCitizenReady: (id: string) => void;
 }) {
@@ -69,6 +75,7 @@ export function GlobeTown({
         citizens={town.citizens}
         mapping={mapping}
         labels={labels}
+        spots={citizenSpots}
         onReady={onCitizenReady}
       />
     </>
@@ -86,12 +93,10 @@ function SitePlacements({
     () => anchorMapping(site.anchor, terrain.globe.radius),
     [site, terrain],
   );
-  const lift = useMemo(() => {
-    const at = new Vector3();
-    return (placement: TownPlacement) =>
-      terrain.heightAt(mapping.toWorld(placement.x, 0, placement.z, at)) -
-      site.anchor.height_m;
-  }, [terrain, mapping, site]);
+  const lift = useMemo(
+    () => terrainLift(terrain, mapping, site.anchor.height_m),
+    [terrain, mapping, site],
+  );
   return (
     <TownPlacements
       placements={site.placements ?? []}
