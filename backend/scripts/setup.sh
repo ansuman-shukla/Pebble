@@ -2,10 +2,10 @@
 # One-time local setup. Everything lands inside this repo (vendor/ and .runtime/, both gitignored).
 #   1. Pebble's private devin-switch at a pinned commit (+ its venv)
 #   2. Pebble's private Claude Code at a pinned version
-# Logins are separate steps: scripts/import_ds_accounts.py, scripts/claude.sh setup-token.
+# Logins are separate steps: backend/scripts/import_ds_accounts.py, backend/scripts/claude.sh setup-token.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 RUNTIME="$ROOT/.runtime"
 DS_REPO="https://github.com/ansuman-shukla/devin-switch.git"
 DS_COMMIT="d56b1a6"
