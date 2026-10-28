@@ -3,10 +3,9 @@ import { expect, test } from '@playwright/test';
 import type { WorldView } from '../../src/lib/client/types.gen';
 import { decodeWorld } from '../../src/lib/world/globe';
 import { terrainGeometry } from '../../src/lib/world/globe-mesh';
+import { WORLD_URL } from './globe-helpers';
 
 /* The terrain mesh of the real world (GET /api/v1/world): lakes, which lie above the sea, are drawn as water. */
-
-const WORLD_URL = 'http://localhost:8100/api/v1/world';
 
 test('lakes above the sea are drawn as water, not sand', async ({
   request,

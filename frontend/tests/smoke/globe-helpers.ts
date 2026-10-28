@@ -26,6 +26,9 @@ export interface Sample {
   townZ: number | null;
 }
 
+/** The backend the tests read the world from directly (PLAYWRIGHT_API_URL points them at a worktree's own). */
+export const WORLD_URL = `${process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:8100'}/api/v1/world`;
+
 export const DRAW_CALL_BUDGET = 300;
 /** The town's plateau and its blend (metres from the anchor): beyond it is the wild. */
 export const TOWN_CLEARING = 300;

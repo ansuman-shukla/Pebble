@@ -11,6 +11,7 @@ import {
   decodeWorld,
 } from '../../src/lib/world/globe';
 import { createScatter, MAX_PROP_SLOPE_DEG } from '../../src/lib/world/scatter';
+import { WORLD_URL } from './globe-helpers';
 
 /*
  * The real generated world (GET /api/v1/world on the backend) only names kinds the frontend can draw, the
@@ -18,7 +19,6 @@ import { createScatter, MAX_PROP_SLOPE_DEG } from '../../src/lib/world/scatter';
  * props keep off cliffs.
  */
 
-const WORLD_URL = 'http://localhost:8100/api/v1/world';
 /** Footprints are authored to 0.1 m. */
 const FOOTPRINT_TOLERANCE = 0.1;
 

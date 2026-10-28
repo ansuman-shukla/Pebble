@@ -23,6 +23,7 @@ import {
   sampleFor,
   TOWN_CLEARING,
   track,
+  WORLD_URL,
 } from './globe-helpers';
 
 /*
@@ -31,7 +32,6 @@ import {
  * readout names the camps and landmarks. Points are picked from the same world the page loads.
  */
 
-const WORLD_URL = 'http://localhost:8100/api/v1/world';
 /** The town's ground disc (local metres); beyond it the player stands on the terrain. */
 const TOWN_GROUND_RADIUS = 225;
 /** Main gate of the town wall (local z), the passage is x ∈ [-1.3, 1.3]. */
