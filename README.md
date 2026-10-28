@@ -83,5 +83,5 @@ The spectator pages read the archive (all take `?at=tick` to replay a past momen
 Their api: `GET /api/v1/citizens`, `/citizens/{id}`, `/citizens/{id}/timeline`, `/citizens/{id}/needs`,
 `/conversations` and `/stats` (see [the spectator findings](docs/findings/2026-10-29-spectator-pages.md)).
 
-Status: phase A, M7 scripted citizens (15 citizens with utility brains, town economy, plant regrowth) and M8 in
-progress (live feed, spectator pages).
+Status: Phase A complete (M9 gate passed, see [the world gate findings](docs/findings/2026-10-29-world-gate.md)).
+Phase B (agent minds) has not started.

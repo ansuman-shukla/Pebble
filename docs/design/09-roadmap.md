@@ -26,14 +26,14 @@ checklist, not a date. Each milestone is a separate branch/PR with small commits
 | **M9 World-complete gate** | review against the checklist below; findings note | every box ticked |
 
 ### M9 checklist: the world is complete when
-- [ ] Terrain, biomes, oceans, rivers, poles and the land loop are generated and rendered.
-- [ ] Town (castle, walls, gate, houses, pagoda, shrine, market, well, mill, paddies) and both camps are built.
-- [ ] All 8 landmarks exist, are named and reachable.
-- [ ] Every v0 animal exists, behaves and renders.
-- [ ] Every v0 action and perception is used by scripted brains, and the contract is frozen.
-- [ ] Bodies, needs, injuries and death work end-to-end.
-- [ ] Every state change is an event; replay works from snapshots.
-- [ ] 15 citizens run stably for 10+ game days.
+- [x] Terrain, biomes, oceans, rivers, poles and the land loop are generated and rendered.
+- [x] Town (castle, walls, gate, houses, pagoda, shrine, market, well, mill, paddies) and both camps are built.
+- [x] All 8 landmarks exist, are named and reachable.
+- [x] Every v0 animal exists, behaves and renders.
+- [x] Every v0 action and perception is used by scripted brains, and the contract is frozen.
+- [x] Bodies, needs, injuries and death work end-to-end.
+- [x] Every state change is an event; replay works from snapshots.
+- [x] 15 citizens run stably for 10+ game days.
 
 ## Phase B: the minds
 
