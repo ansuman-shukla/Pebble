@@ -65,9 +65,9 @@ const PEOPLE: MockPerson[] = [
     pace: 1,
     home: [-128, 44],
     plan: [
-      { activity: 'working', label: 'the rice fields', ticks: 12 },
+      { activity: 'working', label: 'tending the rice paddies', ticks: 12 },
       { walk: [-128, 68], to: 'the seed beds' },
-      { activity: 'working', label: 'the seed beds', ticks: 9 },
+      { activity: 'working', label: 'planting the seed beds', ticks: 9 },
       { walk: WELL, to: 'the well' },
       { activity: 'drinking', label: 'the well', ticks: 4 },
       { walk: [-128, 44], to: 'the rice fields' },
@@ -82,7 +82,7 @@ const PEOPLE: MockPerson[] = [
     pace: 1,
     home: [-78, 93],
     plan: [
-      { activity: 'working', label: 'the loom', ticks: 14 },
+      { activity: 'working', label: 'weaving at the loom', ticks: 14 },
       { walk: [-24, 54], to: 'the well' },
       { activity: 'drinking', label: 'the well', ticks: 4 },
       { walk: [-78, 93], to: 'home' },
@@ -128,7 +128,7 @@ const PEOPLE: MockPerson[] = [
       },
       { activity: 'idle', label: 'the market', ticks: 8 },
       { walk: [58, 72], to: 'the storehouse' },
-      { activity: 'working', label: 'the storehouse', ticks: 6 },
+      { activity: 'working', label: 'filling the storehouse', ticks: 6 },
       { walk: [20, 54], to: 'the market' },
     ],
   },
@@ -239,7 +239,7 @@ const PEOPLE: MockPerson[] = [
     pace: 1,
     home: [3, 4.6],
     plan: [
-      { activity: 'working', label: 'the drying rack', ticks: 7 },
+      { activity: 'working', label: 'mending the drying rack', ticks: 7 },
       { walk: [-36, -12], to: 'the reed bed' },
       { activity: 'gathering', label: 'reeds', ticks: 9 },
       { walk: [3, 4.6], to: 'the drying rack' },
@@ -291,7 +291,7 @@ const PEOPLE: MockPerson[] = [
     pace: 1,
     home: [4.6, 3.6],
     plan: [
-      { activity: 'working', label: 'firewood', ticks: 6 },
+      { activity: 'working', label: 'chopping firewood', ticks: 6 },
       { walk: [40, -34], to: 'the stream' },
       { activity: 'drinking', label: 'the stream', ticks: 4 },
       { walk: [4.6, 3.6], to: 'camp' },

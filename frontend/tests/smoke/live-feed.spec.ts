@@ -217,9 +217,15 @@ test('activities pick their clip and pose', () => {
     still: false,
   });
   expect(look('dead')).toEqual({ clip: 'Idle', pose: 'lying', still: true });
-  expect(look('working', 'the rice fields').clip).toBe('Harvesting');
-  expect(look('working', 'the seed beds').clip).toBe('Planting');
-  expect(look('working', 'firewood').clip).toBe('Chopping wood');
+  // the engine's work tasks
+  expect(look('working', 'tending the rice paddies').clip).toBe('Harvesting');
+  expect(look('working', 'filling the storehouse').clip).toBe('Pick up');
+  expect(look('working', 'keeping watch').clip).toBe('Arms folded');
+  expect(look('working', 'trading at the market').clip).toBe('Talking');
+  expect(look('working', 'weaving at the loom').clip).toBe('Fixing');
+  expect(look('working', 'holding court').clip).toBe('Talking');
+  expect(look('working', 'planting the seed beds').clip).toBe('Planting');
+  expect(look('working', 'chopping firewood').clip).toBe('Chopping wood');
   expect(look('gathering', 'firewood').clip).toBe('Pick up');
   expect(look('gathering', 'roots').clip).toBe('Pick up');
   expect(look('gathering', 'berries').clip).toBe('Harvesting');
@@ -231,8 +237,12 @@ test('activities in words', () => {
     label = '',
     cause: string | null = null,
   ) => activityWords({ activity, action_label: label, cause_of_death: cause });
-  expect(words('working', 'the rice fields')).toBe('working the rice fields');
+  expect(words('working', 'tending the rice paddies')).toBe(
+    'tending the rice paddies',
+  );
+  expect(words('working')).toBe('working');
   expect(words('walking', 'the well')).toBe('walking to the well');
+  expect(words('walking', 'to the north')).toBe('walking to the north');
   expect(words('walking')).toBe('walking');
   expect(words('drinking', 'the well')).toBe('drinking at the well');
   expect(words('sleeping', 'the lean-to')).toBe('asleep');

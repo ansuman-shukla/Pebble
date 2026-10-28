@@ -15,7 +15,9 @@ export type NpcClip =
   | 'Harvesting'
   | 'Planting'
   | 'Pick up'
-  | 'Chopping wood';
+  | 'Chopping wood'
+  | 'Arms folded'
+  | 'Fixing';
 
 /** Every NPC loads these up front; activity clips are fetched (once per page) when first needed. */
 export const BASE_CLIPS: readonly NpcClip[] = ['Idle', 'Walk'];
@@ -31,14 +33,22 @@ export interface NpcLook {
 
 const WOOD = /wood|log|branch|timber/i;
 const PLANTING = /plant|sow|seed/i;
-const PICKING = /root|reed|nut|stone|flint|stick/i;
+const PICKING = /root|reed|nut|stone|flint|stick|pebble/i;
+/** Work labels (the engine's task words, e.g. "keeping watch", "trading at the market") and their clips. */
+const WORK_CLIPS: [RegExp, NpcClip][] = [
+  [/watch|guard|patrol/i, 'Arms folded'],
+  [/trad|market|court|sell/i, 'Talking'],
+  [/weav|loom|mend|sew|repair/i, 'Fixing'],
+  [/storehouse|carry|fill|haul/i, 'Pick up'],
+  [WOOD, 'Chopping wood'],
+  [PLANTING, 'Planting'],
+];
 
 /** The work clip for what someone gathers or works at (from the action label). */
 function workClip(activity: 'gathering' | 'working', label: string): NpcClip {
-  if (WOOD.test(label))
-    return activity === 'working' ? 'Chopping wood' : 'Pick up';
-  if (PLANTING.test(label)) return 'Planting';
-  if (activity === 'gathering' && PICKING.test(label)) return 'Pick up';
+  if (activity === 'working')
+    return WORK_CLIPS.find(([words]) => words.test(label))?.[1] ?? 'Harvesting';
+  if (WOOD.test(label) || PICKING.test(label)) return 'Pick up';
   return 'Harvesting';
 }
 
@@ -65,7 +75,10 @@ export function npcLook(
   return STANDING_CLIPS[activity];
 }
 
-/** What someone is doing, in words ("working the rice fields", "walking to the well"). */
+/**
+ * What someone is doing, in words ("tending the rice paddies", "walking to the well"). Work labels are the
+ * engine's task phrases already; walk labels are a place ("the well") or a direction ("to the north").
+ */
 export function activityWords(
   citizen: Pick<LiveCitizen, 'activity' | 'action_label' | 'cause_of_death'>,
 ): string {
@@ -76,7 +89,7 @@ export function activityWords(
     case 'idle':
       return 'standing about';
     case 'walking':
-      return with_('walking', ' to ');
+      return with_('walking', label.startsWith('to ') ? ' ' : ' to ');
     case 'sleeping':
       return 'asleep';
     case 'resting':
@@ -84,7 +97,7 @@ export function activityWords(
     case 'gathering':
       return with_('gathering');
     case 'working':
-      return with_('working');
+      return label || 'working';
     case 'eating':
       return with_('eating');
     case 'drinking':
