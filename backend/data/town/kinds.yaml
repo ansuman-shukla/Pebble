@@ -1,0 +1,60 @@
+# Town prop kinds: size and how each one affects walking.
+#
+# footprint: [x, z] in metres at rotation 0 (models face +z).
+# walk:      solid   blocks walking (the whole footprint, or only `blockers` when given)
+#            surface walkable; a surface over water makes that water passable
+#            none    decor that never affects walking
+# blockers:  [[x0, z0, x1, z1], ...] local rectangles at rotation 0, for solids that only block in parts.
+# Trees block only at the trunk.
+
+# buildings
+castle_keep: {footprint: [12, 12], walk: solid}
+castle_gatehouse:
+  footprint: [6, 4]
+  walk: solid
+  blockers: [[-3.0, -1.4, -1.3, 1.4], [1.3, -1.4, 3.0, 1.4]] # side pillars; the passage x [-1.3, 1.3] is open
+corner_turret: {footprint: [6, 6], walk: solid}
+stone_wall: {footprint: [2, 2], walk: solid}
+plaster_wall: {footprint: [2, 0.7], walk: solid}
+townhouse: {footprint: [8, 4], walk: solid}
+farmhouse: {footprint: [8, 6], walk: solid}
+storehouse: {footprint: [6, 4], walk: solid}
+temple_hall: {footprint: [10, 8], walk: solid}
+pagoda: {footprint: [6, 6], walk: solid}
+bell_tower: {footprint: [4, 4], walk: solid}
+teahouse: {footprint: [4, 4], walk: solid}
+lookout_tower: {footprint: [2, 2], walk: solid}
+
+# walkable surfaces
+moat_bridge: {footprint: [10, 2], walk: surface}
+stone_stair: {footprint: [4, 6], walk: surface}
+paving_tile: {footprint: [2, 2], walk: surface}
+rice_paddy: {footprint: [2, 2], walk: surface}
+
+# props
+well: {footprint: [2, 2], walk: solid}
+water_wheel: {footprint: [4, 2.5], walk: solid}
+drying_rack: {footprint: [2, 0.7], walk: solid}
+bamboo_fence: {footprint: [2, 0.3], walk: solid}
+palisade: {footprint: [2, 0.4], walk: solid}
+lantern: {footprint: [0.5, 0.5], walk: solid}
+fire_basket: {footprint: [0.6, 0.6], walk: solid}
+banner: {footprint: [1.3, 1], walk: solid}
+notice_board: {footprint: [2, 1], walk: solid}
+sake_barrel: {footprint: [0.5, 0.5], walk: solid}
+bench: {footprint: [1.5, 0.5], walk: solid}
+stone_basin: {footprint: [1, 1], walk: solid}
+war_drum: {footprint: [1, 1], walk: solid}
+tether_rail: {footprint: [2, 1], walk: solid}
+hand_cart: {footprint: [1.5, 3], walk: solid}
+ox_cart: {footprint: [2, 4], walk: solid}
+river_boat: {footprint: [1.5, 6], walk: solid}
+bucket: {footprint: [0.4, 0.3], walk: none}
+
+# plants
+cherry_tree: {footprint: [6, 6], walk: solid, blockers: [[-0.3, -0.3, 0.3, 0.3]]}
+maple_tree: {footprint: [4.5, 4], walk: solid, blockers: [[-0.3, -0.3, 0.3, 0.3]]}
+sculpted_pine: {footprint: [3.3, 2.9], walk: solid, blockers: [[-0.3, -0.3, 0.3, 0.3]]}
+bamboo: {footprint: [1.1, 1.3], walk: solid, blockers: [[-0.3, -0.3, 0.3, 0.3]]}
+azalea: {footprint: [1, 1], walk: none}
+reeds: {footprint: [1.3, 1.5], walk: none}
