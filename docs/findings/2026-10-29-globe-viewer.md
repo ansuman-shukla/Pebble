@@ -34,7 +34,9 @@ Useful `?at=` spots on the real world: band A camp `12.4,100,180`, standing ston
 | `lib/world/local-mapping.ts` | `LocalMapping` (local metres to world); `FLAT_MAPPING` for `/town` |
 | `lib/world/globe-walk.ts` | a step on the sphere: town collisions in local metres inside the town, water biomes block outside |
 | `lib/world/scatter.ts` + `biome-props.ts` | props per cell from `hash(seed, cell)`; `perCell` counts are for frequency 60 and scale with cell area; no props on slopes over 40° |
-| `lib/world/globe-mesh.ts` | terrain (the refined surface, indexed; biome colours blended across cells, sand fading in at shores, lakes as water) and river ribbons |
+| `lib/world/globe-mesh.ts` | terrain (the refined surface, indexed; biome colours blended across cells, sand fading in at shores, a muddy bed under lakes) |
+| `lib/world/river-courses.ts` | where rivers run: smoothed centrelines, widths by flow, runs split at shores / the town / waterfalls, the Mill river led through the town's stream |
+| `lib/world/water-mesh.ts` + `water-material.ts` | the sea and lakes (one surface with the depth under each vertex), river ribbons, falling sheets and foam; one water shader for all of them (also the town's moat and stream) |
 | `lib/world/assets.ts` `kindScale` | per-kind render scale (`giant_tree` ×3.5, `ice_block` ×3), applied to site placements and scatter |
 | `lib/world/game-clock.ts` | the clock and the sun (no axial tilt) |
 | `lib/world/mock-world.ts` | DEV/TEST ONLY mock in the contract's format |
@@ -63,9 +65,24 @@ Useful `?at=` spots on the real world: band A camp `12.4,100,180`, standing ston
 ## Lakes
 
 The real world has 60 lakes whose surfaces lie above sea level (e.g. the great falls lake at 30 m). The terrain
-arrays carry them as flat lake cells at their surface height, so the client draws a face whose corners are all lake
-in the sea's near-shore colour; lake shores get a light sand tint (sea beaches a strong one). Before this the lakes
-showed as sand (the face colouring only knew sea level).
+arrays carry them as flat lake cells at their surface height; the terrain paints them as a muddy bed and the water
+surface (see Water) lies over them; lake shores get a light sand tint (sea beaches a strong one). Before M4's fix the
+lakes showed as sand (the face colouring only knew sea level).
+
+## Water (living-water PR)
+
+| Part | How it works |
+|---|---|
+| Shader | `water-material.ts`: a MeshStandardMaterial (sun, sky light, shadows, fog as before) with chunks added. An animated height field (sines over the world position for still water, value noise in river / sheet coordinates for moving water) bumps the normal through screen derivatives; colour and opacity follow the depth; foam bands at shores, on rapids and on falls; the sky colour (the scene fog's, i.e. globe-sky's day / dusk / night colour) is added at grazing angles, so water darkens at night and turns orange at dusk. One shared clock and sky uniform for every water material, refreshed in `onBeforeRender`. |
+| Sea and lakes | `stillWaterGeometry`: sea faces flat per grid triangle at R + 0.2 (so a refined shore triangle meets a plain deep one without cracks), refined 4×4 like the terrain wherever a corner is shallower than 2 m; depth per vertex = surface − refined ground. Lakes are flat in the data, so their depth grows 2.5 m per cell from the shore (to 9 m); their water lies 0.25 m above the bed so the shore is a contour across the bank instead of the bed's polygon of grid edges. ~99 k triangles (the old ocean sphere was 46 k). |
+| Rivers | `riverLayout`: two [1, 2, 1] passes over the cell path, a Catmull-Rom spline every ~4 m, eased back towards the spline through the cells wherever smoothing would climb more than 1 m above it (authored channels are cut cell by cell). Width 2 + 1.15·√flow m (flow = cells of river upstream, tributaries and lake inflows included; at most 13 m), 0.5 m at a spring growing over 40 m, +45 % fan over the last 30 m before a mouth. Runs stop at open water (the ground under the sea or a lake's surface, not the water cell's Voronoi area), run 4 m past the shore and fade out over 10 m. Speed 0.6 + 6·slope m/s (≤ 5) scrolls the streaks downstream; > 1.4 m/s turns to white water. ~46 k triangles (5 vertices across, the outer ones a wet bank). |
+| The town | the Mill river is led through the town's stream: inside the town's ground its course becomes the stream's centre line (flat on the stream's water), the points before and after bend onto that line over 45 m; other rivers grazing the town's ground are pushed out 8 m past its edge. The moat and stream use the water shader and lie 0.15 m under the grass (was 0.4 m), so the ribbon joins the stream without a step or the old brown wall across its end. |
+| Waterfalls | a river that drops ≥ 12 m at a slope ≥ 0.7 leaves the ground at the lip: on the real world only the great falls (lip 69.8 m, lake 30 m). The sheet follows x ∝ √(drop fraction), pushed further out wherever it would come within 1.2 m of the cliff, 1.5× the river's width widening 40 % to the foot; 70 mist puffs (one Points draw) and a foam disc (18 m) where it lands. |
+
+Performance (headless Chrome, Metal GPU, 1280×800), before → after: falls from the user's spot 206 → 209 draw calls, 3.67 → 3.76 M
+triangles; town stream spot 57 → 58 / 2.62 → 2.72 M; falls lake 50 → 54 / 2.48 → 2.57 M; orbit 267 calls / 3.1 M. 60 fps, no frame
+over 17 ms idle or travelling at the falls and at the Mill river mouth. Building the water geometry: ~25 ms sea + lakes, ~20 ms
+rivers, ~30 ms river layout.
 
 ## Terrain surface (m3.2)
 
@@ -139,7 +156,9 @@ Notes:
   mode climbs anything.
 - Small plateaus (elder tree, camps: radius 40-50 m) are only one or two cells, so the ground around them still slopes.
 - The great falls outflow leaves its lake as a flat land strip at lake level (the authored channel cells are not
-  lake), which reads as a causeway across the lake's south end.
-- Rivers are 6 m ribbons along cell paths; on steep faces (the Mill river coming down the Greyspine) they show as
-  bright strips.
+  lake); the lake's water now lies 0.25 m above it, so it reads as a shallow bar.
+- Land within 0.25 m of a lake's level is under the lake's water (the price of contour shores): the player wades there.
+- On steep lake banks (the falls bowl) the shore is still nearly the bed's polygon: the bank rises past 0.25 m within
+  centimetres of the grid edge. Truly organic shores need the terrain itself to change.
+- Rivers are draped over the ground (not carved into it); the wet bank band and the ribbon's lift give the channel look.
 - Water is checked at the player's centre against the nearest cell's biome and the surface height.
