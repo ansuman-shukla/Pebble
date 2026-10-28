@@ -25,6 +25,8 @@ from sqlalchemy import Engine as DbEngine
 from sqlalchemy.exc import DBAPIError
 from sqlmodel import Session
 
+from app.brains.profile import BrainProfile
+from app.brains.runner import CitizenBrains
 from app.core.db import create_db_engine
 from app.db.models import Run
 from app.db.schemas import MAX_SPEED, ClockChange
@@ -39,6 +41,7 @@ from app.sim.world import SimWorld, load_sim_world
 from app.world.generate import GENERATOR
 from app.world.spec import load_site_kinds, load_world_spec
 from app.world.store import WorldKey, world_key
+from app.world_api.facade import WorldApi
 
 PAUSED_POLL_S = 0.25
 RETRY_FIRST_S = 0.5  # reconnect backoff: doubles per failed attempt up to the cap, forever
@@ -48,7 +51,29 @@ APPLICATION_NAME = "pebble-engine"  # the engine's connections in pg_stat_activi
 LOST_DATABASE_STATES = ("08", "57P")
 log = logging.getLogger("pebble.engine")
 
-Brain = Callable[[Simulation], None]  # called before every tick (scripted brains arrive with M7)
+Brain = Callable[[Simulation], None]  # called before every tick
+HOME_AREAS = {"town": "town", "band_a": "band_a_camp", "band_b": "band_b_camp"}  # region -> its home place id
+
+
+def citizen_brains(sim: Simulation, seed: int) -> CitizenBrains:
+    """A scripted brain for every citizen, acting through their own `WorldApi`."""
+    places = sim.world.places
+    return CitizenBrains(
+        (
+            (
+                WorldApi(sim, citizen.id),
+                BrainProfile(
+                    citizen_id=citizen.id,
+                    name=citizen.name,
+                    role=citizen.role,
+                    region=citizen.region,
+                    home_area=places[HOME_AREAS[citizen.region]].name,
+                ),
+            )
+            for citizen in sim.core.citizens()
+        ),
+        seed,
+    )
 
 
 def is_connection_loss(error: DBAPIError) -> bool:
@@ -183,8 +208,16 @@ class EngineLoop:
         if run is None:
             raise ValueError(f"run {self.run.id} vanished from the database")
         committed_tick = run.tick
-        fresh = resume_run(session, self.sim.world, run, self.store.ids, self.clock, planner=self.sim.core.planner)
-        self.sim, self.store = fresh.sim, fresh.store
+        fresh = resume_run(
+            session,
+            self.sim.world,
+            run,
+            self.store.ids,
+            self.clock,
+            planner=self.sim.core.planner,
+            brains=bool(self.brains),
+        )
+        self.sim, self.store, self.brains = fresh.sim, fresh.store, fresh.brains  # brains act on the fresh sim
         self.catch_up_to = committed_tick
 
     def shut_down(self) -> None:
@@ -205,6 +238,7 @@ def start_run(
     ids: UlidFactory,
     citizens: Path | None,
     clock: Clock,
+    brains: bool = True,
 ) -> EngineLoop:
     """A new run at tick 0 with the given cast, snapshotted before its first tick."""
     run = create_run(session, key, ids, speed=clock.speed, paused=clock.paused)
@@ -221,11 +255,17 @@ def start_run(
     store.snapshot(take_snapshot(sim.state))
     store.commit(0, clock.speed, clock.paused)
     log.info("started run %s with %s citizens", run.id, len(sim.state.citizens))
-    return EngineLoop(sim=sim, store=store, clock=clock)
+    return EngineLoop(sim=sim, store=store, clock=clock, brains=[citizen_brains(sim, key.seed)] if brains else [])
 
 
 def resume_run(
-    session: Session, world: SimWorld, run: Run, ids: UlidFactory, clock: Clock, planner: Planner | None = None
+    session: Session,
+    world: SimWorld,
+    run: Run,
+    ids: UlidFactory,
+    clock: Clock,
+    planner: Planner | None = None,
+    brains: bool = True,
 ) -> EngineLoop:
     """Continue a run from its latest snapshot; events after it (an unclean stop) are dropped and re-simulated."""
     snapshot_row = latest_snapshot(session, run.id)
@@ -238,7 +278,8 @@ def resume_run(
     store = EventStore(session, run, ids)
     store.commit(sim.tick, clock.speed, clock.paused)
     log.info("resumed run %s at tick %s (dropped %s events past the snapshot)", run.id, sim.tick, dropped)
-    return EngineLoop(sim=sim, store=store, clock=clock)
+    hooks: list[Brain] = [citizen_brains(sim, run.world_seed)] if brains else []
+    return EngineLoop(sim=sim, store=store, clock=clock, brains=hooks)
 
 
 def open_loop(
@@ -250,6 +291,7 @@ def open_loop(
     citizens: Path | None,
     clock: Clock,
     ids: UlidFactory | None = None,
+    brains: bool = True,
 ) -> EngineLoop:
     ids = ids or UlidFactory()
     run = None if new_run else latest_run(session, key)
@@ -257,8 +299,8 @@ def open_loop(
         log.info("run %s was written by an older simulation; starting a new one", run.id)
         run = None
     if run is None:
-        return start_run(session, world, key, ids, citizens, clock)
-    return resume_run(session, world, run, ids, clock)
+        return start_run(session, world, key, ids, citizens, clock, brains)
+    return resume_run(session, world, run, ids, clock, brains=brains)
 
 
 def resumable(session: Session, run: Run) -> bool:
@@ -276,6 +318,7 @@ def main(argv: Sequence[str] | None = None, db_engine: DbEngine | None = None) -
     parser.add_argument("--ticks", type=int, default=None, help="stop after this many ticks")
     parser.add_argument("--citizens", type=Path, default=CITIZENS, help="cast for a new run (YAML)")
     parser.add_argument("--no-citizens", action="store_true", help="start a new run with nobody in it")
+    parser.add_argument("--no-brains", action="store_true", help="citizens do nothing on their own")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
 
@@ -291,6 +334,7 @@ def main(argv: Sequence[str] | None = None, db_engine: DbEngine | None = None) -
             new_run=args.new_run,
             citizens=None if args.no_citizens else args.citizens,
             clock=clock,
+            brains=not args.no_brains,
         )
         if args.speed is not None or args.paused:
             loop.clock.apply(ClockChange(speed=args.speed, paused=True if args.paused else None))

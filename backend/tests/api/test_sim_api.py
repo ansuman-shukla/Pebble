@@ -32,8 +32,10 @@ def api_session(db_session: Session) -> Iterator[Session]:
 
 @pytest.fixture
 def loop(api_session: Session, sim_world: SimWorld) -> EngineLoop:
-    loop = open_loop(api_session, sim_world, KEY, new_run=True, citizens=DEV_CITIZENS, clock=Clock(speed=3))
-    WorldApi(loop.sim, "dev-aiko").walk_to_place("the main gate")
+    loop = open_loop(
+        api_session, sim_world, KEY, new_run=True, citizens=DEV_CITIZENS, clock=Clock(speed=3), brains=False
+    )
+    WorldApi(loop.sim, "dev-aiko").walk_to_place("the main gate")  # scripted by the test, not by a brain
     loop.run_ticks(75, headless=True)
     return loop
 
