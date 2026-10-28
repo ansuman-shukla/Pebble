@@ -11,7 +11,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pebble}
       POSTGRES_DB: ${POSTGRES_DB:-pebble}
     volumes:
-      - ./.runtime/postgres:/var/lib/postgresql/data
+      # backend/Makefile passes the resolved path, so every git worktree describes the same container.
+      - ${PEBBLE_RUNTIME_DIR:-./.runtime}/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 2s

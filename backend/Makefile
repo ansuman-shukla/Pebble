@@ -3,7 +3,11 @@
 ROOT := $(abspath ..)
 UV := env -u XDG_DATA_HOME -u XDG_CONFIG_HOME -u XDG_CACHE_HOME -u XDG_STATE_HOME \
 	UV_CACHE_DIR=$(ROOT)/.runtime/uv-cache UV_PYTHON_INSTALL_DIR=$(ROOT)/.runtime/uv-python uv
-COMPOSE := docker compose -f $(ROOT)/docker-compose.yml
+# Worktrees symlink .runtime to the main checkout's. Resolving it makes every checkout hand compose the same project
+# directory and bind-mount path, so `up` reuses the shared Postgres container instead of recreating it.
+RUNTIME_DIR := $(or $(realpath $(ROOT)/.runtime),$(ROOT)/.runtime)
+PROJECT_DIR := $(patsubst %/,%,$(dir $(RUNTIME_DIR)))
+COMPOSE := PEBBLE_RUNTIME_DIR=$(RUNTIME_DIR) docker compose -f $(ROOT)/docker-compose.yml --project-directory $(PROJECT_DIR)
 
 help:
 	@echo "sync            install dependencies (uv)"
