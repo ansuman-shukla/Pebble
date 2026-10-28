@@ -258,6 +258,4 @@ test('the mock feed has the 15 citizens around their home sites', () => {
       ) * world.radius_m;
     expect(metres).toBeLessThan(citizen.region === 'town' ? 160 : 40);
   }
-  // ?time= starts it later in the day
-  expect(new MockLiveServer(world, 12 * 60).entities().time).toBe('12:00');
 });

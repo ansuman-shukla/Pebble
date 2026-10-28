@@ -487,7 +487,6 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
       : params.has('mock')
         ? 'off'
         : 'backend',
-    startMinute: startTime,
   });
   const live = feed.state;
   const feedLive = feed.status === 'live' && live.runId !== null;

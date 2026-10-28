@@ -358,6 +358,7 @@ export interface MockClock {
 
 export class MockLiveServer {
   readonly runId = 'mock-run';
+  /** Like a new engine run: tick 0 is 08:00 on day 0. */
   private tick = 0;
   private clock: MockClock = { speed: 1, paused: false };
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -368,11 +369,10 @@ export class MockLiveServer {
   /** Connections so far (tests read it to see a reconnect). */
   connects = 0;
 
-  constructor(world: WorldView, startMinute = START_MINUTE) {
+  constructor(world: WorldView) {
     const sites = new Map<string, Site>(
       world.sites.map((site) => [site.id, site]),
     );
-    this.tick = (startMinute - START_MINUTE + DAY_MINUTES) % DAY_MINUTES;
     this.states = PEOPLE.map((person) => {
       const site = sites.get(person.site);
       if (!site) throw new Error(`the world has no ${person.site} site`);

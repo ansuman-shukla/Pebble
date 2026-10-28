@@ -315,7 +315,8 @@ test('the clock follows the feed, its speed buttons drive it, and a dropped feed
   page,
 }) => {
   const errors: string[] = [];
-  const world = await openLive(page, errors);
+  // the page's own start time gives way to the engine's
+  const world = await openLive(page, errors, '?mockLive=1&time=20:00');
   const tick = async () => Number(await world.getAttribute('data-live-tick'));
   // the sky runs on engine time: tick 0 is 08:00
   await expect

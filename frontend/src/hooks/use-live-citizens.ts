@@ -96,10 +96,10 @@ async function fetchEntities(): Promise<EntitiesAnswer> {
 
 export function useLiveCitizens(
   world: WorldView,
-  { source, startMinute }: { source: LiveSource; startMinute?: number },
+  { source }: { source: LiveSource },
 ): LiveFeed {
   const [server] = useState<MockLiveServer | null>(() =>
-    source === 'mock' ? new MockLiveServer(world, startMinute) : null,
+    source === 'mock' ? new MockLiveServer(world) : null,
   );
   const [state, dispatch] = useReducer(reduce, EMPTY_LIVE);
   const [status, setStatus] = useState<LiveStatus>(
