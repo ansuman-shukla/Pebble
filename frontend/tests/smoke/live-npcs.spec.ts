@@ -55,6 +55,8 @@ interface Npc {
   label: string;
   clip: string;
   loaded: boolean;
+  /** Left and right foot in the model's own frame (none while it isn't animated). */
+  feet: Vector3[];
 }
 
 type Dataset = { dataset: Record<string, string | undefined> };
@@ -67,6 +69,11 @@ type MockLiveWindow = {
     entities(): { tick: number };
     noRun: boolean;
   };
+};
+
+const footPair = (feet: string) => {
+  const f = feet.split(',').map(Number);
+  return [new Vector3(f[0], f[1], f[2]), new Vector3(f[3], f[4], f[5])];
 };
 
 /** Every drawn citizen as the page's hidden hooks show it now. */
@@ -88,6 +95,7 @@ async function npcs(page: Page): Promise<Npc[]> {
     label: data.npcLabel ?? '',
     clip: data.npcClip ?? '',
     loaded: data.npcLoaded === 'true',
+    feet: data.npcFeet ? footPair(data.npcFeet) : [],
   }));
 }
 
@@ -209,6 +217,58 @@ test('the 15 citizens glide between ticks, stand on the ground and play their ac
   expect(Number(await world.getAttribute('data-draw-calls'))).toBeLessThan(
     DRAW_CALL_BUDGET,
   );
+  expect(errors).toEqual([]);
+});
+
+/** The citizens standing in a clip now (not walking), with their feet. */
+const standing = async (page: Page) =>
+  (await npcs(page)).filter(
+    (npc) => npc.clip && npc.clip !== 'Walk' && npc.feet.length,
+  );
+
+/**
+ * How far an idle or talking citizen's feet may slide in 3 s (m): with the hips pinned, Idle slid them 5-10 cm;
+ * planted they stay within ~2 cm. (Work clips like Fixing step about in the capture itself, so they aren't
+ * held to this.)
+ */
+const FOOT_DRIFT = 0.025;
+const CALM_CLIPS = ['Idle', 'Talking'];
+
+test('standing citizens keep their feet planted', async ({ page }) => {
+  const errors: string[] = [];
+  await openLive(page, errors);
+  // a paused clock holds everyone in their activity (walkers stand once they arrive)
+  await page.evaluate(() =>
+    (globalThis as unknown as MockLiveWindow).__pebbleMockLive.setClock({
+      paused: true,
+    }),
+  );
+  const calm = async () =>
+    (await standing(page)).filter((npc) => CALM_CLIPS.includes(npc.clip))
+      .length;
+  await expect.poll(calm, { timeout: 30_000 }).toBeGreaterThanOrEqual(3);
+  await page.waitForTimeout(1_000);
+
+  const samples: Npc[][] = [];
+  for (let elapsed = 0; elapsed < 3_000; elapsed += 100) {
+    samples.push(await standing(page));
+    await page.waitForTimeout(100);
+  }
+  const calmAtStart = samples[0].filter((npc) => CALM_CLIPS.includes(npc.clip));
+  const sliding = calmAtStart.flatMap(({ id, clip, feet: first }) => {
+    const path = samples.map((all) => all.find((npc) => npc.id === id)!);
+    expect(path.map((npc) => npc.clip)).toEqual(path.map(() => clip));
+    const slid = Math.max(
+      ...path.flatMap(({ feet }) =>
+        feet.map((foot, side) =>
+          Math.hypot(foot.x - first[side].x, foot.z - first[side].z),
+        ),
+      ),
+    );
+    return slid < FOOT_DRIFT ? [] : [`${id} ${clip}: ${slid.toFixed(3)} m`];
+  });
+  expect(calmAtStart.length).toBeGreaterThanOrEqual(3);
+  expect(sliding).toEqual([]);
   expect(errors).toEqual([]);
 });
 

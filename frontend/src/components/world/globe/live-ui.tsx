@@ -197,6 +197,9 @@ export function NpcHooks({
         node.dataset.npcActivity = view.activity;
         node.dataset.npcClip = view.clip;
         node.dataset.npcLoaded = String(view.loaded);
+        node.dataset.npcFeet = view.feet
+          .map((value) => value.toFixed(4))
+          .join(',');
       }
     }, 100);
     return () => window.clearInterval(timer);

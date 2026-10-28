@@ -21,12 +21,14 @@ import {
   type NpcClip,
   type NpcLook,
   npcLook,
+  PLANTED_CLIPS,
 } from '@/lib/live/npc-activity';
 import { CITIZEN_LOOKS, type CitizenLook } from '@/lib/world/citizen-looks';
 import { type GlobeTerrain, tangentFrame } from '@/lib/world/globe';
 import type { LabelStore } from '@/lib/world/label-store';
+import { animateHumanoid } from '@/lib/world/humanoid-clips';
 import type { WalkTown } from '@/lib/world/walk-charts';
-import { animate, type CharacterAnimation } from '@/vendor/polyfork/clips.mjs';
+import type { CharacterAnimation } from '@/vendor/polyfork/clips.mjs';
 import { createCharacter } from '@/vendor/polyfork/humanoid.mjs';
 
 /*
@@ -68,6 +70,7 @@ const glideMs = (speed: number) =>
 const LOOKS = new Map(CITIZEN_LOOKS.map((look) => [look.id, look]));
 const basis = new Matrix4();
 const side = new Vector3();
+const foot = new Vector3();
 
 /** What the page and the tests can read of a drawn citizen (mutated every frame). */
 interface NpcView {
@@ -80,6 +83,8 @@ interface NpcView {
   loaded: boolean;
   /** Within reach of the camera: the model is shown and animated. */
   near: boolean;
+  /** Left then right foot in the model's own frame (x, y, z each), while it is animated. */
+  feet: number[];
 }
 
 export type NpcViews = Map<string, NpcView>;
@@ -142,6 +147,13 @@ function NpcModel({
   viewRef: RefObject<NpcView>;
 }) {
   const character = useMemo(() => createCharacter(look.config), [look]);
+  const feet = useMemo(
+    () =>
+      ['LeftFoot', 'RightFoot'].flatMap(
+        (name) => character.getObjectByName(name) ?? [],
+      ),
+    [character],
+  );
   const [clips, setClips] = useState<readonly NpcClip[]>(() => [
     ...new Set([...BASE_CLIPS, pose.clip]),
   ]);
@@ -151,13 +163,15 @@ function NpcModel({
 
   useEffect(() => {
     let mounted = true;
-    animate(character, { clips: [...clips] }).then((loaded) => {
-      if (!mounted) return;
-      setAnimation((previous) => {
-        previous?.mixer.stopAllAction();
-        return loaded;
-      });
-    });
+    animateHumanoid(character, { clips, planted: PLANTED_CLIPS }).then(
+      (loaded) => {
+        if (!mounted) return;
+        setAnimation((previous) => {
+          previous?.mixer.stopAllAction();
+          return loaded;
+        });
+      },
+    );
     return () => {
       mounted = false;
     };
@@ -179,6 +193,9 @@ function NpcModel({
     if (pose.clip === 'Walk')
       playLook(animation, pose, currentPace(trackRef.current), viewRef.current);
     animation.update(Math.min(delta, MAX_FRAME));
+    viewRef.current.feet = feet.flatMap((bone) =>
+      character.worldToLocal(bone.getWorldPosition(foot)).toArray(),
+    );
   });
 
   return (
@@ -292,6 +309,7 @@ function newView(citizen: LiveCitizen): NpcView {
     clip: '',
     loaded: false,
     near: false,
+    feet: [],
   };
 }
 
