@@ -5,7 +5,7 @@ weighs (how hungry, what time of day, what food is around and how far). Nothing 
 from dataclasses import dataclass
 from typing import Literal
 
-from app.world_api.models import Perception, Seen, TimeOfDay
+from app.world_api.models import Nearness, Perception, ResourceName, Seen, TimeOfDay
 
 Phase = Literal["night", "morning", "day", "dusk"]
 Distance = Literal["here", "near", "close", "off", "far"]
@@ -40,19 +40,14 @@ AMOUNT: tuple[tuple[str, int], ...] = (
     ("a few", 2),
     ("a little", 2),
 )
-RESOURCE_WORDS: tuple[tuple[str, str], ...] = (
-    ("berr", "berries"),
-    ("root", "roots"),
-    ("nut", "nuts"),
-    ("reed", "reeds"),
-    ("wood", "wood"),
-)
-NEAR: tuple[tuple[str, Distance], ...] = (
-    ("right beside you", "here"),
-    ("a few paces", "near"),
-    ("close by", "close"),
-    ("some way off", "off"),
-)
+DISTANCE: dict[Nearness, Distance] = {
+    "right beside you": "here",
+    "a few paces": "near",
+    "close by": "close",
+    "some way off": "off",
+    "in the distance": "far",
+    "far away": "far",
+}
 
 
 @dataclass(frozen=True)
@@ -79,7 +74,7 @@ class Needs:
 
 @dataclass(frozen=True)
 class Resource:
-    kind: str  # berries, roots, nuts, reeds, wood
+    kind: ResourceName
     distance: Distance
     plenty: bool
 
@@ -92,8 +87,9 @@ def afternoon(perception: Perception) -> bool:
     return perception.time_of_day in AFTERNOON
 
 
-def distance(where: str) -> Distance:
-    return next((rank for prefix, rank in NEAR if where.startswith(prefix)), "far")
+def beside(seen: Seen) -> bool:
+    """Right beside you or a few paces off: close enough to sit by or put something down at."""
+    return DISTANCE[seen.nearness] in ("here", "near")
 
 
 def carried_food(perception: Perception) -> dict[str, int]:
@@ -117,30 +113,24 @@ def food_value(food: dict[str, int]) -> float:
 
 
 def resources_in_view(perception: Perception) -> list[Resource]:
-    found: list[Resource] = []
-    for thing in perception.things:
-        if thing.label.endswith("on the ground"):
-            continue
-        kind = next((name for stem, name in RESOURCE_WORDS if stem in thing.label), None)
-        if kind is not None:
-            plenty = not thing.label.startswith(("a few", "a little"))
-            found.append(Resource(kind, distance(thing.where), plenty))
-    return found
+    """Wild plants in view (a plant's words say whether there's plenty: "a few nuts on the trees" is not)."""
+    return [
+        Resource(thing.resource, DISTANCE[thing.nearness], not thing.label.startswith(("a few", "a little")))
+        for thing in perception.things
+        if thing.resource is not None
+    ]
 
 
-def sees_thing(perception: Perception, label: str) -> Seen | None:
-    return next((thing for thing in perception.things if thing.label == label), None)
+def fire_in_view(perception: Perception) -> Seen | None:
+    return next((thing for thing in perception.things if thing.kind == "fire"), None)
 
 
 def water_here(perception: Perception) -> bool:
-    return any(
-        thing.label in ("a river", "a lake", "the well") and distance(thing.where) == "here"
-        for thing in perception.things
-    )
+    return any(thing.kind == "water" and DISTANCE[thing.nearness] == "here" for thing in perception.things)
 
 
 def water_in_view(perception: Perception) -> bool:
-    return any(thing.label in ("a river", "a lake") for thing in perception.things)
+    return any(thing.kind == "water" for thing in perception.things)
 
 
 def is_name(label: str) -> bool:

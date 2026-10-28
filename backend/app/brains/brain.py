@@ -20,22 +20,23 @@ from app.brains.senses import (
     Needs,
     at,
     at_home,
+    beside,
     carried_food,
+    fire_in_view,
     is_name,
     phase,
-    sees_thing,
     water_here,
     water_in_view,
 )
 from app.core.rng import Rng
 from app.world_api.facade import WorldApi
-from app.world_api.models import Perception
+from app.world_api.models import Nearness, Perception
 
 STOREHOUSES = "the storehouses"
 WELL = "the well"
 FIRE = "the fire pit"
 GREET_CHANCE = 0.5
-GREET_REACH = ("right beside you", "a few paces", "close by")
+GREET_REACH: frozenset[Nearness] = frozenset({"right beside you", "a few paces", "close by"})
 EAT_ORDER = ("berries", "nuts", "roots", "rice", "dried meat")  # what spoils first goes first; dried meat keeps
 
 
@@ -170,8 +171,8 @@ class UtilityBrain:
                 else:
                     options.append(Option(40, "go home", lambda: self.api.walk_to_place("home")))
             else:
-                fire = sees_thing(p, FIRE)
-                if fire is not None and fire.where.startswith(("right beside you", "a few paces")):
+                fire = fire_in_view(p)
+                if fire is not None and beside(fire):
                     options.append(Option(40, "rest by the fire", lambda: self.api.rest(30)))
                 elif fire is not None:
                     options.append(Option(40, "go to the fire", lambda: self.api.walk_to_thing(FIRE)))
@@ -194,7 +195,7 @@ class UtilityBrain:
                 return True
         for person in p.people:
             label = person.label
-            if is_name(label) and label not in greeted and person.where.startswith(GREET_REACH):
+            if is_name(label) and label not in greeted and person.nearness in GREET_REACH:
                 if person.doing == "asleep":
                     continue
                 greeted.append(label)
