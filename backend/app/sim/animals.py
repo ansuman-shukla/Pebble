@@ -60,6 +60,7 @@ MAX_BITES = 3
 RETREAT_M = 150.0
 REST_AFTER_TICKS = 120  # after a kill, a failed chase or a fight
 PACK_FED_M = 100.0  # pack members this close share a kill
+DETOUR_M = 40.0  # a blocked animal steps aside this far before heading on
 
 FloatArray = NDArray[np.float64]
 
@@ -406,6 +407,9 @@ def _move(core: SimCore, animal: Animal, afraid: set[str]) -> None:
         animal.activity, animal.until = "idle", core.state.tick + 5
         if animal.target is not None and species.predator:
             _give_up(core, animal, retreat_from=None)
+        else:  # water, walls or a fire in the way: step aside somewhere at random and try again from there
+            bearing = core.state.rngs["animals"].random() * 360.0
+            _go(animal, step_towards(animal.position, bearing, DETOUR_M, core.world.radius_m), species.walk_m)
         return
     _place(core, animal, position)
     if share >= 1.0:
