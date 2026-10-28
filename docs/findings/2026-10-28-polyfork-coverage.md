@@ -120,7 +120,7 @@ each, 1 primitive each except the alpine snow pieces, the volcanic vents and sag
 | fumarole | fumarole-vent-8280ba | Prehistoric Valley | 898 | 1.5·1.6·1.5 |
 | geyser | geyser-cone-2b5033 | Prehistoric Valley | 524 | 3.0·1.2·3.0 |
 | hot_spring_pool | hot-spring-pool-26312c | Prehistoric Valley | 680 | 3.0·3.3·2.5 (with steam) |
-| giant_tree | oak-tree-50ee7c | Medieval Village | 686 | 5.1·6.2·4.2 (drawn ×3-4, D39) |
+| giant_tree | oak-tree-50ee7c | Medieval Village | 686 | 5.1·6.2·4.2 (drawn ×3.5, D39/D40) |
 
 The biome table also reuses the camp/town kinds `rock` (medium rock), `fallen_log` and `reeds`.
 

@@ -82,5 +82,5 @@ The land loop walks broadleaf 101, grassland 92, hills 63, snow 27, tundra 23, m
 - The ice gate band is ~4-6 cells wide; noise decides the exact outline.
 - Landmark placements name kinds that the frontend adds in parallel (`rock_spire`, `boulder`, `basalt_column`,
   `lava_rock`, `fumarole`, `obsidian`, `hot_spring_pool`, `giant_tree`, `snowy_spruce`, `ice_block`); their footprints
-  in `data/world/kinds.yaml` are estimates until the assets are vendored.
+  in `data/world/kinds.yaml` are the drawn asset sizes (M4, D40).
 - Other seeds generate valid worlds too (tested 1, 2, 3, 99, 12345), but site placement is authored for 20261028.

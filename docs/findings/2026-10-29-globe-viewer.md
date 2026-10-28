@@ -1,13 +1,14 @@
 # Findings: the globe viewer (M4 client, 2026-10-29)
 
 What the planet client at `/` does, how it maps the town onto the sphere, what it costs to draw and what is still
-rough. Built against the globe contract with a deterministic mock world until `GET /api/v1/world` exists.
+rough. Built against the globe contract with a deterministic mock world, then switched to the real generated world
+(`GET /api/v1/world`, seed 20261028, generator `m3.1`).
 
 ## Pages and controls
 
 | URL | What |
 |---|---|
-| `/` | the globe (`pages/globe-page.tsx`); `/api/v1/world`, falling back to the mock on 404 |
+| `/` | the globe (`pages/globe-page.tsx`) on the real world from `/api/v1/world` (generated SDK `worldReadWorld`) |
 | `/?mock=1[&frequency=60]` | the dev/test mock world (default frequency 30, 9002 cells) |
 | `/?at=lat,lon[,bearing]` | start somewhere else (bearing clockwise from north) |
 | `/?time=HH:MM` | starting town time (default 08:00) |
@@ -16,17 +17,24 @@ rough. Built against the globe contract with a deterministic mock world until `G
 WASD move, Shift run (3.5 m/s), **T travel (25 m/s, also a button): crosses the 12.6 km circumference in ~8 min**,
 drag look, wheel zoom, C cycles follow / orbit / fly (Q/E down/up in fly). The `time ×60` button runs the clock at
 1 real s = 1 game hour (normal: 1 real s = 1 game minute). Orbit zoomed below 400 m over the player hands over to
-follow.
+follow. The readout (bottom left) shows local time, lat/lon, biome and the site the player stands at (the town
+within 300 m, a camp or landmark within 100 m of its anchor).
+
+Useful `?at=` spots on the real world: band A camp `12.4,100,180`, standing stones `28.75,-4,180`, elder tree
+`10.45,2.2,210`, great falls from the lake `2.25,12,58`, volcano from the south `-4,-20,0` (then fly up), ice gate
+`71,-55,90`, densest broadleaf forest `4.3937,153.6401`.
 
 ## Modules
 
 | Module | Role |
 |---|---|
-| `lib/world/world-view.ts` | hand-written `WorldView` types (swap for the generated client types) |
+| `hooks/use-world.ts` | `/api/v1/world` through the generated client (types from `lib/client/types.gen`), or the mock with `?mock=1` |
 | `lib/world/globe.ts` | decode the base64 arrays, lat/lon, tangent frame, gnomonic `siteMapping`, terrain lookup (`buildTerrain`: nearest cell by greedy walk over neighbours, height = ray hit on the rendered triangle) |
 | `lib/world/local-mapping.ts` | `LocalMapping` (local metres to world); `FLAT_MAPPING` for `/town` |
 | `lib/world/globe-walk.ts` | a step on the sphere: town collisions in local metres inside the town, water biomes block outside |
-| `lib/world/scatter.ts` + `biome-props.ts` | props per cell from `hash(seed, cell)`; `perCell` counts are for frequency 60 and scale with cell area |
+| `lib/world/scatter.ts` + `biome-props.ts` | props per cell from `hash(seed, cell)`; `perCell` counts are for frequency 60 and scale with cell area; no props on slopes over 40° |
+| `lib/world/globe-mesh.ts` | terrain (flat faces coloured by biome, sand on shores, lakes as water) and river ribbons |
+| `lib/world/assets.ts` `kindScale` | per-kind render scale (`giant_tree` ×3.5, `ice_block` ×3), applied to site placements and scatter |
 | `lib/world/game-clock.ts` | the clock and the sun (no axial tilt) |
 | `lib/world/mock-world.ts` | DEV/TEST ONLY mock in the contract's format |
 | `components/world/globe/*` | surface, sky, smoke, sites, scatter, player, cameras, walker |
@@ -37,26 +45,54 @@ follow.
   the basis (east', up', south') at their spot, flat shapes are split into ≤ 8 m triangles before mapping.
 - The town lays its own ground disc (radius 225 m, inside the 230 m plateau) at exactly R + h0, with a 4 m skirt;
   the terrain shader discards fragments inside that cone, so moat and stream water (0.4 m below the grass) are
-  never covered by terrain triangles (whose chords sag below the sphere).
+  never covered by terrain triangles (whose chords sag below the sphere). On the real world the disc meets the
+  plateau without a visible seam; walking out of the main gate south, the ground goes 8 m → terrain smoothly.
 - Camps and landmarks have no ground of their own: each placement stands on the rendered terrain under it
   (`lift`), so a slightly uneven plateau never leaves props floating.
 
-## Performance
+## Biome props
 
-1280x800, Chrome with the Metal GPU, mock world.
+- Two reach tiers around the camera target (D41): ground cover (grass, dry/dune grass, flowers, ferns, small rocks,
+  cattails, reeds) within 150 m, everything else within 500 m. Cells within 600 m are scattered and cached; the
+  tiers are re-filtered every 20 m of focus movement, the cell set every 100 m.
+- Full density to 600 m (the first draft) was 5.0 M triangles at a forest edge; the tiers bring the densest
+  broadleaf view down to 1.6 M.
+- Real terrain has steep faces (10 % of land edges over 40°, 5 % over 48°): props skip slopes over 40°.
+
+## Lakes
+
+The real world has 60 lakes whose surfaces lie above sea level (e.g. the great falls lake at 30 m). The terrain
+arrays carry them as flat lake cells at their surface height, so the client draws a face whose corners are all lake
+in the sea's near-shore colour; lake shores get a light sand tint (sea beaches a strong one). Before this the lakes
+showed as sand (the face colouring only knew sea level).
+
+## Performance (real world)
+
+1280x800, headless Chrome with the Metal GPU (`--use-angle=metal`), M-series Mac. Triangles include the shadow pass.
 
 | View | Draw calls | Triangles | fps |
 |---|---|---|---|
-| follow at the town spawn (f30 / f60) | 183 / 183 | 2.3 M / 2.4 M | 60 / 60 |
-| follow in a forest (f30 / f60) | 191 / 191 | 3.8 M / 3.8 M | 60 / 60 |
-| orbit, whole planet (f30 / f60) | 233 / 233 | 1.9 M / 2.0 M | 60 / 60 |
+| follow at the town spawn (gate approach) | 203 | 1.9 M | 60 |
+| follow at the main gate | 206 | 1.9 M | 60 |
+| follow in the densest broadleaf forest (4.39, 153.64) | 71 | 1.6 M | 60 |
+| follow at band A camp | 92 | 1.4 M | 60 |
+| orbit, whole planet (6000 m from the centre) | 263 | 1.9 M | 60 |
+| orbit over the town (~500 m up) | 221 | 2.3 M | 60 |
+| fly near the volcano | 259 | 2.3 M | 60 |
+| travelling at 25 m/s through forest | 54 | 1.8 M | 60, no frame over 17 ms in 8 s |
 
-Ready in ~3 s (warm cache). Triangle counts include the shadow pass; most are the town's instances.
+- `/api/v1/world`: 0.85 MB gzip (2.0 MB JSON), ~0.2 s from the stored row; generating a new row (spec change) ~1 s.
+- Ready (world decoded, town placements and walker loaded) in ~4-4.7 s from a cold page in headless Chrome.
 
 ## Known limitations
 
 - No fire light or lantern glow at night yet; no seasons (no axial tilt, so the poles sit in permanent twilight).
 - Camps and landmarks have no collisions (only the town's apply).
-- The town is drawn at full detail even from orbit (no LOD); fine at 60 fps but ~1.9 M triangles.
-- The mock's rivers are carved one cell wide, so at frequency 60 they cut narrow canyons.
+- The town is drawn at full detail even from orbit (no LOD); fine at 60 fps but it is most of the orbit draw calls.
+- The real terrain is rugged at 40 m cells (steep faces up to ~60°); the walker climbs any slope.
+- Small plateaus (elder tree, camps: radius 40-50 m) are only one or two cells, so the ground around them still slopes.
+- The great falls outflow leaves its lake as a flat land strip at lake level (the authored channel cells are not
+  lake), which reads as a causeway across the lake's south end.
+- Rivers are 6 m ribbons along cell paths; on steep faces (the Mill river coming down the Greyspine) they show as
+  bright strips.
 - Water is checked at the player's centre against the nearest cell's biome and the surface height.
