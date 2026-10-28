@@ -1,36 +1,33 @@
-import { expect, type Locator, type Page, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { Vector3 } from 'three';
 
 import {
   buildTerrain,
   cellDirection,
   decodeWorld,
-  latLonFromDirection,
-  tangentFrame,
   WATER_BIOMES,
 } from '../../src/lib/world/globe';
 import { createMockWorld } from '../../src/lib/world/mock-world';
+import {
+  atParam,
+  DRAW_CALL_BUDGET,
+  hold,
+  openGlobe as openPage,
+  radiusOf,
+  sample,
+  type Sample,
+  sampleFor,
+  track,
+} from './globe-helpers';
 
 /*
  * The globe at /?mock=1 (the dev/test mock world, the town from /api/v1/town): the player spawns at the town's
- * spawn (local 0, 120) facing the main gate, on the town's plateau. Positions are world metres (planet centre at
- * the origin); data-town-x/z are the town's local metres while the player is inside the town.
+ * spawn (local 0, 120) facing the main gate, on the town's plateau. The real planet is covered by planet.spec.ts.
  */
-
-interface Sample {
-  x: number;
-  y: number;
-  z: number;
-  ground: number;
-  biome: string;
-  townX: number | null;
-  townZ: number | null;
-}
 
 const view = createMockWorld();
 const globe = decodeWorld(view);
 const R = globe.radius;
-const DRAW_CALL_BUDGET = 300;
 /** South face of the 0.7 m town wall at z = 100, plus the player's 0.3 m radius, minus a little tolerance. */
 const WALL_SOUTH_LIMIT = 100.6;
 
@@ -50,92 +47,16 @@ function coast() {
     );
     if (wet.length < 2) continue;
     cellDirection(globe, wet[0], water);
-    const { east, north } = tangentFrame(land);
-    const toWater = water.clone().sub(land);
-    const bearing =
-      (Math.atan2(toWater.dot(east), toWater.dot(north)) * 180) / Math.PI;
-    const { lat, lon } = latLonFromDirection(land);
-    return { at: `${lat},${lon},${bearing}`, water: water.clone() };
+    return { at: atParam(land, water.clone().sub(land)), water: water.clone() };
   }
   throw new Error('no coast near the town');
 }
 
-async function openGlobe(page: Page, errors: string[], query = '') {
-  page.on('pageerror', (error) => errors.push(error.message));
-  page.on('console', (message) => {
-    if (message.type() === 'error') errors.push(message.text());
-  });
-  await page.goto(`/?mock=1${query}`);
-  const world = page.getByTestId('world');
-  await expect(world).toHaveAttribute('data-world-ready', 'true', {
-    timeout: 60_000,
-  });
-  await expect(world).toHaveAttribute('data-player-x', /\d/);
-  return world;
-}
-
-async function sample(world: Locator): Promise<Sample> {
-  const read = (name: string) => world.getAttribute(`data-${name}`);
-  const [x, y, z, ground, biome, townX, townZ] = await Promise.all(
-    [
-      'player-x',
-      'player-y',
-      'player-z',
-      'player-ground',
-      'player-biome',
-      'town-x',
-      'town-z',
-    ].map(read),
-  );
-  const maybe = (value: string | null) =>
-    value === null ? null : Number(value);
-  return {
-    x: Number(x),
-    y: Number(y),
-    z: Number(z),
-    ground: Number(ground),
-    biome: biome ?? '',
-    townX: maybe(townX),
-    townZ: maybe(townZ),
-  };
-}
-
-const radiusOf = ({ x, y, z }: Sample) => Math.hypot(x, y, z);
-
-/** Polls samples until `done` holds, keeping every sample. */
-async function track(
-  world: Locator,
-  done: (sample: Sample) => boolean,
-  timeout = 45_000,
-) {
-  const samples: Sample[] = [];
-  await expect
-    .poll(
-      async () => {
-        const current = await sample(world);
-        samples.push(current);
-        return done(current);
-      },
-      { timeout, intervals: [100] },
-    )
-    .toBe(true);
-  return samples;
-}
-
-async function sampleFor(world: Locator, page: Page, duration: number) {
-  const samples: Sample[] = [];
-  for (let elapsed = 0; elapsed < duration; elapsed += 100) {
-    samples.push(await sample(world));
-    await page.waitForTimeout(100);
-  }
-  return samples;
-}
-
-async function hold(page: Page, keys: string[], run: () => Promise<unknown>) {
-  for (const key of keys) await page.keyboard.down(key);
-  await run();
-  for (const key of keys) await page.keyboard.up(key);
-}
+const openGlobe = (
+  page: Parameters<typeof openPage>[0],
+  errors: string[],
+  query = '',
+) => openPage(page, errors, `?mock=1${query}`);
 
 test.describe.configure({ timeout: 120_000 });
 
