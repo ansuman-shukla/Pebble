@@ -9,14 +9,24 @@ import hashlib
 import json
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, JsonValue
 
 from app.core.rng import Rng
-from app.sim.state import ActionState, AgeGroup, Body, Citizen, GroundStack, Heard, PlaceKnowledge, WorldState
+from app.sim.state import (
+    ActionState,
+    AgeGroup,
+    Body,
+    Citizen,
+    GroundStack,
+    Heard,
+    PlaceKnowledge,
+    Region,
+    WorldState,
+)
 from app.sim.vec import Vec3
 from app.world_api.models import ActionResult
 
-SNAPSHOT_VERSION = 1
+SNAPSHOT_VERSION = 2  # 2: identities (role, region, skills, heading), regrowth, brain notes, 5 resources
 
 
 class _Snap(BaseModel):
@@ -34,6 +44,10 @@ class CitizenSnap(_Snap):
     position: Vec3
     cell: int
     height_m: float
+    role: str
+    region: Region
+    skills: list[str]
+    heading_deg: float
     body: Body
     inventory: dict[str, int]
     places: dict[str, PlaceKnowledge]
@@ -56,6 +70,8 @@ class SimSnapshot(_Snap):
     resources: str  # base64 of uint8 (cells, resources), row-major
     resource_columns: int
     rngs: dict[str, str]  # stream -> state as a decimal string (64-bit)
+    regrow: dict[str, int]
+    notes: dict[str, dict[str, JsonValue]]
 
 
 def take_snapshot(state: WorldState) -> SimSnapshot:
@@ -73,6 +89,10 @@ def take_snapshot(state: WorldState) -> SimSnapshot:
             position=c.position,
             cell=c.cell,
             height_m=c.height_m,
+            role=c.role,
+            region=c.region,
+            skills=list(c.skills),
+            heading_deg=c.heading_deg,
             body=c.body,
             inventory=dict(sorted(c.inventory.items())),
             places=dict(sorted(c.places.items())),
@@ -96,6 +116,8 @@ def take_snapshot(state: WorldState) -> SimSnapshot:
         resources=base64.b64encode(resources.tobytes()).decode("ascii"),
         resource_columns=resources.shape[1],
         rngs={name: str(rng.state) for name, rng in sorted(state.rngs.items())},
+        regrow=dict(sorted(state.regrow.items())),
+        notes=copy.deepcopy({cid: dict(sorted(notes.items())) for cid, notes in sorted(state.notes.items())}),
     )
 
 
@@ -117,6 +139,10 @@ def restore(snapshot: SimSnapshot) -> WorldState:
             position=snap.position,
             cell=snap.cell,
             height_m=snap.height_m,
+            role=snap.role,
+            region=snap.region,
+            skills=tuple(snap.skills),
+            heading_deg=snap.heading_deg,
             body=snap.body,
             inventory=dict(snap.inventory),
             places=dict(snap.places),
@@ -138,6 +164,8 @@ def restore(snapshot: SimSnapshot) -> WorldState:
         stores={store: dict(items) for store, items in snapshot.stores.items()},
         resources=resources.reshape(-1, snapshot.resource_columns).copy(),
         rngs={name: Rng(int(value)) for name, value in snapshot.rngs.items()},
+        regrow=dict(snapshot.regrow),
+        notes={cid: dict(notes) for cid, notes in snapshot.notes.items()},
     )
 
 

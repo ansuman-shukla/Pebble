@@ -6,6 +6,8 @@ the action ends in game time (completion or interrupt); the engine keeps ticking
 
 from dataclasses import dataclass
 
+from pydantic import JsonValue
+
 from app.sim.simulation import Simulation
 from app.world_api.models import (
     Action,
@@ -80,6 +82,23 @@ class WorldApi:
     def _start(self, action: Action) -> ActionHandle:
         return ActionHandle(self.sim, self.citizen_id, self.sim.start(self.citizen_id, action))
 
+    # --- the mind's own side (not actions: nothing here changes the world) ---
+
+    @property
+    def alive(self) -> bool:
+        """Whether there is still someone to act (a mind knows when it has died)."""
+        return self.sim.citizen(self.citizen_id).body.alive
+
+    def handle(self, number: int) -> ActionHandle:
+        """The handle of an action this citizen started earlier (by its number), e.g. after the engine resumed."""
+        return ActionHandle(self.sim, self.citizen_id, number)
+
+    @property
+    def notes(self) -> dict[str, JsonValue]:
+        """A scripted brain's working memory for this citizen. It is kept with the world so a resumed run continues
+        exactly; it is never part of what the citizen perceives. Agent minds keep their own memory (05)."""
+        return self.sim.state.notes.setdefault(self.citizen_id, {})
+
     # --- senses ---
 
     def look_around(self) -> Perception:
@@ -143,7 +162,11 @@ class WorldApi:
     def flee(self) -> ActionHandle:
         return self._start(Flee())
 
-    # --- typed now, implemented in M6/M7 ---
+    def work(self, task: str) -> ActionHandle:
+        """A role task: farm, store food, guard, trade, weave, govern."""
+        return self._start(Work(task=task))
+
+    # --- typed now, implemented in M6 ---
 
     def follow(self, person: str) -> ActionHandle:
         return self._start(Follow(person=person))
@@ -159,9 +182,6 @@ class WorldApi:
 
     def feed_fire(self) -> ActionHandle:
         return self._start(FeedFire())
-
-    def work(self, task: str) -> ActionHandle:
-        return self._start(Work(task=task))
 
     def attack(self, target: str) -> ActionHandle:
         return self._start(Attack(target=target))

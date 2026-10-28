@@ -8,6 +8,7 @@ from typing import Literal
 
 import numpy as np
 from numpy.typing import NDArray
+from pydantic import JsonValue
 
 from app.core.rng import Rng
 from app.sim.navigation import Route
@@ -16,6 +17,7 @@ from app.world_api.models import ActionName, ActionResult, Volume
 
 AgeGroup = Literal["child", "teen", "young_adult", "middle_aged", "elder"]
 KnowledgeLevel = Literal["visited", "rough"]
+Region = Literal["town", "band_a", "band_b"]
 JsonScalar = str | int | float | bool | None
 RNG_STREAMS = ("ecology", "actions")
 
@@ -98,6 +100,7 @@ class ActionState:
     amount: int = 0
     label: str = ""  # how the result names the destination or thing
     collapsed: bool = False
+    store_id: str | None = None  # the storehouse an eat or work action takes from or puts into
 
 
 @dataclass
@@ -112,6 +115,10 @@ class Citizen:
     position: Vec3
     cell: int
     height_m: float
+    role: str = ""
+    region: Region = "town"
+    skills: tuple[str, ...] = ()
+    heading_deg: float = 0.0  # facing: yaw in the local tangent frame, 0 = south, 90 = east, 180 = north
     body: Body = field(default_factory=Body)
     inventory: dict[str, int] = field(default_factory=dict)
     places: dict[str, PlaceKnowledge] = field(default_factory=dict)
@@ -143,6 +150,8 @@ class WorldState:
     next_stack: int
     citizens: dict[str, Citizen]
     ground: dict[str, GroundStack]
-    stores: dict[str, dict[str, int]]  # structure id -> items (filled by M7's town economy)
+    stores: dict[str, dict[str, int]]  # storehouse or field id -> items
     resources: NDArray[np.uint8]  # (cells, len(RESOURCES)) wild plant counters
     rngs: dict[str, Rng]
+    regrow: dict[str, int] = field(default_factory=dict)  # "cell:resource" -> tick it grows one more
+    notes: dict[str, dict[str, JsonValue]] = field(default_factory=dict)  # scripted brains' working memory

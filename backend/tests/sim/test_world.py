@@ -5,6 +5,7 @@ import pytest
 from sqlmodel import Session
 
 from app.sim.items import ITEMS, RESOURCE_INDEX, amount_words
+from app.sim.navigation import Planner
 from app.sim.vec import angle, bearing_deg, lat_lon_deg, slerp, step_towards
 from app.sim.world import TERRAIN_COST, SimWorld, load_sim_world
 from app.world.biomes import BIOME_IDS
@@ -17,16 +18,24 @@ def test_every_town_place_and_structure_door_is_walkable(sim_world: SimWorld) ->
     for place in sim_world.places.values():
         if place.kind == "town":
             assert walk.is_walkable(*sim_world.town.to_local(place.stand)), place.id
+    allowed = Planner(sim_world).outer.allowed
     for structure in sim_world.structures.values():
-        assert walk.is_walkable(*structure.door_xz), structure.id
+        if structure.site == "town":
+            assert walk.is_walkable(*structure.door_xz), structure.id
+        else:  # camps: the door stands on walkable ground outside the town
+            assert sim_world.town_point(structure.door) is None, structure.id
+            assert allowed[sim_world.nearest_cell(structure.door)], structure.id
         assert math.dist(structure.door_xz, structure.centre_xz) < 8, structure.id
 
 
-def test_homes_and_storehouses_come_from_the_town_spec(sim_world: SimWorld) -> None:
+def test_homes_and_storehouses_come_from_the_town_spec_and_the_camps(sim_world: SimWorld) -> None:
     town = load_town()
-    houses = {p.id for p in town.placements if p.kind in ("townhouse", "farmhouse")}
+    houses = {p.id for p in town.placements if p.kind in ("townhouse", "farmhouse", "castle_keep")}
+    lean_tos = {f"{camp}:shelter-{side}" for camp in ("band_a_camp", "band_b_camp") for side in "nwe"}
     stores = {p.id for p in town.placements if p.kind == "storehouse"}
-    assert {s.id for s in sim_world.structures.values() if s.is_home} == houses
+    assert {s.id for s in sim_world.structures.values() if s.is_home} == houses | lean_tos
+    assert {s.label for s in sim_world.structures.values() if s.kind == "fire_pit"} == {"the fire pit"}
+    assert sim_world.structures["castle-keep"].label == "the keep"
     assert {s.id for s in sim_world.structures.values() if s.kind == "storehouse"} == stores
     assert sim_world.structures["well"].label == "the well"
     assert sim_world.structures["main-gate"].label == "the main gate"

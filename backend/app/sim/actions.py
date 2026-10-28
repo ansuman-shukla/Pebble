@@ -4,6 +4,7 @@ tick and end on completion or interrupt. Every failure is an in-world sentence; 
 
 import math
 import re
+from dataclasses import dataclass
 
 from app.observability.events import (
     ActionEnded,
@@ -16,9 +17,11 @@ from app.observability.events import (
 from app.sim.bodies import COLLAPSE_WAKE_ENERGY, Crossing
 from app.sim.clock import NIGHT_ALTITUDE_DEG, sun_altitude_deg, sun_direction
 from app.sim.core import HEARING_M, KEPT_HEARD, REACH_M, SimCore
+from app.sim.ecology import schedule_regrowth
 from app.sim.items import ITEMS, RESOURCE_INDEX, amount_words
 from app.sim.navigation import walk_along
 from app.sim.perception import (
+    HOME_RADIUS_M,
     compass,
     match_person,
     match_thing,
@@ -50,6 +53,7 @@ from app.world_api.models import (
     Volume,
     Wait,
     WalkTo,
+    Work,
 )
 
 WALK_M_PER_TICK = 5000 / 60  # 5 km/h on flat ground
@@ -84,6 +88,7 @@ VERB: dict[str, str] = {
     "sleep": "sleeping",
     "wait": "waiting",
     "flee": "running",
+    "work": "working",
 }
 SAY_VERB: dict[Volume, str] = {"whisper": "whisper", "normal": "say", "shout": "shout"}
 SAYS_VERB: dict[Volume, str] = {"whisper": "whispers", "normal": "says", "shout": "shouts"}
@@ -97,10 +102,98 @@ NEED_WORDS: dict[str, str] = {
     "hurt": "hurting",
     "near death": "close to death",
 }
+STORE_REACH_M = 6.0  # from a storehouse's door
+FARM_GROWTH = 12  # measures of rice an hour of tending ripens
+FIELD_ID = "rice-fields"  # the town's paddies: a place, and the store their ripe rice waits in
 NOT_YET = "You can't do that yet."
-_NIGHT_STOPS = frozenset({"walk_to", "gather", "wait", "rest"})
-_NEED_STOPS = frozenset({"walk_to", "gather", "wait", "rest", "flee"})
-_SINGULAR = {"berry": "berries", "root": "roots", "nut": "nuts"}
+
+
+@dataclass(frozen=True)
+class WorkTask:
+    """A role task for `work(task)` (03): who can do it, where, for how long, and how it reads."""
+
+    name: str
+    words: frozenset[str]  # what someone asking for it may say
+    minutes: int
+    skill: str | None  # None = anyone
+    places: tuple[str, ...] = ()  # place ids to stand in (empty: see `at`)
+    at: str = "place"  # "place" | "storehouse" | "home"
+    nowhere: str = ""  # the failure when not where the task is done
+    label: str = ""  # what they are doing, for spectators
+    done: str = ""  # the result text when finished
+
+
+WORK_TASKS: tuple[WorkTask, ...] = (
+    WorkTask(
+        "farm",
+        frozenset({"farm", "farming", "fields", "field", "paddies", "rice", "tend", "harvest"}),
+        60,
+        "farming",
+        places=(FIELD_ID,),
+        nowhere="There are no fields here to tend.",
+        label="tending the rice paddies",
+    ),
+    WorkTask(
+        "store food",
+        frozenset({"store", "storehouse", "stores", "granary"}),
+        5,
+        None,
+        at="storehouse",
+        nowhere="There's no storehouse within reach.",
+        label="filling the storehouse",
+    ),
+    WorkTask(
+        "guard",
+        frozenset({"guard", "patrol", "watch", "sentry"}),
+        45,
+        "arms",
+        places=("main-gate", "west-gate", "castle", "training-ground"),
+        nowhere="There is nothing to guard here.",
+        label="keeping watch",
+        done="You keep watch a while; all is quiet.",
+    ),
+    WorkTask(
+        "trade",
+        frozenset({"trade", "sell", "buy", "market", "haggle"}),
+        60,
+        "trade",
+        places=("market",),
+        nowhere="There is no market here.",
+        label="trading at the market",
+        done="You trade with passers-by and haggle over cloth and salt.",
+    ),
+    WorkTask(
+        "weave",
+        frozenset({"weave", "weaving", "loom", "cloth"}),
+        60,
+        "weaving",
+        at="home",
+        nowhere="Your loom is at home.",
+        label="weaving at the loom",
+        done="You weave a length of cloth.",
+    ),
+    WorkTask(
+        "govern",
+        frozenset({"govern", "rule", "court", "petitions", "council"}),
+        60,
+        "governing",
+        places=("castle",),
+        nowhere="You hold court only at the castle.",
+        label="holding court",
+        done="You hear petitions and settle a quarrel over a boundary stone.",
+    ),
+)
+WORK_BY_NAME = {task.name: task for task in WORK_TASKS}
+
+
+def work_task(words: str) -> WorkTask | None:
+    query = set(normalize(words).split())
+    return next((task for task in WORK_TASKS if task.words & query), None)
+
+
+_NIGHT_STOPS = frozenset({"walk_to", "gather", "wait", "rest", "work"})
+_NEED_STOPS = frozenset({"walk_to", "gather", "wait", "rest", "flee", "work"})
+_SINGULAR = {"berry": "berries", "root": "roots", "nut": "nuts", "reed": "reeds"}
 
 
 # --- bookkeeping ---
@@ -143,11 +236,13 @@ def refuse(core: SimCore, citizen: Citizen, kind: ActionName, text: str) -> Acti
 
 
 def item_name(words: str) -> str | None:
-    query = normalize(words)
-    for word in reversed(query.split()):
-        name = _SINGULAR.get(word, word)
-        if name in ITEMS:
-            return name
+    """The item the words name: the last word or two-word name that is an item ("some dried meat" -> dried meat)."""
+    query = [_SINGULAR.get(word, word) for word in normalize(words).split()]
+    for end in range(len(query), 0, -1):
+        for start in (end - 2, end - 1):
+            name = " ".join(query[max(start, 0) : end])
+            if start >= 0 and name in ITEMS:
+                return name
     return None
 
 
@@ -307,6 +402,8 @@ def start(core: SimCore, citizen: Citizen, action: Action) -> int:
         return citizen.next_action - 1
     if isinstance(action, Flee):
         return _settled(core, citizen, "flee", "failed", "You see nothing to run from.")
+    if isinstance(action, Work):
+        return _start_work(core, citizen, action)
     return _settled(core, citizen, action.action, "failed", NOT_YET)
 
 
@@ -394,17 +491,112 @@ def _start_eat(core: SimCore, citizen: Citizen, action: Eat) -> int:
     item = item_name(action.item)
     if item is None or ITEMS[item].food <= 0:
         return _settled(core, citizen, "eat", "failed", "You can't eat that.")
-    stack_id = None
+    stack_id = store_id = None
     available = citizen.inventory.get(item, 0)
     if available == 0:
         stack_id = _stack_in_reach(core, citizen, item)
-        if stack_id is None:
+        store_id = None if stack_id is not None else store_in_reach(core, citizen, item)
+        if stack_id is not None:
+            available = core.state.ground[stack_id].count
+        elif store_id is not None:
+            available = core.state.stores[store_id][item]
+        else:
             return _settled(core, citizen, "eat", "failed", f"You have no {item}, and there are none within reach.")
-        available = core.state.ground[stack_id].count
     pieces = max(1, min(available, math.ceil(citizen.body.hunger / ITEMS[item].food)))
     eat = _begin(core, citizen, "eat", item, {"item": item})
     eat.item, eat.amount, eat.target_id, eat.until_tick = item, pieces, stack_id, core.state.tick + pieces
+    eat.store_id = store_id
     return eat.number
+
+
+def store_in_reach(core: SimCore, citizen: Citizen, item: str | None = None) -> str | None:
+    """The nearest storehouse within reach that the citizen may use (town folk only), holding `item` if given."""
+    if citizen.region != "town":
+        return None
+    options = [
+        (core.distance_m(citizen.position, structure.door), structure.id)
+        for structure in core.world.structures.values()
+        if structure.kind == "storehouse" and (item is None or core.state.stores.get(structure.id, {}).get(item, 0) > 0)
+    ]
+    near = [option for option in options if option[0] <= STORE_REACH_M]
+    return min(near)[1] if near else None
+
+
+def _start_work(core: SimCore, citizen: Citizen, action: Work) -> int:
+    task = work_task(action.task)
+    if task is None or (task.skill is not None and task.skill not in citizen.skills):
+        return _settled(core, citizen, "work", "failed", "You don't know how to do that.")
+    store_id = None
+    if task.at == "storehouse":
+        store_id = store_in_reach(core, citizen)
+        if store_id is None:
+            return _settled(core, citizen, "work", "failed", task.nowhere)
+        if not any(ITEMS[item].food > 0 for item in citizen.inventory):
+            return _settled(core, citizen, "work", "failed", "You aren't carrying any food to store.")
+    elif task.at == "home":
+        home = core.world.structures.get(citizen.home) if citizen.home is not None else None
+        if home is None or core.distance_m(citizen.position, home.door) > HOME_RADIUS_M:
+            return _settled(core, citizen, "work", "failed", task.nowhere)
+    else:
+        places = [core.world.places[place_id] for place_id in task.places]
+        if not any(core.distance_m(citizen.position, place.centre) <= place.radius_m for place in places):
+            return _settled(core, citizen, "work", "failed", task.nowhere)
+    work = _begin(core, citizen, "work", task.label, {"task": task.name})
+    work.item, work.store_id, work.until_tick = task.name, store_id, core.state.tick + task.minutes
+    return work.number
+
+
+def _finish_work(core: SimCore, citizen: Citizen, action: ActionState) -> None:
+    task = WORK_BY_NAME[str(action.item)]
+    if task.name == "farm":
+        core.end_action(citizen, "done", _farm(core, citizen))
+    elif task.name == "store food":
+        core.end_action(citizen, "done", _store_food(core, citizen, str(action.store_id)))
+    else:
+        core.end_action(citizen, "done", task.done)
+
+
+def _farm(core: SimCore, citizen: Citizen) -> str:
+    """An hour of tending ripens rice in the field; the farmer harvests what they can carry, the rest waits there."""
+    field = core.state.stores.setdefault(FIELD_ID, {})
+    field["rice"] = field.get("rice", 0) + FARM_GROWTH
+    grown = core.item_moved(
+        citizen, "rice", FARM_GROWTH, ItemLocation(kind="world"), ItemLocation(kind="store", id=FIELD_ID)
+    )
+    taken = min(field["rice"], core.room_for(citizen, "rice"))
+    if taken == 0:
+        return "You tend the rice paddies, but you can't carry any more rice."
+    field["rice"] -= taken
+    if field["rice"] == 0:
+        del field["rice"]
+    citizen.inventory["rice"] = citizen.inventory.get("rice", 0) + taken
+    core.item_moved(
+        citizen,
+        "rice",
+        taken,
+        ItemLocation(kind="store", id=FIELD_ID),
+        ItemLocation(kind="inventory", id=citizen.id),
+        cause_seq=grown,
+    )
+    left = " The rest stays in the field." if field.get("rice", 0) else ""
+    return f"You tend the rice paddies and harvest {amount_words(taken, ITEMS['rice'])}.{left}"
+
+
+def _store_food(core: SimCore, citizen: Citizen, store_id: str) -> str:
+    store = core.state.stores.setdefault(store_id, {})
+    stored: list[str] = []
+    for item in sorted(citizen.inventory):
+        if ITEMS[item].food <= 0:
+            continue
+        count = citizen.inventory.pop(item)
+        store[item] = store.get(item, 0) + count
+        core.item_moved(
+            citizen, item, count, ItemLocation(kind="inventory", id=citizen.id), ItemLocation(kind="store", id=store_id)
+        )
+        stored.append(amount_words(count, ITEMS[item]))
+    if not stored:
+        return "You have no food left to store."
+    return f"You put {' and '.join(stored)} in the storehouse."
 
 
 def water_within_reach(core: SimCore, citizen: Citizen) -> tuple[str, str] | None:
@@ -517,6 +709,8 @@ def _complete(core: SimCore, citizen: Citizen, action: ActionState) -> None:
         core.end_action(citizen, "done", "You rest a while.")
     elif action.kind == "wait":
         core.end_action(citizen, "done", "You wait a while.")
+    elif action.kind == "work":
+        _finish_work(core, citizen, action)
     else:
         raise ValueError(f"{action.kind} has no timed completion")
 
@@ -536,6 +730,7 @@ def _finish_gather(core: SimCore, citizen: Citizen, action: ActionState) -> None
         )
         return
     core.state.resources[cell, column] = before - count
+    schedule_regrowth(core, cell, resource)
     seq = core.emit(
         "resource_changed",
         ResourceChanged(cell=cell, resource=resource, before=before, after=before - count),
@@ -559,11 +754,22 @@ def _eat(core: SimCore, citizen: Citizen, action: ActionState, pieces: int) -> s
     if item is None:
         raise ValueError("an eat action needs an item")
     stack = core.state.ground.get(action.target_id) if action.target_id is not None else None
-    available = stack.count if stack is not None else citizen.inventory.get(item, 0)
+    store = core.state.stores.get(action.store_id, {}) if action.store_id is not None else None
+    if stack is not None:
+        available = stack.count
+    elif store is not None:
+        available = store.get(item, 0)
+    else:
+        available = citizen.inventory.get(item, 0)
     eaten = min(pieces, available)
     if eaten <= 0:
         return None
-    if stack is not None:
+    if store is not None:
+        store[item] -= eaten
+        if store[item] == 0:
+            del store[item]
+        source = ItemLocation(kind="store", id=action.store_id)
+    elif stack is not None:
         stack.count -= eaten
         if stack.count == 0:
             del core.state.ground[stack.id]
@@ -661,6 +867,13 @@ def interrupt(
 
 
 WalkHeading = tuple[str | None, Vec3 | None]  # (person walked to, where the walk goes)
+
+
+def body_activity(action: ActionState | None) -> str | None:
+    """What the body is doing for need rates: the action, or the work task (farming is hard work)."""
+    if action is None:
+        return None
+    return str(action.item) if action.kind == "work" else action.kind
 
 
 def walk_heading(citizen: Citizen) -> WalkHeading | None:

@@ -46,11 +46,14 @@ DOING: dict[str, str] = {
     "sleep": "asleep",
     "wait": "standing about",
     "flee": "running",
+    "work": "working",
 }
 RESOURCE_KEYWORDS: dict[str, frozenset[str]] = {
     "berries": frozenset({"berries", "berry", "bush", "bushes"}),
     "roots": frozenset({"roots", "root"}),
     "nuts": frozenset({"nuts", "nut"}),
+    "reeds": frozenset({"reeds", "reed"}),
+    "wood": frozenset({"wood", "branches", "deadwood", "firewood"}),
 }
 STRUCTURE_KEYWORDS: dict[str, frozenset[str]] = {
     "well": frozenset({"well", "water"}),
@@ -58,6 +61,9 @@ STRUCTURE_KEYWORDS: dict[str, frozenset[str]] = {
     "townhouse": frozenset({"house"}),
     "farmhouse": frozenset({"farmhouse", "house"}),
     "castle_gatehouse": frozenset({"gate", "gatehouse"}),
+    "castle_keep": frozenset({"keep", "castle"}),
+    "lean_to": frozenset({"lean-to", "shelter"}),
+    "fire_pit": frozenset({"fire", "pit", "firepit"}),
 }
 
 
@@ -141,7 +147,11 @@ def _resource_label(resource: str, count: int) -> str:
         )
     if resource == "roots":
         return "plenty of edible roots" if count >= 10 else "a few edible roots"
-    return "nut trees heavy with nuts" if count >= 10 else "a few nuts on the trees"
+    if resource == "nuts":
+        return "nut trees heavy with nuts" if count >= 10 else "a few nuts on the trees"
+    if resource == "reeds":
+        return "thick reeds" if count >= 10 else "a few reeds"
+    return "plenty of fallen wood" if count >= 10 else "a little fallen wood"
 
 
 def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
@@ -163,45 +173,36 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
         distance = core.distance_m(position, target)
         things.append(Thing(label, keywords, goal, distance, bearing_deg(position, target), kind, ref, water))
 
-    town_up = (float(world.town.frame.up[0]), float(world.town.frame.up[1]), float(world.town.frame.up[2]))
-    if core.distance_m(position, town_up) <= sight + 230:
-        nearest_of: dict[str, tuple[float, str]] = {}
-        for structure in world.structures.values():
-            distance = core.distance_m(position, structure.centre)
-            if distance > sight:
-                continue
-            if structure.id == citizen.home:
-                add(
-                    "your home",
-                    frozenset({"home", "house"}),
-                    structure.door,
-                    "structure",
-                    structure.id,
-                    at=structure.centre,
-                )
-            elif structure.label.startswith("the "):  # named ones (the well, the main gate) are listed one by one
-                water: Literal["fresh"] | None = "fresh" if structure.kind == "well" else None
-                add(
-                    structure.label,
-                    STRUCTURE_KEYWORDS[structure.kind],
-                    structure.door,
-                    "structure",
-                    structure.id,
-                    water,
-                    structure.centre,
-                )
-            elif (distance, structure.id) < nearest_of.get(structure.kind, (math.inf, "")):
-                nearest_of[structure.kind] = (distance, structure.id)
-        for kind, (_, structure_id) in sorted(nearest_of.items()):
-            structure = world.structures[structure_id]
+    nearest_of: dict[str, tuple[float, str]] = {}
+    for structure in world.structures.values():
+        distance = core.distance_m(position, structure.centre)
+        if distance > sight:
+            continue
+        if structure.id == citizen.home:
             add(
-                structure.label,
-                STRUCTURE_KEYWORDS[kind],
+                "your home",
+                frozenset({"home", "house"}),
                 structure.door,
                 "structure",
                 structure.id,
                 at=structure.centre,
             )
+        elif structure.label.startswith("the "):  # named ones (the well, the main gate) are listed one by one
+            water: Literal["fresh"] | None = "fresh" if structure.kind == "well" else None
+            add(
+                structure.label,
+                STRUCTURE_KEYWORDS[structure.kind],
+                structure.door,
+                "structure",
+                structure.id,
+                water,
+                structure.centre,
+            )
+        elif (distance, structure.id) < nearest_of.get(structure.kind, (math.inf, "")):
+            nearest_of[structure.kind] = (distance, structure.id)
+    for kind, (_, structure_id) in sorted(nearest_of.items()):
+        structure = world.structures[structure_id]
+        add(structure.label, STRUCTURE_KEYWORDS[kind], structure.door, "structure", structure.id, at=structure.centre)
 
     for stack in sorted(state.ground.values(), key=lambda s: s.id):
         if core.distance_m(position, stack.position) <= sight:

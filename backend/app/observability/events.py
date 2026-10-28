@@ -47,6 +47,7 @@ class Moved(Payload):
     position: Vec3
     height_m: float
     cell: int
+    heading_deg: float = 0.0  # facing after the move (yaw in the local tangent frame, 0 = south, 180 = north)
 
 
 class TickSummary(Payload):
@@ -68,6 +69,11 @@ class CitizenSpawned(Payload):
     body: BodyValues
     places: dict[str, Literal["visited", "rough"]]
     people: list[str]
+    role: str = ""
+    region: Literal["town", "band_a", "band_b"] = "town"
+    skills: list[str] = []
+    heading_deg: float = 0.0
+    inventory: dict[str, int] = {}  # what they start out carrying
 
 
 class Perceived(Payload):
@@ -115,7 +121,10 @@ class Died(Payload):
 
 
 class ItemLocation(Payload):
-    kind: Literal["inventory", "ground", "store", "resource", "eaten"]
+    """Where items are. `resource` = a cell's wild plants (changed by `resource_changed`); `world` = made by the world
+    (a tended field's harvest growing, a store's starting stock); `eaten` = gone."""
+
+    kind: Literal["inventory", "ground", "store", "resource", "eaten", "world"]
     id: str | None = None  # citizen, ground stack or store id
     cell: int | None = None
     position: Vec3 | None = None  # for a ground stack

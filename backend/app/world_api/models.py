@@ -39,8 +39,8 @@ Outcome = Literal["done", "interrupted", "failed"]
 
 INSTANT_ACTIONS: frozenset[ActionName] = frozenset({"look_around", "check_self", "say", "pick_up", "drop", "give"})
 NOT_YET_ACTIONS: frozenset[ActionName] = frozenset(
-    {"follow", "fish", "hunt", "make_fire", "feed_fire", "work", "attack", "recall"}
-)  # typed now, implemented in M6/M7 (recall in phase B)
+    {"follow", "fish", "hunt", "make_fire", "feed_fire", "attack", "recall"}
+)  # typed now, implemented in M6 (recall in phase B)
 
 
 class _Model(BaseModel):

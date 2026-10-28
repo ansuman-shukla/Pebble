@@ -8,17 +8,27 @@ wall clock and draws randomness only from its seeded streams, so the same seed a
 import numpy as np
 
 from app.core.rng import Rng
-from app.observability.events import CitizenSpawned, Died, EventDraft, Moved, NeedChanged, Perceived, TickSummary
+from app.observability.events import (
+    CitizenSpawned,
+    Died,
+    EventDraft,
+    ItemLocation,
+    ItemMoved,
+    Moved,
+    NeedChanged,
+    Perceived,
+    TickSummary,
+)
 from app.sim import actions, ecology
 from app.sim.bodies import COLLAPSE_WAKE_ENERGY, HOT_BIOMES, Crossing, update_body
 from app.sim.citizens import CitizenSpec
 from app.sim.core import GiftPolicy, SimCore
-from app.sim.items import RESOURCES
+from app.sim.items import ITEMS, RESOURCES
 from app.sim.navigation import Planner
 from app.sim.perception import perceive, self_view
 from app.sim.state import RNG_STREAMS, Citizen, PlaceKnowledge, WorldState, age_group
-from app.sim.vec import Vec3, add, as_vec, normalize, scale
-from app.sim.world import SimWorld
+from app.sim.vec import Vec3
+from app.sim.world import SimWorld, site_unit
 from app.world_api.models import (
     INSTANT_ACTIONS,
     NOT_YET_ACTIONS,
@@ -98,6 +108,9 @@ class Simulation:
         unknown = sorted(set(spec.knows_places) - set(world.places))
         if unknown:
             raise ValueError(f"{spec.id}: unknown places {unknown}")
+        bad_items = sorted(item for item, count in spec.inventory.items() if item not in ITEMS or count <= 0)
+        if bad_items:
+            raise ValueError(f"{spec.id}: can't start with {bad_items}")
         position = self._spawn_point(spec)
         cell = world.nearest_cell(position)
         citizen = Citizen(
@@ -111,6 +124,10 @@ class Simulation:
             position=position,
             cell=cell,
             height_m=world.ground_height(position, cell),
+            role=spec.role,
+            region=spec.region,
+            skills=tuple(spec.skills),
+            inventory={item: spec.inventory[item] for item in sorted(spec.inventory)},
         )
         for place_id in spec.knows_places:
             place = world.places[place_id]
@@ -134,6 +151,11 @@ class Simulation:
                 body=(body.hunger, body.thirst, body.energy, body.health),
                 places=dict.fromkeys(sorted(citizen.places), "visited"),
                 people=sorted(citizen.people),
+                role=citizen.role,
+                region=citizen.region,
+                skills=list(citizen.skills),
+                heading_deg=citizen.heading_deg,
+                inventory=dict(citizen.inventory),
             ),
             actor=citizen,
         )
@@ -145,6 +167,25 @@ class Simulation:
         self._visit(citizen)
         return citizen
 
+    def stock_store(self, store_id: str, item: str, count: int) -> None:
+        """Put a starting stock into a storehouse (one `item_moved` from the world)."""
+        structure = self.core.world.structures.get(store_id)
+        if structure is None or structure.kind != "storehouse":
+            raise ValueError(f"{store_id} is not a storehouse")
+        if item not in ITEMS or count <= 0:
+            raise ValueError(f"can't stock {count} {item}")
+        store = self.core.state.stores.setdefault(store_id, {})
+        store[item] = store.get(item, 0) + count
+        self.core.emit(
+            "item_moved",
+            ItemMoved(
+                item=item,
+                count=count,
+                source=ItemLocation(kind="world"),
+                destination=ItemLocation(kind="store", id=store_id),
+            ),
+        )
+
     def _spawn_point(self, spec: CitizenSpec) -> Vec3:
         world = self.core.world
         if spec.site == "town":
@@ -154,11 +195,7 @@ class Simulation:
         site = next((s for s in world.sites if s.id == spec.site), None)
         if site is None:
             raise ValueError(f"{spec.id}: unknown site {spec.site}")
-        anchor = site.anchor
-        r = world.radius_m + anchor.height_m
-        up, east, north = as_vec(anchor.position), as_vec(anchor.east), as_vec(anchor.north)
-        x, z = spec.at
-        position = normalize(add(add(scale(up, r), scale(east, x)), scale(north, -z)))
+        position = site_unit(world.radius_m, site, *spec.at)
         if not self.core.planner.outer.allowed[world.nearest_cell(position)]:
             raise ValueError(f"{spec.id} would start in water or off the walkable ground")
         return position
@@ -252,7 +289,9 @@ class Simulation:
             self._visit(citizen)
 
         moved = {
-            citizen.id: Moved(position=citizen.position, height_m=citizen.height_m, cell=citizen.cell)
+            citizen.id: Moved(
+                position=citizen.position, height_m=citizen.height_m, cell=citizen.cell, heading_deg=citizen.heading_deg
+            )
             for citizen in core.citizens()
             if citizen.id in before and citizen.position != before[citizen.id]
         }
@@ -268,7 +307,7 @@ class Simulation:
 
     def _body(self, citizen: Citizen) -> list[Crossing]:
         core = self.core
-        activity = citizen.action.kind if citizen.action is not None else None
+        activity = actions.body_activity(citizen.action)
         hot = core.world.biome(citizen.cell) in HOT_BIOMES
         change = update_body(citizen.body, citizen.traits, activity, hot)
         for crossing in change.crossings:
