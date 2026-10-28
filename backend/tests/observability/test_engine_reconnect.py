@@ -21,6 +21,7 @@ from sqlmodel import Session, col, create_engine, select
 from app.core.db import create_db_engine
 from app.db.models import Event, Run, Snapshot
 from app.engine import RETRY_FIRST_S, RETRY_MAX_S, Clock, EngineLoop, is_connection_loss, open_loop
+from app.observability.store import queue_command
 from app.sim.citizens import DEV_CITIZENS
 from app.sim.simulation import Simulation
 from app.sim.snapshot import state_hash
@@ -215,13 +216,14 @@ def test_lost_ticks_are_caught_up_without_real_time_waits(
         loop = _open(session, sim_world, sleeps)
         loop.run_ticks(70, headless=True)
         loop.brains.append(KillBefore(named, committing_engine, {70}))
-        loop.clock.speed = 2
+        queue_command(session, loop.run.id, "clock", {"speed": 120})  # a tick every half second, stored so the
+        loop.apply_commands()  # reload resumes at it
         started = time.monotonic()
         loop.run_ticks(2, headless=False)  # back to tick 60, ticks 61..70 at once, then 71 and 72 in real time
         elapsed = time.monotonic() - started
         assert loop.sim.tick == 72 and loop.catch_up_to == 70
     assert sleeps.delays == [RETRY_FIRST_S]
-    assert elapsed < 3.0  # waiting for each re-simulated tick at speed 2 would take over 6 s
+    assert elapsed < 3.0  # waiting for each of the 12 ticks at speed 120 would take 6 s
 
 
 def test_a_connection_killed_while_the_engine_waits_is_replaced_without_a_reload(
@@ -239,7 +241,7 @@ def test_a_connection_killed_while_the_engine_waits_is_replaced_without_a_reload
             time.sleep(min(seconds, 0.01))
 
         loop.idle_sleep = kill_while_waiting
-        loop.clock.speed = 20
+        loop.clock.speed = 600  # a tick every 0.1 s
         loop.run_ticks(6, headless=False)
         final_hash = state_hash(loop.sim.state)
         assert loop.catch_up_to == 0
@@ -263,7 +265,7 @@ def test_the_engine_holds_no_transaction_open_while_it_waits(
             time.sleep(min(seconds, 0.05))
 
         loop.idle_sleep = watch
-        loop.clock.speed = 5
+        loop.clock.speed = 300  # a tick every 0.2 s
         loop.run_ticks(3, headless=False)  # waits between ticks
         waits = len(seen)
         loop.clock.paused = True

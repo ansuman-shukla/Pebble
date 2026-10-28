@@ -13,7 +13,7 @@ feed once the backend half (citizens spec, brains, WebSocket `/api/v1/live`, ext
 | `/?mockLive=1` | the dev/test mock feed: 15 citizens (the 15 look ids) around the town and both camps, starting at 08:00 |
 | `/?mock=1` | the mock world without a feed (the engine's citizens don't belong on it); `&mockLive=1` adds the mock feed |
 | `people` | the People panel: name, role, region, activity in words, body state; a row or `follow` → the camera follows that citizen (Esc or `stop following` returns to the player); `go to` → drops the player next to them |
-| clock (bottom right) | engine day and time; `pause`, `×1`, `×10`, `×60` call `POST /api/v1/admin/clock` (the mock: its own clock) |
+| clock (bottom right) | engine day, time and speed; `pause`, `×1` (real time), `×10`, `×60`, `×600` call `POST /api/v1/admin/clock` (the mock: its own clock) |
 | `time ×60` | only without a feed (the client-side clock of M4) |
 
 ## Data flow
@@ -45,12 +45,12 @@ GET /api/v1/entities ──┐
 
 ## Drawing a citizen
 
-- **Between ticks**: from where the citizen is drawn now to the new position over one tick at the feed's speed
-  (`tickMs(speed)` in `live-contract.ts`: 1 s at ×1, 17 ms at ×60, a minute at one tick a minute). A frame that
-  arrives mid-glide starts the next glide from the drawn spot, so nothing jumps. Without this, Kenji's walk to the gate
-  was one 83 m jump (the test's mutation check). The interval used to be measured between frames and capped at 2 s,
-  so with ticks further apart walkers arrived early and stood still until the next tick.
-- **Heading**: eases to `heading_deg` at 8/s in the citizen's own tangent frame (0 = south, 180 = north).
+- **Between ticks** (since D65): a walker walks the path its tick streamed (`route`, ~2 game minutes of it) at
+  `speed_mps × clock speed` real m/s (`lib/live/walk-path.ts`); a new tick joins its path at the spot nearest to where
+  the citizen is drawn and eases the rest away (3/s), more than 30 m off snaps. Standing citizens ease onto a new spot
+  the same way. (Before D65 every frame was a straight glide over one tick, cutting the route's corners.)
+- **Heading**: eases at 8/s towards the leg being walked, or `heading_deg` when standing, in the citizen's own
+  tangent frame (0 = south, 180 = north).
 - **Ground**: the town's plateau height on its ground disc, else `terrain.heightAt` (the drawn surface). Paving and
   bridges aren't probed (feet sink a few centimetres into paving).
 - **Activity → clip** (`lib/live/npc-activity.ts`): walking → Walk paced to the walk (Idle once arrived); working →
@@ -71,12 +71,11 @@ GET /api/v1/entities ──┐
   clearance); the player stands still meanwhile. The walk keeps two wild charts, so following someone 4 km away
   doesn't rebuild the wild collisions every frame.
 
-## Time is compressed 60×, so walkers glide fast
+## Time was compressed 60× (until D65)
 
-One tick is one game minute and runs every real second at ×1, and the engine walks 5 km/h = 83 m per tick. So at ×1 a
-walking citizen covers 83 m per real second on screen. The walk clip is paced to the game pace (83 m / 60 s =
-1.4 m/s, a calm walk), so a walker glides across the town in a couple of seconds with relaxed legs. This is the
-contract's time scale, not a client bug; slowing it down would need a different tick length or a "real time" speed.
+One tick is one game minute and ran every real second at ×1, so a walking citizen covered 83 m per real second on
+screen. D65 made ×1 real time (a tick a real minute, walkers at 1.4 m/s; `findings/2026-10-29-real-time-speed.md`);
+×60 is the old pace. The walk clip stays paced to the game pace (1.4 m/s), whatever the clock's speed.
 
 ## Performance (real world, mock feed)
 
@@ -117,9 +116,7 @@ paused, no frame passes 18 ms.
 
 ## Rough edges
 
-- `tickMs` and the sky's rate (`globe-page.tsx`: game minutes per real second = `speed`) both assume the engine's
-  `speed` is ticks per real second; a change to what `speed` means has to change both.
-- Between ticks a walker cuts the corner of its route (the feed sends positions, not routes): at 83 m per tick it can
-  pass through a house for a moment.
+- `tickMs` and the sky's rate (`globe-page.tsx`: `speed / 60` game minutes per real second) both follow D65's
+  `speed` (game seconds per real second).
 - No markers for citizens beyond 400 m; the People panel is the way to find them.
 - The mock's walks are straight lines between hand-picked spots, through fences and the moat.

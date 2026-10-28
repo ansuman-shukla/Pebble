@@ -5,9 +5,11 @@ writes every change to the event store.
 
 ## Clock and tick
 
-- **Tick = 1 game minute.** At default speed one tick runs every real second. Speed is configurable (pause, ×1…×60).
+- **Tick = 1 game minute.** Speed = game seconds per real second: at the default ×1 (real time) one tick runs every
+  real minute; pause, ×10, ×60 and ×600 are the spectator choices (1..600 accepted, D65).
 - Each tick: advance durative actions → move entities → update bodies → ecology → perception/interrupts → emit events.
-- Positions are continuous on the sphere; the client interpolates between ticks.
+- Positions are continuous on the sphere; each tick's summary carries every walker's path for the next 2 game minutes
+  and their ground speed, and the client moves them along it between ticks.
 - Seeded RNG per subsystem; state snapshots every game hour so any run can be resumed or replayed.
 
 ## Entities

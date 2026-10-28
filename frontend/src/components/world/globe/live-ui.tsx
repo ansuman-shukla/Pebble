@@ -5,7 +5,7 @@ import type { NpcViews } from './globe-npcs';
 import { Button } from '@/components/ui/button';
 import type { ClockChange, LiveStatus } from '@/hooks/use-live-citizens';
 import type { LiveCitizen } from '@/lib/live/live-contract';
-import type { LiveState } from '@/lib/live/live-state';
+import { type LiveState, speedWords } from '@/lib/live/live-state';
 import { activityWords } from '@/lib/live/npc-activity';
 import type { Region } from '@/lib/world/citizen-looks';
 
@@ -25,10 +25,32 @@ function stateWords(citizen: LiveCitizen) {
   return citizen.state.length ? citizen.state.join(', ') : 'fine';
 }
 
-const SPEEDS: { label: string; change: Required<ClockChange> }[] = [
-  { label: '×1', change: { speed: 1, paused: false } },
-  { label: '×10', change: { speed: 10, paused: false } },
-  { label: '×60', change: { speed: 60, paused: false } },
+/** The clock's speeds: game seconds per real second (D65). */
+const SPEEDS: {
+  label: string;
+  title: string;
+  change: Required<ClockChange>;
+}[] = [
+  {
+    label: '×1',
+    title: 'real time: citizens walk at your pace',
+    change: { speed: 1, paused: false },
+  },
+  {
+    label: '×10',
+    title: 'ten times faster: a tick every 6 s',
+    change: { speed: 10, paused: false },
+  },
+  {
+    label: '×60',
+    title: 'a game hour per real minute',
+    change: { speed: 60, paused: false },
+  },
+  {
+    label: '×600',
+    title: 'time-lapse: a game day in 2.4 minutes',
+    change: { speed: 600, paused: false },
+  },
 ];
 
 const STATUS_WORDS: Record<LiveStatus, string> = {
@@ -56,6 +78,9 @@ export function LiveClock({
       <span className="px-1 font-mono" data-testid="live-time">
         day {state.day} · {state.time}
       </span>
+      <span className="text-muted-foreground px-1" data-testid="live-speed">
+        {speedWords(state)}
+      </span>
       <Button
         size="sm"
         variant={state.paused ? 'default' : 'ghost'}
@@ -67,11 +92,12 @@ export function LiveClock({
       >
         pause
       </Button>
-      {SPEEDS.map(({ label, change }) => {
+      {SPEEDS.map(({ label, title, change }) => {
         const active = !state.paused && state.speed === change.speed;
         return (
           <Button
             key={label}
+            title={title}
             size="sm"
             variant={active ? 'default' : 'ghost'}
             aria-pressed={active}
@@ -197,6 +223,10 @@ export function NpcHooks({
         node.dataset.npcActivity = view.activity;
         node.dataset.npcClip = view.clip;
         node.dataset.npcLoaded = String(view.loaded);
+        node.dataset.npcFacing = view.pose.facing
+          .toArray()
+          .map((value) => value.toFixed(4))
+          .join(',');
         node.dataset.npcFeet = view.feet
           .map((value) => value.toFixed(4))
           .join(',');

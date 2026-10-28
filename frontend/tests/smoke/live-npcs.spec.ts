@@ -2,7 +2,7 @@ import { expect, type Locator, type Page, test } from '@playwright/test';
 import { Vector3 } from 'three';
 
 import type { EntitiesView, WorldView } from '../../src/lib/client/types.gen';
-import type { Activity } from '../../src/lib/live/live-contract';
+import { type Activity, tickMs } from '../../src/lib/live/live-contract';
 import { npcLook } from '../../src/lib/live/npc-activity';
 import {
   anchorMapping,
@@ -26,7 +26,8 @@ import {
  * of the running engine once.
  */
 
-const ENTITIES_URL = `${process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:8100'}/api/v1/entities`;
+const API_URL = `${process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:8100'}/api/v1`;
+const ENTITIES_URL = `${API_URL}/entities`;
 
 let terrain: GlobeTerrain;
 let R: number;
@@ -57,6 +58,8 @@ interface Npc {
   loaded: boolean;
   /** Left and right foot in the model's own frame (none while it isn't animated). */
   feet: Vector3[];
+  /** The way the body faces (a unit vector). */
+  facing: Vector3;
 }
 
 type Dataset = { dataset: Record<string, string | undefined> };
@@ -66,7 +69,7 @@ type MockLiveWindow = {
     sayNow(actor: string, words: string): void;
     restartRun(): void;
     setClock(change: { speed?: number; paused?: boolean }): void;
-    entities(): { tick: number };
+    entities(): EntitiesView;
     noRun: boolean;
   };
 };
@@ -96,6 +99,7 @@ async function npcs(page: Page): Promise<Npc[]> {
     clip: data.npcClip ?? '',
     loaded: data.npcLoaded === 'true',
     feet: data.npcFeet ? footPair(data.npcFeet) : [],
+    facing: new Vector3(...(data.npcFacing ?? '0,0,0').split(',').map(Number)),
   }));
 }
 
@@ -123,14 +127,49 @@ function groundUnder(direction: Vector3) {
     : terrain.heightAt(direction);
 }
 
-async function openLive(page: Page, errors: string[], query = '?mockLive=1') {
+/**
+ * The globe on the mock feed. Like a new engine run the mock starts in real time (a tick a real minute); most tests
+ * run it at ×60 (a tick a second, walkers cover 83 m of it), `speed` 1 keeps real time.
+ */
+async function openLive(
+  page: Page,
+  errors: string[],
+  query = '?mockLive=1',
+  speed = 60,
+) {
   const world = await openGlobe(page, errors, query);
   await expect(page.getByTestId('npcs')).toHaveAttribute(
     'data-npcs-ready',
     '15',
   );
   await expect(world).toHaveAttribute('data-live-status', 'live');
+  if (speed !== 1)
+    await page.evaluate(
+      (fast) =>
+        (globalThis as unknown as MockLiveWindow).__pebbleMockLive.setClock({
+          speed: fast,
+        }),
+      speed,
+    );
   return world;
+}
+
+/** Metres from a drawn spot to the nearest point of a route (unit directions), measured on the sphere's surface. */
+function offPath(position: Vector3, route: Vector3[]) {
+  const spot = position.clone().normalize();
+  const leg = new Vector3();
+  const nearest = new Vector3();
+  let best = spot.angleTo(route[0]);
+  for (let k = 0; k < route.length - 1; k++) {
+    leg.subVectors(route[k + 1], route[k]);
+    const t = Math.min(
+      Math.max(nearest.subVectors(spot, route[k]).dot(leg) / leg.lengthSq(), 0),
+      1,
+    );
+    nearest.copy(route[k]).addScaledVector(leg, t).normalize();
+    best = Math.min(best, spot.angleTo(nearest));
+  }
+  return best * R;
 }
 
 const playerOf = async (world: Locator) => {
@@ -443,17 +482,30 @@ test('the clock follows the feed, its speed buttons drive it, and a dropped feed
     .toBeLessThanOrEqual(1);
   await expect(page.getByRole('button', { name: 'time ×60' })).toHaveCount(0);
 
-  await page.getByRole('button', { name: '×60', exact: true }).click();
+  await expect(page.getByTestId('live-speed')).toHaveText('×60');
+  await page.getByRole('button', { name: '×600', exact: true }).click();
+  await expect(page.getByTestId('live-speed')).toHaveText('×600');
   const fast = await tick();
   await page.waitForTimeout(1_000);
-  expect((await tick()) - fast).toBeGreaterThan(20);
+  expect((await tick()) - fast).toBeGreaterThan(5); // a tick every 0.1 s
   await page.getByRole('button', { name: 'pause', exact: true }).click();
+  await expect(page.getByTestId('live-speed')).toHaveText('paused');
   await page.waitForTimeout(300);
   const paused = await tick();
   await page.waitForTimeout(1_500);
   expect(await tick()).toBe(paused);
   await expect(page.getByTestId('live-time')).toHaveText(/^day 0 · \d\d:\d\d$/);
+  // real time: no tick for a real minute, and the sky's clock runs a game second per real second
   await page.getByRole('button', { name: '×1', exact: true }).click();
+  await expect(page.getByTestId('live-speed')).toHaveText('real time');
+  const minutes = async () =>
+    Number(await world.getAttribute('data-game-minutes'));
+  const before = await minutes();
+  await page.waitForTimeout(3_000);
+  expect(await tick()).toBe(paused);
+  expect((await minutes()) - before).toBeGreaterThan(1.5 / 60);
+  expect((await minutes()) - before).toBeLessThan(5 / 60);
+  await page.getByRole('button', { name: '×60', exact: true }).click();
 
   // the server goes away: the client reconnects and resyncs from the new snapshot
   await expect(world).toHaveAttribute('data-live-connects', '1');
@@ -472,40 +524,49 @@ test('the clock follows the feed, its speed buttons drive it, and a dropped feed
   expect(errors).toEqual([]);
 });
 
-test('with ticks far apart the citizens glide the whole tick long', async ({
+test('in real time a walker walks its streamed route at its own pace, facing the way it goes', async ({
   page,
 }) => {
   const errors: string[] = [];
   const world = await openLive(page, errors);
   const tick = async () => Number(await world.getAttribute('data-live-tick'));
-  // a fresh run at ×1; at tick 6 the clock slows to a tick every 8 s, so tick 7 (Kenji walks 82 m to the gate)
-  // takes 8 s: the glide is derived from the feed's speed, not measured between the earlier 1 s frames
-  await page.evaluate(async () => {
+  // a fresh run at ×60 until Kenji sets off for the gate (82 m), then real time: a tick a real minute
+  const kenji = await page.evaluate(async () => {
     const mock = (globalThis as unknown as MockLiveWindow).__pebbleMockLive;
     mock.restartRun();
-    while (mock.entities().tick < 6)
-      await new Promise((done) => setTimeout(done, 20));
-    mock.setClock({ speed: 0.125 });
+    const find = () =>
+      mock.entities().citizens.find((citizen) => citizen.id === 'kenji')!;
+    while (find().activity !== 'walking')
+      await new Promise((done) => setTimeout(done, 10));
+    mock.setClock({ speed: 1 });
+    return { tick: mock.entities().tick, ...find() };
   });
-  await expect.poll(tick, { timeout: 10_000 }).toBe(7);
-  // skip the first second of the glide, then watch the next 4 s (up to ~6 s into the 8 s tick)
-  await page.waitForTimeout(1_000);
-  const samples = await trackNpcs(page, 4_000);
-  expect(await tick()).toBe(7);
-  const walkers = samples[0]
-    .map((npc) => npc.id)
-    .map((id) => samples.map((all) => all.find((npc) => npc.id === id)!))
-    .filter((path) => path[0].position.distanceTo(path.at(-1)!.position) > 10);
-  expect(walkers.map((path) => path[0].id)).toContain('kenji');
-  // and keeps moving smoothly to the end of the window
-  for (const path of walkers) {
-    const steps = path
-      .slice(1)
-      .map((npc, k) => npc.position.distanceTo(path[k].position));
-    expect(Math.max(...steps)).toBeLessThan(5);
-    const lastSecond = steps.slice(-10);
-    expect(lastSecond.filter((step) => step > 0.05).length).toBeGreaterThan(5);
+  await expect(page.getByTestId('live-speed')).toHaveText('real time');
+  expect(kenji.route.length).toBeGreaterThan(1);
+  expect(kenji.speed_mps).toBeCloseTo(5000 / 3600, 1);
+  // let the drawn spot settle onto the new route, then watch 4 s of the tick
+  await page.waitForTimeout(1_500);
+  const route = kenji.route.map(({ unit }) => new Vector3(...unit));
+  const samples: { at: number; npc: Npc }[] = [];
+  for (let elapsed = 0; elapsed < 4_000; elapsed += 100) {
+    samples.push({ at: Date.now(), npc: await npcOf(page, 'kenji') });
+    await page.waitForTimeout(100);
   }
+  expect(await tick()).toBe(kenji.tick);
+  // on the route the engine streamed, never off it
+  for (const { npc } of samples)
+    expect(offPath(npc.position, route)).toBeLessThan(0.3);
+  // at 5 km/h of real time: about 1.4 m/s, not 83 m/s
+  const first = samples[0];
+  const last = samples.at(-1)!;
+  const metres = first.npc.position.distanceTo(last.npc.position);
+  const seconds = (last.at - first.at) / 1000;
+  expect(metres / seconds).toBeGreaterThan(kenji.speed_mps * 0.8);
+  expect(metres / seconds).toBeLessThan(kenji.speed_mps * 1.2);
+  // facing the way it walks, with the gait
+  const going = last.npc.position.clone().sub(first.npc.position).normalize();
+  expect(last.npc.facing.dot(going)).toBeGreaterThan(0.95);
+  expect(last.npc.clip).toBe('Walk');
   expect(errors).toEqual([]);
 });
 
@@ -580,8 +641,16 @@ test('the real feed: the 15 citizens stand where the engine says, on the ground,
   await expect(world).toHaveAttribute('data-live-status', 'live');
   const tick = async () => Number(await world.getAttribute('data-live-tick'));
   const startTick = await tick();
+  // the engine's clock: at ×1 (real time) a tick comes once a real minute
+  const clock = (await (await page.request.get(`${API_URL}/clock`)).json()) as {
+    speed: number;
+    paused: boolean;
+  };
+  test.skip(clock.paused, 'the engine is paused');
+  const nextTick = tickMs(clock.speed) + 5_000;
 
-  // the feed is live: within a few seconds someone drawn moves or starts doing something else
+  // the feed is live: someone drawn walks on or starts doing something else, or at least a tick comes (at night
+  // everyone may be asleep)
   const first = await npcs(page);
   await expect
     .poll(
@@ -592,8 +661,8 @@ test('the real feed: the 15 citizens stand where the engine says, on the ground,
             npc.activity !== was.activity ||
             npc.position.distanceTo(was.position) > 0.01
           );
-        }).length,
-      { timeout: 5_000 },
+        }).length + ((await tick()) > startTick ? 1 : 0),
+      { timeout: nextTick },
     )
     .toBeGreaterThan(0);
 
@@ -619,7 +688,7 @@ test('the real feed: the 15 citizens stand where the engine says, on the ground,
 
   // the engine ticks on and the drawn citizens follow it: at the page's tick, everyone who stood still since the
   // tick before is exactly where the engine has them, and everyone does what the engine says
-  await expect.poll(tick, { timeout: 5_000 }).toBeGreaterThan(startTick);
+  await expect.poll(tick, { timeout: nextTick }).toBeGreaterThan(startTick);
   const at = async (when: number) =>
     (
       (await (
@@ -654,6 +723,40 @@ test('the real feed: the 15 citizens stand where the engine says, on the ground,
       { timeout: 15_000 },
     )
     .toEqual([]);
+
+  // between ticks the walkers walk the routes the engine streamed: they never cut off them (through a wall). Only
+  // checked with ticks far apart (×1 real time, up to ×6): at ×60 a tick lasts a second and the drawn spot is
+  // still easing onto the new route
+  if (tickMs(clock.speed) >= 10_000)
+    await expect
+      .poll(
+        async () => {
+          const when = await tick();
+          const walkers = (await at(when)).filter(
+            (citizen) => citizen.route.length > 1,
+          );
+          await page.waitForTimeout(1_000); // the drawn spot settles onto the tick's route
+          const off: string[] = [];
+          for (let k = 0; k < 10; k++) {
+            const shown = await npcs(page);
+            for (const citizen of walkers) {
+              const npc = shown.find(
+                (candidate) => candidate.id === citizen.id,
+              )!;
+              const route = citizen.route.map(
+                ({ unit }) => new Vector3(...unit),
+              );
+              const metres = offPath(npc.position, route);
+              if (metres > 0.5)
+                off.push(`${citizen.id}: ${metres.toFixed(2)} m`);
+            }
+            await page.waitForTimeout(100);
+          }
+          return (await tick()) === when ? off : ['the page moved on'];
+        },
+        { timeout: 15_000 },
+      )
+      .toEqual([]);
 
   // the townspeople near the spawn play their activity's clip
   await expect

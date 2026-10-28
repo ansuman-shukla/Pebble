@@ -1211,6 +1211,17 @@
             "type": "number",
             "title": "Heading Deg"
           },
+          "route": {
+            "items": {
+              "$ref": "#/components/schemas/RoutePoint"
+            },
+            "type": "array",
+            "title": "Route"
+          },
+          "speed_mps": {
+            "type": "number",
+            "title": "Speed Mps"
+          },
           "activity": {
             "type": "string",
             "enum": [
@@ -1283,6 +1294,8 @@
           "region",
           "position",
           "heading_deg",
+          "route",
+          "speed_mps",
           "activity",
           "cell",
           "alive",
@@ -1665,7 +1678,7 @@
             "anyOf": [
               {
                 "type": "integer",
-                "maximum": 60.0,
+                "maximum": 600.0,
                 "minimum": 1.0
               },
               {
@@ -2683,6 +2696,38 @@
           "cells"
         ],
         "title": "River"
+      },
+      "RoutePoint": {
+        "properties": {
+          "unit": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "Unit"
+          },
+          "height_m": {
+            "type": "number",
+            "title": "Height M"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "unit",
+          "height_m"
+        ],
+        "title": "RoutePoint"
       },
       "Site": {
         "properties": {

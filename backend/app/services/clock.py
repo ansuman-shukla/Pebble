@@ -21,7 +21,7 @@ class ClockView(BaseModel):
     game_time: int  # town time in game minutes since day 0 00:00
     day: int
     time: str  # town time "HH:MM"
-    speed: int  # ticks (game minutes) per real second
+    speed: int  # game seconds per real second (1 = real time; a tick every 60 / speed real seconds)
     paused: bool
 
 

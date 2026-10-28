@@ -13,8 +13,13 @@ from app.core.config import settings
 from app.db.models import EngineCommand, Run
 from app.engine import Clock, EngineLoop, open_loop
 from app.main import app
+from app.observability.replay import from_snapshot
+from app.observability.store import latest_snapshot
 from app.services.clock import read_clock
+from app.services.entities import world_at
+from app.sim.actions import walk_ahead
 from app.sim.citizens import DEV_CITIZENS
+from app.sim.snapshot import SimSnapshot
 from app.sim.vec import lat_lon_deg
 from app.sim.world import SimWorld
 from app.world.store import WorldKey
@@ -80,7 +85,9 @@ def test_admin_clock_queues_a_command_the_engine_applies(
     assert client.get(f"{API}/clock").json()["paused"] is True
     assert client.get(f"{API}/clock").json()["speed"] == 20
     assert client.post(f"{API}/admin/clock", json={}).status_code == 422
-    assert client.post(f"{API}/admin/clock", json={"speed": 61}).status_code == 422
+    assert client.post(f"{API}/admin/clock", json={"speed": 601}).status_code == 422
+    assert client.post(f"{API}/admin/clock", json={"speed": 0}).status_code == 422
+    assert client.post(f"{API}/admin/clock", json={"speed": 600}).status_code == 202  # ×600 time-lapse is the top
 
 
 def test_entities_now_match_the_simulation(client: TestClient, loop: EngineLoop) -> None:
@@ -104,6 +111,37 @@ def test_entities_now_match_the_simulation(client: TestClient, loop: EngineLoop)
     lat, lon = lat_lon_deg(loop.sim.citizen("dev-aiko").position)
     assert (aiko["position"]["lat"], aiko["position"]["lon"]) == pytest.approx((lat, lon))
     assert lat == pytest.approx(38 - 104 / (2000 * math.pi / 180), abs=0.05)  # ~104 m south of the town centre
+
+
+def test_entities_carry_the_walk_ahead_even_at_a_snapshot_tick(
+    client: TestClient, api_session: Session, sim_world: SimWorld
+) -> None:
+    loop = open_loop(api_session, sim_world, KEY, new_run=True, citizens=DEV_CITIZENS, clock=Clock(), brains=False)
+    loop.run_ticks(59, headless=True)
+    WorldApi(loop.sim, "dev-aiko").walk_to_place("the west gate")  # ~90 m: still walking after tick 60
+    loop.run_ticks(1, headless=True)  # tick 60 is snapshotted; its summary has the walk ahead, the snapshot doesn't
+    expected, speed_mps = walk_ahead(loop.sim.core, loop.sim.citizen("dev-aiko"))
+    assert len(expected) >= 2
+    for params in ({}, {"at": 60}):
+        aiko = next(c for c in client.get(f"{API}/entities", params=params).json()["citizens"] if c["id"] == "dev-aiko")
+        assert aiko["activity"] == "walking"
+        assert aiko["route"] == [point.model_dump(mode="json") for point in expected]
+        assert aiko["route"][0]["unit"] == aiko["position"]["unit"]
+        assert aiko["speed_mps"] == pytest.approx(speed_mps)
+    before = next(
+        c for c in client.get(f"{API}/entities", params={"at": 59}).json()["citizens"] if c["id"] == "dev-aiko"
+    )
+    assert (before["route"], before["speed_mps"]) == ([], 0.0)  # she has just set off
+
+    loop.run_ticks(1, headless=True)
+    WorldApi(loop.sim, "dev-aiko").walk_to_place("the main gate")
+    loop.run_ticks(1, headless=True)  # tick 62: on her way again
+    walking = next(c for c in client.get(f"{API}/entities").json()["citizens"] if c["id"] == "dev-aiko")
+    assert walking["route"]
+    WorldApi(loop.sim, "dev-aiko").rest(10)  # stops the walk between ticks: she doesn't move in tick 63
+    loop.run_ticks(1, headless=True)
+    after = next(c for c in client.get(f"{API}/entities").json()["citizens"] if c["id"] == "dev-aiko")
+    assert (after["activity"], after["route"], after["speed_mps"]) == ("resting", [], 0.0)
 
 
 @pytest.mark.usefixtures("loop")
@@ -146,3 +184,15 @@ def test_runs_are_listed_newest_first(api_session: Session, sim_world: SimWorld,
     assert client.get(f"{API}/clock").json()["run_id"] == second.run.id
     assert client.get(f"{API}/clock", params={"run_id": first.run.id}).json()["run_id"] == first.run.id
     assert len(api_session.exec(select(Run)).all()) >= 2
+
+
+def test_replaying_from_the_snapshot_before_a_tick_rebuilds_the_snapshotted_world(
+    api_session: Session, loop: EngineLoop
+) -> None:
+    """Spectator endpoints share `world_at`, which starts from the snapshot before the asked tick: at a snapshot
+    tick its replay (knowledge, inventories, bodies, positions) must equal that snapshot."""
+    snapshot_row = latest_snapshot(api_session, loop.run.id, at_or_before=60)
+    assert snapshot_row is not None and snapshot_row.tick == 60
+    world = world_at(api_session, loop.run.id, at=60)
+    assert world is not None and world.tick == 60
+    assert world.state.same_as(from_snapshot(SimSnapshot.model_validate(snapshot_row.state)))

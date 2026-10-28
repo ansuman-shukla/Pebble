@@ -13,6 +13,7 @@ from app.world_api.models import TimeOfDay
 DAY_MINUTES = 24 * 60
 START_MINUTE = 8 * 60
 TICKS_PER_HOUR = 60
+SECONDS_PER_TICK = 60  # game seconds
 NIGHT_ALTITUDE_DEG = -6.0  # darker than civil twilight is night
 
 
