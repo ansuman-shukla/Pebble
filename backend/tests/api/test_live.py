@@ -63,6 +63,9 @@ def test_the_live_feed_streams_snapshot_events_and_ticks(client: TestClient, com
         assert {c.region for c in snapshot.citizens} == {"town", "band_a", "band_b"}
         genzo = next(c for c in snapshot.citizens if c.id == "genzo")
         assert (genzo.role, genzo.activity) == ("rice farmer", "idle")
+        assert {a.id for a in snapshot.animals} == set(loop.sim.state.animals)
+        assert {a.kind for a in snapshot.animals} >= {"deer", "wolf", "fish", "duck"}
+        assert {f.id for f in snapshot.fires} == set(loop.sim.state.fires)
 
         WorldApi(loop.sim, "genzo").say("Good morning, Aiko!")
         WorldApi(loop.sim, "hana").walk_to_place("the storehouses")  # over 100 m: still walking at tick 1
@@ -83,6 +86,11 @@ def test_the_live_feed_streams_snapshot_events_and_ticks(client: TestClient, com
         assert hana.activity == "walking" and hana.position.unit != start.position.unit
         talker = next(c for c in ticks[0].citizens if c.id == "genzo")
         assert talker.activity == "talking"
+        moved = {a.id: a for a in ticks[-1].animals}
+        assert {a.id: (a.position.unit, a.activity) for a in ticks[-1].animals} == {
+            a.id: (a.position, a.activity) for a in loop.sim.state.animals.values()
+        }
+        assert any(moved[a.id].position.unit != a.position.unit for a in snapshot.animals)  # animals move live
 
         queue_command(loop.store.session, loop.run.id, "clock", {"speed": 7})
         loop.apply_commands()  # commits the new speed without a tick: the feed notices within a second

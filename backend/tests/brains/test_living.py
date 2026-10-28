@@ -1,8 +1,10 @@
-"""The M7 done-when: the 15 scripted citizens live 10 game days headless without getting stuck.
+"""The M7 and M6 done-whens: the 15 scripted citizens live 10 game days headless among the animals.
 
 One 10-day run (~40 s) feeds every test here: nobody dies (deaths only from real causes, and the default cast
 doesn't starve or parch), everyone keeps making progress and moving, nobody passes through the town's walls,
-bands sleep at camp at night and forage by day, the farmers work the fields and the storehouse fills up.
+bands sleep at camp at night and forage by day, the farmers work the fields and the storehouse fills up; animal
+populations stay within their caps, predators hurt people only at dusk or night when they're alone and away from
+fire, hunters hunt, the camp fires burn through the nights and the guard lights the gate's fire baskets.
 """
 
 from collections import Counter, defaultdict
@@ -11,8 +13,11 @@ from dataclasses import dataclass, field
 import pytest
 
 from app.engine import citizen_brains
+from app.sim.animals import DUSK_ALTITUDE_DEG, GROUP_M, GROUP_SAFE
 from app.sim.citizens import CITIZENS, load_citizens
 from app.sim.clock import DAY_MINUTES
+from app.sim.fauna import HERBIVORES, PREDATORS
+from app.sim.fire import SAFE_M, near_lit_fire
 from app.sim.navigation import Planner
 from app.sim.perception import HOME_RADIUS_M
 from app.sim.simulation import Simulation
@@ -37,6 +42,11 @@ class Life:
     night: dict[str, list[tuple[bool, float]]] = field(default_factory=lambda: defaultdict(list))  # (asleep, m home)
     rice: list[int] = field(default_factory=list)  # in the storehouse at the end of each day
     said: int = 0
+    attacks: list[tuple[str, float, int, bool, bool]] = field(default_factory=list)  # who, sun, near, fire, town
+    populations: list[Counter[str]] = field(default_factory=list)  # living animals by kind at the end of each day
+    hunts_won: int = 0
+    camp_fire: Counter[str] = field(default_factory=Counter)  # (camp) minutes lit / (camp:night) night minutes
+    baskets_lit: list[int] = field(default_factory=list)  # gate baskets burning at local midnight, each night
 
 
 @pytest.fixture(scope="module")
@@ -59,8 +69,24 @@ def life(sim_world: SimWorld, planner: Planner) -> Life:
         sim.step()
         day = (sim.tick - 1) // DAY_MINUTES
         for event in sim.drain():
-            if event.type == "died" and event.actor_id is not None:
+            if event.type == "died" and event.actor_kind == "citizen" and event.actor_id is not None:
                 out.deaths.append((event.actor_id, str(getattr(event.payload, "cause", ""))))
+            elif event.type == "injured" and event.actor_kind == "citizen" and event.actor_id is not None:
+                words, _ = sim.core.hurt.get(event.actor_id, ("", 0))
+                if words.endswith("attacks you"):  # a predator going for them (not game turning on a hunter)
+                    victim = sim.citizen(event.actor_id)
+                    near = sum(sim.core.distance_m(o.position, victim.position) <= GROUP_M for o in sim.core.living())
+                    out.attacks.append(
+                        (
+                            victim.id,
+                            sim.core.altitude(victim.position),
+                            near,
+                            near_lit_fire(sim.core, victim.position, SAFE_M),
+                            sim_world.town_point(victim.position) is not None,
+                        )
+                    )
+            elif event.type == "action_finished" and getattr(event.payload, "action", "") == "hunt":
+                out.hunts_won += 1
             elif event.type == "said":
                 out.said += 1
             elif event.type == "action_started" and event.actor_id is not None:
@@ -82,8 +108,16 @@ def life(sim_world: SimWorld, planner: Planner) -> Life:
             if citizen.region != "town" and 0.5 <= local_hour(sim, citizen.id) < 4.0:
                 home = sim_world.structures[str(citizen.home)]
                 out.night[citizen.id].append((citizen.body.asleep, sim_world.distance_m(citizen.position, home.door)))
+        for camp in ("band_a_camp:fire-pit", "band_b_camp:fire-pit"):
+            fire = sim.state.fires[camp]
+            if sim.core.is_night_at(fire.position):
+                out.camp_fire[f"{camp}:night"] += 1
+                out.camp_fire[camp] += fire.lit
+        if (sim.tick + 8 * 60) % DAY_MINUTES == 0:  # midnight at the town
+            out.baskets_lit.append(sum(sim.state.fires[b].lit for b in ("main-gate-fire-w", "main-gate-fire-e")))
         if sim.tick % DAY_MINUTES == 0:
             out.rice.append(sim.state.stores[STORE].get("rice", 0))
+            out.populations.append(Counter(a.kind for a in sim.state.animals.values() if a.alive))
     return out
 
 
@@ -134,3 +168,29 @@ def test_the_farmers_fill_the_storehouse(life: Life) -> None:
     assert len(rice) == DAYS + 1
     assert rice[-1] > rice[0] + 200  # the harvest outpaces what six people eat
     assert all(later >= earlier for earlier, later in zip(rice[1:], rice[2:], strict=False))
+
+
+def test_animal_populations_stay_within_caps_among_the_people(life: Life) -> None:
+    caps: Counter[str] = Counter()
+    for group in life.sim.state.groups.values():
+        caps[group.kind] += group.size
+    assert len(life.populations) == DAYS
+    for living in life.populations:
+        assert all(living[kind] <= cap for kind, cap in caps.items())
+        assert all(living[kind] >= caps[kind] // 2 for kind in HERBIVORES)  # hunting pressure, no extinction
+        assert all(living[kind] >= caps[kind] - 1 for kind in PREDATORS)
+
+
+def test_predators_hurt_people_only_alone_at_dusk_or_night_away_from_fire(life: Life) -> None:
+    for victim, sun, near, by_fire, in_town in life.attacks:
+        assert sun < DUSK_ALTITUDE_DEG, f"{victim} was attacked by day"
+        assert near < GROUP_SAFE, f"{victim} was attacked in a group of {near}"
+        assert not by_fire and not in_town, f"{victim} was attacked by a fire or inside the walls"
+
+
+def test_hunters_hunt_and_the_fires_burn_through_the_night(life: Life) -> None:
+    assert life.hunts_won >= DAYS // 2  # four hunters bring down game every other day or so
+    for camp in ("band_a_camp:fire-pit", "band_b_camp:fire-pit"):
+        share = life.camp_fire[camp] / life.camp_fire[f"{camp}:night"]
+        assert share > 0.8, f"{camp} burned only {share:.0%} of the night"
+    assert life.baskets_lit[1:] and all(lit == 2 for lit in life.baskets_lit[1:])  # the guard lights both baskets
