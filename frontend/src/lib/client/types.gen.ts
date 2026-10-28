@@ -39,6 +39,33 @@ export type Anchor = {
 };
 
 /**
+ * AnimalEntity
+ */
+export type AnimalEntity = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: 'deer' | 'elk' | 'antelope' | 'rabbit' | 'hare' | 'boar' | 'goat' | 'duck' | 'fox' | 'wolf' | 'bear' | 'lion' | 'polar_bear' | 'shark' | 'fish';
+    /**
+     * Group
+     */
+    group: string;
+    position: Position;
+    /**
+     * Heading Deg
+     */
+    heading_deg: number;
+    /**
+     * Activity
+     */
+    activity: 'idle' | 'grazing' | 'walking' | 'running' | 'hunting' | 'sleeping' | 'dead';
+};
+
+/**
  * CitizenEntity
  */
 export type CitizenEntity = {
@@ -74,7 +101,7 @@ export type CitizenEntity = {
     /**
      * Activity
      */
-    activity: 'idle' | 'walking' | 'sleeping' | 'resting' | 'gathering' | 'eating' | 'drinking' | 'working' | 'talking' | 'dead';
+    activity: 'idle' | 'walking' | 'running' | 'sleeping' | 'resting' | 'gathering' | 'eating' | 'drinking' | 'working' | 'hunting' | 'fishing' | 'tending_fire' | 'talking' | 'dead';
     /**
      * Cell
      */
@@ -201,6 +228,14 @@ export type EntitiesView = {
      * Citizens
      */
     citizens: Array<CitizenEntity>;
+    /**
+     * Animals
+     */
+    animals: Array<AnimalEntity>;
+    /**
+     * Fires
+     */
+    fires: Array<FireEntity>;
 };
 
 /**
@@ -311,6 +346,29 @@ export type Extent = {
      * Max Z
      */
     max_z: number;
+};
+
+/**
+ * FireEntity
+ */
+export type FireEntity = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: 'pit' | 'basket' | 'campfire';
+    position: Position;
+    /**
+     * Lit
+     */
+    lit: boolean;
+    /**
+     * Strength
+     */
+    strength: number;
 };
 
 /**
@@ -436,6 +494,14 @@ export type LiveState = {
      * Citizens
      */
     citizens: Array<CitizenEntity>;
+    /**
+     * Animals
+     */
+    animals: Array<AnimalEntity>;
+    /**
+     * Fires
+     */
+    fires: Array<FireEntity>;
 };
 
 /**
