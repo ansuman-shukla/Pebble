@@ -123,7 +123,7 @@ def _store_rice(ctx: Context, score: float = WORK + 1) -> Option:
 
 
 def _farm(ctx: Context) -> list[Option]:
-    rice = carried_food(ctx.perception).get("rice", 0)
+    rice = carried_food(ctx.perception.you).get("rice", 0)
     if ctx.phase == "dusk" and rice:
         return [_store_rice(ctx, 46)]  # bring the day's harvest in before supper
     if not _daytime(ctx):
@@ -258,7 +258,7 @@ class Forager:
 def _forage(ctx: Context, style: Forager) -> list[Option]:
     p, api = ctx.perception, ctx.api
     home_area = ctx.profile.home_area
-    food = carried_food(p)
+    food = carried_food(p.you)
     hungry_empty = ctx.needs.hunger >= 2 and not food
     if ctx.phase == "dusk":
         return _evening_chores(ctx) + _keep_fire(ctx, 48.0)
@@ -320,7 +320,7 @@ def _hunt(ctx: Context) -> list[Option]:
     p, api = ctx.perception, ctx.api
     if "hunting" not in ctx.profile.skills or not _daytime(ctx) or ctx.done_today("hunt"):
         return []
-    if carried_food(p).get("meat"):
+    if carried_food(p.you).get("meat"):
         ctx.mark_done("hunt")
         return [] if at_home(p) else [Option(WORK + 5, "bring the meat home", lambda: api.walk_to_place("home"))]
     tries = _count_today(ctx, "hunt-try")

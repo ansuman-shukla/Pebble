@@ -31,7 +31,7 @@ from app.brains.senses import (
     water_in_view,
 )
 from app.core.rng import Rng
-from app.world_api.facade import WorldApi
+from app.world_api.facade import ActionHandle, WorldApi
 from app.world_api.models import Nearness, Perception
 
 STOREHOUSES = "the storehouses"
@@ -81,6 +81,10 @@ class UtilityBrain:
 
     def decide(self) -> None:
         api, notes = self.api, self.api.notes
+        again = self.eat_or_drink_again()
+        if again is not None:
+            notes["action"] = again.number
+            return
         perception = api.look_around()
         if perception.place == "asleep":  # woken but still lying there: the sleep goes on
             return
@@ -109,6 +113,25 @@ class UtilityBrain:
         notes["action"] = handle.number
         if best.name == "sleep" and handle.result is None:
             notes["asleep"] = True
+
+    def eat_or_drink_again(self) -> ActionHandle | None:
+        """After a meal or a drink, feel whether it was enough (`check_self`) before looking about: still hungry with
+        food left (the berries ran out, there are nuts), eat on; still thirsty by the water, drink on."""
+        notes = self.api.notes
+        number = notes.get("action")
+        last = notes.get("last")
+        if last not in ("eat", "eat by the fire", "drink") or not isinstance(number, int):
+            return None
+        result = self.api.handle(number).result
+        if result is None or result.outcome != "done":
+            return None
+        you = self.api.check_self()
+        needs = Needs.read(you.feeling)
+        if last == "drink":
+            return self.api.drink() if needs.thirst >= 1 else None
+        food = carried_food(you)
+        left = [name for name in EAT_ORDER if name in food]
+        return self.api.eat(left[0]) if needs.hunger >= 1 and left else None
 
     # --- options ---
 
@@ -150,7 +173,7 @@ class UtilityBrain:
         if needs.hunger < 2 and not mealtime:
             return None
         score = {1: 45.0, 2: 85.0, 3: 105.0}[needs.hunger]
-        food = carried_food(p)
+        food = carried_food(p.you)
         raw = [name for name in RAW if name in food]
         if raw and fire_here(p) in ("burning", "low"):
             return Option(score + 1, "eat by the fire", lambda: self.api.eat(raw[0]))
