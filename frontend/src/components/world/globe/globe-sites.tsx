@@ -4,7 +4,7 @@ import { Vector3 } from 'three';
 import { TownCitizens } from '@/components/world/town/town-citizens';
 import { TownGround } from '@/components/world/town/town-ground';
 import { TownPlacements } from '@/components/world/town/town-placements';
-import type { TownPlacement, TownView } from '@/lib/client/types.gen';
+import type { Site, TownPlacement, TownView } from '@/lib/client/types.gen';
 import type { Point } from '@/lib/world/collision';
 import {
   anchorMapping,
@@ -12,7 +12,6 @@ import {
   type SiteMapping,
 } from '@/lib/world/globe';
 import type { LabelStore } from '@/lib/world/label-store';
-import type { Site } from '@/lib/world/world-view';
 
 /*
  * Sites on the planet. The town lays its own ground disc at the plateau height (the terrain leaves a hole for
@@ -95,7 +94,7 @@ function SitePlacements({
   }, [terrain, mapping, site]);
   return (
     <TownPlacements
-      placements={site.placements}
+      placements={site.placements ?? []}
       mapping={mapping}
       lift={lift}
     />
@@ -113,7 +112,9 @@ export function GlobeSites({
   return (
     <>
       {sites
-        .filter((site) => site.kind !== 'town' && site.placements.length > 0)
+        .filter(
+          (site) => site.kind !== 'town' && (site.placements?.length ?? 0) > 0,
+        )
         .map((site) => (
           <SitePlacements key={site.id} site={site} terrain={terrain} />
         ))}

@@ -38,7 +38,7 @@ import {
 import { useLabelStore } from '@/hooks/use-label-store';
 import { useTown } from '@/hooks/use-town';
 import { useWorld } from '@/hooks/use-world';
-import type { TownView } from '@/lib/client/types.gen';
+import type { TownView, WorldView } from '@/lib/client/types.gen';
 import { BIOME_PROPS } from '@/lib/world/biome-props';
 import {
   FAST_RATE,
@@ -63,7 +63,6 @@ import {
 import { biomeColor } from '@/lib/world/globe-mesh';
 import type { LabelStore } from '@/lib/world/label-store';
 import { createScatter, type Scatter } from '@/lib/world/scatter';
-import type { WorldView } from '@/lib/world/world-view';
 
 /*
  * The planet at /: terrain, ocean, rivers, sites and the castle town, a sun on the game clock, and the player

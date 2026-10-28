@@ -17,8 +17,12 @@ import {
   uint32ToBase64,
   encodeBase64,
 } from './globe';
-import type { TownPlacement } from '@/lib/client/types.gen';
-import type { River, Site, WorldView } from './world-view';
+import type {
+  River,
+  Site,
+  TownPlacement,
+  WorldView,
+} from '@/lib/client/types.gen';
 
 const MOCK_BIOME_NAMES = [
   'deep_ocean',

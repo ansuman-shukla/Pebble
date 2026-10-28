@@ -6,7 +6,7 @@
 import { Matrix4, Vector3 } from 'three';
 
 import type { LocalMapping } from './local-mapping';
-import type { Anchor, WorldView } from './world-view';
+import type { Anchor, WorldView } from '@/lib/client/types.gen';
 
 /** The rendered water surface above sea level: keeps beaches dry and shallows visibly under water. */
 export const WATER_SURFACE = 0.2;
