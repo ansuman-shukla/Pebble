@@ -12,10 +12,11 @@ from app.observability.events import (
     ItemLocation,
     JsonScalar,
     ResourceChanged,
+    RoutePoint,
     Said,
 )
 from app.sim.bodies import COLLAPSE_WAKE_ENERGY, Crossing
-from app.sim.clock import NIGHT_ALTITUDE_DEG, sun_altitude_deg, sun_direction
+from app.sim.clock import NIGHT_ALTITUDE_DEG, SECONDS_PER_TICK, sun_altitude_deg, sun_direction
 from app.sim.core import HEARING_M, KEPT_HEARD, REACH_M, SimCore
 from app.sim.ecology import schedule_regrowth
 from app.sim.items import ITEMS, RESOURCE_INDEX, amount_words
@@ -58,6 +59,7 @@ from app.world_api.models import (
 
 WALK_M_PER_TICK = 5000 / 60  # 5 km/h on flat ground
 EXHAUSTED_PACE = 0.5
+WALK_AHEAD_TICKS = 2  # how much of a walker's path spectators get: enough to draw the walk until the next tick
 ARRIVE_M = 2.0  # close enough to a person
 FOLLOW_REPLAN_M = 3.0
 GATHER_MINUTES = 20
@@ -662,8 +664,7 @@ def _advance_walk(core: SimCore, citizen: Citizen, walk: ActionState) -> None:
             walk.route, walk.goal, walk.leg, walk.along_m = route, person.position, 0, 0.0
     if walk.route is None:
         raise ValueError(f"walk {walk.number} of {citizen.id} has no route")
-    pace = citizen.traits.speed * (EXHAUSTED_PACE if citizen.body.energy <= 10 else 1.0)
-    progress = walk_along(walk.route, walk.leg, walk.along_m, WALK_M_PER_TICK * pace, core.world.radius_m)
+    progress = walk_along(walk.route, walk.leg, walk.along_m, WALK_M_PER_TICK * walk_pace(citizen), core.world.radius_m)
     walk.leg, walk.along_m = progress.leg, progress.along_m
     core.place_at(citizen, progress.position)
     if not progress.arrived:
@@ -682,6 +683,34 @@ def _advance_walk(core: SimCore, citizen: Citizen, walk: ActionState) -> None:
         else:
             arrive = f"You reach about where {place.name} should be, but you don't find it."
     core.end_action(citizen, "done", arrive)
+
+
+def walk_pace(citizen: Citizen) -> float:
+    """Walking cost budget per tick as a share of WALK_M_PER_TICK (age, halved when exhausted)."""
+    return citizen.traits.speed * (EXHAUSTED_PACE if citizen.body.energy <= 10 else 1.0)
+
+
+def walk_ahead(core: SimCore, citizen: Citizen) -> tuple[list[RoutePoint], float]:
+    """A walker's planned path for the next WALK_AHEAD_TICKS from where they stand (the first point), and their
+    ground speed on the current leg in metres per game second; ([], 0) when they aren't walking on.
+
+    The points are the route's own corners plus where the look-ahead ends on a leg, so the path between them is as
+    walkable as the route (in town: grid corners, no corner cutting).
+    """
+    walk = citizen.action
+    if walk is None or walk.kind != "walk_to" or walk.route is None or walk.leg >= len(walk.route.costs):
+        return [], 0.0
+    route, world = walk.route, core.world
+    pace = walk_pace(citizen)
+    end = walk_along(route, walk.leg, walk.along_m, WALK_AHEAD_TICKS * WALK_M_PER_TICK * pace, world.radius_m)
+    points: list[RoutePoint] = []
+    cell = citizen.cell
+    for unit in (citizen.position, *route.points[walk.leg + 1 : end.leg + 1], end.position):
+        if points and unit == points[-1].unit:
+            continue
+        cell = world.nearest_cell(unit, cell)
+        points.append(RoutePoint(unit=unit, height_m=world.ground_height(unit, cell)))
+    return points, WALK_M_PER_TICK * pace / route.costs[walk.leg] / SECONDS_PER_TICK
 
 
 def _advance_sleep(core: SimCore, citizen: Citizen) -> None:
