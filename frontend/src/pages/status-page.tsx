@@ -30,7 +30,7 @@ export function StatusPage() {
   const databaseStatus = data?.database ?? 'unknown';
 
   return (
-    <main className="bg-muted flex min-h-svh items-center justify-center p-6">
+    <main className="bg-muted flex h-full items-center justify-center p-6">
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>
