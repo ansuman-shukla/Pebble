@@ -48,6 +48,14 @@ const router = createBrowserRouter([
         }),
       },
       {
+        path: 'conversations',
+        hydrateFallbackElement: pageLoading,
+        lazy: async () => ({
+          Component: (await import('@/pages/conversations-page'))
+            .ConversationsPage,
+        }),
+      },
+      {
         path: 'gallery',
         hydrateFallbackElement: pageLoading,
         lazy: async () => ({

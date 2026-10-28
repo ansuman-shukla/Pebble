@@ -4,6 +4,7 @@ import { NavLink, Outlet } from 'react-router';
 const LINKS = [
   { to: '/', label: 'World', end: true },
   { to: '/people', label: 'People', end: false },
+  { to: '/conversations', label: 'Conversations', end: true },
   { to: '/gallery', label: 'Gallery', end: true },
   { to: '/status', label: 'Status', end: true },
 ];
