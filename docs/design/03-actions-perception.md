@@ -20,8 +20,11 @@ A perception describes, in words:
 - **Self:** body in coarse words ("very thirsty", "a little tired", "your leg hurts"), what you carry.
 - **Place:** the place name if known ("the river by the camp"), else a description ("an unfamiliar pine forest").
 - **Time:** from the sun ("late afternoon", "the sun is about to set").
-- **Others:** people you know by name; strangers by appearance ("a man in a fur cloak"); animals by kind.
-- **Things:** visible food, water, items, structures, resources ("bushes heavy with berries").
+- **Others:** people you know by name; strangers by appearance ("a man in a fur cloak"); animals by kind, a group
+  once ("a herd of deer", "two wolves", "a shoal of fish") with what it is doing ("grazing", "asleep", "watching
+  you", "coming at you"); remains as "the remains of a deer".
+- **Things:** visible food, water, items, structures, resources ("bushes heavy with berries"), fires ("a campfire
+  burning", "embers glowing", "a cold fire basket"). Stacks of one item lying together are one heap.
 - **Heard:** speech within range, with who said it if you can see them.
 
 Each citizen keeps **knowledge** the world tracks for it: known places (its mental map), known people, skills.
@@ -40,19 +43,20 @@ interrupted.
 | `walk_to(target)` | durative | a known place, a visible person/thing, or a direction + rough distance |
 | `follow(person)` | durative | until they stop, vanish or you're interrupted |
 | `gather(resource)` | durative | berries, roots, nuts, reeds, wood, flint… |
-| `fish()` / `hunt(animal)` | durative | outcome by skill, tool, strength, group; can hurt you |
-| `eat(item)` / `drink()` | durative | from inventory or within reach |
-| `pick_up(item)` / `drop(item)` / `give(item, person)` | instant | within reach; giving needs acceptance |
-| `make_fire()` / `feed_fire()` | durative | needs wood and the skill |
+| `fish()` / `hunt(animal)` | durative | outcome by skill, tool (a spear), strength, group; can hurt you. Fish: at a river, lake or shallow sea shore. Hunt: an animal in view; you creep up on it, then strike |
+| `eat(item)` / `drink()` | durative | from inventory or within reach; raw meat or fish eaten beside a fire is roasted (more filling), raw it can make you sick |
+| `pick_up(item)` / `drop(item)` / `give(item, person)` | instant | within reach (for town folk a storehouse within reach counts); giving needs acceptance |
+| `make_fire()` / `feed_fire()` | durative | make: the fire skill and wood; lights a fire pit or basket within reach, else a campfire where you stand. Feed: wood carried, then wood lying beside the fire. A fire burns down unless fed |
 | `rest(minutes)` / `sleep()` | durative | sleep ends at morning, on danger or when rested |
 | `work(task)` | durative | role tasks (town): farm, store food, guard, trade, weave, govern; needs the skill and the place (cook, repair later) |
-| `attack(target)` | durative | people or animals; consequences are real |
-| `flee()` | durative | away from the nearest danger |
+| `attack(target)` | durative | people within reach or animals in view; consequences are real (a struck predator may bite back) |
+| `flee()` | durative | run away from the nearest dangerous animal in view |
 | `wait(minutes)` | durative | do nothing, stay alert |
 | `recall(about)` | instant | agent phase only: "try to remember…" (see `05-memory.md`) |
 
 **Interrupts** end a durative action early and say why: someone speaks to you or near you, a stranger or an animal
-comes into view, someone you know walks up to you (within ~10 m), you are hurt, a need crosses a threshold, night
+comes into view, someone you know walks up to you (within ~10 m), a predator comes at you, you are hurt (this wakes sleepers too),
+a need crosses a threshold, night
 falls, the target is gone. People you know merely walking by don't interrupt. The result always says
 what happened and what changed ("You stop walking: a wolf is watching you from the trees, 40 paces away.").
 
