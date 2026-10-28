@@ -30,6 +30,11 @@ const BIOME_COLORS: Record<string, string> = {
   volcanic: '#5e5450',
 };
 const FALLBACK_COLOR = '#ff00ff';
+/** Lakes are terrain faces flat at their surface height, drawn the colour the sea shows near its shores. */
+const LAKE_WATER = '#4284b0';
+/** How far a dry face touching water turns to sand: a sea beach, a lake shore. */
+const BEACH_SAND = 0.6;
+const LAKE_SHORE_SAND = 0.25;
 
 /** The terrain colour of a biome (by name, so the client never depends on the id order). */
 export const biomeColor = (name: string) =>
@@ -44,14 +49,17 @@ function jitter(index: number) {
 
 /**
  * Non-indexed terrain: every triangle gets its own vertices and one colour (flat, faceted shading). A face
- * above the water takes the colours of its land corners (a shore face turns to sand), a face under it those
- * of its water corners, so no sea colour shows on dry land.
+ * above the sea takes the colours of its land corners (a shore face turns to sand), a face under it those
+ * of its water corners, so no sea colour shows on dry land. Lakes lie above the sea at their surface height:
+ * a face whose corners are all lake is the lake's water.
  */
 export function terrainGeometry(globe: Globe, biomeNames: readonly string[]) {
   const { positions, heights, biomes, triangles, radius } = globe;
   const palette = biomeNames.map((name) => new Color(biomeColor(name)));
   const sand = new Color(biomeColor('beach'));
   const shallows = new Color(biomeColor('shallow_ocean'));
+  const lake = biomeNames.indexOf('lake');
+  const lakeWater = new Color(LAKE_WATER);
   const count = triangles.length;
   const vertices = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
@@ -66,6 +74,12 @@ export function terrainGeometry(globe: Globe, biomeNames: readonly string[]) {
       height += heights[cell] / 3;
     });
     const dry = height > WATER_SURFACE;
+    const lakeCorners = [...cells].filter((cell) => biomes[cell] === lake);
+    if (dry && lakeCorners.length === 3) {
+      color.copy(lakeWater).multiplyScalar(1 + jitter(t) * 0.02);
+      for (let k = 0; k < 3; k++) color.toArray(colors, (t * 3 + k) * 3);
+      continue;
+    }
     const matching = [...cells].filter(
       (cell) => WATER_BIOMES.has(biomes[cell]) !== dry,
     );
@@ -73,7 +87,13 @@ export function terrainGeometry(globe: Globe, biomeNames: readonly string[]) {
     for (const cell of matching) color.add(palette[biomes[cell]]);
     if (matching.length > 0) color.multiplyScalar(1 / matching.length);
     else color.copy(dry ? sand : shallows);
-    if (dry && matching.length < 3) color.lerp(sand, 0.6);
+    if (dry && matching.length < 3)
+      color.lerp(
+        sand,
+        matching.length + lakeCorners.length === 3
+          ? LAKE_SHORE_SAND
+          : BEACH_SAND,
+      );
     // higher land a touch lighter, plus a little noise per face
     const shade = 1 + jitter(t) * 0.05 + Math.max(0, height) / 1500;
     color.multiplyScalar(shade);
