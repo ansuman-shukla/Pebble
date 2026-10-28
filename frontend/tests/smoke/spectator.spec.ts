@@ -97,9 +97,13 @@ test('a citizen page shows their needs and a timeline that loads more as you scr
     await expect
       .poll(
         async () => {
-          await main.evaluate((element) =>
-            element.scrollTo(0, element.scrollHeight),
-          );
+          await main.evaluate((element) => {
+            const scroller = element as unknown as {
+              scrollTo(x: number, y: number): void;
+              scrollHeight: number;
+            };
+            scroller.scrollTo(0, scroller.scrollHeight);
+          });
           return entries.count();
         },
         { timeout: 10_000 },
@@ -126,16 +130,16 @@ test('a citizen page replays a past tick', async ({ page }) => {
     'href',
     `/?tick=600&follow=${id}`,
   );
-  const ticks = await page
-    .getByTestId('timeline-entry')
-    .locator('a')
-    .evaluateAll((links) =>
-      links.map((link) =>
-        Number(
-          new URL((link as HTMLAnchorElement).href).searchParams.get('tick'),
-        ),
+  const links = await page.getByTestId('timeline-entry').locator('a').all();
+  const ticks = await Promise.all(
+    links.map(async (link) =>
+      Number(
+        new URLSearchParams(
+          ((await link.getAttribute('href')) ?? '').split('?')[1],
+        ).get('tick'),
       ),
-    );
+    ),
+  );
   expect(ticks.length).toBeGreaterThan(0);
   expect(Math.max(...ticks)).toBeLessThanOrEqual(600);
   expect(errors).toEqual([]);
