@@ -14,14 +14,18 @@ same way.
 ```
 """
 
+from functools import partial
+
 from app.brains.profile import BrainProfile
 from app.brains.routines import ROUTINES, Context, Option
 from app.brains.senses import (
+    DISTANCE,
     Needs,
     at,
     at_home,
     beside,
     carried_food,
+    carries,
     danger,
     fire_here,
     fire_in_view,
@@ -143,8 +147,12 @@ class UtilityBrain:
         ctx = Context(self.api, self.profile, p, needs, now, self.chance, self.pick)
         options = [Option(1, "idle", lambda: self.api.wait(15))]
         behind_walls = self.profile.region == "town" and at(p, self.profile.home_area)  # walls keep animals out
-        if danger(p) is not None and not behind_walls and fire_here(p) not in ("burning", "low"):  # fire too
-            options.append(Option(200, "flee", self.api.flee))
+        threat = danger(p)
+        if threat is not None and not behind_walls and fire_here(p) not in ("burning", "low"):  # fire too
+            if carries(p, "spear") and DISTANCE[threat.nearness] in ("here", "near", "close"):  # armed: drive it off
+                options.append(Option(200, "fight off", partial(self.api.attack, threat.label)))
+            else:
+                options.append(Option(200, "flee", self.api.flee))
         thirst = self.thirst_option(p, needs, now)
         if thirst is not None:
             options.append(thirst)
