@@ -2,6 +2,8 @@
  * Doors that stand open in the walkable world. Polyfork rigs door leaves as named nodes pivoting on their
  * hinge; the colliders JSON is built with the doors shut, so the same swing is applied to the leaf parts.
  */
+import type { Object3D } from 'three';
+
 export interface DoorLeaf {
   /** Node name in the GLB; its origin is the hinge. */
   node: string;
@@ -59,4 +61,13 @@ export function openDoorParts<T extends number[][]>(id: string, parts: T[]) {
       return [hingeX + dx * cos + dz * sin, y, hingeZ - dx * sin + dz * cos];
     }) as T;
   });
+}
+
+/** Swings the door leaves of a loaded model open (mutates the given copy). */
+export function openDoors(model: Object3D, id: string) {
+  for (const leaf of OPEN_DOORS[id] ?? []) {
+    const node = model.getObjectByName(leaf.node);
+    if (!node) throw new Error(`${id} has no door node ${leaf.node}`);
+    node.rotation.y = leaf.openYaw;
+  }
 }

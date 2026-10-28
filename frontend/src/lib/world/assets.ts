@@ -192,12 +192,14 @@ export const ANIMALS: Record<AnimalKind, AnimalAsset> = {
 };
 
 export const assetUrl = (id: string) => `/assets/polyfork/${id}/${id}.glb`;
+export const collidersUrl = (id: string) =>
+  `/assets/polyfork/${id}/${id}-colliders.json`;
 
 /*
  * Assets built to stand below the town ground. The moat bridge stands on the moat floor and its walked lips sit
- * pierHeight (1.6 m) + the apron (0.1 m) above it, so it is lowered until the lips meet the ground at y = 0.
+ * pierHeight (1.6 m) + the apron (0.1 m) above it, so it is lowered until the lips (1.68-1.70 m) meet the ground at y = 0.
  */
-const BASE_Y: Record<string, number> = { 'moat-bridge-4fbcd9': -1.7 };
+const BASE_Y: Record<string, number> = { 'moat-bridge-4fbcd9': -1.68 };
 
 /** Height at which to place an asset in a flat town (0 for everything that rests on the ground). */
 export const assetBaseY = (id: string) => BASE_Y[id] ?? 0;

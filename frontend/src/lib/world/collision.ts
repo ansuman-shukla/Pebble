@@ -23,6 +23,11 @@ export interface WalkPlacement {
   rotation_deg: 0 | 90 | 180 | 270;
   walk: 'solid' | 'surface' | 'none';
 }
+export interface WalkSpawn {
+  x: number;
+  z: number;
+  heading_deg: number;
+}
 export interface WalkWater {
   polygon: Point[];
   holes?: Point[][];
@@ -53,7 +58,7 @@ const PUSH_ITERATIONS = 4;
 const GRID_CELL = 4;
 const EPSILON = 1e-9;
 
-function assetIdForKind(kind: string) {
+export function assetIdForKind(kind: string) {
   if (!Object.hasOwn(PROPS, kind)) throw new Error(`unknown prop kind ${kind}`);
   return PROPS[kind as PropKind];
 }
@@ -205,7 +210,7 @@ const pointBox = ([x, z]: Point, margin = 0): Box => ({
 });
 
 /** Walkable surfaces whose footprint holds the point. */
-const surfacesAt = (world: WalkWorld, point: Point) =>
+export const surfacesAt = (world: WalkWorld, point: Point) =>
   world.surfaces
     .near(pointBox(point))
     .filter((shape) => pointInPolygon(point, shape.polygon));
