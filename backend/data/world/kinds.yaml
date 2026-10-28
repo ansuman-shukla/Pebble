@@ -1,6 +1,6 @@
 # Wild prop kinds that sites place (camps, landmarks); the town's kinds come from ../town/kinds.yaml.
 # Same format: footprint [x, z] in metres at rotation 0, walk solid | surface | none, optional blockers.
-# Sizes follow the Polyfork assets (asset-manifest.json) where vendored; the rest are estimates.
+# Sizes follow the Polyfork assets (frontend asset-manifest.json size_m x the frontend KIND_SCALE).
 
 # camps
 fire_pit: {footprint: [1.2, 1.2], walk: solid}
@@ -13,15 +13,15 @@ petroglyph_boulder: {footprint: [1.6, 0.7], walk: solid}
 fallen_log: {footprint: [3.1, 0.7], walk: solid}
 rock: {footprint: [1, 1], walk: solid}
 
-# landmarks
-rock_spire: {footprint: [1.5, 1.5], walk: solid}
-boulder: {footprint: [2.5, 2.5], walk: solid}
-basalt_column: {footprint: [1.5, 1.5], walk: solid}
-lava_rock: {footprint: [1.5, 1.5], walk: solid}
+# landmarks (giant_tree is the elder tree: the frontend draws it x3.5, so its footprint is the scaled size)
+rock_spire: {footprint: [1.3, 1.5], walk: solid}
+boulder: {footprint: [2.2, 1.4], walk: solid}
+basalt_column: {footprint: [1.5, 2], walk: solid}
+lava_rock: {footprint: [2, 1.5], walk: solid}
 fumarole: {footprint: [1.5, 1.5], walk: solid}
-geyser: {footprint: [2, 2], walk: solid}
-hot_spring_pool: {footprint: [4, 4], walk: none}
+geyser: {footprint: [3, 3], walk: solid}
+hot_spring_pool: {footprint: [3, 2.5], walk: none}
 obsidian: {footprint: [1, 1], walk: solid}
-giant_tree: {footprint: [12, 12], walk: solid, blockers: [[-1.5, -1.5, 1.5, 1.5]]}
+giant_tree: {footprint: [18, 14.8], walk: solid, blockers: [[-1.8, -1.8, 1.8, 1.8]]}
 snowy_spruce: {footprint: [3, 3], walk: solid, blockers: [[-0.3, -0.3, 0.3, 0.3]]}
-ice_block: {footprint: [2, 2], walk: solid}
+ice_block: {footprint: [0.8, 0.9], walk: solid}
