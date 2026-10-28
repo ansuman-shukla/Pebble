@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { type BufferGeometry, Vector3 } from 'three';
+import { type BufferGeometry, Color, Vector3 } from 'three';
 
 import type { WorldView } from '../../src/lib/client/types.gen';
 import {
@@ -7,12 +7,12 @@ import {
   decodeWorld,
   type GlobeTerrain,
 } from '../../src/lib/world/globe';
-import { terrainGeometry } from '../../src/lib/world/globe-mesh';
+import { biomeColor, terrainGeometry } from '../../src/lib/world/globe-mesh';
 import { WORLD_URL } from './globe-helpers';
 
 /*
  * The terrain mesh of the real world (GET /api/v1/world): a refined surface with no stray faces, the height
- * lookup the walker uses lies exactly on it, and lakes, which lie above the sea, are drawn as water.
+ * lookup the walker uses lies exactly on it, and lakes, which lie above the sea, get a dark bed under their water.
  */
 
 /** Longest grid edge on the planet (the icosahedron's subdivision is uneven): 44 m. */
@@ -95,18 +95,20 @@ test('the height lookup lies on the drawn faces', () => {
   expect(worst).toBeLessThan(0.002);
 });
 
-test('lakes above the sea are drawn as water, not sand', () => {
+test('lakes above the sea get a dark bed under their water, not sand', () => {
   const { biomes, heights, cellCount } = terrain.globe;
   const colors = mesh.getAttribute('color');
   const lake = view.biome_names.indexOf('lake');
+  const brightness = (color: Color) => color.r + color.g + color.b;
+  const sand = brightness(new Color(biomeColor('beach')));
   let lakeCells = 0;
+  const color = new Color();
   // a cell's own point is mesh vertex `cell`
   for (let cell = 0; cell < cellCount; cell++) {
     if (biomes[cell] !== lake || heights[cell] <= 0.2) continue;
     lakeCells += 1;
-    const [r, g, b] = [0, 1, 2].map((k) => colors.getComponent(cell, k));
-    expect(b, `cell ${cell}`).toBeGreaterThan(r + 0.2);
-    expect(b, `cell ${cell}`).toBeGreaterThan(g);
+    color.fromBufferAttribute(colors, cell);
+    expect(brightness(color), `cell ${cell}`).toBeLessThan(sand * 0.4);
   }
   expect(lakeCells).toBeGreaterThan(50);
 });

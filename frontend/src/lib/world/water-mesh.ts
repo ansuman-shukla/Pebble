@@ -58,10 +58,11 @@ function builder() {
 
 /** Sea triangles whose corners all lie deeper than this (metres) are drawn as one face, not the refined lattice. */
 const SHALLOW_SEA = 2;
-/** Lake water floats this far above the lake's flat bed (its surface height in the terrain). */
-const LAKE_LIFT = 0.05;
-/** Ground this close (metres) above a lake's surface height is still its flat bed. */
-const LAKE_BED = 0.01;
+/**
+ * Lake water lies this far above the lake's flat bed (its surface height in the terrain), so its shore is a
+ * contour across the rising bank instead of the bed's polygon of grid edges.
+ */
+export const LAKE_LIFT = 0.25;
 /** Lakes are flat in the terrain: their depth for the shader grows by LAKE_STEP per cell from the shore. */
 const LAKE_STEP = 2.5;
 const LAKE_DEPTH_MAX = 9;
@@ -181,11 +182,11 @@ export function stillWaterGeometry(terrain: GlobeTerrain) {
           .addScaledVector(corner[2], b2)
           .normalize()
           .multiplyScalar(radius + level + LAKE_LIFT);
-        const ground = surface.height(t, b0, b1, b2);
-        // on the lake's flat bed the depth grows away from the shore; where the bank rises the water is gone
-        return ground <= level + LAKE_BED
-          ? b0 * bedDepths[0] + b1 * bedDepths[1] + b2 * bedDepths[2]
-          : level + LAKE_LIFT - ground;
+        // on the flat bed the depth grows away from the shore; up the bank it thins to nothing where the
+        // ground meets the surface
+        const bed = b0 * bedDepths[0] + b1 * bedDepths[1] + b2 * bedDepths[2];
+        const rise = surface.height(t, b0, b1, b2) - level;
+        return (LAKE_LIFT + bed) * (1 - rise / LAKE_LIFT);
       });
     }
   }

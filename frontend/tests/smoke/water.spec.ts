@@ -23,6 +23,7 @@ import {
 import {
   fallPath,
   fallSheetGeometry,
+  LAKE_LIFT,
   riverGeometry,
   stillWaterGeometry,
 } from '../../src/lib/world/water-mesh';
@@ -274,9 +275,11 @@ test('the sea and the lakes carry the depth of the water under them', () => {
       } else if (biomes[cell] === lake) {
         // a lake lies on its flat bed, deeper away from the shore
         lakes += 1;
-        if (Math.abs(surface - heights[cell] - 0.05) > 0.01 || depth <= 1)
+        if (Math.abs(surface - heights[cell] - LAKE_LIFT) > 0.01 || depth <= 1)
           wrong.push(`lake over ${cell}: surface ${surface}, depth ${depth}`);
-      } else if (depth > 0.05) wrong.push(`land ${cell}: depth ${depth}`);
+      } else if (heights[cell] > surface && depth > 0)
+        // dry land above the water's surface is out of the water
+        wrong.push(`land ${cell}: depth ${depth}`);
     }
   expect(wrong).toEqual([]);
   expect(lakes).toBeGreaterThan(200);

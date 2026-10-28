@@ -31,7 +31,7 @@ const BIOME_COLORS: Record<string, string> = {
 };
 const FALLBACK_COLOR = '#ff00ff';
 /** Lakes are terrain faces flat at their surface height: their bed, seen through the lake's water. */
-const LAKE_BED = '#3a7396';
+const LAKE_BED = '#5f6a4a';
 /** How far a dry face touching water turns to sand: a sea beach, a lake shore. */
 const BEACH_SAND = 0.6;
 const LAKE_SHORE_SAND = 0.25;
