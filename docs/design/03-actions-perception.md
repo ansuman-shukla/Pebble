@@ -52,7 +52,7 @@ interrupted.
 | `gather(resource)` | durative | berries, roots, nuts, reeds, wood, flint… |
 | `fish()` / `hunt(animal)` | durative | outcome by skill, tool (a spear), strength, group; can hurt you. Fish: at a river, lake or shallow sea shore. Hunt: an animal in view; you creep up on it, then strike |
 | `eat(item)` / `drink()` | durative | from inventory or within reach; raw meat or fish eaten beside a fire is roasted (more filling), raw it can make you sick |
-| `pick_up(item)` / `drop(item)` / `give(item, person)` | instant | within reach (for town folk a storehouse within reach counts); giving needs acceptance |
+| `pick_up(item)` / `drop(item)` / `give(item, person)` | instant | within reach (for town folk a storehouse within reach counts); giving needs acceptance; the words may say how many ("a fish", "two berries", "half the meat", "a few nuts"), else all of it |
 | `make_fire()` / `feed_fire()` | durative | make: the fire skill and wood; lights a fire pit or basket within reach, else a campfire where you stand. Feed: wood carried, then wood lying beside the fire. A fire burns down unless fed |
 | `rest(minutes)` / `sleep()` | durative | sleep ends at morning, on danger or when rested |
 | `work(task)` | durative | role tasks (town): farm, store food, guard, trade, weave, govern; needs the skill and the place (cook, repair later) |

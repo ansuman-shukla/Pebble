@@ -2,6 +2,8 @@
 finding them within reach. Every failure is an in-world sentence.
 """
 
+import re
+
 from app.observability.events import ActionEnded, ActionStarted, JsonScalar
 from app.sim.core import REACH_M, SimCore
 from app.sim.items import ITEMS
@@ -10,6 +12,12 @@ from app.sim.state import ActionState, Citizen
 from app.world_api.models import ActionName, ActionResult
 
 _SINGULAR = {"berry": "berries", "root": "roots", "nut": "nuts", "reed": "reeds"}
+_NUMBERS = {
+    word: index + 1
+    for index, word in enumerate("one two three four five six seven eight nine ten eleven twelve".split())
+} | {"a": 1, "an": 1}
+# the amounts the world itself says, read back ("a great deal of rice" and "a lot of" mean all of it)
+_VAGUE: dict[str, int | None] = {"a few": 3, "a little": 3, "a handful": 8, "a great": None, "a lot": None}
 
 
 def begin(
@@ -65,6 +73,26 @@ def item_name(words: str) -> str | None:
             if start >= 0 and name in ITEMS:
                 return name
     return None
+
+
+def item_amount(words: str, have: int) -> int:
+    """How many of `have` the words ask for: "a fish", "two berries", "3 roots", "half the meat", "a few nuts";
+    anything else ("some", "all", just the item) means all of it."""
+    query = " ".join(re.sub(r"[^a-z0-9' -]", " ", words.lower()).split())  # articles kept: "a fish" is one
+    head, _, rest = query.partition(" ")
+    vague = next((phrase for phrase in _VAGUE if query.startswith(phrase + " ")), None)
+    wanted: int | None
+    if vague is not None:
+        wanted = _VAGUE[vague]
+    elif head == "half":
+        wanted = (have + 1) // 2
+    elif head.isdigit():
+        wanted = int(head)
+    elif head in _NUMBERS and rest:
+        wanted = _NUMBERS[head]
+    else:
+        wanted = None
+    return have if wanted is None else max(1, min(wanted, have))
 
 
 def stack_in_reach(core: SimCore, citizen: Citizen, item: str) -> str | None:

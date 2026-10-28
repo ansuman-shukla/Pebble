@@ -13,7 +13,7 @@ from app.observability.events import (
     Said,
 )
 from app.sim import fire, wild
-from app.sim.acting import begin, capital, item_name, refuse, settled, stack_in_reach
+from app.sim.acting import begin, capital, item_amount, item_name, refuse, settled, stack_in_reach
 from app.sim.bodies import COLLAPSE_WAKE_ENERGY, Crossing
 from app.sim.clock import NIGHT_ALTITUDE_DEG, SECONDS_PER_TICK, sun_altitude_deg, sun_direction
 from app.sim.core import HEARING_M, KEPT_HEARD, REACH_M, SimCore
@@ -259,9 +259,9 @@ def pick_up(core: SimCore, citizen: Citizen, action: PickUp) -> ActionResult:
     if room == 0:
         return refuse(core, citizen, "pick_up", "You can't carry any more.")
     if stack_id is None:
-        return _take_from_store(core, citizen, item, str(store_id), room)
+        return _take_from_store(core, citizen, item, str(store_id), item_amount(action.item, room))
     stack = core.state.ground[stack_id]
-    count = min(room, stack.count)
+    count = item_amount(action.item, min(room, stack.count))
     stack.count -= count
     if stack.count == 0:
         del core.state.ground[stack_id]
@@ -276,10 +276,10 @@ def pick_up(core: SimCore, citizen: Citizen, action: PickUp) -> ActionResult:
     return ActionResult(action="pick_up", outcome="done", text=f"You pick up {amount_words(count, ITEMS[item])}.")
 
 
-def _take_from_store(core: SimCore, citizen: Citizen, item: str, store_id: str, room: int) -> ActionResult:
+def _take_from_store(core: SimCore, citizen: Citizen, item: str, store_id: str, wanted: int) -> ActionResult:
     """Town folk take what they need from a storehouse within reach (03 pick_up: "within reach")."""
     store = core.state.stores[store_id]
-    count = min(room, store[item])
+    count = min(wanted, store[item])
     store[item] -= count
     if store[item] == 0:
         del store[item]
@@ -296,7 +296,10 @@ def drop(core: SimCore, citizen: Citizen, action: Drop) -> ActionResult:
     count = citizen.inventory.get(item, 0) if item else 0
     if item is None or count == 0:
         return refuse(core, citizen, "drop", f"You aren't carrying any {action.item}.")
-    del citizen.inventory[item]
+    count = item_amount(action.item, count)
+    citizen.inventory[item] -= count
+    if citizen.inventory[item] == 0:
+        del citizen.inventory[item]
     stack = core.new_stack(item, count, citizen.position, citizen.cell)
     core.item_moved(
         citizen,
@@ -321,7 +324,7 @@ def give(core: SimCore, citizen: Citizen, action: Give) -> ActionResult:
         return refuse(core, citizen, "give", f"You aren't carrying any {action.item}.")
     if receiver.body.asleep:
         return refuse(core, citizen, "give", f"{capital(label)} is asleep.")
-    count = min(count, core.room_for(receiver, item))
+    count = min(item_amount(action.item, count), core.room_for(receiver, item))
     if count == 0:
         return refuse(core, citizen, "give", f"{capital(label)} can't carry any more.")
     if not core.accepts_gift(citizen, receiver, item, count):

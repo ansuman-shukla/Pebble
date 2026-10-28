@@ -250,8 +250,43 @@ def test_giving_needs_reach_and_a_waking_receiver(new_sim: Callable[..., Simulat
     taker.body.asleep = True
     assert api.give("roots", "Taker").text == "Taker is asleep."
     taker.body.asleep = False
-    assert api.give("roots", "Taker").text == "Taker takes a handful of roots."
+    assert api.give("a root", "Taker").text == "Taker takes a root."
+    assert (giver.inventory, taker.inventory) == ({"roots": 3}, {"roots": 1})
+    assert api.give("roots", "Taker").text == "Taker takes a few roots."  # no amount said: all of them
     assert (giver.inventory, taker.inventory) == ({}, {"roots": 4})
+
+
+@pytest.mark.parametrize(
+    ("words", "given", "dropped"),  # of 10 berries: how many are given, then how many of those are put down
+    [
+        ("berries", 10, 10),
+        ("a berry", 1, 1),
+        ("two berries", 2, 2),
+        ("3 berries", 3, 3),
+        ("half the berries", 5, 3),
+        ("a few berries", 3, 3),
+        ("a handful of berries", 8, 8),
+        ("a great many berries", 10, 10),
+        ("some berries", 10, 10),
+        ("all the berries", 10, 10),
+        ("twelve berries", 10, 10),
+    ],
+)
+def test_amounts_in_the_words_say_how_many_to_hand_over(
+    new_sim: Callable[..., Simulation], words: str, given: int, dropped: int
+) -> None:
+    sim = new_sim()
+    giver = sim.add_citizen(make_spec("giver", at=WELL, knows_people=["taker"]))
+    taker = sim.add_citizen(make_spec("taker", name="Taker", at=(-20.0, 54.0)))
+    giver.inventory["berries"] = 10
+    assert WorldApi(sim, "giver").give(words, "Taker").outcome == "done"
+    assert (giver.inventory.get("berries", 0), taker.inventory) == (10 - given, {"berries": given})
+    taker_api = WorldApi(sim, "taker")
+    assert taker_api.drop(words).outcome == "done"
+    on_ground = sum(stack.count for stack in sim.state.ground.values() if stack.item == "berries")
+    assert (taker.inventory.get("berries", 0), on_ground) == (given - dropped, dropped)
+    assert taker_api.pick_up("a berry").text == "You pick up a berry."
+    assert sum(stack.count for stack in sim.state.ground.values() if stack.item == "berries") == dropped - 1
 
 
 def test_names_and_places_are_learned_by_listening(new_sim: Callable[..., Simulation]) -> None:
