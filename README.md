@@ -60,7 +60,7 @@ town's main gate, with the engine's citizens living on it (`GET /api/v1/entities
 | `drop` (the pegman) | click it, then click a spot on the planet (Esc cancels), or drag it onto the planet: the player lands there and the camera flies down behind them; water is refused |
 | `go to` | jump to the castle town, a camp or a landmark |
 | `people` | the citizens: what each is doing and how they are; `follow` (or the row) flies the camera to them and orbits them as they go (Esc or `stop following` returns to the player); `go to` drops the player next to them |
-| clock (bottom right) | engine day and time; `pause`, `×1`, `×10`, `×60` set the engine's speed (`POST /api/v1/admin/clock`); the sun follows engine time |
+| clock (bottom right) | engine day, time and speed ("real time", "×60", "paused"); `pause`, `×1` (real time: citizens walk at your pace, a tick a real minute), `×10`, `×60` (a game hour per real minute), `×600` (time-lapse) set the engine's speed (`POST /api/v1/admin/clock`); the sun follows engine time |
 | `time ×60` | without a feed (`/?mock=1`): run the client clock at one game hour per second |
 | `?at=lat,lon[,bearing]` | start anywhere, e.g. `/?at=12.4,100,180` (band A camp); a drop or go to rewrites it so the spot can be shared; `?time=HH:MM` sets the town time |
 
