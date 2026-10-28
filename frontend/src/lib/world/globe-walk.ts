@@ -2,17 +2,19 @@
  * Walking on the planet. A step is a displacement in the tangent plane, re-projected onto the sphere, and is
  * always resolved in the local metres of a chart (a gnomonic site mapping) with the flat 2D collisions of
  * collision.ts, then mapped back:
- *   - the town's chart: its walls, gates, moat and townspeople; on its ground disc the ground is the plateau
- *     plus walkable surfaces (bridges, paving);
+ *   - the town's chart: its walls, gates and moat; on its ground disc the ground is the plateau plus walkable
+ *     surfaces (bridges, paving);
  *   - a camp's or landmark's chart: its placements' colliders (standing on the terrain) and nearby trees;
  *   - elsewhere a "wild" chart re-anchored around the player: the colliders of scattered trees, rocks, bushes.
- * Outside the town's ground the ground is the terrain: water blocks and slopes steeper than MAX_GRADE can't be
+ * The citizens are solid everywhere: standing cylinders around their feet, mapped into whichever chart resolves
+ * the step. Outside the town's ground the ground is the terrain: water blocks and slopes steeper than MAX_GRADE can't be
  * climbed (the step slides along the slope's contour instead). Travel mode skips scattered props and slopes.
  */
 import { Vector3 } from 'three';
 
 import {
   blockerWorld,
+  circleShape,
   clearOfBlockers,
   isBlocked,
   isWater,
@@ -55,8 +57,11 @@ export interface WalkChart {
   radius: number;
   /** The site's own ground; without it the ground is the terrain. */
   ground?: ChartGround;
-  /** Moving blockers in local metres (townspeople), read at every step. */
-  dynamic?: () => readonly Shape[];
+}
+
+/** Where the citizens' feet are right now (world metres, by id), read at every step. */
+export interface WalkPeople {
+  readonly current: ReadonlyMap<string, Vector3>;
 }
 
 /** Blockers of the scattered props around a direction, in a mapping's local metres. */
@@ -72,12 +77,17 @@ const MAX_GRADE = 1;
 const WILD_REACH = 70;
 /** ...and is re-anchored once the player is this far from it. */
 const WILD_RECENTER = 35;
+/** Wild charts kept at once (the player's and a followed citizen's). */
+const WILD_CHARTS = 2;
 /** Look-ahead and spacing of the terrain gradient samples, metres. */
 const SLOPE_AHEAD = 0.3;
 const SLOPE_SAMPLE = 0.5;
 const CAMERA_GROUND_SAMPLES = 12;
 /** Drop spots are searched on rings around the picked point out to this many metres. */
 const DROP_SEARCH = 12;
+/** Citizens block as standing cylinders. */
+const PERSON_RADIUS = 0.3;
+const PERSON_HEIGHT = 1.7;
 
 export interface GlobeWalk {
   /** Town local (x, z) when the point is inside the town's chart, else null. */
@@ -93,7 +103,7 @@ export interface GlobeWalk {
   grade(position: Vector3, heading: Vector3): number;
   /**
    * Where a player at `position` standing on `ground` ends up trying to move by `step` (possibly zero, which
-   * still pushes the player out of moving people): a unit direction. `travel` skips props and slopes.
+   * still pushes the player out of people walking into it): a unit direction. `travel` skips props and slopes.
    */
   move(
     position: Vector3,
@@ -118,8 +128,6 @@ export interface GlobeWalk {
   clearCamera(camera: Vector3, radius: number): Vector3;
 }
 
-const NO_SHAPES: readonly Shape[] = [];
-
 /** What walking needs of the terrain: heights, biomes and the nearest cell. */
 export type WalkTerrain = Pick<
   GlobeTerrain,
@@ -130,23 +138,27 @@ export function createGlobeWalk(
   terrain: WalkTerrain,
   charts: WalkChart[],
   wildBlockers: WildBlockers | null,
+  peopleRef: WalkPeople | null = null,
 ): GlobeWalk {
   const radius = terrain.globe.radius;
   const local = new Vector3();
+  const feetLocal = new Vector3();
+  const centres = new WeakMap<WalkChart, Vector3>();
   const target = new Vector3();
   const sample = new Vector3();
   const wildAt = new Vector3();
   const town = charts.find((chart) => chart.ground) ?? null;
-  let wild: (WalkChart & { anchor: Vector3; props: boolean }) | null = null;
+  /** The latest wild charts: the player's and, while the camera follows a citizen elsewhere, the citizen's. */
+  const wilds: (WalkChart & { anchor: Vector3; props: boolean })[] = [];
 
   function wildChart(direction: Vector3, props: boolean): WalkChart {
     const unit = wildAt.copy(direction).normalize();
-    if (
-      wild &&
-      wild.props === props &&
-      wild.anchor.angleTo(unit) * radius < WILD_RECENTER
-    )
-      return wild;
+    const cached = wilds.find(
+      (wild) =>
+        wild.props === props &&
+        wild.anchor.angleTo(unit) * radius < WILD_RECENTER,
+    );
+    if (cached) return cached;
     const anchor = unit.clone();
     const height = terrain.heightAt(anchor);
     const mapping = siteMapping(tangentFrame(anchor), radius + height);
@@ -154,7 +166,7 @@ export function createGlobeWalk(
       props && wildBlockers
         ? wildBlockers(mapping, anchor, WILD_REACH + WILD_RECENTER)
         : [];
-    wild = {
+    const wild = {
       id: 'wild',
       anchor,
       props,
@@ -163,6 +175,8 @@ export function createGlobeWalk(
       radius: Infinity,
       world: blockerWorld(shapes),
     };
+    wilds.unshift(wild);
+    wilds.length = Math.min(wilds.length, WILD_CHARTS);
     return wild;
   }
 
@@ -176,6 +190,33 @@ export function createGlobeWalk(
     const chart = wildChart(point, props);
     chart.mapping.toLocal(point, local);
     return { chart, at: [local.x, local.z] as Point };
+  }
+
+  /** The citizens within a chart's reach as blockers in its local metres. */
+  function peopleIn(chart: WalkChart): Shape[] {
+    const near = peopleRef?.current;
+    if (!near?.size) return [];
+    let centre = centres.get(chart);
+    if (!centre) {
+      centre = chart.mapping.toWorld(0, 0, 0, new Vector3()).normalize();
+      centres.set(chart, centre);
+    }
+    const reach = Math.min(chart.radius, WILD_REACH + WILD_RECENTER) / radius;
+    const shapes: Shape[] = [];
+    for (const [id, feet] of near) {
+      if (feet.angleTo(centre) > reach) continue;
+      chart.mapping.toLocal(feet, feetLocal);
+      shapes.push(
+        circleShape(
+          `person-${id}`,
+          [feetLocal.x, feetLocal.z],
+          PERSON_RADIUS,
+          feetLocal.y,
+          feetLocal.y + PERSON_HEIGHT,
+        ),
+      );
+    }
+    return shapes;
   }
 
   function townPoint(point: Vector3): Point | null {
@@ -296,7 +337,7 @@ export function createGlobeWalk(
           ? ledge.groundAt(point, groundY + ledge.probeHeight) - groundY <=
             ledge.maxStepUp
           : terrainStep(chart, previous, point, !travel),
-      chart.dynamic?.() ?? NO_SHAPES,
+      peopleIn(chart),
     );
     return chart.mapping.toWorld(to[0], 0, to[1], new Vector3()).normalize();
   }
@@ -317,7 +358,7 @@ export function createGlobeWalk(
       chart.world,
       point,
       ground - chart.height,
-      chart.dynamic?.() ?? NO_SHAPES,
+      peopleIn(chart),
     );
   }
 
@@ -380,7 +421,7 @@ export function createGlobeWalk(
       chart.world,
       toLocalPoint(chart, eye),
       toLocalPoint(chart, camera),
-      chart.dynamic?.() ?? NO_SHAPES,
+      peopleIn(chart),
     );
     return groundReach(eye, camera, reach, clearance);
   }
@@ -393,7 +434,7 @@ export function createGlobeWalk(
       at,
       height,
       clearance,
-      chart.dynamic?.() ?? NO_SHAPES,
+      peopleIn(chart),
     );
     if (x !== at[0] || z !== at[1]) chart.mapping.toWorld(x, height, z, camera);
     return camera;

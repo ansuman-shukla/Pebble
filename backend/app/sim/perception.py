@@ -189,6 +189,8 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
         distance = core.distance_m(position, target)
         things.append(Thing(label, keywords, goal, distance, bearing_deg(position, target), kind, ref, water))
 
+    # everyone of a band has their own seat round its fire
+    seat = [other.id for other in core.citizens() if other.region == citizen.region].index(citizen.id)
     nearest_of: dict[str, tuple[float, str]] = {}
     for structure in world.structures.values():
         distance = core.distance_m(position, structure.centre)
@@ -208,7 +210,7 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
             add(
                 structure.label,
                 STRUCTURE_KEYWORDS[structure.kind],
-                structure.door,
+                structure.spot(seat),
                 "structure",
                 structure.id,
                 water,
@@ -218,7 +220,14 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
             nearest_of[structure.kind] = (distance, structure.id)
     for kind, (_, structure_id) in sorted(nearest_of.items()):
         structure = world.structures[structure_id]
-        add(structure.label, STRUCTURE_KEYWORDS[kind], structure.door, "structure", structure.id, at=structure.centre)
+        add(
+            structure.label,
+            STRUCTURE_KEYWORDS[kind],
+            structure.spot(seat),
+            "structure",
+            structure.id,
+            at=structure.centre,
+        )
 
     for fire in sorted(state.fires.values(), key=lambda f: f.id):
         if fire.kind == "pit" and not fire.lit:
@@ -457,7 +466,7 @@ def doing_words(action: ActionState | None, asleep: bool) -> str:
     if action is None:
         return "You are standing still."
     if action.kind == "walk_to":
-        return f"You are walking to {action.label}." if action.label else "You are walking."
+        return f"You are walking to {action.destination}." if action.destination else "You are walking."
     return f"You are {DOING.get(action.kind, 'busy')}."
 
 

@@ -6,7 +6,10 @@ ticking the simulation (as the engine does).
 
 from collections.abc import Callable
 
+from app.observability.events import ActionStarted
+from app.observability.replay import from_snapshot
 from app.sim.simulation import Simulation
+from app.sim.snapshot import take_snapshot
 from app.world_api.facade import WorldApi, run_until_done
 from tests.sim_helpers import HOME, compass_towards, local_hour, make_spec, nearest_cell_of
 
@@ -62,6 +65,21 @@ def test_walk_to_a_forest_gather_and_eat_berries(new_sim: Callable[..., Simulati
     assert citizen.inventory == {"berries": 1}
 
 
+def test_a_walk_home_reads_home_to_spectators_and_your_home_to_the_walker(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    sim = new_sim()
+    citizen = sim.add_citizen(make_spec())
+    api = WorldApi(sim, citizen.id)
+    sim.drain()
+
+    api.walk_to_place("home")  # under way until the next tick (a minute's walk gets there)
+    assert api.check_self().doing == "You are walking to your home."
+    started = [event.payload for event in sim.drain() if isinstance(event.payload, ActionStarted)]
+    assert [payload.label for payload in started] == ["home"]
+    assert from_snapshot(take_snapshot(sim.state)).citizens[citizen.id].action_label == "home"
+
+
 def test_walk_home_and_sleep_through_the_night(new_sim: Callable[..., Simulation]) -> None:
     sim = new_sim()
     citizen = sim.add_citizen(make_spec())
@@ -91,3 +109,26 @@ def test_walk_home_and_sleep_through_the_night(new_sim: Callable[..., Simulation
     assert citizen.body.energy > 99.0  # full, less the minute awake since
     assert not citizen.body.asleep
     assert citizen.action is None
+
+
+def test_a_band_rests_round_its_fire_each_on_their_own_seat(new_sim: Callable[..., Simulation]) -> None:
+    sim = new_sim()
+    pit = sim.world.structures["band_a_camp:fire-pit"].centre
+    starts = [(9.0, 1.0), (-8.0, 4.0), (1.0, -9.0), (2.5, 8.0), (-6.0, -7.0)]
+    band = [
+        sim.add_citizen(
+            make_spec(f"band-{k}", site="band_a_camp", at=at, region="band_a", home="band_a_camp:shelter-e")
+        )
+        for k, at in enumerate(starts)
+    ]
+    for citizen in band:
+        api = WorldApi(sim, citizen.id)
+        walk = run_until_done(sim, api.walk_to_thing("the fire pit"), max_ticks=10)
+        assert walk.outcome == "done", walk.text
+        assert run_until_done(sim, api.rest(5), max_ticks=10).outcome == "done"
+
+    seats = [citizen.position for citizen in band]
+    for seat in seats:
+        assert 1.5 <= sim.world.distance_m(seat, pit) <= 2.5
+    gaps = [sim.world.distance_m(a, b) for k, a in enumerate(seats) for b in seats[k + 1 :]]
+    assert min(gaps) > 1.0  # seats 1.5 m apart, one each

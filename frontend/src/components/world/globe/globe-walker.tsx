@@ -1,8 +1,11 @@
+import { useThree } from '@react-three/fiber';
 import {
+  type ComponentProps,
   type RefObject,
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -36,7 +39,7 @@ import { useColliders } from '@/hooks/use-walk-world';
 import type { Site } from '@/lib/client/types.gen';
 
 import { type ColliderFile, colliderIdsOf } from '@/lib/world/collision';
-import { type GlobeTerrain } from '@/lib/world/globe';
+import { type GlobeTerrain, tangent, tangentFrame } from '@/lib/world/globe';
 import { createGlobeWalk, type GlobeWalk } from '@/lib/world/globe-walk';
 import type { Scatter } from '@/lib/world/scatter';
 import {
@@ -63,6 +66,10 @@ type GlobeWalkerProps = {
   /** Filled with the drop / go-to controls once the walk is ready. */
   dropRef: RefObject<DropApi | null>;
   goTo: GoToSite[];
+  /** Where the citizens' feet are (they are solid to the player). */
+  peopleRef: RefObject<Map<string, Vector3>>;
+  /** While set, the follow camera follows this pose (a citizen's) instead of the player, who stands still. */
+  subjectRef: RefObject<GlobePlayerState> | null;
   onPlayerMove?: (move: GlobeMove) => void;
   onReady?: () => void;
 };
@@ -74,15 +81,17 @@ function WalkingPlayer({
   scatter,
   colliders,
   walkRef,
+  peopleRef,
   ...props
 }: Pick<
   GlobeWalkerProps,
-  'terrain' | 'town' | 'sites' | 'scatter' | 'travel'
+  'terrain' | 'town' | 'sites' | 'scatter' | 'travel' | 'peopleRef'
 > & {
   colliders: ReadonlyMap<string, ColliderFile>;
   walkRef: RefObject<GlobeWalk | null>;
   playerRef: RefObject<GlobePlayerState>;
   rigRef: RefObject<GlobeRig>;
+  viewRigRef: RefObject<GlobeRig>;
   steerable: boolean;
   following: boolean;
   onReady: () => void;
@@ -101,8 +110,8 @@ function WalkingPlayer({
       }),
       ...siteCharts(terrain, sites, colliders, wild),
     ];
-    return createGlobeWalk(terrain, charts, wild);
-  }, [terrain, town, sites, scatter, colliders, proxies]);
+    return createGlobeWalk(terrain, charts, wild, peopleRef);
+  }, [terrain, town, sites, scatter, colliders, proxies, peopleRef]);
   useEffect(() => {
     walkRef.current = walk;
     return () => {
@@ -110,6 +119,32 @@ function WalkingPlayer({
     };
   }, [walk, walkRef]);
   return <GlobePlayer walk={walk} radius={terrain.globe.radius} {...props} />;
+}
+
+/** The follow camera around a citizen: it flies over from the current view, then orbits them as they move. */
+function SubjectCamera({
+  subjectRef,
+  rigRef,
+  ...props
+}: Omit<ComponentProps<typeof GlobeFollowCamera>, 'playerRef'> & {
+  subjectRef: RefObject<GlobePlayerState>;
+}) {
+  const camera = useThree((state) => state.camera);
+  useLayoutEffect(() => {
+    const rig = rigRef.current;
+    const up = subjectRef.current.position.clone().normalize();
+    // look at them the way the camera looks now
+    tangent(
+      rig.heading.copy(camera.getWorldDirection(new Vector3())),
+      up,
+      tangentFrame(up).north,
+    );
+    rig.settled = true;
+    rig.flight = null;
+  }, [rigRef, subjectRef, camera]);
+  return (
+    <GlobeFollowCamera playerRef={subjectRef} rigRef={rigRef} {...props} />
+  );
 }
 
 /**
@@ -129,6 +164,8 @@ export function GlobeWalker({
   focusRef,
   dropRef,
   goTo,
+  peopleRef,
+  subjectRef,
   onPlayerMove,
   onReady,
 }: GlobeWalkerProps) {
@@ -157,10 +194,15 @@ export function GlobeWalker({
       flight: null,
       settled: false,
     };
-    return { player, rig };
+    return {
+      player,
+      rig,
+      subjectRig: { ...rig, heading: rig.heading.clone() },
+    };
   });
   const playerRef = useRef(initial.player);
   const rigRef = useRef(initial.rig);
+  const subjectRigRef = useRef(initial.subjectRig);
   const walkRef = useRef<GlobeWalk | null>(null);
   const ready = useCallback(() => onReady?.(), [onReady]);
   const handover = useCallback(
@@ -189,11 +231,13 @@ export function GlobeWalker({
             scatter={scatter}
             colliders={colliders}
             walkRef={walkRef}
+            peopleRef={peopleRef}
             travel={travel}
             playerRef={playerRef}
             rigRef={rigRef}
-            steerable={cameraMode === 'follow'}
-            following={cameraMode === 'follow'}
+            viewRigRef={subjectRef ? subjectRigRef : rigRef}
+            steerable={cameraMode === 'follow' && !subjectRef}
+            following={cameraMode === 'follow' && !subjectRef}
             onReady={ready}
             onMove={onPlayerMove}
           />
@@ -208,8 +252,19 @@ export function GlobeWalker({
         goTo={goTo}
         onCameraModeChange={onCameraModeChange}
       />
-      {cameraMode === 'follow' && (
+      {cameraMode === 'follow' && subjectRef && (
+        <SubjectCamera
+          key="subject"
+          terrain={terrain}
+          subjectRef={subjectRef}
+          rigRef={subjectRigRef}
+          walkRef={walkRef}
+          focusRef={focusRef}
+        />
+      )}
+      {cameraMode === 'follow' && !subjectRef && (
         <GlobeFollowCamera
+          key="player"
           terrain={terrain}
           playerRef={playerRef}
           rigRef={rigRef}

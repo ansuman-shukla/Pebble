@@ -12,12 +12,20 @@ from app.world_api.models import ActionName, ActionResult
 _SINGULAR = {"berry": "berries", "root": "roots", "nut": "nuts", "reed": "reeds"}
 
 
-def begin(core: SimCore, citizen: Citizen, kind: ActionName, label: str, args: dict[str, JsonScalar]) -> ActionState:
+def begin(
+    core: SimCore, citizen: Citizen, kind: ActionName, label: str, args: dict[str, JsonScalar], destination: str = ""
+) -> ActionState:
     number = citizen.next_action
     citizen.next_action += 1
     seq = core.emit("action_started", ActionStarted(number=number, action=kind, args=args, label=label), actor=citizen)
     action = ActionState(
-        number=number, kind=kind, started_tick=core.state.tick, started_seq=seq, args=args, label=label
+        number=number,
+        kind=kind,
+        started_tick=core.state.tick,
+        started_seq=seq,
+        args=args,
+        label=label,
+        destination=destination,
     )
     citizen.action = action
     return action
