@@ -13,6 +13,7 @@ from pydantic import JsonValue
 
 from app.brains.profile import BrainProfile, Routine
 from app.brains.senses import (
+    DISTANCE,
     Needs,
     Phase,
     Resource,
@@ -123,7 +124,7 @@ def _store_rice(ctx: Context, score: float = WORK + 1) -> Option:
 
 
 def _farm(ctx: Context) -> list[Option]:
-    rice = carried_food(ctx.perception).get("rice", 0)
+    rice = carried_food(ctx.perception.you).get("rice", 0)
     if ctx.phase == "dusk" and rice:
         return [_store_rice(ctx, 46)]  # bring the day's harvest in before supper
     if not _daytime(ctx):
@@ -224,13 +225,16 @@ def lord(ctx: Context) -> list[Option]:
 
 
 def town_child(ctx: Context) -> list[Option]:
-    """Plays around the well; sometimes runs off to the market or to the fields."""
+    """Plays around the well; sometimes tags along after someone close by, or runs off to the market or the fields."""
     if not _daytime(ctx):
         return []
     p = ctx.perception
     if not (at(p, WELL) or at(p, MARKET) or at(p, FIELDS)):
         return [_go(ctx, WELL)]
     roll = ctx.pick(10)
+    close = [person.label for person in p.people if DISTANCE[person.nearness] in ("near", "close")]
+    if roll < 1 and close:
+        return [Option(WORK, f"tag along after {close[0]}", partial(ctx.api.follow, close[0]))]
     if roll < 4:
         direction = COMPASS[ctx.pick(len(COMPASS))]
         return [Option(WORK, "play", lambda: ctx.api.walk_towards(direction, "a few steps"))]
@@ -258,7 +262,7 @@ class Forager:
 def _forage(ctx: Context, style: Forager) -> list[Option]:
     p, api = ctx.perception, ctx.api
     home_area = ctx.profile.home_area
-    food = carried_food(p)
+    food = carried_food(p.you)
     hungry_empty = ctx.needs.hunger >= 2 and not food
     if ctx.phase == "dusk":
         return _evening_chores(ctx) + _keep_fire(ctx, 48.0)
@@ -318,9 +322,12 @@ def _hunt(ctx: Context) -> list[Option]:
     """Hunters hunt by day: game in view is stalked (hunters setting out together go for the same herd); else they
     search around camp a few times; meat goes home to the fire."""
     p, api = ctx.perception, ctx.api
-    if "hunting" not in ctx.profile.skills or not _daytime(ctx) or ctx.done_today("hunt"):
+    if "hunting" not in ctx.profile.skills or not _daytime(ctx):
         return []
-    if carried_food(p).get("meat"):
+    sharing = _share_meat(ctx)
+    if sharing or ctx.done_today("hunt"):
+        return sharing
+    if carried_food(p.you).get("meat"):
         ctx.mark_done("hunt")
         return [] if at_home(p) else [Option(WORK + 5, "bring the meat home", lambda: api.walk_to_place("home"))]
     tries = _count_today(ctx, "hunt-try")
@@ -337,6 +344,29 @@ def _hunt(ctx: Context) -> list[Option]:
         search = _then(lambda: ctx.mark_done("game-search"), lambda: api.walk_towards(direction, distance))
         return [Option(WORK + 4, "look for game", search)]
     return []
+
+
+def _share_meat(ctx: Context) -> list[Option]:
+    """Back at camp with meat, a hunter hands half of it to the nearest one close by (walking up to them first), once
+    a day."""
+    p, api = ctx.perception, ctx.api
+    if ctx.done_today("shared meat") or carried_food(p.you).get("meat", 0) < 2:
+        return []
+    if not (at_home(p) or at(p, ctx.profile.home_area)):
+        return []
+    close = [person for person in p.people if DISTANCE[person.nearness] in ("here", "near", "close")]
+    if not close:
+        return []
+    who = close[0].label
+    if not beside(close[0]):
+        return [Option(WORK + 5, f"take meat to {who}", partial(api.walk_to_person, who))]
+
+    def share() -> ActionHandle:
+        ctx.mark_done("shared meat")
+        api.give("half the meat", who)
+        return api.rest(20)
+
+    return [Option(WORK + 5, "share the meat", share)]
 
 
 def _count_today(ctx: Context, chore: str) -> int:

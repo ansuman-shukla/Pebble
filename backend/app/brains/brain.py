@@ -14,14 +14,18 @@ same way.
 ```
 """
 
+from functools import partial
+
 from app.brains.profile import BrainProfile
 from app.brains.routines import ROUTINES, Context, Option
 from app.brains.senses import (
+    DISTANCE,
     Needs,
     at,
     at_home,
     beside,
     carried_food,
+    carries,
     danger,
     fire_here,
     fire_in_view,
@@ -31,7 +35,7 @@ from app.brains.senses import (
     water_in_view,
 )
 from app.core.rng import Rng
-from app.world_api.facade import WorldApi
+from app.world_api.facade import ActionHandle, WorldApi
 from app.world_api.models import Nearness, Perception, Volume
 
 STOREHOUSES = "the storehouses"
@@ -83,6 +87,10 @@ class UtilityBrain:
 
     def decide(self) -> None:
         api, notes = self.api, self.api.notes
+        again = self.eat_or_drink_again()
+        if again is not None:
+            notes["action"] = again.number
+            return
         perception = api.look_around()
         if perception.place == "asleep":  # woken but still lying there: the sleep goes on
             return
@@ -112,6 +120,25 @@ class UtilityBrain:
         if best.name == "sleep" and handle.result is None:
             notes["asleep"] = True
 
+    def eat_or_drink_again(self) -> ActionHandle | None:
+        """After a meal or a drink, feel whether it was enough (`check_self`) before looking about: still hungry with
+        food left (the berries ran out, there are nuts), eat on; still thirsty by the water, drink on."""
+        notes = self.api.notes
+        number = notes.get("action")
+        last = notes.get("last")
+        if last not in ("eat", "eat by the fire", "drink") or not isinstance(number, int):
+            return None
+        result = self.api.handle(number).result
+        if result is None or result.outcome != "done":
+            return None
+        you = self.api.check_self()
+        needs = Needs.read(you.feeling)
+        if last == "drink":
+            return self.api.drink() if needs.thirst >= 1 else None
+        food = carried_food(you)
+        left = [name for name in EAT_ORDER if name in food]
+        return self.api.eat(left[0]) if needs.hunger >= 1 and left else None
+
     # --- options ---
 
     def options(self, p: Perception) -> list[Option]:
@@ -120,8 +147,12 @@ class UtilityBrain:
         ctx = Context(self.api, self.profile, p, needs, now, self.chance, self.pick)
         options = [Option(1, "idle", lambda: self.api.wait(15))]
         behind_walls = self.profile.region == "town" and at(p, self.profile.home_area)  # walls keep animals out
-        if danger(p) is not None and not behind_walls and fire_here(p) not in ("burning", "low"):  # fire too
-            options.append(Option(200, "flee", self.api.flee))
+        threat = danger(p)
+        if threat is not None and not behind_walls and fire_here(p) not in ("burning", "low"):  # fire too
+            if carries(p, "spear") and DISTANCE[threat.nearness] in ("here", "near", "close"):  # armed: drive it off
+                options.append(Option(200, "fight off", partial(self.api.attack, threat.label)))
+            else:
+                options.append(Option(200, "flee", self.api.flee))
         thirst = self.thirst_option(p, needs, now)
         if thirst is not None:
             options.append(thirst)
@@ -152,7 +183,7 @@ class UtilityBrain:
         if needs.hunger < 2 and not mealtime:
             return None
         score = {1: 45.0, 2: 85.0, 3: 105.0}[needs.hunger]
-        food = carried_food(p)
+        food = carried_food(p.you)
         raw = [name for name in RAW if name in food]
         if raw and fire_here(p) in ("burning", "low"):
             return Option(score + 1, "eat by the fire", lambda: self.api.eat(raw[0]))

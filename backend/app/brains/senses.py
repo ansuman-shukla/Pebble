@@ -5,7 +5,7 @@ weighs (how hungry, what time of day, what food is around and how far). Nothing 
 from dataclasses import dataclass
 from typing import Literal
 
-from app.world_api.models import Nearness, Perception, ResourceName, Seen, TimeOfDay
+from app.world_api.models import Nearness, Perception, ResourceName, Seen, SelfView, TimeOfDay
 
 Phase = Literal["night", "morning", "day", "dusk"]
 Distance = Literal["here", "near", "close", "off", "far"]
@@ -123,10 +123,10 @@ def beside(seen: Seen) -> bool:
     return DISTANCE[seen.nearness] in ("here", "near")
 
 
-def carried_food(perception: Perception) -> dict[str, int]:
+def carried_food(you: SelfView) -> dict[str, int]:
     """Rough counts of the food carried ("a handful of roots" -> roots: 8)."""
     food: dict[str, int] = {}
-    for line in perception.you.carrying:
+    for line in you.carrying:
         for name, one in FOOD_ONE.items():
             if line.endswith(f" {name}") or line == one or line.endswith(one):
                 count = next((amount for words, amount in AMOUNT if line.startswith(words)), 1)

@@ -297,7 +297,8 @@ class Simulation:
         poses = {a.id: (a.position, a.heading_deg, a.activity) for a in core.state.animals.values() if a.alive}
         headings = {citizen.id: actions.walk_heading(citizen) for citizen in core.living()}
 
-        for citizen in core.living():
+        # followers move last, after the people they follow have taken this minute's steps
+        for citizen in sorted(core.living(), key=lambda c: c.action is not None and c.action.kind == "follow"):
             actions.advance(core, citizen)
 
         worse: dict[str, list[Crossing]] = {}

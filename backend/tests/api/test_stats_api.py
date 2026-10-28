@@ -11,6 +11,7 @@ from sqlmodel import Session, col, select
 
 from app.db.models import Event, Snapshot
 from app.engine import EngineLoop
+from app.sim import animals
 from app.sim.clock import DAY_MINUTES
 from app.sim.items import ITEMS, RESOURCES
 from app.sim.world import SimWorld
@@ -98,3 +99,15 @@ def test_days_split_at_town_midnight(client: TestClient, spectator_session: Sess
     assert [d["day"] for d in days] == [0, 1]
     assert [d["events"] for d in days] == [count(Event.tick < midnight), count(Event.tick >= midnight)]
     assert days[1]["events"] >= 11  # at least the tick summaries of 00:00 to 00:10
+
+
+def test_animal_deaths_are_not_counted_as_people(
+    client: TestClient, spectator_session: Session, sim_world: SimWorld
+) -> None:
+    loop = dev_run(spectator_session, sim_world)
+    deer = next(a for a in loop.sim.state.animals.values() if a.kind == "deer")
+    animals.kill(loop.sim.core, deer, "hunted")
+    loop.run_ticks(1, headless=True)
+    stats = client.get(f"{API}/stats").json()
+    assert stats["population"] == {"alive": 3, "dead": 0}
+    assert stats["deaths_by_cause"] == {} and stats["deaths"] == [] and stats["days"][0]["deaths"] == 0

@@ -102,7 +102,9 @@ def world_stats(
     people = roster(session, run.id)
 
     died = session.exec(
-        select(Event).where(Event.run_id == run.id, Event.type == "died", Event.tick <= tick).order_by(col(Event.seq))
+        select(Event)
+        .where(Event.run_id == run.id, Event.type == "died", Event.actor_kind == "citizen", Event.tick <= tick)
+        .order_by(col(Event.seq))
     ).all()
     deaths = []
     for row in died:
@@ -152,19 +154,19 @@ def world_stats(
 
     day_of = (col(Event.game_time) // DAY_MINUTES).label("day")
     counted = session.exec(
-        select(day_of, Event.type, func.count())
+        select(day_of, Event.type, Event.actor_kind, func.count())
         .where(Event.run_id == run.id, Event.tick <= tick)
-        .group_by(day_of, Event.type)
+        .group_by(day_of, Event.type, Event.actor_kind)
     ).all()
     days: dict[int, DayCount] = {}
-    for day_number, kind, count in counted:
+    for day_number, kind, actor_kind, count in counted:
         entry = days.setdefault(day_number, DayCount(day=day_number, events=0, said=0, actions=0, deaths=0))
         entry.events += count
         if kind == "said":
             entry.said += count
         elif kind == "action_started":
             entry.actions += count
-        elif kind == "died":
+        elif kind == "died" and actor_kind == "citizen":  # animals die too; deaths count people
             entry.deaths += count
 
     alive = sum(citizen.alive for citizen in state.citizens.values())

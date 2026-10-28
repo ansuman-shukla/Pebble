@@ -13,7 +13,7 @@ from app.observability.events import (
     Said,
 )
 from app.sim import fire, wild
-from app.sim.acting import begin, capital, item_name, refuse, settled, stack_in_reach
+from app.sim.acting import begin, capital, item_amount, item_name, refuse, settled, stack_in_reach
 from app.sim.bodies import COLLAPSE_WAKE_ENERGY, Crossing
 from app.sim.clock import NIGHT_ALTITUDE_DEG, SECONDS_PER_TICK, sun_altitude_deg, sun_direction
 from app.sim.core import HEARING_M, KEPT_HEARD, REACH_M, SimCore
@@ -48,6 +48,7 @@ from app.world_api.models import (
     FeedFire,
     Fish,
     Flee,
+    Follow,
     Gather,
     Give,
     Hunt,
@@ -92,6 +93,7 @@ DISTANCE_PHRASE: dict[str, str] = {
 COMPASS_BEARING = {name: index * 45.0 for index, name in enumerate(compass(b * 45.0) for b in range(8))}
 VERB: dict[str, str] = {
     "walk_to": "walking",
+    "follow": "following",
     "gather": "gathering",
     "eat": "eating",
     "drink": "drinking",
@@ -213,8 +215,8 @@ def work_task(words: str) -> WorkTask | None:
     return next((task for task in WORK_TASKS if task.words & query), None)
 
 
-_NIGHT_STOPS = frozenset({"walk_to", "gather", "wait", "rest", "work", "hunt", "fish"})
-_NEED_STOPS = frozenset({"walk_to", "gather", "wait", "rest", "flee", "work", "hunt", "fish"})
+_NIGHT_STOPS = frozenset({"walk_to", "follow", "gather", "wait", "rest", "work", "hunt", "fish"})
+_NEED_STOPS = frozenset({"walk_to", "follow", "gather", "wait", "rest", "flee", "work", "hunt", "fish"})
 
 
 # --- instant actions ---
@@ -257,9 +259,9 @@ def pick_up(core: SimCore, citizen: Citizen, action: PickUp) -> ActionResult:
     if room == 0:
         return refuse(core, citizen, "pick_up", "You can't carry any more.")
     if stack_id is None:
-        return _take_from_store(core, citizen, item, str(store_id), room)
+        return _take_from_store(core, citizen, item, str(store_id), item_amount(action.item, room))
     stack = core.state.ground[stack_id]
-    count = min(room, stack.count)
+    count = item_amount(action.item, min(room, stack.count))
     stack.count -= count
     if stack.count == 0:
         del core.state.ground[stack_id]
@@ -274,10 +276,10 @@ def pick_up(core: SimCore, citizen: Citizen, action: PickUp) -> ActionResult:
     return ActionResult(action="pick_up", outcome="done", text=f"You pick up {amount_words(count, ITEMS[item])}.")
 
 
-def _take_from_store(core: SimCore, citizen: Citizen, item: str, store_id: str, room: int) -> ActionResult:
+def _take_from_store(core: SimCore, citizen: Citizen, item: str, store_id: str, wanted: int) -> ActionResult:
     """Town folk take what they need from a storehouse within reach (03 pick_up: "within reach")."""
     store = core.state.stores[store_id]
-    count = min(room, store[item])
+    count = min(wanted, store[item])
     store[item] -= count
     if store[item] == 0:
         del store[item]
@@ -294,7 +296,10 @@ def drop(core: SimCore, citizen: Citizen, action: Drop) -> ActionResult:
     count = citizen.inventory.get(item, 0) if item else 0
     if item is None or count == 0:
         return refuse(core, citizen, "drop", f"You aren't carrying any {action.item}.")
-    del citizen.inventory[item]
+    count = item_amount(action.item, count)
+    citizen.inventory[item] -= count
+    if citizen.inventory[item] == 0:
+        del citizen.inventory[item]
     stack = core.new_stack(item, count, citizen.position, citizen.cell)
     core.item_moved(
         citizen,
@@ -319,7 +324,7 @@ def give(core: SimCore, citizen: Citizen, action: Give) -> ActionResult:
         return refuse(core, citizen, "give", f"You aren't carrying any {action.item}.")
     if receiver.body.asleep:
         return refuse(core, citizen, "give", f"{capital(label)} is asleep.")
-    count = min(count, core.room_for(receiver, item))
+    count = min(item_amount(action.item, count), core.room_for(receiver, item))
     if count == 0:
         return refuse(core, citizen, "give", f"{capital(label)} can't carry any more.")
     if not core.accepts_gift(citizen, receiver, item, count):
@@ -377,6 +382,8 @@ def start(core: SimCore, citizen: Citizen, action: Action) -> int:
         return citizen.next_action - 1
     if isinstance(action, Flee):
         return _start_flee(core, citizen)
+    if isinstance(action, Follow):
+        return _start_follow(core, citizen, action)
     if isinstance(action, Work):
         return _start_work(core, citizen, action)
     if isinstance(action, Hunt):
@@ -413,6 +420,18 @@ def _start_walk(core: SimCore, citizen: Citizen, target: Target) -> int:
     )
     walk.route, walk.goal, walk.target_id = route, resolved.goal, resolved.person_id
     return walk.number
+
+
+def _start_follow(core: SimCore, citizen: Citizen, action: Follow) -> int:
+    """Walk after someone in view until they stop (03 follow); the route is planned as they go."""
+    person = match_person(core, citizen, action.person)
+    if person is None:
+        return settled(core, citizen, "follow", "failed", "You don't see anyone like that.")
+    follow = begin(
+        core, citizen, "follow", person.name, {"target": "person"}, destination=person_label(citizen, person)
+    )
+    follow.target_id = person.id
+    return follow.number
 
 
 def _start_flee(core: SimCore, citizen: Citizen) -> int:
@@ -472,7 +491,8 @@ def _resolve(core: SimCore, citizen: Citizen, target: Target) -> _Destination | 
         if person is None:
             return "You don't see anyone like that."
         label = person_label(citizen, person)
-        return _Destination(person.position, label, person.id, f"You reach {label}.", label)
+        # spectators see who it really is; the walker only knows a stranger by their looks
+        return _Destination(person.position, label, person.id, f"You reach {label}.", shown=person.name)
     if isinstance(target, ThingTarget):
         thing = match_thing(core, citizen, target.what)
         if thing is not None:
@@ -666,7 +686,7 @@ def advance(core: SimCore, citizen: Citizen) -> None:
     action = citizen.action
     if action is None:
         return
-    if action.kind in ("walk_to", "flee"):
+    if action.kind in ("walk_to", "flee", "follow"):
         _advance_walk(core, citizen, action)
     elif action.kind in ("hunt", "attack"):
         wild.advance_stalk(core, citizen, action)
@@ -681,10 +701,11 @@ def _advance_walk(core: SimCore, citizen: Citizen, walk: ActionState) -> None:
         person = core.state.citizens[walk.target_id]
         distance = core.distance_m(citizen.position, person.position)
         if not person.body.alive or distance > core.sight_range(citizen):
-            core.end_action(citizen, "interrupted", f"You stop walking: you lose sight of {walk.destination}.")
+            text = f"You stop {VERB[walk.kind]}: you lose sight of {walk.destination}."
+            core.end_action(citizen, "interrupted", text)
             return
         if distance <= ARRIVE_M:
-            core.end_action(citizen, "done", f"You reach {walk.destination}.")
+            _beside(core, citizen, walk, person)
             return
         if walk.goal is None or core.distance_m(person.position, walk.goal) > FOLLOW_REPLAN_M:
             route = core.planner.plan(citizen.position, person.position, citizen.cell)
@@ -702,8 +723,9 @@ def _advance_walk(core: SimCore, citizen: Citizen, walk: ActionState) -> None:
     if not progress.arrived:
         return
     if walk.target_id is not None:
-        if core.distance_m(citizen.position, core.state.citizens[walk.target_id].position) <= ARRIVE_M:
-            core.end_action(citizen, "done", f"You reach {walk.destination}.")
+        person = core.state.citizens[walk.target_id]
+        if core.distance_m(citizen.position, person.position) <= ARRIVE_M:
+            _beside(core, citizen, walk, person)
         else:
             walk.goal = None  # they moved on: plan again next tick
         return
@@ -715,6 +737,18 @@ def _advance_walk(core: SimCore, citizen: Citizen, walk: ActionState) -> None:
         else:
             arrive = f"You reach about where {place.name} should be, but you don't find it."
     core.end_action(citizen, "done", arrive)
+
+
+def _beside(core: SimCore, citizen: Citizen, walk: ActionState, person: Citizen) -> None:
+    """Caught up with the person walked to: a walk ends; a follow keeps beside them until they stop moving."""
+    if walk.kind != "follow":
+        core.end_action(citizen, "done", f"You reach {walk.destination}.")
+        return
+    moving = person.action is not None and person.action.kind in ("walk_to", "flee", "follow")
+    if moving:
+        walk.route, walk.goal = None, None  # wait at their side; plan again once they pull ahead
+        return
+    core.end_action(citizen, "done", f"{capital(walk.destination)} stops, and you stop beside them.")
 
 
 def walk_pace(citizen: Citizen) -> float:
@@ -733,7 +767,12 @@ def walk_ahead(core: SimCore, citizen: Citizen) -> tuple[list[RoutePoint], float
     walkable as the route (in town: grid corners, no corner cutting).
     """
     walk = citizen.action
-    if walk is None or walk.kind not in ("walk_to", "flee") or walk.route is None or walk.leg >= len(walk.route.costs):
+    if (
+        walk is None
+        or walk.kind not in ("walk_to", "flee", "follow")
+        or walk.route is None
+        or walk.leg >= len(walk.route.costs)
+    ):
         return [], 0.0
     route, world = walk.route, core.world
     pace = walk_pace(citizen)

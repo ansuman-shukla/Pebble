@@ -166,8 +166,6 @@ class WorldApi:
         """A role task: farm, store food, guard, trade, weave, govern."""
         return self._start(Work(task=task))
 
-    # --- typed now, implemented in M6 ---
-
     def follow(self, person: str) -> ActionHandle:
         return self._start(Follow(person=person))
 

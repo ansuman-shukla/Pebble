@@ -285,6 +285,9 @@ def test_town_folk_take_wood_from_the_storehouse(new_sim: Callable[..., Simulati
     result = WorldApi(sim, porter.id).pick_up("wood")
     assert result.text == "You take plenty of wood from the storehouse."
     assert porter.inventory == {"wood": 25} and sim.state.stores["store-2"] == {"wood": 5}
+    porter.inventory.clear()
+    assert WorldApi(sim, porter.id).pick_up("two pieces of wood").text == "You take a little wood from the storehouse."
+    assert porter.inventory == {"wood": 2} and sim.state.stores["store-2"] == {"wood": 3}
 
 
 # --- perception and interrupts ---

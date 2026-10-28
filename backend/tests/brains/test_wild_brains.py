@@ -95,3 +95,35 @@ def test_a_hunter_stalks_the_game_in_view(new_sim: Callable[..., Simulation]) ->
     _brain(sim, hunter.id).decide()
     action = sim.citizen(hunter.id).action
     assert action is not None and action.kind == "hunt" and action.label == "a deer"
+
+
+def test_a_spear_carrier_drives_off_a_wolf_that_comes_close(new_sim: Callable[..., Simulation]) -> None:
+    sim = without_animals(new_sim())
+    armed = sim.add_citizen(make_spec("armed", home=None, region="band_a", inventory={"spear": 1}))
+    put_in_the_wild(sim, armed.id, wild_cell(sim))
+    skip_to(sim, armed.position, night=False)
+    add_animal(sim, "wolf", step_towards(armed.position, 0.0, 12.0, sim.world.radius_m), until=10**9)
+    _brain(sim, armed.id).decide()
+    action = sim.citizen(armed.id).action
+    assert action is not None and action.kind == "attack" and action.label == "a wolf"
+
+    unarmed = sim.add_citizen(make_spec("unarmed", home=None, region="band_a"))
+    sim.core.place_at(unarmed, step_towards(armed.position, 180.0, 300.0, sim.world.radius_m))
+    add_animal(sim, "wolf", step_towards(unarmed.position, 0.0, 12.0, sim.world.radius_m), until=10**9)
+    _brain(sim, unarmed.id).decide()
+    assert _started(sim, unarmed.id) == "flee"
+
+
+def test_a_hunter_back_at_camp_shares_half_the_meat(new_sim: Callable[..., Simulation]) -> None:
+    sim = without_animals(new_sim())
+    camp = {"site": "band_a_camp", "home": None, "region": "band_a"}
+    hunter = sim.add_citizen(make_spec("tek", at=(0.0, 30.0), skills=["hunting"], inventory={"meat": 4}, **camp))
+    other = sim.add_citizen(make_spec("suna", at=(1.0, 30.0), **camp))
+    skip_to(sim, hunter.position, night=False)
+    brain = _brain(sim, hunter.id)
+    brain.decide()
+    assert other.inventory.get("meat") == 2 and hunter.inventory["meat"] == 2
+    assert _started(sim, hunter.id) == "rest"
+    sim.run(21)  # the rest is over
+    brain.decide()
+    assert other.inventory["meat"] == 2  # once a day
