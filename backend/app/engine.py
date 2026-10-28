@@ -20,7 +20,7 @@ from types import FrameType
 from sqlalchemy import Engine as DbEngine
 from sqlmodel import Session
 
-from app.core.db import engine as default_db_engine
+from app.core.db import create_db_engine
 from app.db.models import Run
 from app.db.schemas import MAX_SPEED, ClockChange
 from app.lib.ulid import UlidFactory
@@ -35,6 +35,7 @@ from app.world.spec import load_site_kinds, load_world_spec
 from app.world.store import WorldKey, world_key
 
 PAUSED_POLL_S = 0.25
+APPLICATION_NAME = "pebble-engine"  # the engine's connections in pg_stat_activity
 log = logging.getLogger("pebble.engine")
 
 Brain = Callable[[Simulation], None]  # called before every tick (scripted brains arrive with M7)
@@ -173,7 +174,7 @@ def open_loop(
     return resume_run(session, world, run, ids, clock)
 
 
-def main(argv: Sequence[str] | None = None, db_engine: DbEngine = default_db_engine) -> None:
+def main(argv: Sequence[str] | None = None, db_engine: DbEngine | None = None) -> None:
     parser = argparse.ArgumentParser(prog="python -m app.engine", description=__doc__.splitlines()[0])
     parser.add_argument("--new-run", action="store_true", help="start a new run instead of resuming the latest")
     parser.add_argument("--speed", type=int, default=None, help=f"ticks per real second, 1..{MAX_SPEED}")
@@ -188,7 +189,7 @@ def main(argv: Sequence[str] | None = None, db_engine: DbEngine = default_db_eng
     clock = Clock(paused=args.paused)
     if args.speed is not None:
         clock.apply(ClockChange(speed=args.speed))
-    with Session(db_engine) as session:
+    with Session(db_engine or create_db_engine(APPLICATION_NAME)) as session:
         world = load_sim_world(session)
         loop = open_loop(
             session,
