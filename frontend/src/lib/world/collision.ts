@@ -4,7 +4,7 @@
  * it overlaps the body band, so roofs, canopies and gate lintels never block. Water blocks unless a walkable
  * surface (a bridge) covers it.
  */
-import { assetBaseY, PROPS, type PropKind } from './assets';
+import { assetBaseY, kindScale, PROPS, type PropKind } from './assets';
 import { openDoorParts } from './doors';
 
 /** A ground point (x, z) in metres. */
@@ -63,6 +63,12 @@ export function assetIdForKind(kind: string) {
   return PROPS[kind as PropKind];
 }
 
+/** Asset ids whose colliders a placement set needs (solid and surface placements). */
+export const colliderIdsOf = (placements: WalkPlacement[]) =>
+  placements
+    .filter((placement) => placement.walk !== 'none')
+    .map((placement) => assetIdForKind(placement.kind));
+
 const cross = (o: Point, a: Point, b: Point) =>
   (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
 
@@ -97,31 +103,59 @@ function boxOf(polygon: Point[]): Box {
   };
 }
 
-/** Places collider parts like three.js would place the model: rotation.y = deg·π/180, then translation. */
-export function placeParts(
-  placement: WalkPlacement,
+/** Collider parts moved by `place` (model space -> local metres), flattened to ground polygons with y-ranges. */
+export function shapesOf(
+  placementId: string,
   parts: ColliderPart[],
-  baseY = 0,
+  place: (vertex: [number, number, number]) => [number, number, number],
 ): Shape[] {
-  const angle = (placement.rotation_deg * Math.PI) / 180;
-  const cos = Math.cos(angle);
-  const sin = Math.sin(angle);
   return parts.map((part) => {
-    const polygon = convexHull(
-      part.map(([x, , z]) => [
-        placement.x + x * cos + z * sin,
-        placement.z - x * sin + z * cos,
-      ]),
-    );
-    const ys = part.map(([, y]) => y + baseY);
+    const placed = part.map(place);
+    const polygon = convexHull(placed.map(([x, , z]) => [x, z]));
+    const ys = placed.map(([, y]) => y);
     return {
-      placementId: placement.id,
+      placementId,
       polygon,
       minY: Math.min(...ys),
       maxY: Math.max(...ys),
       box: boxOf(polygon),
     };
   });
+}
+
+/**
+ * Places collider parts like three.js would place the model: uniform scale, rotation.y = deg·π/180, then
+ * translation to (x, baseY, z).
+ */
+export function placeParts(
+  placement: WalkPlacement,
+  parts: ColliderPart[],
+  baseY = 0,
+  scale = 1,
+): Shape[] {
+  const angle = (placement.rotation_deg * Math.PI) / 180;
+  const cos = Math.cos(angle) * scale;
+  const sin = Math.sin(angle) * scale;
+  return shapesOf(placement.id, parts, ([x, y, z]) => [
+    placement.x + x * cos + z * sin,
+    baseY + y * scale,
+    placement.z - x * sin + z * cos,
+  ]);
+}
+
+/** A standing cylinder (as a 12-sided prism), e.g. a person. */
+export function circleShape(
+  placementId: string,
+  [x, z]: Point,
+  radius: number,
+  minY: number,
+  maxY: number,
+): Shape {
+  const polygon = Array.from({ length: 12 }, (_, i): Point => {
+    const angle = (i / 12) * Math.PI * 2;
+    return [x + Math.cos(angle) * radius, z + Math.sin(angle) * radius];
+  });
+  return { placementId, polygon, minY, maxY, box: boxOf(polygon) };
 }
 
 /** Uniform grid over shape bounding boxes, for "what is near this point" queries. */
@@ -160,13 +194,22 @@ export interface WalkWorld {
   water: WalkWater[];
 }
 
-/** Builds the collision world; `colliders` must hold the colliders file of every solid and surface asset. */
+/** Extra local height of a placement's base (e.g. standing it on uneven terrain); 0 on flat ground. */
+export type PlacementLift = (placement: WalkPlacement) => number;
+
+/**
+ * Builds the collision world; `colliders` must hold the colliders file of every solid and surface asset.
+ * Parts are placed like the rendered model: at assetBaseY plus `lift`, scaled by kindScale. `extra` adds
+ * blockers that are not placements (e.g. scattered trees).
+ */
 export function buildWalkWorld(
   placements: WalkPlacement[],
   water: WalkWater[],
   colliders: ReadonlyMap<string, ColliderFile>,
+  lift?: PlacementLift,
+  extra: Shape[] = [],
 ): WalkWorld {
-  const blockers: Shape[] = [];
+  const blockers: Shape[] = [...extra];
   const surfaces: Shape[] = [];
   for (const placement of placements) {
     const id = assetIdForKind(placement.kind);
@@ -176,7 +219,8 @@ export function buildWalkWorld(
     const shapes = placeParts(
       placement,
       openDoorParts(id, file.parts),
-      assetBaseY(id),
+      assetBaseY(id) + (lift?.(placement) ?? 0),
+      kindScale(placement.kind),
     );
     (placement.walk === 'solid' ? blockers : surfaces).push(...shapes);
   }
@@ -186,6 +230,13 @@ export function buildWalkWorld(
     water,
   };
 }
+
+/** A collision world of blockers only (scattered props in the wild). */
+export const blockerWorld = (blockers: Shape[]): WalkWorld => ({
+  blockers: new ShapeGrid(blockers),
+  surfaces: new ShapeGrid([]),
+  water: [],
+});
 
 export const blocksBody = (shape: Shape, groundY: number) =>
   shape.maxY > groundY + BODY_BAND[0] && shape.minY < groundY + BODY_BAND[1];
@@ -285,18 +336,45 @@ function pushOutOfConvex(
   return [(center[0] - closest[0]) * depth, (center[1] - closest[1]) * depth];
 }
 
-/** Moves a player circle out of every blocker overlapping its body band. */
+/** Blockers near a point plus the moving ones (people). */
+function blockersNear(
+  world: WalkWorld,
+  box: Box,
+  dynamic: readonly Shape[],
+): Shape[] {
+  const near = world.blockers.near(box);
+  for (const shape of dynamic) {
+    const other = shape.box;
+    if (
+      other.maxX >= box.minX &&
+      other.minX <= box.maxX &&
+      other.maxZ >= box.minZ &&
+      other.minZ <= box.maxZ
+    )
+      near.push(shape);
+  }
+  return near;
+}
+
+/** Moves a circle out of every blocker that `blocks` (by default: overlapping the body band above groundY). */
 function pushOutOfBlockers(
   world: WalkWorld,
   point: Point,
   groundY: number,
+  dynamic: readonly Shape[],
+  radius = PLAYER_RADIUS,
+  blocks = (shape: Shape) => blocksBody(shape, groundY),
 ): Point {
   let [x, z] = point;
   for (let iteration = 0; iteration < PUSH_ITERATIONS; iteration++) {
     let moved = false;
-    for (const shape of world.blockers.near(pointBox([x, z], PLAYER_RADIUS))) {
-      if (!blocksBody(shape, groundY)) continue;
-      const push = pushOutOfConvex([x, z], PLAYER_RADIUS, shape.polygon);
+    for (const shape of blockersNear(
+      world,
+      pointBox([x, z], radius),
+      dynamic,
+    )) {
+      if (!blocks(shape)) continue;
+      const push = pushOutOfConvex([x, z], radius, shape.polygon);
       if (!push) continue;
       x += push[0];
       z += push[1];
@@ -307,36 +385,57 @@ function pushOutOfBlockers(
   return [x, z];
 }
 
+/** Whether a player circle at the point overlaps any blocker in its body band. */
+export function isBlocked(
+  world: WalkWorld,
+  point: Point,
+  groundY: number,
+  dynamic: readonly Shape[] = [],
+) {
+  return blockersNear(world, pointBox(point, PLAYER_RADIUS), dynamic).some(
+    (shape) =>
+      blocksBody(shape, groundY) &&
+      pushOutOfConvex(point, PLAYER_RADIUS, shape.polygon) !== null,
+  );
+}
+
+/** Whether a player at `point` may step there from `from` (water, a ledge too high, a cliff...). */
+export type CanEnter = (point: Point, from: Point) => boolean;
+
 function resolveStep(
   world: WalkWorld,
   from: Point,
   to: Point,
   groundY: number,
-  canEnter: (point: Point) => boolean,
+  canEnter: CanEnter,
+  dynamic: readonly Shape[],
 ): Point {
-  const enterable = (point: Point) => !isWater(world, point) && canEnter(point);
+  const enterable = (point: Point) =>
+    !isWater(world, point) && canEnter(point, from);
   // whole move first, then each axis alone so the player slides along banks and ledges
   for (const target of [
     to,
     [to[0], from[1]] as Point,
     [from[0], to[1]] as Point,
   ]) {
-    const resolved = pushOutOfBlockers(world, target, groundY);
+    const resolved = pushOutOfBlockers(world, target, groundY, dynamic);
     if (enterable(resolved)) return resolved;
   }
   return from;
 }
 
 /**
- * Where a player at `from` ends up when trying to move to `to`: slides along blockers, never enters water and
- * never enters a point `canEnter` rejects (e.g. a step up that is too high).
+ * Where a player at `from` ends up when trying to move to `to`: slides along blockers (the world's and the
+ * `dynamic` ones), never enters water and never enters a point `canEnter` rejects (e.g. a step up that is too
+ * high).
  */
 export function resolveMove(
   world: WalkWorld,
   from: Point,
   to: Point,
   groundY: number,
-  canEnter: (point: Point) => boolean = () => true,
+  canEnter: CanEnter = () => true,
+  dynamic: readonly Shape[] = [],
 ): Point {
   const steps = Math.max(
     1,
@@ -351,7 +450,79 @@ export function resolveMove(
       [position[0] + step[0], position[1] + step[1]],
       groundY,
       canEnter,
+      dynamic,
     );
   }
   return position;
 }
+
+/** A local point with its height: (x, y, z). */
+export type LocalPoint = [number, number, number];
+
+/**
+ * Where along the segment from `from` to `to` (0..1) it first enters a blocker's volume (its ground polygon
+ * extruded over its y-range), or 1 if it never does. Blockers the segment starts inside are ignored.
+ */
+export function raycastBlockers(
+  world: WalkWorld,
+  from: LocalPoint,
+  to: LocalPoint,
+  dynamic: readonly Shape[] = [],
+): number {
+  const dx = to[0] - from[0];
+  const dy = to[1] - from[1];
+  const dz = to[2] - from[2];
+  const box: Box = {
+    minX: Math.min(from[0], to[0]),
+    minZ: Math.min(from[2], to[2]),
+    maxX: Math.max(from[0], to[0]),
+    maxZ: Math.max(from[2], to[2]),
+  };
+  let first = 1;
+  for (const shape of blockersNear(world, box, dynamic)) {
+    // Cyrus-Beck: clip the segment against every face plane of the convex prism
+    let enter = 0;
+    let exit = first;
+    let startsInside = true;
+    const clip = (start: number, rate: number) => {
+      // inside where start + rate·t <= 0
+      if (start > 0) startsInside = false;
+      if (Math.abs(rate) < EPSILON) return start <= 0;
+      const t = -start / rate;
+      if (rate < 0) enter = Math.max(enter, t);
+      else exit = Math.min(exit, t);
+      return enter <= exit;
+    };
+    let hit = clip(from[1] - shape.maxY, dy) && clip(shape.minY - from[1], -dy);
+    const { polygon } = shape;
+    for (let i = 0; hit && i < polygon.length; i++) {
+      const a = polygon[i];
+      const b = polygon[(i + 1) % polygon.length];
+      const nx = b[1] - a[1];
+      const nz = -(b[0] - a[0]);
+      hit = clip(
+        (from[0] - a[0]) * nx + (from[2] - a[1]) * nz,
+        dx * nx + dz * nz,
+      );
+    }
+    if (hit && !startsInside && enter < first) first = enter;
+  }
+  return first;
+}
+
+/** Pushes a point (e.g. the camera) at height y out of blockers within `radius` of it. */
+export const clearOfBlockers = (
+  world: WalkWorld,
+  point: Point,
+  y: number,
+  radius: number,
+  dynamic: readonly Shape[] = [],
+) =>
+  pushOutOfBlockers(
+    world,
+    point,
+    y,
+    dynamic,
+    radius,
+    (shape) => shape.maxY > y - radius && shape.minY < y + radius,
+  );

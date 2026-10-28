@@ -275,7 +275,14 @@ const RIVER_WIDTH = 6;
 const RIVER_LIFT = 0.35;
 const RIVER_STEPS = 4;
 
-/** Ribbons along each river's cell path, sampled several times per cell and lifted just above the ground. */
+/** Shore points are found to this many halvings of a path step (10 m / 2⁸ ≈ 4 cm). */
+const SHORE_REFINE = 8;
+
+/**
+ * Ribbons along each river's cell path, sampled several times per cell and lifted just above the ground. A
+ * ribbon stops at the shore where the river reaches the sea or a lake (and starts again where it leaves one),
+ * so it never lies over water.
+ */
 export function riverGeometry(terrain: GlobeTerrain, rivers: number[][]) {
   const { globe } = terrain;
   const { radius } = globe;
@@ -286,26 +293,23 @@ export function riverGeometry(terrain: GlobeTerrain, rivers: number[][]) {
       .multiplyScalar(
         radius + Math.max(terrain.heightAt(direction, hint), 0) + RIVER_LIFT,
       );
-  for (const cells of rivers) {
-    if (cells.length < 2) continue;
-    const path: { direction: Vector3; cell: number }[] = [];
-    for (let i = 0; i + 1 < cells.length; i++) {
-      const a = cellDirection(globe, cells[i], new Vector3());
-      const b = cellDirection(globe, cells[i + 1], new Vector3());
-      for (let s = 0; s < RIVER_STEPS; s++)
-        path.push({
-          direction: a
-            .clone()
-            .lerp(b, s / RIVER_STEPS)
-            .normalize(),
-          cell: cells[i],
-        });
+  const wet = (direction: Vector3, hint: number) =>
+    WATER_BIOMES.has(terrain.biomeAt(direction, hint)) ||
+    terrain.heightAt(direction, hint) <= WATER_SURFACE;
+  /** The shore between a dry and a wet point (by bisection), on the dry side. */
+  const shore = (dry: Vector3, water: Vector3, hint: number) => {
+    let [low, high] = [dry, water];
+    for (let k = 0; k < SHORE_REFINE; k++) {
+      const middle = low.clone().lerp(high, 0.5).normalize();
+      if (wet(middle, hint)) high = middle;
+      else low = middle;
     }
-    const last = cells[cells.length - 1];
-    path.push({
-      direction: cellDirection(globe, last, new Vector3()),
-      cell: last,
-    });
+    return low;
+  };
+  type PathPoint = { direction: Vector3; cell: number };
+
+  function ribbon(path: PathPoint[]) {
+    if (path.length < 2) return;
     const edges = path.map(({ direction, cell }, i) => {
       const ahead = path[Math.min(i + 1, path.length - 1)].direction;
       const behind = path[Math.max(i - 1, 0)].direction;
@@ -326,6 +330,50 @@ export function riverGeometry(terrain: GlobeTerrain, rivers: number[][]) {
       vertices.push(...a.toArray(), ...c.toArray(), ...b.toArray());
       vertices.push(...c.toArray(), ...d.toArray(), ...b.toArray());
     }
+  }
+
+  for (const cells of rivers) {
+    if (cells.length < 2) continue;
+    const path: PathPoint[] = [];
+    for (let i = 0; i + 1 < cells.length; i++) {
+      const a = cellDirection(globe, cells[i], new Vector3());
+      const b = cellDirection(globe, cells[i + 1], new Vector3());
+      for (let s = 0; s < RIVER_STEPS; s++)
+        path.push({
+          direction: a
+            .clone()
+            .lerp(b, s / RIVER_STEPS)
+            .normalize(),
+          cell: cells[i],
+        });
+    }
+    const last = cells[cells.length - 1];
+    path.push({
+      direction: cellDirection(globe, last, new Vector3()),
+      cell: last,
+    });
+    // split the path into its dry runs, each ending exactly at the shore
+    let run: PathPoint[] = [];
+    path.forEach((point, i) => {
+      const previous = path[i - 1];
+      if (wet(point.direction, point.cell)) {
+        if (run.length > 0)
+          run.push({
+            direction: shore(previous.direction, point.direction, point.cell),
+            cell: point.cell,
+          });
+        ribbon(run);
+        run = [];
+        return;
+      }
+      if (run.length === 0 && previous)
+        run.push({
+          direction: shore(point.direction, previous.direction, point.cell),
+          cell: point.cell,
+        });
+      run.push(point);
+    });
+    ribbon(run);
   }
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new Float32BufferAttribute(vertices, 3));

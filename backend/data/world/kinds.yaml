@@ -20,7 +20,7 @@ basalt_column: {footprint: [1.5, 2], walk: solid}
 lava_rock: {footprint: [2, 1.5], walk: solid}
 fumarole: {footprint: [1.5, 1.5], walk: solid}
 geyser: {footprint: [3, 3], walk: solid}
-hot_spring_pool: {footprint: [3, 2.5], walk: none}
+hot_spring_pool: {footprint: [3, 2.5], walk: solid}
 obsidian: {footprint: [1, 1], walk: solid}
 giant_tree: {footprint: [18, 14.8], walk: solid, blockers: [[-1.8, -1.8, 1.8, 1.8]]}
 snowy_spruce: {footprint: [3, 3], walk: solid, blockers: [[-0.3, -0.3, 0.3, 0.3]]}

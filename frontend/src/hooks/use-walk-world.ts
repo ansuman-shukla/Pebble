@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { collidersUrl } from '@/lib/world/assets';
 import {
-  assetIdForKind,
   buildWalkWorld,
+  colliderIdsOf,
   type ColliderFile,
   type WalkPlacement,
   type WalkWater,
@@ -25,10 +25,38 @@ function loadColliders(id: string) {
   return file;
 }
 
-interface Built {
-  placements: WalkPlacement[];
-  water: WalkWater[];
-  world: WalkWorld;
+interface Loaded {
+  key: string;
+  files: ReadonlyMap<string, ColliderFile>;
+}
+
+/** The colliders files of a set of assets by id (null while they load). */
+export function useColliders(
+  ids: readonly string[],
+): ReadonlyMap<string, ColliderFile> | null {
+  const unique = useMemo(() => [...new Set(ids)].sort(), [ids]);
+  const key = unique.join(',');
+  const [loaded, setLoaded] = useState<Loaded | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    Promise.all(unique.map(loadColliders))
+      .then((files) => {
+        if (!live) return;
+        setLoaded({
+          key,
+          files: new Map(files.map((file, index) => [unique[index], file])),
+        });
+      })
+      .catch((reason: Error) => live && setError(reason));
+    return () => {
+      live = false;
+    };
+  }, [unique, key]);
+
+  if (error) throw error;
+  return loaded?.key === key ? loaded.files : null;
 }
 
 /** The collision world for a placement set (null while colliders load); rebuilt only when the arrays change. */
@@ -36,33 +64,10 @@ export function useWalkWorld(
   placements: WalkPlacement[],
   water: WalkWater[],
 ): WalkWorld | null {
-  const [built, setBuilt] = useState<Built | null>(null);
-  const [error, setError] = useState<Error | null>(null);
-
-  useEffect(() => {
-    let live = true;
-    const ids = [
-      ...new Set(
-        placements
-          .filter((placement) => placement.walk !== 'none')
-          .map((placement) => assetIdForKind(placement.kind)),
-      ),
-    ];
-    Promise.all(ids.map(loadColliders))
-      .then((files) => {
-        if (!live) return;
-        const byId = new Map(files.map((file, index) => [ids[index], file]));
-        const world = buildWalkWorld(placements, water, byId);
-        setBuilt({ placements, water, world });
-      })
-      .catch((reason: Error) => live && setError(reason));
-    return () => {
-      live = false;
-    };
-  }, [placements, water]);
-
-  if (error) throw error;
-  return built?.placements === placements && built.water === water
-    ? built.world
-    : null;
+  const ids = useMemo(() => colliderIdsOf(placements), [placements]);
+  const colliders = useColliders(ids);
+  return useMemo(
+    () => colliders && buildWalkWorld(placements, water, colliders),
+    [colliders, placements, water],
+  );
 }
