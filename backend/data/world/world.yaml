@@ -1,0 +1,249 @@
+# The world spec: the procedural pass reads `terrain`, `climate`, `biomes`, `hydrology`; the authored pass places
+# continents, the land loop, mountain ranges, rivers and sites. Same seed + same spec = same world.
+#
+# Positions are [lat, lon] in degrees (+lat north; lon 0 faces +Z, lon 90 faces +X). On a 2 km planet 1° ≈ 35 m.
+# Site placements are local metres around the site's anchor (x east, z south, like the town) in the town's
+# placement format; kinds come from ../town/kinds.yaml and kinds.yaml.
+
+seed: 20261028
+radius_m: 2000
+frequency: 60
+
+terrain:
+  sea_level: 0.0 # threshold of the continental field
+  warp: {frequency: 1.6, octaves: 3, strength: 0.2}
+  coast: {frequency: 2.5, octaves: 5}
+  coast_amplitude: 0.45
+  islands: {frequency: 4.0, octaves: 4}
+  island_threshold: 0.42
+  hills: {frequency: 7.0, octaves: 4}
+  hills_m: 55
+  ridges: {frequency: 6.0, octaves: 4}
+  relief: {frequency: 3.5, octaves: 4}
+  relief_m: 150
+  relief_threshold: 0.55
+  lowland_m: 30
+  max_land_m: 250
+  min_sea_m: -120
+  shelf_m: -25
+  beach_m: 4
+
+continents:
+  - {name: Ashland, at: [22, 0], radius_deg: 48}
+  - {name: Eastreach, at: [2, 125], radius_deg: 40}
+  - {name: Westmark, at: [12, -122], radius_deg: 40}
+  - {name: Southland, at: [-42, 70], radius_deg: 26}
+  - {name: Farsouth, at: [-38, -170], radius_deg: 20}
+  - {name: South cap, at: [-90, 0], radius_deg: 24}
+  - {name: North cap, at: [90, 0], radius_deg: 9}
+
+seas:
+  - {name: Bright gulf, at: [30, 30], radius_deg: 8}
+  - {name: North gate sound, at: [79, -50], radius_deg: 6.5}
+  - {name: South gate sound, at: [63, -60], radius_deg: 6.5}
+
+# A closed ring of land around the planet: continents joined by land bridges, closed by the ice gate.
+land_loop:
+  core_fraction: 0.5
+  core_height_m: 3
+  waypoints:
+    - {at: [30, -5], width_m: 600}
+    - {at: [16, 25], width_m: 500}
+    - {at: [15, 55], width_m: 450}
+    - {at: [8, 82], width_m: 150} # first land bridge
+    - {at: [5, 110], width_m: 500}
+    - {at: [5, 150], width_m: 450}
+    - {at: [8, 178], width_m: 140} # second land bridge
+    - {at: [12, -148], width_m: 450}
+    - {at: [30, -112], width_m: 450}
+    - {at: [52, -92], width_m: 250}
+    - {at: [66, -72], width_m: 160}
+    - {at: [71, -55], width_m: 90} # the ice gate
+    - {at: [64, -35], width_m: 200}
+    - {at: [50, -22], width_m: 400}
+
+mountains:
+  - {name: Greyspine, height_m: 210, width_m: 260, points: [[50, -32], [45, -14], [43, -4]]}
+  - {name: Eastern wall, height_m: 190, width_m: 240, points: [[20, 115], [8, 130], [-10, 140]]}
+  - {name: Westmark ridge, height_m: 180, width_m: 220, points: [[35, -130], [20, -120], [0, -112]]}
+
+climate:
+  equator_c: 30
+  pole_c: -25
+  exponent: 1.6
+  lapse_c_per_m: 0.08
+  moisture: {frequency: 3.0, octaves: 4}
+  moisture_water_m: 250
+
+biomes:
+  ice_c: -9
+  snow_c: -3
+  tundra_c: 3
+  taiga_c: 8
+  savanna_c: 21
+  mountain_m: 160
+  hills_m: 95
+  wetland_moisture: 0.68
+  wetland_max_m: 20
+  forest_moisture: 0.55
+  savanna_moisture: 0.45
+
+hydrology:
+  river_min_cells: 60
+  river_min_length: 6
+  lake_min_depth_m: 3.0
+  lake_max_depth_m: 8.0
+  lake_min_cells: 3
+  channel_depth_m: 3
+
+rivers:
+  # from the Greyspine down the west side of the town (its mill stream runs at local x = -156) to the sea
+  - {id: town-river, name: Mill river, points: [[44, 0], [42.5, 6.3], [33.5, 6.3], [31, 14], [30.5, 24]]}
+  - {id: falls-river, name: Falls river, points: [[14, 18], [7.5, 15.5], [5, 15], [1.4, 15]]}
+  - {id: falls-outflow, name: Lower falls river, points: [[1.4, 15], [-1.8, 15], [-10, 14], [-22, 10], [-34, 8]]}
+
+loop_gate: ice_gate
+
+sites:
+  - id: town
+    kind: town
+    name: The castle town
+    at: [38, 12]
+    terrain: {type: plateau, height_m: 8, radius_m: 230, blend_m: 70}
+    biome: grassland
+    biome_radius_m: 300
+
+  - id: band_a_camp
+    kind: camp
+    name: Band A camp
+    at: [12, 100]
+    terrain: {type: plateau, radius_m: 50, blend_m: 40}
+    placements: &camp
+      - {id: fire-pit, kind: fire_pit, at: [0, 0]}
+      - {id: cook-tripod, kind: cook_tripod, at: [-2.5, 1.5]}
+      - {id: shelter-n, kind: lean_to, at: [0, -6]}
+      - {id: shelter-w, kind: lean_to, at: [-6, 2], rotation_deg: 90}
+      - {id: shelter-e, kind: lean_to, at: [6, 2], rotation_deg: 270}
+      - {id: firewood, kind: firewood, at: [3, -2.5]}
+      - {id: drying-rack, kind: drying_rack, at: [3, 6]}
+      - {id: basket, kind: reed_basket, at: [-3.5, -2.5]}
+      - {id: torch, kind: reed_torch, at: [2.5, -4.5]}
+
+  - id: band_b_camp
+    kind: camp
+    name: Band B camp
+    at: [-6.3, -152.6]
+    terrain: {type: plateau, radius_m: 50, blend_m: 40}
+    placements: *camp
+
+  - id: smoking_mountain
+    kind: landmark
+    name: Smoking mountain
+    at: [18, -20]
+    terrain:
+      type: volcano
+      peak_m: 320
+      base_radius_m: 400
+      crater_radius_m: 95
+      crater_depth_m: 30
+      floor_radius_m: 45
+      volcanic_radius_m: 200
+    placements:
+      - {id: fumarole-1, kind: fumarole, at: [0, 0]}
+      - {id: fumarole-2, kind: fumarole, at: [7, -5]}
+      - {id: lava-rock-1, kind: lava_rock, at: [-8, 4]}
+      - {id: lava-rock-2, kind: lava_rock, at: [5, 9]}
+      - {id: basalt-1, kind: basalt_column, at: [-12, -9]}
+      - {id: basalt-2, kind: basalt_column, at: [13, -4], rotation_deg: 90}
+      - {id: obsidian, kind: obsidian, at: [-3, 12]}
+
+  - id: great_falls
+    kind: landmark
+    name: Great falls
+    at: [5, 15]
+    terrain:
+      type: falls
+      lip_m: 70
+      drop_m: 40
+      bearing_deg: 180
+      lake_distance_m: 125
+      lake_radius_m: 100
+      lake_depth_m: 5
+      upland_radius_m: 260
+      flat_radius_m: 25
+    placements:
+      - {id: lip-rock-w, kind: rock, at: [-6, 6]}
+      - {id: lip-rock-e, kind: rock, at: [6, 6]}
+      - {id: lip-boulder-w, kind: boulder, at: [-12, 0]}
+      - {id: lip-boulder-e, kind: boulder, at: [12, 0]}
+
+  - id: elder_tree
+    kind: landmark
+    name: Elder tree
+    at: [10, 2]
+    terrain: {type: plateau, radius_m: 40, blend_m: 40}
+    biome: broadleaf_forest
+    biome_radius_m: 160
+    placements:
+      - {id: elder-tree, kind: giant_tree, at: [0, 0]}
+      - {id: fallen-log, kind: fallen_log, at: [9, 6], rotation_deg: 90}
+      - {id: rock, kind: rock, at: [-8, 5]}
+
+  - id: standing_stones
+    kind: landmark
+    name: Standing stones
+    at: [28, -4]
+    terrain: {type: hill, radius_m: 40, blend_m: 90, rise_m: 18}
+    biome: grassland
+    biome_radius_m: 140
+    placements:
+      - {id: stone-1, kind: rock_spire, at: [9, 0]}
+      - {id: stone-2, kind: rock_spire, at: [6.4, 6.4]}
+      - {id: stone-3, kind: rock_spire, at: [0, 9]}
+      - {id: stone-4, kind: rock_spire, at: [-6.4, 6.4]}
+      - {id: stone-5, kind: rock_spire, at: [-9, 0]}
+      - {id: stone-6, kind: rock_spire, at: [-6.4, -6.4]}
+      - {id: stone-7, kind: rock_spire, at: [0, -9]}
+      - {id: stone-8, kind: rock_spire, at: [6.4, -6.4]}
+
+  - id: painted_cave
+    kind: landmark
+    name: Painted cave
+    at: [20, 108]
+    terrain: {type: plateau, radius_m: 40, blend_m: 50}
+    placements:
+      - {id: outcrop-w, kind: boulder, at: [-4, -4]}
+      - {id: outcrop-n, kind: boulder, at: [0, -6]}
+      - {id: outcrop-e, kind: boulder, at: [4, -4]}
+      - {id: spire-w, kind: rock_spire, at: [-7, -7]}
+      - {id: spire-e, kind: rock_spire, at: [7, -7]}
+      - {id: paintings, kind: petroglyph_boulder, at: [0, -2]}
+      - {id: rock, kind: rock, at: [3, 1]}
+
+  - id: ice_gate
+    kind: landmark
+    name: Ice gate
+    at: [71, -55]
+    terrain: {type: plateau, radius_m: 70, blend_m: 40}
+    biome: ice
+    biome_radius_m: 110
+    placements:
+      - {id: west-block-n, kind: ice_block, at: [-55, -3]}
+      - {id: west-block-s, kind: ice_block, at: [-55, 3]}
+      - {id: east-block-n, kind: ice_block, at: [55, -3]}
+      - {id: east-block-s, kind: ice_block, at: [55, 3]}
+      - {id: west-spruce, kind: snowy_spruce, at: [-62, 8]}
+      - {id: east-spruce, kind: snowy_spruce, at: [62, -8]}
+
+  - id: hot_springs
+    kind: landmark
+    name: Hot springs
+    at: [46, -18]
+    terrain: {type: plateau, radius_m: 40, blend_m: 50}
+    placements:
+      - {id: pool-1, kind: hot_spring_pool, at: [-5, -3]}
+      - {id: pool-2, kind: hot_spring_pool, at: [4, -4]}
+      - {id: pool-3, kind: hot_spring_pool, at: [0, 5]}
+      - {id: rock-e, kind: rock, at: [9, 2]}
+      - {id: rock-w, kind: rock, at: [-9, 3]}
+      - {id: boulder, kind: boulder, at: [0, -10]}

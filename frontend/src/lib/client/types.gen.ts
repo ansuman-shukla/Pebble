@@ -5,6 +5,40 @@ export type ClientOptions = {
 };
 
 /**
+ * Anchor
+ */
+export type Anchor = {
+    /**
+     * Position
+     */
+    position: [
+        number,
+        number,
+        number
+    ];
+    /**
+     * East
+     */
+    east: [
+        number,
+        number,
+        number
+    ];
+    /**
+     * North
+     */
+    north: [
+        number,
+        number,
+        number
+    ];
+    /**
+     * Height M
+     */
+    height_m: number;
+};
+
+/**
  * Extent
  */
 export type Extent = {
@@ -54,6 +88,51 @@ export type HealthStatus = {
      * Database
      */
     database: 'up' | 'down';
+};
+
+/**
+ * River
+ */
+export type River = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Cells
+     */
+    cells: Array<number>;
+};
+
+/**
+ * Site
+ */
+export type Site = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: 'town' | 'camp' | 'landmark';
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Cell
+     */
+    cell: number;
+    anchor: Anchor;
+    /**
+     * Placements
+     */
+    placements?: Array<TownPlacement>;
 };
 
 /**
@@ -211,6 +290,64 @@ export type TownWater = {
     ]>>;
 };
 
+/**
+ * WorldView
+ */
+export type WorldView = {
+    /**
+     * Seed
+     */
+    seed: number;
+    /**
+     * Generator Version
+     */
+    generator_version: string;
+    /**
+     * Radius M
+     */
+    radius_m: number;
+    /**
+     * Frequency
+     */
+    frequency: number;
+    /**
+     * Cell Count
+     */
+    cell_count: number;
+    /**
+     * Biome Names
+     */
+    biome_names: Array<string>;
+    /**
+     * Positions
+     */
+    positions: string;
+    /**
+     * Heights
+     */
+    heights: string;
+    /**
+     * Biomes
+     */
+    biomes: string;
+    /**
+     * Triangles
+     */
+    triangles: string;
+    /**
+     * Rivers
+     */
+    rivers: Array<River>;
+    /**
+     * Land Loop
+     */
+    land_loop: Array<number>;
+    /**
+     * Sites
+     */
+    sites: Array<Site>;
+};
+
 export type HealthReadHealthData = {
     body?: never;
     path?: never;
@@ -242,3 +379,19 @@ export type TownReadTownResponses = {
 };
 
 export type TownReadTownResponse = TownReadTownResponses[keyof TownReadTownResponses];
+
+export type WorldReadWorldData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/world';
+};
+
+export type WorldReadWorldResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorldView;
+};
+
+export type WorldReadWorldResponse = WorldReadWorldResponses[keyof WorldReadWorldResponses];

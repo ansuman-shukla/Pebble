@@ -46,10 +46,99 @@
           }
         }
       }
+    },
+    "/api/v1/world": {
+      "get": {
+        "tags": [
+          "world"
+        ],
+        "summary": "Read World",
+        "description": "The planet: grid, heights, biomes, rivers, land loop and sites (stored JSON, generated on first request).",
+        "operationId": "world-read_world",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorldView"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "Anchor": {
+        "properties": {
+          "position": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "Position"
+          },
+          "east": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "East"
+          },
+          "north": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "North"
+          },
+          "height_m": {
+            "type": "number",
+            "title": "Height M"
+          }
+        },
+        "type": "object",
+        "required": [
+          "position",
+          "east",
+          "north",
+          "height_m"
+        ],
+        "title": "Anchor"
+      },
       "Extent": {
         "properties": {
           "min_x": {
@@ -119,6 +208,83 @@
           "database"
         ],
         "title": "HealthStatus"
+      },
+      "River": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "cells": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Cells"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "cells"
+        ],
+        "title": "River"
+      },
+      "Site": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "town",
+              "camp",
+              "landmark"
+            ],
+            "title": "Kind"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "cell": {
+            "type": "integer",
+            "title": "Cell"
+          },
+          "anchor": {
+            "$ref": "#/components/schemas/Anchor"
+          },
+          "placements": {
+            "items": {
+              "$ref": "#/components/schemas/TownPlacement"
+            },
+            "type": "array",
+            "title": "Placements",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "cell",
+          "anchor"
+        ],
+        "title": "Site"
       },
       "Spawn": {
         "properties": {
@@ -398,6 +564,91 @@
           "polygon"
         ],
         "title": "TownWater"
+      },
+      "WorldView": {
+        "properties": {
+          "seed": {
+            "type": "integer",
+            "title": "Seed"
+          },
+          "generator_version": {
+            "type": "string",
+            "title": "Generator Version"
+          },
+          "radius_m": {
+            "type": "number",
+            "title": "Radius M"
+          },
+          "frequency": {
+            "type": "integer",
+            "title": "Frequency"
+          },
+          "cell_count": {
+            "type": "integer",
+            "title": "Cell Count"
+          },
+          "biome_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Biome Names"
+          },
+          "positions": {
+            "type": "string",
+            "title": "Positions"
+          },
+          "heights": {
+            "type": "string",
+            "title": "Heights"
+          },
+          "biomes": {
+            "type": "string",
+            "title": "Biomes"
+          },
+          "triangles": {
+            "type": "string",
+            "title": "Triangles"
+          },
+          "rivers": {
+            "items": {
+              "$ref": "#/components/schemas/River"
+            },
+            "type": "array",
+            "title": "Rivers"
+          },
+          "land_loop": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Land Loop"
+          },
+          "sites": {
+            "items": {
+              "$ref": "#/components/schemas/Site"
+            },
+            "type": "array",
+            "title": "Sites"
+          }
+        },
+        "type": "object",
+        "required": [
+          "seed",
+          "generator_version",
+          "radius_m",
+          "frequency",
+          "cell_count",
+          "biome_names",
+          "positions",
+          "heights",
+          "biomes",
+          "triangles",
+          "rivers",
+          "land_loop",
+          "sites"
+        ],
+        "title": "WorldView"
       }
     }
   }
