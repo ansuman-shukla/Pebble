@@ -1,4 +1,4 @@
-# Plan: Phase A, building the world (M0-M7)
+# Plan: Phase A, building the world (M0-M9)
 
 Execution brief for the milestones in `docs/design/09-roadmap.md`. Read `docs/README.md` and the design docs first;
 this file adds the build order, asset sources and working rules. No agent minds are connected in phase A.
@@ -10,13 +10,15 @@ One branch + PR per milestone, from the latest `main`, named `ansuman/<type>/<sl
 | Milestone | Branch (suggested) | First deliverable to show |
 |---|---|---|
 | M0 | `ansuman/build/m0-scaffold` | empty backend + frontend pass lint/tests; health endpoint shown in the browser |
-| M1 | `ansuman/feat/m1-globe` | `/world` returns a seeded hex-sphere with biomes, rivers, town, camps, landmarks |
-| M2 | `ansuman/feat/m2-world-viewer` | the static planet in the browser, orbit to street level |
-| M3 | `ansuman/feat/m3-sim-core` | a test citizen walks, drinks, eats, sleeps through `world_api` |
-| M4 | `ansuman/feat/m4-ecology` | herds, predators, plant regrowth, fire over 10 headless game days |
-| M5 | `ansuman/feat/m5-scripted-citizens` | 15 citizens live 10+ game days |
-| M6 | `ansuman/feat/m6-live-spectator` | follow any citizen live; replay any moment |
-| M7 | `ansuman/docs/m7-world-gate` | checklist ticked, findings note |
+| M1 | `ansuman/feat/m1-characters-assets` | gallery of the 15 citizens (Stone Age remixes included) and v0 animals, animating |
+| M2 | `ansuman/feat/m2-walkable-town` | walk in through the gate and along the town's streets in third person |
+| M3 | `ansuman/feat/m3-globe` | `/world` returns a seeded hex-sphere with biomes, rivers, town, camps, landmarks |
+| M4 | `ansuman/feat/m4-planet-viewer` | the static planet in the browser, orbit down into the town |
+| M5 | `ansuman/feat/m5-sim-core` | a test citizen walks, drinks, eats, sleeps through `world_api` |
+| M6 | `ansuman/feat/m6-ecology` | herds, predators, plant regrowth, fire over 10 headless game days |
+| M7 | `ansuman/feat/m7-scripted-citizens` | 15 citizens live 10+ game days |
+| M8 | `ansuman/feat/m8-live-spectator` | follow any citizen live; replay any moment |
+| M9 | `ansuman/docs/m9-world-gate` | checklist ticked, findings note |
 
 ## Accepted defaults (from `docs/decisions.md`)
 Castle-town look (~1600, stone-based keep); Postgres via `docker compose` on port 5544 with data in
@@ -45,7 +47,7 @@ drei; harness leaks are logged, not rewritten.
 | Coast and sea | **Coast and Boardwalk**, **Coral Reef** | rocks, driftwood, reef, fish | boardwalk, modern props |
 | Other animals | search `/api/assets` | wolf, boar, goat, lion, shark, seal, fish (all found as free assets) | - |
 
-### Known gaps (check before M2, fill or report)
+### Known gaps (check in M1, fill or report)
 - **Stone Age people:** no caveman/hunter-gatherer characters found. Check https://polyfork.dev/characters, try
   remixing villagers via params (clothing palette), and file the gap with Polyfork's `report_need`. Fallback: simple
   parametric stand-ins.

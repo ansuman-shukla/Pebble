@@ -4,7 +4,7 @@
 
 | # | Decision | Why | Date |
 |---|---|---|---|
-| D1 | Phase A completes the world with scripted citizens; agents enter only after the M7 gate | agents should get a finished world and a frozen contract | 2026-10-28 |
+| D1 | Phase A completes the world with scripted citizens; agents enter only after the M9 gate | agents should get a finished world and a frozen contract | 2026-10-28 |
 | D2 | Pebble is fully contained: private devin-switch (`vendor/`, `.runtime/ds`), private Claude Code, `env -i` launchers | the main devin-switch is for daily work and must never be affected | 2026-10-28 |
 | D3 | Mind backends: Claude Code for Claude models (4-5 citizens, Sonnet/Haiku), Devin via Pebble ds for the rest | Claude models don't act in the world through Devin; Devin gives many models from the shared pool | 2026-10-28 |
 | D4 | The world is a real sphere on a hex grid, with a walkable land loop | "start somewhere, walk on, come back" must be true | 2026-10-28 |
@@ -21,6 +21,12 @@
 | D15 | 3D stack: react-three-fiber + drei | fits the React frontend | 2026-10-28 |
 | D16 | Harness leaks in speech (paths, links): forbid in prompts, flag in the disclosure log, never rewrite speech | keep the experiment honest | 2026-10-28 |
 | D17 | 3D assets from Polyfork (all low-poly parts free), vendored into the frontend with a manifest | kits match the town, forests, snow, volcanic landmarks; no hotlinking | 2026-10-28 |
+| D18 | Phase A order: characters and assets (M1), then a walkable town (M2), then the globe (M3) and planet viewer (M4); later milestones renumbered | see and walk the town with its people early; the town spec is in local metres so it drops onto the globe unchanged | 2026-10-28 |
+| D19 | "Navigate the town" = third-person walking through gate, bridge and streets with collisions; buildings are shells with opening doors, no interiors in v0 | Polyfork buildings have no interiors | 2026-10-28 |
+| D20 | The repo is private; vendored Polyfork files are committed | Polyfork's licence forbids redistributing the files, which a public repo would do | 2026-10-28 |
+| D21 | Frontend uses Tailwind v4 (Associo uses v3) | new codebase, current shadcn default | 2026-10-28 |
+| D22 | Local ports: API 8100, frontend 5180 (Postgres 5544) | run next to Associo's 8000/5173 without clashes | 2026-10-28 |
+| D23 | Frontend uses Pebble's own pnpm 12 (`frontend/scripts/pnpm.sh`, installed in `.runtime/`) with `minimumReleaseAge` 7 days; backend uses uv `exclude-newer = "7 days"` | dependencies must be at least a week old; the global pnpm 9 can't enforce it | 2026-10-28 |
 
 ## Open (recommendation first)
 

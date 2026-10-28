@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Pebble-local Claude Code: own install, HOME and config dir inside this repo.
-# Auth: put CLAUDE_CODE_OAUTH_TOKEN (from `scripts/claude.sh setup-token`) in Pebble/.env.
+# Auth: put CLAUDE_CODE_OAUTH_TOKEN (from `backend/scripts/claude.sh setup-token`) in Pebble/.env.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 RUNTIME="$ROOT/.runtime"
 TOKEN=""
 if [[ -f "$ROOT/.env" ]]; then

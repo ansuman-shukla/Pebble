@@ -13,7 +13,7 @@ Start with the vision, then read in order. Each design doc is short and owns one
 | [design/06-observability.md](design/06-observability.md) | event store, transcripts, self-disclosure log, spectator API |
 | [design/07-spectator-client.md](design/07-spectator-client.md) | pages, 3D world view, assets |
 | [design/08-architecture.md](design/08-architecture.md) | processes, repository layout, tooling, isolation rules |
-| [design/09-roadmap.md](design/09-roadmap.md) | milestones M0-M11 and later versions |
+| [design/09-roadmap.md](design/09-roadmap.md) | milestones M0-M13 and later versions |
 | [decisions.md](decisions.md) | accepted decisions and open questions |
 | [findings/](findings/) | dated experiment results |
 | [plans/](plans/) | execution briefs per phase (start: [phase A](plans/2026-10-28-phase-a-world.md)) |

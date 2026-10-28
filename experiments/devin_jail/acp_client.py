@@ -1,6 +1,6 @@
 """Minimal ACP client that drives Pebble's private `ds acp` bridge (jailed Devin natives) for NPCs.
 
-The jail itself lives in each Pebble account's Devin config (scripts/apply_npc_config.py).
+The jail itself lives in each Pebble account's Devin config (backend/scripts/apply_npc_config.py).
 Every JSON-RPC message in and out is written to the run's events.jsonl.
 """
 
@@ -14,7 +14,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
-LAUNCHER = ROOT / "scripts" / "ds.sh"
+LAUNCHER = ROOT / "backend" / "scripts" / "ds.sh"
 RUNTIME = ROOT / ".runtime"
 PYTHON = "/opt/homebrew/bin/python3"
 REQUEST_TIMEOUT = 120.0

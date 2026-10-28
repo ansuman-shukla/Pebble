@@ -1,0 +1,41 @@
+[project]
+name = "app"
+version = "0.1.0"
+description = "Pebble backend: world engine and spectator API"
+requires-python = "~=3.12.0"
+dependencies = [
+    "alembic>=1.20.0",
+    "fastapi>=0.156.8",
+    "psycopg[binary]>=3.3.6",
+    "pydantic-settings>=2.16.1",
+    "sqlmodel>=0.0.48",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[tool.uv]
+package = false
+exclude-newer = "7 days"
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.16.0",
+    "mypy>=2.4.0",
+    "pytest>=9.1.1",
+    "ruff>=0.17.1",
+]
+
+[tool.mypy]
+strict = true
+plugins = ["pydantic.mypy"]
+exclude = ["\\.venv", "app/alembic/versions"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP", "ARG"]
+ignore = ["B008"]

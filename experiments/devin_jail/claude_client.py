@@ -11,7 +11,7 @@ from typing import Any
 
 from acp_client import HERE, PYTHON, ROOT, STREAM_LIMIT, RunPaths, Turn
 
-LAUNCHER = ROOT / "scripts" / "claude.sh"
+LAUNCHER = ROOT / "backend" / "scripts" / "claude.sh"
 PROMPT_TIMEOUT = 600.0
 SHUTDOWN_TIMEOUT = 30.0
 SESSION = "claude"
