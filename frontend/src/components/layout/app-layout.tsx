@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router';
 
 const LINKS = [
+  { to: '/', label: 'World' },
   { to: '/gallery', label: 'Gallery' },
   { to: '/status', label: 'Status' },
 ];
@@ -15,6 +16,7 @@ export function AppLayout() {
             <NavLink
               key={link.to}
               to={link.to}
+              end
               className={({ isActive }) =>
                 isActive ? 'text-foreground' : 'text-muted-foreground'
               }
