@@ -19,7 +19,7 @@ from app.sim.core import SimCore
 from app.sim.items import ITEMS, RESOURCE_INDEX, RESOURCES, amount_words
 from app.sim.state import ActionState, Citizen
 from app.sim.vec import Vec3, bearing_deg, lat_lon_deg
-from app.sim.world import CAMP_STRUCTURE_LABELS, HOME_KINDS, STRUCTURE_LABELS
+from app.sim.world import CAMP_STRUCTURE_LABELS, HOME_KINDS, STRUCTURE_LABELS, WATER_BIOMES
 from app.world_api.models import (
     NEAREST,
     HeardWords,
@@ -57,6 +57,7 @@ TIERS: dict[ThingKind, int] = {
 }
 IMPORTANT = 5
 RESOURCE_NAMES: dict[str, ResourceName] = {name: name for name in get_args(ResourceName)}
+WATER = frozenset(WATER_BIOMES)
 _CELL_MARGIN_M = 25.0  # cells whose centre is this much beyond sight still count (cells are ~40 m across)
 _ARTICLES = frozenset({"the", "a", "an", "some", "any", "my", "your"})
 
@@ -254,6 +255,8 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
     resources = state.resources
     found_resource: set[str] = set()
     found_water: set[str] = set()
+    # a lake or the sea next to your cell is right beside you: you can drink from it there (`water_within_reach`)
+    beside = {_water_kind(world.biome(other)) for other in world.neighbours[here] if world.biome(other) in WATER}
     for cell in [here, *[int(c) for c in cells if c != here]]:
         unit = world.unit(cell)
         biome = world.biome(cell)
@@ -282,8 +285,8 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
                 "fresh",
                 at=position if cell == here else unit,
             )
-        if biome in ("lake", "shallow_ocean", "deep_ocean"):
-            water_kind = "lake" if biome == "lake" else "sea"
+        if biome in WATER:
+            water_kind = _water_kind(biome)
             if water_kind in found_water:
                 continue
             shore = _shore_cell(core, cell, citizen)
@@ -298,7 +301,7 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
                     "water",
                     f"lake:{cell}",
                     "fresh",
-                    at=unit,
+                    at=position if water_kind in beside else unit,
                 )
             else:
                 add(
@@ -308,10 +311,14 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
                     "water",
                     f"sea:{cell}",
                     "salt",
-                    at=unit,
+                    at=position if water_kind in beside else unit,
                 )
     things.sort(key=lambda thing: (thing.distance_m, thing.ref))
     return things
+
+
+def _water_kind(biome: str) -> Literal["lake", "sea"]:
+    return "lake" if biome == "lake" else "sea"
 
 
 def _shore_cell(core: SimCore, water_cell: int, citizen: Citizen) -> int | None:

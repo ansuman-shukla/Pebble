@@ -19,7 +19,7 @@ from app.sim.perception import (
 from app.sim.simulation import Simulation
 from app.sim.state import Citizen
 from app.sim.vec import Vec3, step_towards
-from app.world_api.facade import WorldApi
+from app.world_api.facade import WorldApi, run_until_done
 from app.world_api.models import Perception, Seen, ThingKind
 from tests.sim_helpers import WELL, make_spec
 
@@ -149,6 +149,36 @@ def test_things_say_what_they_are(new_sim: Callable[..., Simulation]) -> None:
         if sight.seen.label == "the sea"
     ]
     assert [(seen.kind, seen.resource) for seen in sea] == [("sea", None)]
+
+
+def test_a_lake_you_can_drink_from_is_right_beside_you(new_sim: Callable[..., Simulation]) -> None:
+    """Regression: the lake was told where its nearest cell's centre is ("close by"), so a brain on the shore never
+    saw water beside it and kept walking to the lake ("You are already there.") instead of drinking."""
+    sim = new_sim()
+    world = sim.world
+    allowed = sim.core.planner.outer.allowed
+    shore = next(
+        cell
+        for cell in range(len(world.biomes))
+        if allowed[cell]
+        and world.town_point(world.unit(cell)) is None
+        and any(world.biome(n) == "lake" for n in world.neighbours[cell])
+    )
+    citizen = _put(sim, sim.add_citizen(make_spec()), world.unit(shore))
+    citizen.body.thirst = 50.0
+    api = WorldApi(sim, citizen.id)
+    lake = next(thing for thing in api.look_around().things if thing.label == "a lake")
+    assert (lake.kind, lake.nearness, lake.where) == ("water", "right beside you", "right beside you")
+    assert run_until_done(sim, api.drink(), 10).text == "You drink from the lake until you are no longer thirsty."
+
+    inland = next(
+        n for n in world.neighbours[shore] if allowed[n] and all(world.biome(m) != "lake" for m in world.neighbours[n])
+    )
+    _put(sim, citizen, world.unit(inland))
+    lake = next(thing for thing in api.look_around().things if thing.label == "a lake")
+    assert lake.nearness != "right beside you"
+    refused = api.drink().result
+    assert refused is not None and refused.text == "There's no water within reach."
 
 
 def _sight(label: str, kind: ThingKind, tier: int, distance_m: float) -> Sight:
