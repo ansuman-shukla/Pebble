@@ -21,4 +21,8 @@ cd frontend && ./scripts/pnpm.sh install && ./scripts/pnpm.sh dev   # http://loc
 `./scripts/pnpm.sh dev` and `build` first run `fetch-assets`, which downloads the pinned Polyfork files (~24 MB) into
 gitignored folders.
 
+`./scripts/pnpm.sh test` runs Playwright against the frontend on 5180 (starting it if needed). To test another
+checkout's frontend, run it on its own port and set `PLAYWRIGHT_PORT`, e.g. `PLAYWRIGHT_PORT=5190 ./scripts/pnpm.sh test`
+(the status test also needs that origin in the backend's `FRONTEND_ORIGINS`).
+
 Status: phase A, M0 scaffold.

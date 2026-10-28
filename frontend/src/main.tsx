@@ -23,6 +23,13 @@ const router = createBrowserRouter([
         }),
       },
       { path: 'status', element: <StatusPage /> },
+      {
+        path: 'dev/walk',
+        lazy: async () => ({
+          Component: (await import('@/pages/walk-sandbox-page'))
+            .WalkSandboxPage,
+        }),
+      },
     ],
   },
 ]);
