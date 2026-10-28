@@ -32,8 +32,10 @@ def api_session(db_session: Session) -> Iterator[Session]:
 
 @pytest.fixture
 def loop(api_session: Session, sim_world: SimWorld) -> EngineLoop:
-    loop = open_loop(api_session, sim_world, KEY, new_run=True, citizens=DEV_CITIZENS, clock=Clock(speed=3))
-    WorldApi(loop.sim, "dev-aiko").walk_to_place("the main gate")
+    loop = open_loop(
+        api_session, sim_world, KEY, new_run=True, citizens=DEV_CITIZENS, clock=Clock(speed=3), brains=False
+    )
+    WorldApi(loop.sim, "dev-aiko").walk_to_place("the main gate")  # scripted by the test, not by a brain
     loop.run_ticks(75, headless=True)
     return loop
 
@@ -93,7 +95,11 @@ def test_entities_now_match_the_simulation(client: TestClient, loop: EngineLoop)
         assert entity["position"]["height_m"] == pytest.approx(citizen.height_m)
         assert entity["action"] == (citizen.action.kind if citizen.action else None)
         assert entity["alive"] is True
+        assert entity["heading_deg"] == pytest.approx(citizen.heading_deg)
+        assert (entity["role"], entity["region"]) == (citizen.role, citizen.region)
+        assert entity["activity"] == {"walk_to": "walking", "sleep": "sleeping"}.get(entity["action"], "idle")
     aiko = by_id["dev-aiko"]
+    assert aiko["heading_deg"] != 0.0  # she walked to the gate and faces the way she went
     assert loop.sim.world.distance_m(tuple(aiko["position"]["unit"]), loop.sim.world.places["main-gate"].stand) < 1
     lat, lon = lat_lon_deg(loop.sim.citizen("dev-aiko").position)
     assert (aiko["position"]["lat"], aiko["position"]["lon"]) == pytest.approx((lat, lon))

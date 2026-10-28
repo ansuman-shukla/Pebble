@@ -21,15 +21,19 @@ cd frontend && ./scripts/pnpm.sh install && ./scripts/pnpm.sh dev   # http://loc
 The simulation runs as its own process next to the API (the API only reads what it writes):
 
 ```sh
-make -C backend engine                                # resume the latest run, or start one with the dev cast
+make -C backend engine                                # resume the latest run, or start one with the 15 citizens
 make -C backend engine ENGINE_ARGS="--new-run --speed 10"   # new run, 10 game minutes per real second
 ```
 
-It ticks one game minute per real second by default (`--speed 1..60`, `--paused`, `--headless --ticks N` to
-fast-forward) and stops cleanly on Ctrl-C (it snapshots, and the next start resumes). Watch and steer it through
-`GET /api/v1/clock`, `POST /api/v1/admin/clock` (`{"paused": true}`, `{"speed": 30}`), `GET /api/v1/entities[?at=tick]`
-and `GET /api/v1/events?actor=…&type=…&since_tick=…`. `uv run python -m scripts.bench_sim 15 24` (in `backend/`)
-measures tick cost and event volume.
+New runs start with the 15 citizens of `backend/data/citizens/citizens.yaml` (town, band A, band B), each living
+their day through a scripted brain (`backend/app/brains/`, `--no-brains` to leave them standing; `--citizens PATH`
+for another cast, e.g. `data/citizens/dev.yaml`). It ticks one game minute per real second by default
+(`--speed 1..60`, `--paused`, `--headless --ticks N` to fast-forward) and stops cleanly on Ctrl-C (it snapshots, and
+the next start resumes). Watch and steer it through `GET /api/v1/clock`, `POST /api/v1/admin/clock`
+(`{"paused": true}`, `{"speed": 30}`), `GET /api/v1/entities[?at=tick]`, `GET /api/v1/events?actor=…&type=…&since_tick=…`
+and the live feed `WS /api/v1/live` (a snapshot, then events and one tick message per tick). In `backend/`,
+`uv run python -m scripts.bench_sim 15 24` measures tick cost and event volume and
+`uv run python -m scripts.citizens_run 10` lives 10 game days headless and prints how they went.
 
 The browser only talks to the frontend's own origin: vite (`dev` and `preview`) proxies `/api` to the backend
 (`PEBBLE_API_TARGET`, default http://localhost:8100), so the world also loads through http://127.0.0.1:5180 or a
@@ -64,4 +68,5 @@ town's main gate, with the engine's citizens living on it (`GET /api/v1/entities
 labelled within 40 m; what they say shows as a bubble for a few seconds. See
 [the live citizens findings](docs/findings/2026-10-29-live-citizens-client.md).
 
-Status: phase A, M5 simulation core (engine, bodies, world contract, event store).
+Status: phase A, M7 scripted citizens (15 citizens with utility brains, town economy, plant regrowth) and the first
+slice of M8 (live feed).

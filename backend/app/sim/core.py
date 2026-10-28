@@ -22,7 +22,7 @@ from app.sim.clock import NIGHT_ALTITUDE_DEG, daylight, sun_altitude_deg, sun_di
 from app.sim.items import ITEMS
 from app.sim.navigation import Planner
 from app.sim.state import Citizen, GroundStack, KnowledgeLevel, PlaceKnowledge, WorldState
-from app.sim.vec import Vec3, step_towards
+from app.sim.vec import Vec3, bearing_deg, step_towards
 from app.sim.world import SimWorld
 from app.world_api.models import ActionResult, Outcome
 
@@ -125,6 +125,8 @@ class SimCore:
         return self.world.distance_m(a, b)
 
     def place_at(self, citizen: Citizen, position: Vec3) -> None:
+        if position != citizen.position:  # face where they go: yaw 0 = south, 90 = east (180 - compass bearing)
+            citizen.heading_deg = round((180.0 - bearing_deg(citizen.position, position)) % 360.0, 2)
         citizen.position = position
         citizen.cell = self.world.nearest_cell(position, citizen.cell)
         citizen.height_m = self.world.ground_height(position, citizen.cell)

@@ -8,7 +8,7 @@ from sqlmodel import Session, col, select
 from app.db.models import EngineCommand, Event, Run, Snapshot
 from app.engine import Clock, open_loop
 from app.observability.store import latest_snapshot, queue_command
-from app.sim.citizens import DEV_CITIZENS, load_citizens
+from app.sim.citizens import CITIZENS, DEV_CITIZENS, load_citizens
 from app.sim.clock import game_minute
 from app.sim.snapshot import SimSnapshot, canonical_json, take_snapshot
 from app.sim.world import SimWorld
@@ -81,3 +81,26 @@ def test_clock_commands_reach_the_engine(db_session: Session, sim_world: SimWorl
     assert run is not None and (run.paused, run.speed) == (True, 30)
     loop.run_ticks(3, headless=True)  # headless ignores pause; real time would wait
     assert loop.sim.tick == 3
+
+
+def test_a_new_run_starts_with_the_cast_and_the_stocked_storehouse(db_session: Session, sim_world: SimWorld) -> None:
+    loop = open_loop(db_session, sim_world, KEY, new_run=True, citizens=CITIZENS, clock=Clock())
+    assert len(loop.sim.state.citizens) == 15
+    assert loop.sim.state.stores == {"store-2": {"rice": load_citizens(CITIZENS).stores["store-2"]["rice"]}}
+    events = _events(db_session, loop.run.id)
+    stocked = [e for e in events if e.type == "item_moved"]
+    assert [(e.payload["source"]["kind"], e.payload["destination"]["id"]) for e in stocked] == [("world", "store-2")]
+
+
+def test_a_run_from_an_older_simulation_is_not_resumed(db_session: Session, sim_world: SimWorld) -> None:
+    old = open_loop(db_session, sim_world, KEY, new_run=True, citizens=DEV_CITIZENS, clock=Clock())
+    snapshot = latest_snapshot(db_session, old.run.id)
+    assert snapshot is not None
+    snapshot.state = {**snapshot.state, "version": 1}
+    db_session.add(snapshot)
+    db_session.flush()
+    fresh = open_loop(db_session, sim_world, KEY, new_run=False, citizens=DEV_CITIZENS, clock=Clock())
+    assert fresh.run.id != old.run.id
+    assert fresh.sim.tick == 0
+    again = open_loop(db_session, sim_world, KEY, new_run=False, citizens=DEV_CITIZENS, clock=Clock())
+    assert again.run.id == fresh.run.id  # the current one resumes

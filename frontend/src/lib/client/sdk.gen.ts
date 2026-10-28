@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AdminChangeClockData, AdminChangeClockErrors, AdminChangeClockResponses, ClockReadGameClockData, ClockReadGameClockErrors, ClockReadGameClockResponses, EntitiesReadEntitiesData, EntitiesReadEntitiesErrors, EntitiesReadEntitiesResponses, EventsReadEventsData, EventsReadEventsErrors, EventsReadEventsResponses, HealthReadHealthData, HealthReadHealthResponses, TownReadTownData, TownReadTownResponses, WorldReadWorldData, WorldReadWorldResponses } from './types.gen';
+import type { AdminChangeClockData, AdminChangeClockErrors, AdminChangeClockResponses, ClockReadGameClockData, ClockReadGameClockErrors, ClockReadGameClockResponses, EntitiesReadEntitiesData, EntitiesReadEntitiesErrors, EntitiesReadEntitiesResponses, EventsReadEventsData, EventsReadEventsErrors, EventsReadEventsResponses, HealthReadHealthData, HealthReadHealthResponses, LiveLiveSchemaData, LiveLiveSchemaErrors, LiveLiveSchemaResponses, TownReadTownData, TownReadTownResponses, WorldReadWorldData, WorldReadWorldResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -57,6 +57,13 @@ export const eventsReadEvents = <ThrowOnError extends boolean = false>(options?:
  * Read Health
  */
 export const healthReadHealth = <ThrowOnError extends boolean = false>(options?: Options<HealthReadHealthData, ThrowOnError>): RequestResult<HealthReadHealthResponses, unknown, ThrowOnError> => (options?.client ?? client).get<HealthReadHealthResponses, unknown, ThrowOnError>({ url: '/api/v1/health', ...options });
+
+/**
+ * Live Schema
+ *
+ * The live feed's message types for clients (this answers with the current `snapshot` message).
+ */
+export const liveLiveSchema = <ThrowOnError extends boolean = false>(options?: Options<LiveLiveSchemaData, ThrowOnError>): RequestResult<LiveLiveSchemaResponses, LiveLiveSchemaErrors, ThrowOnError> => (options?.client ?? client).get<LiveLiveSchemaResponses, LiveLiveSchemaErrors, ThrowOnError>({ url: '/api/v1/live/schema', ...options });
 
 /**
  * Read Town

@@ -45,7 +45,7 @@ interrupted.
 | `pick_up(item)` / `drop(item)` / `give(item, person)` | instant | within reach; giving needs acceptance |
 | `make_fire()` / `feed_fire()` | durative | needs wood and the skill |
 | `rest(minutes)` / `sleep()` | durative | sleep ends at morning, on danger or when rested |
-| `work(task)` | durative | role tasks: farm, cook, guard, store food, repair (town) |
+| `work(task)` | durative | role tasks (town): farm, store food, guard, trade, weave, govern; needs the skill and the place (cook, repair later) |
 | `attack(target)` | durative | people or animals; consequences are real |
 | `flee()` | durative | away from the nearest danger |
 | `wait(minutes)` | durative | do nothing, stay alert |

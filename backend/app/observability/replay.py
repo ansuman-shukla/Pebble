@@ -23,6 +23,7 @@ from app.observability.events import (
 )
 from app.sim.items import RESOURCE_INDEX
 from app.sim.snapshot import SimSnapshot
+from app.sim.state import Region
 from app.sim.vec import Vec3
 
 
@@ -39,6 +40,9 @@ class ReplayCitizen:
     height_m: float
     cell: int
     body: BodyValues
+    role: str = ""
+    region: Region = "town"
+    heading_deg: float = 0.0
     alive: bool = True
     asleep: bool = False
     cause_of_death: str | None = None
@@ -46,6 +50,7 @@ class ReplayCitizen:
     action_number: int | None = None
     action_label: str = ""
     inventory: dict[str, int] = field(default_factory=dict)
+    said_tick: int | None = field(default=None, compare=False)  # last spoke (not in snapshots: a moment's flavour)
 
 
 @dataclass
@@ -97,6 +102,9 @@ def from_snapshot(snapshot: SimSnapshot) -> ReplayState:
             height_m=c.height_m,
             cell=c.cell,
             body=(c.body.hunger, c.body.thirst, c.body.energy, c.body.health),
+            role=c.role,
+            region=c.region,
+            heading_deg=c.heading_deg,
             alive=c.body.alive,
             asleep=c.body.asleep,
             cause_of_death=c.body.cause_of_death,
@@ -130,6 +138,7 @@ def apply_event(state: ReplayState, event: ReplayEvent) -> None:
         for citizen_id, moved in summary.moved.items():
             citizen = state.citizens[citizen_id]
             citizen.position, citizen.height_m, citizen.cell = moved.position, moved.height_m, moved.cell
+            citizen.heading_deg = moved.heading_deg
         for citizen_id, body in summary.bodies.items():
             state.citizens[citizen_id].body = body
     elif kind == "citizen_spawned":
@@ -146,6 +155,10 @@ def apply_event(state: ReplayState, event: ReplayEvent) -> None:
             height_m=spawned.height_m,
             cell=spawned.cell,
             body=spawned.body,
+            role=spawned.role,
+            region=spawned.region,
+            heading_deg=spawned.heading_deg,
+            inventory={item: count for item, count in spawned.inventory.items() if count},
         )
     elif kind == "action_started":
         started = ActionStarted.model_validate(event.payload)
@@ -160,6 +173,8 @@ def apply_event(state: ReplayState, event: ReplayEvent) -> None:
             if citizen.action == "sleep":
                 citizen.asleep = False
             citizen.action, citizen.action_number, citizen.action_label = None, None, ""
+    elif kind == "said":
+        state.citizens[_actor(event)].said_tick = event.tick
     elif kind == "died":
         died = Died.model_validate(event.payload)
         citizen = state.citizens[_actor(event)]
@@ -195,7 +210,7 @@ def _take(state: ReplayState, where: ItemLocation, item: str, count: int) -> Non
         store[item] -= count
         if store[item] == 0:
             del store[item]
-    # resources change through their own `resource_changed` event
+    # resources change through their own `resource_changed` event; `world` items come from nowhere
 
 
 def _put(state: ReplayState, where: ItemLocation, item: str, count: int) -> None:
