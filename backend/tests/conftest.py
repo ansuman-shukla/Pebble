@@ -1,8 +1,11 @@
-"""Shared fixtures. The test process uses its own database (`pebble_test`), never the dev one (`pebble`)."""
+"""Shared fixtures. The test process uses its own database (`pebble_test[_<worktree>]`), never the dev `pebble`."""
 
 import os
 
-os.environ["POSTGRES_DB"] = "pebble_test"  # before app.core.config builds settings, so every engine points here
+from tests.database_name import suite_database_name
+
+# before app.core.config builds settings, so every engine points here
+os.environ["POSTGRES_DB"] = suite_database_name(override=os.environ.get("PEBBLE_TEST_DB"))
 
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -43,7 +46,7 @@ def _migrate() -> None:
 
 @pytest.fixture(scope="session", autouse=True)
 def test_database() -> None:
-    """Once per run: create `pebble_test` if missing, migrate it to head and empty its tables."""
+    """Once per run: create the test database if missing, migrate it to head and empty its tables."""
     server_url = make_url(str(settings.SQLALCHEMY_DATABASE_URI)).set(database="postgres")
     server = create_engine(server_url, isolation_level="AUTOCOMMIT")
     with server.connect() as connection:

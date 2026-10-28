@@ -84,6 +84,12 @@ export interface GlobeMove {
   /** Spring arm length (follow view). */
   arm: number;
   flying: boolean;
+  /** Avatar world position and quaternion (x, y, z, qx, qy, qz, qw). */
+  avatar: number[];
+  /** The locomotion clip playing (null until the clips load). */
+  clip: string | null;
+  /** Left then right foot in the avatar's own frame (x, y, z each). */
+  feet: number[];
 }
 
 const up = new Vector3();
@@ -92,6 +98,7 @@ const right = new Vector3();
 const step = new Vector3();
 const side = new Vector3();
 const basis = new Matrix4();
+const foot = new Vector3();
 
 /** Pace multiplier for walking along a slope of `grade` (rise per metre, negative downhill). */
 function slopePace(grade: number) {
@@ -128,7 +135,19 @@ export function GlobePlayer({
   const keys = useKeys();
   const group = useRef<Group>(null);
   const { character, animation } = useVisitor(onReady);
-  const motion = useRef({ speed: 0, pace: 0, sinceEvent: Infinity });
+  const feet = useMemo(
+    () =>
+      ['LeftFoot', 'RightFoot'].flatMap(
+        (name) => character.getObjectByName(name) ?? [],
+      ),
+    [character],
+  );
+  const motion = useRef({
+    speed: 0,
+    pace: 0,
+    sinceEvent: Infinity,
+    clip: null as string | null,
+  });
   const previous = useMemo(() => new Vector3(), []);
   const heading = useMemo(() => new Vector3(), []);
 
@@ -200,7 +219,10 @@ export function GlobePlayer({
       avatar.quaternion.setFromRotationMatrix(basis);
       avatar.visible = !following || rig.flight !== null || rig.arm > HIDE_ARM;
     }
-    animation.current?.locomotion(Math.min(current.speed, RUN_SPEED * 1.2));
+    const action = animation.current?.locomotion(
+      Math.min(current.speed, RUN_SPEED * 1.2),
+    );
+    current.clip = action?.getClip().name ?? null;
     animation.current?.update(delta);
 
     current.sinceEvent += frameDelta;
@@ -221,6 +243,15 @@ export function GlobePlayer({
         camera: [...camera.position.toArray(), ...camera.quaternion.toArray()],
         arm: viewRigRef.current.arm,
         flying: viewRigRef.current.flight !== null,
+        avatar: avatar
+          ? [...avatar.position.toArray(), ...avatar.quaternion.toArray()]
+          : [],
+        clip: current.clip,
+        feet: avatar
+          ? feet.flatMap((bone) =>
+              avatar.worldToLocal(bone.getWorldPosition(foot)).toArray(),
+            )
+          : [],
       });
     }
   });
