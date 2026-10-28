@@ -1,4 +1,4 @@
-# Findings: running the world in real time (D61, 2026-10-29)
+# Findings: running the world in real time (D65, 2026-10-29)
 
 At D13's 1 real second = 1 game minute, a citizen walking 5 km/h covers 83 m per real second, while the player walks
 1.4 m/s. Walking among them looked absurd. The clock now counts **game seconds per real second** and starts at ×1

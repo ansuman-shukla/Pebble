@@ -11,6 +11,25 @@ from pydantic import BaseModel, ConfigDict, Field
 Volume = Literal["whisper", "normal", "shout"]
 Compass = Literal["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"]
 RoughDistance = Literal["a few steps", "a short walk", "a long walk", "very far"]
+# how far off something seen is, in the words `Seen.where` starts with
+Nearness = Literal["right beside you", "a few paces", "close by", "some way off", "in the distance", "far away"]
+# what a thing in view is (fresh water, the sea, food, your home, a shelter, a fire pit, wood or reeds, an item on the
+# ground, any other building)
+ThingKind = Literal["water", "sea", "food", "home", "shelter", "fire", "material", "item", "building"]
+ResourceName = Literal["berries", "roots", "nuts", "reeds", "wood"]  # wild plants, as `gather` names them
+# the local sun, coarsely; `Perception.time` says the same in a sentence
+TimeOfDay = Literal[
+    "pre-dawn",
+    "dawn",
+    "early morning",
+    "mid-morning",
+    "midday",
+    "early afternoon",
+    "late afternoon",
+    "sunset",
+    "dusk",
+    "night",
+]
 ActionName = Literal[
     "look_around",
     "check_self",
@@ -235,9 +254,15 @@ class SelfView(_Model):
 
 
 class Seen(_Model):
-    label: str  # a name, an appearance or a thing ("Aiko", "a man in a fur cloak", "bushes heavy with berries")
+    """One person, animal or (group of) thing(s) in view. A group's `where` is its nearest member's, said as "the
+    nearest …" when the others are elsewhere."""
+
+    label: str  # a name, an appearance or a thing ("Aiko", "a man in a fur cloak", "three lean-tos")
     where: str  # rough distance and direction ("a few paces to the north")
+    nearness: Nearness  # how far, as `where` says it
     doing: str | None = None
+    kind: ThingKind | None = None  # things only
+    resource: ResourceName | None = None  # a wild plant you could gather
 
 
 class HeardWords(_Model):
@@ -247,29 +272,55 @@ class HeardWords(_Model):
 
 
 class Perception(_Model):
+    """What a look around tells. People and animals are always all there; things are grouped and chosen by importance
+    (water, food, shelter, fire, then the rest, nearest first) so everything seen fits a short paragraph."""
+
     you: SelfView
     place: str
-    time: str
+    time: str  # a sentence from the sun ("It is late afternoon.", "The sun is about to set.")
+    time_of_day: TimeOfDay
     people: list[Seen]
     animals: list[Seen]
     things: list[Seen]
     heard: list[HeardWords]
 
     def text(self) -> str:
-        lines = [f"You are {self.place}. It is {self.time}.", self.you.text()]
+        lines = [f"You are {self.place}. {self.time}", self.you.text()]
         if self.people:
-            lines.append("You see " + _join([_seen(s) for s in self.people]) + ".")
+            lines.append("You see " + "; ".join(_phrases(self.people)) + ".")
         if self.animals:
-            lines.append("Animals: " + _join([_seen(s) for s in self.animals]) + ".")
+            lines.append("Animals: " + "; ".join(_phrases(self.animals)) + ".")
         if self.things:
-            lines.append("Around you: " + _join([_seen(s) for s in self.things]) + ".")
+            lines.append("Around you: " + "; ".join(_phrases(self.things)) + ".")
         verbs = {"whisper": "whispers", "normal": "says", "shout": "shouts"}
         lines += [f'{heard.who} {verbs[heard.volume]}: "{heard.words}"' for heard in self.heard]
         return "\n".join(lines)
 
 
-def _seen(seen: Seen) -> str:
-    return f"{seen.label} {seen.where}" + (f" ({seen.doing})" if seen.doing else "")
+NEAREST = "the nearest "  # starts the `where` of a group whose members are at different places
+
+
+def phrase(seen: Seen) -> str:
+    """One entry in words ("Oru a few paces to the south (resting)", "three lean-tos, the nearest close by …")."""
+    return _phrase(seen.label, seen.where, seen.doing)
+
+
+def _phrase(label: str, where: str, doing: str | None) -> str:
+    joint = ", " if where.startswith(NEAREST) else " "
+    return f"{label}{joint}{where}" + (f" ({doing})" if doing else "")
+
+
+def _phrases(seen: list[Seen]) -> list[str]:
+    """Entries at the same place doing the same share one phrase ("Suna and Tek a few paces to the east (resting)")."""
+    groups: list[tuple[str, str | None, list[str]]] = []
+    for entry in seen:
+        shared = not entry.where.startswith(NEAREST)
+        same = next((g for g in groups if shared and (g[0], g[1]) == (entry.where, entry.doing)), None)
+        if same is None:
+            groups.append((entry.where, entry.doing, [entry.label]))
+        else:
+            same[2].append(entry.label)
+    return [_phrase(_join(labels), where, doing) for where, doing, labels in groups]
 
 
 def _join(parts: list[str]) -> str:

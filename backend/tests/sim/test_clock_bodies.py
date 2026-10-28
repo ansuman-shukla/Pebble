@@ -1,4 +1,6 @@
+import re
 from collections.abc import Callable
+from typing import get_args
 
 import pytest
 
@@ -10,18 +12,20 @@ from app.sim.bodies import (
     update_body,
 )
 from app.sim.clock import (
+    DAY_MINUTES,
     daylight,
     is_night,
     local_minute,
     sun_altitude_deg,
     sun_direction,
-    time_words,
+    time_of_day,
     town_clock,
 )
 from app.sim.simulation import Simulation
 from app.sim.state import AGE_GROUPS, Body, age_group
 from app.sim.vec import Vec3
 from app.sim.world import SimWorld
+from app.world_api.models import TimeOfDay
 from tests.sim_helpers import make_spec
 
 ADULT = AGE_GROUPS["young_adult"]
@@ -55,13 +59,41 @@ def test_local_time_runs_ahead_four_minutes_per_degree_east() -> None:
     assert local_minute(0, 12.0, 12.0 - 135.0) == 1380  # 23:00 the evening before
 
 
-def test_light_and_time_words() -> None:
+def test_light() -> None:
     assert (daylight(10.0), daylight(-3.0), daylight(-6.0), daylight(-20.0)) == (1.0, 0.5, 0.0, 0.0)
     assert is_night(-6.1) and not is_night(-5.9)
-    assert time_words(12 * 60) == "around midday; the sun is high"
-    assert time_words(17.5 * 60) == "the sun is about to set"
-    assert time_words(2 * 60) == "the middle of the night"
-    assert time_words(23 * 60) == "night"
+
+
+DAY_PHASES: list[tuple[float, TimeOfDay, str]] = [  # (local hour, time of day, what a citizen reads)
+    (0.0, "night", "It is the middle of the night."),
+    (3.9, "night", "It is the middle of the night."),
+    (4.0, "pre-dawn", "It is the dark before dawn."),
+    (6.0, "dawn", "It is dawn; the sun is rising."),
+    (6.5, "early morning", "It is early morning."),
+    (10.0, "mid-morning", "It is mid-morning."),
+    (12.0, "midday", "It is around midday; the sun is high."),
+    (14.0, "early afternoon", "It is early afternoon."),
+    (16.0, "late afternoon", "It is late afternoon."),
+    (17.5, "sunset", "The sun is about to set."),
+    (18.5, "dusk", "It is dusk."),
+    (19.0, "night", "It is night."),
+    (23.99, "night", "It is night."),
+]
+# One sentence: a capital, a full stop, and clauses (split at "; ") that each have one subject and one "is"
+# ("It is the sun is about to set." has two).
+WELL_FORMED = re.compile(r"(It|The sun) is [a-z][a-z -]*(; the sun is [a-z ]+)?\.")
+
+
+@pytest.mark.parametrize(("hour", "when", "sentence"), DAY_PHASES)
+def test_every_phase_of_the_day_reads_as_one_well_formed_sentence(hour: float, when: str, sentence: str) -> None:
+    assert time_of_day(hour * 60) == (when, sentence)
+    assert WELL_FORMED.fullmatch(sentence), sentence
+    assert all(clause.count(" is ") == 1 for clause in sentence.rstrip(".").split("; "))
+
+
+def test_the_day_covers_every_time_of_day() -> None:
+    assert {time_of_day(minute)[0] for minute in range(DAY_MINUTES)} == set(get_args(TimeOfDay))
+    assert {when for _, when, _ in DAY_PHASES} == set(get_args(TimeOfDay))
 
 
 def test_needs_rise_at_the_documented_rates() -> None:

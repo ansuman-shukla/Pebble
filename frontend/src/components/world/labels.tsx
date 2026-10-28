@@ -2,12 +2,13 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { type Group, Vector3 } from 'three';
 
-import type { LabelStore } from '@/lib/world/label-store';
+import { type LabelBox, stackLabels } from '@/lib/world/label-layout';
+import type { LabelEntry, LabelStore } from '@/lib/world/label-store';
 
 /*
  * Name labels over 3D objects: anchors live in the scene, the text lives in one DOM overlay, and a projector
- * moves each label to its anchor's screen position every frame. (drei's <Html> creates a React root per label
- * and dropped one of them reliably in this app.)
+ * moves each label to its anchor's screen position every frame, stacking labels that would overlap. (drei's
+ * <Html> creates a React root per label and dropped one of them reliably in this app.)
  */
 
 type LabelProps = {
@@ -15,21 +16,25 @@ type LabelProps = {
   id: string;
   text: string;
   height: number;
+  kind?: LabelEntry['kind'];
 };
 
 /** An anchor inside the scene; place it as a child of the object it names. */
-export function Label({ store, id, text, height }: LabelProps) {
+export function Label({ store, id, text, height, kind }: LabelProps) {
   const anchor = useRef<Group>(null);
   useEffect(
-    () => store.add({ id, text, anchor: anchor.current! }),
-    [store, id, text],
+    () => store.add({ id, text, anchor: anchor.current!, kind }),
+    [store, id, text, kind],
   );
   return <group ref={anchor} position={[0, height, 0]} />;
 }
 
 const projected = new Vector3();
 
-/** Inside the Canvas: moves every label to its anchor's screen position, hiding those beyond maxDistance. */
+/**
+ * Inside the Canvas: moves every label to its anchor's screen position, hiding those beyond maxDistance and
+ * nudging farther ones up out of nearer ones (speech bubbles stay on top).
+ */
 export function LabelProjector({
   store,
   maxDistance = Infinity,
@@ -38,11 +43,13 @@ export function LabelProjector({
   maxDistance?: number;
 }) {
   useFrame(({ camera, size }) => {
-    for (const { id, anchor } of store.getSnapshot()) {
+    const shown: { element: HTMLElement; box: LabelBox }[] = [];
+    for (const { id, anchor, kind = 'name' } of store.getSnapshot()) {
       const element = store.elements.get(id);
       if (!element) continue;
       anchor.getWorldPosition(projected);
-      const near = projected.distanceTo(camera.position) <= maxDistance;
+      const distance = projected.distanceTo(camera.position);
+      const near = distance <= maxDistance;
       projected.project(camera);
       const onScreen =
         near &&
@@ -52,9 +59,21 @@ export function LabelProjector({
       element.style.display = onScreen ? '' : 'none';
       if (!onScreen) continue;
       const x = ((projected.x + 1) / 2) * size.width;
-      const y = ((1 - projected.y) / 2) * size.height;
-      element.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
+      const bottom = ((1 - projected.y) / 2) * size.height;
+      shown.push({
+        element,
+        box: { x, bottom, width: 0, height: 0, distance, kind },
+      });
     }
+    // sizes are read after every display change: one layout per frame
+    for (const { element, box } of shown) {
+      box.width = element.offsetWidth;
+      box.height = element.offsetHeight;
+    }
+    const bottoms = stackLabels(shown.map(({ box }) => box));
+    shown.forEach(({ element, box }, index) => {
+      element.style.transform = `translate(${box.x}px, ${bottoms[index]}px) translate(-50%, -100%)`;
+    });
   });
   return null;
 }
@@ -64,10 +83,11 @@ export function LabelOverlay({ store }: { store: LabelStore }) {
   const entries = useSyncExternalStore(store.subscribe, store.getSnapshot);
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      {entries.map(({ id, text }) => (
+      {entries.map(({ id, text, kind = 'name' }) => (
         <span
           key={id}
           data-label={id}
+          data-label-kind={kind}
           ref={(element) => {
             if (!element) return;
             store.elements.set(id, element);
@@ -75,7 +95,11 @@ export function LabelOverlay({ store }: { store: LabelStore }) {
               store.elements.delete(id);
             };
           }}
-          className="absolute top-0 left-0 rounded bg-black/60 px-1.5 py-0.5 text-[11px] whitespace-nowrap text-white"
+          className={
+            kind === 'speech'
+              ? 'absolute top-0 left-0 z-10 w-max max-w-56 rounded-lg bg-white/95 px-2 py-1 text-xs text-black shadow'
+              : 'absolute top-0 left-0 rounded bg-black/60 px-1.5 py-0.5 text-[11px] whitespace-nowrap text-white'
+          }
         >
           {text}
         </span>

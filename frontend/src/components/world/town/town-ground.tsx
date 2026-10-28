@@ -4,9 +4,10 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 import type { TownArea } from '@/lib/client/types.gen';
 import type { Point, WalkWater } from '@/lib/world/collision';
-import { groundShape } from '@/lib/world/ground-shape';
+import { groundShape, TOWN_WATER_Y } from '@/lib/world/ground-shape';
 import { FLAT_MAPPING, type LocalMapping } from '@/lib/world/local-mapping';
 import { mapGeometry } from '@/lib/world/map-geometry';
+import { waterMaterial } from '@/lib/world/water-material';
 
 /*
  * The town ground: grass with holes where water is (an island inside a moat ring is land again), water
@@ -23,13 +24,13 @@ const FLAT_OUTLINE: Point[] = [
   [GROUND_HALF, GROUND_HALF],
   [-GROUND_HALF, GROUND_HALF],
 ];
-const WATER_Y = -0.4;
 const BANK_BOTTOM = -0.8;
 const AREA_Y = 0.005;
 
 const GRASS = '#9fb37a';
-const WATER = '#4f86a8';
-const BANK = '#7d6c50';
+/** Depth the water shader gives the moat and the stream (they have walled banks, no shallows). */
+const POOL_DEPTH = 2.5;
+const BANK = '#6a5d47';
 const AREA_COLORS: Record<TownArea['kind'], string> = {
   street: '#b8a07a',
   road: '#b09670',
@@ -52,6 +53,15 @@ function bankWalls(rings: Point[][], bottom: number) {
   }
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+  return geometry;
+}
+
+/** The water surface with the `water` attribute the water shader reads (a constant depth). */
+function pool(geometry: BufferGeometry) {
+  const count = geometry.getAttribute('position').count;
+  const data = new Float32Array(count * 4);
+  for (let i = 0; i < count; i++) data[i * 4] = POOL_DEPTH;
+  geometry.setAttribute('water', new Float32BufferAttribute(data, 4));
   return geometry;
 }
 
@@ -112,9 +122,13 @@ export function TownGround({
           ],
           mapping,
         ),
-        mapAll(
-          water.map((area) => shapeAt(area.polygon, area.holes, WATER_Y)),
-          mapping,
+        pool(
+          mapAll(
+            water.map((area) =>
+              shapeAt(area.polygon, area.holes, TOWN_WATER_Y),
+            ),
+            mapping,
+          ),
         ),
         mapAll(
           [
@@ -126,6 +140,9 @@ export function TownGround({
       ];
     }, [water, mapping, outline, skirt]),
   );
+
+  const surfaceMaterial = useMemo(() => waterMaterial('pool'), []);
+  useEffect(() => () => surfaceMaterial.dispose(), [surfaceMaterial]);
 
   const areaKinds = useMemo(
     () => [...new Set(areas.map((area) => area.kind))],
@@ -151,9 +168,7 @@ export function TownGround({
       <mesh geometry={grass} receiveShadow>
         <meshStandardMaterial color={grassColor} />
       </mesh>
-      <mesh geometry={surface}>
-        <meshStandardMaterial color={WATER} />
-      </mesh>
+      <mesh geometry={surface} material={surfaceMaterial} receiveShadow />
       <mesh geometry={banks} receiveShadow>
         <meshStandardMaterial color={BANK} side={DoubleSide} />
       </mesh>

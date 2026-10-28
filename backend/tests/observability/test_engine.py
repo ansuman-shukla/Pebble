@@ -133,7 +133,7 @@ class FakeTime:
 def _timed_loop(db_session: Session, sim_world: SimWorld, speed: int) -> tuple[EngineLoop, FakeTime]:
     loop = open_loop(db_session, sim_world, KEY, new_run=True, citizens=None, clock=Clock(speed=speed), brains=False)
     fake = FakeTime()
-    loop.now, loop.sleep, loop.brains = fake.now, fake.sleep, [fake.brain]
+    loop.now, loop.idle_sleep, loop.brains = fake.now, fake.sleep, [fake.brain]
     return loop, fake
 
 

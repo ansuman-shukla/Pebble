@@ -9,7 +9,6 @@ import { PROPS, type PropKind } from './assets';
 import { BIOME_PROPS, GROUND_COVER } from './biome-props';
 import {
   buildWalkWorld,
-  circleShape,
   type ColliderFile,
   type PlacementLift,
   type Point,
@@ -98,17 +97,12 @@ export interface WalkTown {
   water: WalkWater[];
   /** Radius of the town's own ground disc (local metres). */
   groundRadius: number;
-  /** Where the townspeople stand (local metres), kept up to date by the town. */
-  citizenSpots: ReadonlyMap<string, Point>;
 }
 
 /** How far past its ground disc the town's collisions still apply. */
 const TOWN_CHART_MARGIN = 15;
 /** A camp's or landmark's chart reaches this far past its outermost placement. */
 const SITE_CHART_MARGIN = 20;
-/** Townspeople as standing cylinders. */
-const CITIZEN_RADIUS = 0.3;
-const CITIZEN_HEIGHT = 1.7;
 
 /** How the player gets onto the town's walkable surfaces (bridge, paving). */
 export interface TownSurfaces {
@@ -118,7 +112,7 @@ export interface TownSurfaces {
   probeHeight: number;
 }
 
-/** The town's chart: walls, gates and moat, its plateau with walkable surfaces, and the townspeople. */
+/** The town's chart: walls, gates and moat, and its plateau with walkable surfaces. */
 export function townChart(
   town: WalkTown,
   colliders: ReadonlyMap<string, ColliderFile>,
@@ -137,10 +131,6 @@ export function townChart(
       maxStepUp: surfaces.maxStepUp,
       probeHeight: surfaces.probeHeight,
     },
-    dynamic: () =>
-      [...town.citizenSpots].map(([id, spot]) =>
-        circleShape(id, spot, CITIZEN_RADIUS, 0, CITIZEN_HEIGHT),
-      ),
   };
 }
 

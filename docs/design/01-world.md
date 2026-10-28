@@ -78,7 +78,7 @@ Each is a named place citizens can learn about, travel to and talk about.
 
 ## Time and light
 - One global game clock that runs in **real time by default**: speed = game seconds per real second, so at ×1 a game
-  day lasts a real day and citizens walk at the player's pace (D61). Spectators can pause or pick ×10, ×60 (a game
+  day lasts a real day and citizens walk at the player's pace (D65). Spectators can pause or pick ×10, ×60 (a game
   hour per real minute, a day in 24 real minutes) or ×600 for a time-lapse (a day in 2.4 real minutes).
 - The simulation still ticks once per game minute (every 60 / speed real seconds); clients draw walkers moving along
   the path each tick streams ahead (`route`, `speed_mps`), so motion stays smooth even with a real minute between

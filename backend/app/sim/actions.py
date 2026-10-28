@@ -201,12 +201,20 @@ _SINGULAR = {"berry": "berries", "root": "roots", "nut": "nuts", "reed": "reeds"
 # --- bookkeeping ---
 
 
-def _begin(core: SimCore, citizen: Citizen, kind: ActionName, label: str, args: dict[str, JsonScalar]) -> ActionState:
+def _begin(
+    core: SimCore, citizen: Citizen, kind: ActionName, label: str, args: dict[str, JsonScalar], destination: str = ""
+) -> ActionState:
     number = citizen.next_action
     citizen.next_action += 1
     seq = core.emit("action_started", ActionStarted(number=number, action=kind, args=args, label=label), actor=citizen)
     action = ActionState(
-        number=number, kind=kind, started_tick=core.state.tick, started_seq=seq, args=args, label=label
+        number=number,
+        kind=kind,
+        started_tick=core.state.tick,
+        started_seq=seq,
+        args=args,
+        label=label,
+        destination=destination,
     )
     citizen.action = action
     return action
@@ -413,54 +421,68 @@ def _start_walk(core: SimCore, citizen: Citizen, target: Target) -> int:
     resolved = _resolve(core, citizen, target)
     if isinstance(resolved, str):
         return _settled(core, citizen, "walk_to", "failed", resolved)
-    goal, label, person_id, arrive = resolved
-    if person_id is None and core.distance_m(citizen.position, goal) < 1.0:
+    if resolved.person_id is None and core.distance_m(citizen.position, resolved.goal) < 1.0:
         return _settled(core, citizen, "walk_to", "done", "You are already there.")
-    if person_id is not None and core.distance_m(citizen.position, goal) <= ARRIVE_M:
-        return _settled(core, citizen, "walk_to", "done", f"You are already beside {label}.")
-    route = core.planner.plan(citizen.position, goal, citizen.cell)
+    if resolved.person_id is not None and core.distance_m(citizen.position, resolved.goal) <= ARRIVE_M:
+        return _settled(core, citizen, "walk_to", "done", f"You are already beside {resolved.words}.")
+    route = core.planner.plan(citizen.position, resolved.goal, citizen.cell)
     if route is None:
         return _settled(core, citizen, "walk_to", "failed", "You can't find a way there.")
-    walk = _begin(core, citizen, "walk_to", label, {"target": target.kind, "arrive": arrive})
-    walk.route, walk.goal, walk.target_id = route, goal, person_id
+    walk = _begin(
+        core,
+        citizen,
+        "walk_to",
+        resolved.shown,
+        {"target": target.kind, "arrive": resolved.arrive},
+        destination=resolved.words,
+    )
+    walk.route, walk.goal, walk.target_id = route, resolved.goal, resolved.person_id
     return walk.number
 
 
-def _resolve(
-    core: SimCore, citizen: Citizen, target: Target
-) -> tuple[tuple[float, float, float], str, str | None, str] | str:
-    """(goal, label, person id, arrival text) or the in-world reason it can't be walked to."""
+@dataclass(frozen=True)
+class _Destination:
+    """Where a walk goes, as the walker names it (`words`, "your home") and as spectators see it (`shown`, "home")."""
+
+    goal: Vec3
+    words: str
+    person_id: str | None
+    arrive: str  # the arrival text, or "rough:<place id>" for a place only guessed at
+    shown: str
+
+
+def _resolve(core: SimCore, citizen: Citizen, target: Target) -> _Destination | str:
+    """Where the target is, or the in-world reason it can't be walked to."""
     if isinstance(target, PlaceTarget):
         query = normalize(target.name)
         if query == "home":
             if citizen.home is None:
                 return "You have no home to go to."
-            return core.world.structures[citizen.home].door, "your home", None, "You arrive home."
+            door = core.world.structures[citizen.home].door
+            return _Destination(door, "your home", None, "You arrive home.", shown="home")
         for place_id in sorted(citizen.places):
             place = core.world.places[place_id]
             if normalize(place.name) == query:
                 knowledge = citizen.places[place_id]
                 if knowledge.level == "visited":
-                    return place.stand, place.name, None, f"You arrive at {place.name}."
-                return knowledge.guess, place.name, None, f"rough:{place_id}"
+                    return _Destination(place.stand, place.name, None, f"You arrive at {place.name}.", place.name)
+                return _Destination(knowledge.guess, place.name, None, f"rough:{place_id}", place.name)
         return f"You don't know a place called {target.name}."
     if isinstance(target, PersonTarget):
         person = match_person(core, citizen, target.who)
         if person is None:
             return "You don't see anyone like that."
         label = person_label(citizen, person)
-        return person.position, label, person.id, f"You reach {label}."
+        return _Destination(person.position, label, person.id, f"You reach {label}.", label)
     if isinstance(target, ThingTarget):
         thing = match_thing(core, citizen, target.what)
         if thing is None:
             return f"You don't see any {target.what} around here."
-        return thing.goal, thing.label, None, f"You reach {thing.label}."
+        return _Destination(thing.goal, thing.label, None, f"You reach {thing.label}.", thing.label)
     return _resolve_direction(core, citizen, target)
 
 
-def _resolve_direction(
-    core: SimCore, citizen: Citizen, target: DirectionTarget
-) -> tuple[tuple[float, float, float], str, None, str] | str:
+def _resolve_direction(core: SimCore, citizen: Citizen, target: DirectionTarget) -> _Destination | str:
     full = ROUGH_DISTANCE_M[target.distance]
     for share in (1.0, 0.75, 0.5, 0.25):
         goal = step_towards(citizen.position, COMPASS_BEARING[target.direction], full * share, core.world.radius_m)
@@ -473,7 +495,7 @@ def _resolve_direction(
     else:
         return f"You can't go {target.distance} to the {target.direction} from here."
     label = f"to the {target.direction}"
-    return goal, label, None, f"You walk {DISTANCE_PHRASE[target.distance]} {label} and stop."
+    return _Destination(goal, label, None, f"You walk {DISTANCE_PHRASE[target.distance]} {label} and stop.", label)
 
 
 def _start_gather(core: SimCore, citizen: Citizen, action: Gather) -> int:
@@ -651,15 +673,17 @@ def _advance_walk(core: SimCore, citizen: Citizen, walk: ActionState) -> None:
         person = core.state.citizens[walk.target_id]
         distance = core.distance_m(citizen.position, person.position)
         if not person.body.alive or distance > core.sight_range(citizen):
-            core.end_action(citizen, "interrupted", f"You stop walking: you lose sight of {walk.label}.")
+            core.end_action(citizen, "interrupted", f"You stop walking: you lose sight of {walk.destination}.")
             return
         if distance <= ARRIVE_M:
-            core.end_action(citizen, "done", f"You reach {walk.label}.")
+            core.end_action(citizen, "done", f"You reach {walk.destination}.")
             return
         if walk.goal is None or core.distance_m(person.position, walk.goal) > FOLLOW_REPLAN_M:
             route = core.planner.plan(citizen.position, person.position, citizen.cell)
             if route is None:
-                core.end_action(citizen, "interrupted", f"You stop walking: you can't find a way to {walk.label}.")
+                core.end_action(
+                    citizen, "interrupted", f"You stop walking: you can't find a way to {walk.destination}."
+                )
                 return
             walk.route, walk.goal, walk.leg, walk.along_m = route, person.position, 0, 0.0
     if walk.route is None:
@@ -671,7 +695,7 @@ def _advance_walk(core: SimCore, citizen: Citizen, walk: ActionState) -> None:
         return
     if walk.target_id is not None:
         if core.distance_m(citizen.position, core.state.citizens[walk.target_id].position) <= ARRIVE_M:
-            core.end_action(citizen, "done", f"You reach {walk.label}.")
+            core.end_action(citizen, "done", f"You reach {walk.destination}.")
         else:
             walk.goal = None  # they moved on: plan again next tick
         return

@@ -5,6 +5,8 @@ export interface LabelEntry {
   id: string;
   text: string;
   anchor: Group;
+  /** A name tag (default) or a speech bubble (white, wraps long text). */
+  kind?: 'name' | 'speech';
 }
 
 export class LabelStore {
