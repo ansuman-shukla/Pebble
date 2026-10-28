@@ -9,6 +9,10 @@ make pre-commit  # lint (ruff, mypy strict) + tests; run before every commit
 ```
 
 - Settings come from the repo-root `.env` (see `.env.example`); every value has a local default.
+- All checkouts share one Postgres container (`pebble-db-1`, data in the main checkout's `.runtime/postgres`). The
+  Makefile resolves `.runtime` to its real path and pins the compose project directory, so `make db-up` (and `test`,
+  `dev`, `engine`) from a git worktree whose `.runtime` symlinks to the main one reuses the running container instead
+  of recreating it.
 - New dependencies resolve only to versions published at least 7 days ago (`exclude-newer` in `pyproject.toml`).
 - `make migrate` applies the Alembic migrations; `uv run python -m app.world.generate` (via the Makefile's uv env)
   generates the world from `data/world/world.yaml`, stores it and prints its stats. `GET /api/v1/world` also
