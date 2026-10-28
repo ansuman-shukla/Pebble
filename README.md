@@ -48,7 +48,7 @@ checkout's frontend, run it on its own port and set `PLAYWRIGHT_PORT`, e.g. `PLA
 (`--use-angle=metal`); headless Chrome's default software WebGL is too slow for the town.
 
 Open http://localhost:5180 for the planet: the generated world from `GET /api/v1/world`, starting at the castle
-town's main gate.
+town's main gate, with the engine's citizens living on it (`GET /api/v1/entities`, then the live feed).
 
 | Control | What |
 |---|---|
@@ -58,10 +58,15 @@ town's main gate.
 | drag, wheel | look, zoom |
 | `drop` (the pegman) | click it, then click a spot on the planet (Esc cancels), or drag it onto the planet: the player lands there and the camera flies down behind them; water is refused |
 | `go to` | jump to the castle town, a camp or a landmark |
-| `time ×60` | run the clock at one game hour per second |
+| `people` | the citizens: what each is doing and how they are; `follow` (or the row) flies the camera to them and orbits them as they go (Esc or `stop following` returns to the player); `go to` drops the player next to them |
+| clock (bottom right) | engine day and time; `pause`, `×1`, `×10`, `×60` set the engine's speed (`POST /api/v1/admin/clock`); the sun follows engine time |
+| `time ×60` | without a feed (`/?mock=1`): run the client clock at one game hour per second |
 | `?at=lat,lon[,bearing]` | start anywhere, e.g. `/?at=12.4,100,180` (band A camp); a drop or go to rewrites it so the spot can be shared; `?time=HH:MM` sets the town time |
 
-`/town` shows the flat town alone; `/?mock=1` uses the small test world instead of the backend's.
+`/town` shows the flat town alone; `/?mock=1` uses the small test world instead of the backend's (without citizens);
+`?mockLive=1` adds a deterministic mock feed of the 15 citizens (dev and tests). Citizens within 400 m are drawn,
+labelled within 40 m; what they say shows as a bubble for a few seconds. See
+[the live citizens findings](docs/findings/2026-10-29-live-citizens-client.md).
 
 The spectator pages read the archive (all take `?at=tick` to replay a past moment):
 

@@ -129,9 +129,12 @@ test('the real planet loads, the player spawns at the town gate and orbit shows 
   expect(start.townZ).toBeCloseTo(120, 1);
   expect(start.ground).toBeCloseTo(town.anchor.height_m, 1);
   expect(Math.abs(radiusOf(start) - (R + start.ground))).toBeLessThan(0.05);
-  await expect(world).toHaveAttribute('data-citizens-ready', '6', {
-    timeout: 30_000,
-  });
+  // the live citizens from the backend's feed are on the planet
+  await expect(page.getByTestId('npcs')).toHaveAttribute(
+    'data-npcs-ready',
+    /^[1-9]\d*$/,
+    { timeout: 30_000 },
+  );
   await expect(world).toHaveAttribute('data-draw-calls-mode', 'follow', {
     timeout: 30_000,
   });

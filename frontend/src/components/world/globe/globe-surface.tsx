@@ -1,15 +1,17 @@
 import { useEffect, useMemo } from 'react';
-import { IcosahedronGeometry, MeshStandardMaterial, type Vector3 } from 'three';
+import { MeshStandardMaterial, type Vector3 } from 'three';
 
-import { type GlobeTerrain as Terrain, WATER_SURFACE } from '@/lib/world/globe';
-import { riverGeometry, terrainGeometry } from '@/lib/world/globe-mesh';
+import type { GlobeTerrain as Terrain } from '@/lib/world/globe';
+import { terrainGeometry } from '@/lib/world/globe-mesh';
+import type { RiverLayout } from '@/lib/world/river-courses';
+import { riverGeometry, stillWaterGeometry } from '@/lib/world/water-mesh';
+import { waterMaterial } from '@/lib/world/water-material';
 
 /*
- * The planet surface: the refined terrain mesh (with a round hole where the town's own ground lies), a translucent
- * ocean sphere just above sea level, and the rivers.
+ * The planet surface: the refined terrain mesh (with a round hole where the town's own ground lies), the sea and
+ * the lakes (one water surface that knows the depth under it: clear at the shore, deep blue offshore) and the
+ * rivers (flowing ribbons).
  */
-
-const OCEAN_DETAIL = 48;
 
 /** A cone of directions where the terrain is not drawn because a site lays its own ground there. */
 export interface TerrainHole {
@@ -86,7 +88,7 @@ export function GlobeSurface({
 }: {
   terrain: Terrain;
   biomeNames: readonly string[];
-  rivers: number[][];
+  rivers: RiverLayout;
   hole: TerrainHole | null;
 }) {
   const { globe } = terrain;
@@ -98,39 +100,35 @@ export function GlobeSurface({
     () => terrainMaterial(hole, globe.radius),
     [hole, globe],
   );
-  const ocean = useMemo(
-    () => new IcosahedronGeometry(globe.radius + WATER_SURFACE, OCEAN_DETAIL),
-    [globe],
-  );
-  const water = useMemo(
+  const still = useMemo(() => stillWaterGeometry(terrain), [terrain]);
+  const stillMaterial = useMemo(() => waterMaterial('still'), []);
+  const flowing = useMemo(
     () => riverGeometry(terrain, rivers),
     [terrain, rivers],
   );
+  const flowingMaterial = useMemo(() => waterMaterial('flowing'), []);
   useEffect(() => () => land.dispose(), [land]);
   useEffect(() => () => material.dispose(), [material]);
-  useEffect(() => () => ocean.dispose(), [ocean]);
-  useEffect(() => () => water.dispose(), [water]);
+  useEffect(() => () => still.dispose(), [still]);
+  useEffect(() => () => stillMaterial.dispose(), [stillMaterial]);
+  useEffect(() => () => flowing.dispose(), [flowing]);
+  useEffect(() => () => flowingMaterial.dispose(), [flowingMaterial]);
 
   return (
     <>
       <mesh geometry={land} material={material} receiveShadow />
-      <mesh geometry={ocean} renderOrder={1}>
-        <meshStandardMaterial
-          color="#3a7db3"
-          transparent
-          opacity={0.78}
-          roughness={0.3}
-        />
-      </mesh>
-      <mesh geometry={water}>
-        <meshStandardMaterial
-          color="#4b8fc2"
-          roughness={0.35}
-          polygonOffset
-          polygonOffsetFactor={-2}
-          polygonOffsetUnits={-2}
-        />
-      </mesh>
+      <mesh
+        geometry={still}
+        material={stillMaterial}
+        renderOrder={1}
+        receiveShadow
+      />
+      <mesh
+        geometry={flowing}
+        material={flowingMaterial}
+        renderOrder={2}
+        receiveShadow
+      />
     </>
   );
 }

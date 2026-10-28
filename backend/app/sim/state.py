@@ -98,7 +98,8 @@ class ActionState:
     target_id: str | None = None  # a person or ground stack the action is about
     item: str | None = None
     amount: int = 0
-    label: str = ""  # how the result names the destination or thing
+    label: str = ""  # the destination or thing in neutral words, for spectators ("home", "the well")
+    destination: str = ""  # where a walk is heading in the walker's own words ("your home")
     collapsed: bool = False
     store_id: str | None = None  # the storehouse an eat or work action takes from or puts into
 

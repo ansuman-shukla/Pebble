@@ -2,6 +2,9 @@ import { Shape, ShapeGeometry, Vector2 } from 'three';
 
 import type { Point } from './collision';
 
+/** The town's moat and stream lie this far (metres) below its grass. */
+export const TOWN_WATER_Y = -0.15;
+
 /** A flat shape on the ground; Shape y is world -z because the mesh is rotated -90° about x. */
 export function groundShape(outline: Point[], holes: Point[][] = []) {
   const toShape = (points: Point[]) =>

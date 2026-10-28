@@ -9,7 +9,6 @@ import { BIOME_PROPS } from '../../src/lib/world/biome-props';
 import {
   colliderIdsOf,
   type ColliderFile,
-  type Point,
 } from '../../src/lib/world/collision';
 import {
   anchorMapping,
@@ -70,7 +69,8 @@ export interface Explore {
   colliders: Map<string, ColliderFile>;
   wild: WildBlockers;
   townMapping: SiteMapping;
-  citizens: Map<string, Point>;
+  /** Where the citizens' feet are (world metres), read by every walk. */
+  people: Map<string, Vector3>;
   /** A walk with every collision; `props: false` leaves out scattered props. */
   walk: (options?: { props?: boolean }) => GlobeWalk;
   site: (id: string) => Site;
@@ -99,7 +99,7 @@ export function explore(view: WorldView, town: TownView): Explore {
   const wild = createWildBlockers(scatter, colliders, R);
   const townSite = view.sites.find((site) => site.kind === 'town')!;
   const townMapping = anchorMapping(townSite.anchor, R);
-  const citizens = new Map<string, Point>();
+  const people = new Map<string, Vector3>();
   const walk = ({ props = true } = {}) => {
     const blockers = props ? wild : () => [];
     return createGlobeWalk(
@@ -112,7 +112,6 @@ export function explore(view: WorldView, town: TownView): Explore {
             placements: town.placements,
             water: clipWater(town.water, TOWN_GROUND_RADIUS),
             groundRadius: TOWN_GROUND_RADIUS,
-            citizenSpots: citizens,
           },
           colliders,
           { heightAt: () => 0, maxStepUp: 0.5, probeHeight: 1 },
@@ -120,6 +119,7 @@ export function explore(view: WorldView, town: TownView): Explore {
         ...siteCharts(terrain, view.sites, colliders, blockers),
       ],
       blockers,
+      { current: people },
     );
   };
   return {
@@ -131,7 +131,7 @@ export function explore(view: WorldView, town: TownView): Explore {
     colliders,
     wild,
     townMapping,
-    citizens,
+    people,
     walk,
     site: (id) => view.sites.find((site) => site.id === id)!,
   };

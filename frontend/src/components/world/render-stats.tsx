@@ -1,6 +1,8 @@
 import { useFrame } from '@react-three/fiber';
 import { useRef } from 'react';
 
+import { waterClock } from '@/lib/world/water-material';
+
 /** Frames rendered after everything is ready before the renderer's counters are first sampled... */
 const STATS_AFTER_FRAMES = 30;
 /** ...and between later samples, so the counters follow the view as it moves. */
@@ -9,6 +11,8 @@ const STATS_EVERY_FRAMES = 60;
 export interface RenderStats {
   calls: number;
   triangles: number;
+  /** The water shader's clock: it only advances while water is drawn. */
+  waterTime: number;
 }
 
 /** Samples the renderer's draw calls and triangles once `active` has held for a few frames, then every second. */
@@ -27,7 +31,7 @@ export function RenderStatsProbe({
     if (frames.current < STATS_AFTER_FRAMES) return;
     frames.current = STATS_AFTER_FRAMES - STATS_EVERY_FRAMES;
     const { calls, triangles } = gl.info.render;
-    onSample({ calls, triangles });
+    onSample({ calls, triangles, waterTime: waterClock() });
   });
   return null;
 }
