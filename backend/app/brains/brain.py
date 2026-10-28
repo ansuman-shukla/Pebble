@@ -98,11 +98,13 @@ class UtilityBrain:
             previous = notes.get("instant")
             streak = (previous if isinstance(previous, int) else 0) + 1
             notes["instant"] = streak
+            notes["failed"] = notes.get("last") if handle.result.outcome == "failed" else None
             if handle.result.outcome == "failed" or streak >= 2:
                 handle = api.wait(10 + 5 * self.pick(4))  # nothing to do right now: look again in a while
                 notes["instant"] = 0
         else:
             notes["instant"] = 0
+            notes["failed"] = None
         notes["action"] = handle.number
         if best.name == "sleep" and handle.result is None:
             notes["asleep"] = True
@@ -132,7 +134,8 @@ class UtilityBrain:
         if needs.thirst < 2 and not before_bed and not (now == "morning" and needs.thirst >= 1):
             return None
         score = {0: 0.0, 1: 50.0, 2: 80.0, 3: 110.0}[needs.thirst]
-        if water_here(p) or (self.profile.region == "town" and at(p, WELL)):
+        arrived = self.api.notes.get("last") == "go drink" and water_in_view(p)  # at the shore of a lake or river
+        if water_here(p) or arrived or (self.profile.region == "town" and at(p, WELL)):
             return Option(score, "drink", self.api.drink)
         if self.profile.region == "town":
             return Option(score, "go drink", lambda: self.api.walk_to_place(WELL))
@@ -155,7 +158,8 @@ class UtilityBrain:
             item = cooked[0] if cooked else raw[0]
             return Option(score, "eat", lambda: self.api.eat(item))
         if self.profile.region == "town":
-            if at(p, STOREHOUSES):
+            # in the storehouses' yard but out of reach of a door (stopped short): walk up to them first
+            if at(p, STOREHOUSES) and self.api.notes.get("failed") != "eat":
                 return Option(score, "eat", lambda: self.api.eat("rice"))
             return Option(score - 2, "go eat", lambda: self.api.walk_to_place(STOREHOUSES))
         return None  # bands go foraging (their routine scores it up when hungry)

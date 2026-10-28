@@ -22,7 +22,6 @@ from app.brains.senses import (
     afternoon,
     at,
     at_home,
-    carried_count,
     carried_food,
     carries,
     fire_here,
@@ -51,7 +50,6 @@ COMPASS: tuple[Compass, ...] = get_args(Compass)
 HUNT_TRIES = 3  # hunts (and as many searches for game) a hunter tries a day
 FISH_CHANCE = 0.3  # a forager standing at a river or lake fishes instead of gathering this often
 BASKETS = "the main gate"  # where the guard lights the fire baskets at dusk
-BASKET_WOOD = 20  # wood the guard fetches first: two baskets burn about a dozen pieces each a night
 
 
 @dataclass(frozen=True)
@@ -184,10 +182,9 @@ def _light_baskets(ctx: Context) -> list[Option]:
     if "fire" not in ctx.profile.skills or ctx.done_today("baskets"):
         return []
     score = 45.0  # before going home for the night
-    if carried_count(p, "wood") < BASKET_WOOD and not ctx.done_today("fetched wood"):
+    if not ctx.done_today("fetched wood"):  # topped up every evening: two full baskets burn two dozen pieces
         if at(p, STOREHOUSES):
-            fetch = _then(lambda: ctx.mark_done("fetched wood"), lambda: _pick_up_then_go(ctx, "wood", BASKETS))
-            return [Option(score, "fetch wood", fetch)]
+            return [Option(score, "fetch wood", lambda: _fetch_wood(ctx))]
         return [_go(ctx, STOREHOUSES, score)]
     if not at(p, BASKETS):
         return [_go(ctx, BASKETS, score)]
@@ -203,9 +200,12 @@ def _light_baskets(ctx: Context) -> list[Option]:
     return []
 
 
-def _pick_up_then_go(ctx: Context, item: str, place: str) -> ActionHandle:
-    ctx.api.pick_up(item)
-    return ctx.api.walk_to_place(place)
+def _fetch_wood(ctx: Context) -> ActionHandle:
+    """Take wood from the storehouse and head for the baskets; stopped short of its doors, walk up to them first."""
+    if ctx.api.pick_up("wood").outcome == "done":
+        ctx.mark_done("fetched wood")
+        return ctx.api.walk_to_place(BASKETS)
+    return ctx.api.walk_to_place(STOREHOUSES)
 
 
 def lord(ctx: Context) -> list[Option]:

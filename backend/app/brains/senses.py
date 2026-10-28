@@ -138,14 +138,6 @@ def carried_food(perception: Perception) -> dict[str, int]:
     return food
 
 
-def carried_count(perception: Perception, item: str) -> int:
-    """About how many of an item they carry ("plenty of wood" -> 25, "a piece of wood" -> 1)."""
-    for line in perception.you.carrying:
-        if line.endswith(f" {item}"):
-            return next((amount for words, amount in AMOUNT if line.startswith(words)), 1)
-    return 0
-
-
 def carries(perception: Perception, item: str) -> bool:
     return any(line.endswith(f" {item}") or line.endswith(item.rstrip("s")) for line in perception.you.carrying)
 
