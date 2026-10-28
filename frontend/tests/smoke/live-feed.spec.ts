@@ -9,9 +9,16 @@ import {
   feedMinutes,
   pruneSpeech,
   SPEECH_MS,
+  speedWords,
 } from '../../src/lib/live/live-state';
 import { MockLiveServer } from '../../src/lib/live/mock-live';
 import { activityWords, npcLook } from '../../src/lib/live/npc-activity';
+import {
+  advance,
+  citizenPath,
+  pathLength,
+  pointAt,
+} from '../../src/lib/live/walk-path';
 import { CITIZEN_LOOKS } from '../../src/lib/world/citizen-looks';
 import { directionFromLatLon } from '../../src/lib/world/globe';
 import { createMockWorld } from '../../src/lib/world/mock-world';
@@ -215,4 +222,53 @@ test('the mock feed has the 15 citizens around their home sites', () => {
       ) * world.radius_m;
     expect(metres).toBeLessThan(citizen.region === 'town' ? 160 : 40);
   }
+});
+
+test('the clock speed in words', () => {
+  expect(speedWords({ speed: 1, paused: false })).toBe('real time');
+  expect(speedWords({ speed: 60, paused: false })).toBe('×60');
+  expect(speedWords({ speed: 600, paused: true })).toBe('paused');
+});
+
+test('the mock feed streams each walk ahead like the engine: the next tick lands on it', async () => {
+  const world = createMockWorld();
+  const server = new MockLiveServer(world);
+  server.setClock({ speed: 600 }); // a tick every 0.1 s
+  const frames: LiveFrame[] = [];
+  const socket = server.connect();
+  socket.onmessage = ({ data }) => {
+    const message = JSON.parse(data) as LiveFrame;
+    if (message.type === 'tick') frames.push(message);
+  };
+  await new Promise((done) => setTimeout(done, 2_500));
+  socket.close();
+  server.stop();
+
+  let walks = 0;
+  for (const [k, frame] of frames.slice(0, -1).entries()) {
+    const next = frames[k + 1];
+    expect(next.tick).toBe(frame.tick + 1);
+    for (const citizen of frame.citizens) {
+      if (citizen.activity !== 'walking') {
+        expect([citizen.route, citizen.speed_mps]).toEqual([[], 0]);
+        continue;
+      }
+      walks += 1;
+      expect(citizen.route[0].unit).toEqual(citizen.position.unit);
+      expect(citizen.speed_mps).toBeGreaterThan(0.8); // 5 km/h × pace (elders 0.6)
+      expect(citizen.speed_mps).toBeLessThan(1.4);
+      const path = citizenPath(citizen, world.radius_m);
+      expect(pathLength(path)).toBeLessThanOrEqual(
+        2 * 60 * citizen.speed_mps + 1e-6,
+      );
+      advance(path, 60);
+      const landed = next.citizens.find(({ id }) => id === citizen.id)!;
+      const metres =
+        pointAt(path, new Vector3()).angleTo(
+          new Vector3(...landed.position.unit),
+        ) * world.radius_m;
+      expect(metres, `${citizen.id} at tick ${next.tick}`).toBeLessThan(0.01);
+    }
+  }
+  expect(walks).toBeGreaterThan(5);
 });
