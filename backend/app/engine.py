@@ -2,7 +2,8 @@
 
 Loads the stored world (current generator version) and the town, resumes the latest run of that world from its
 latest snapshot (or starts a new run with the 15 citizens of `data/citizens/citizens.yaml`), then ticks:
-1 tick = 1 game minute, `speed` ticks per real second (1 = real time, up to 60), paused = no ticks.
+1 tick = 1 game minute; `speed` = game seconds per real second (1 = real time, a tick every real minute; up to 600),
+paused = no ticks.
 `--headless --ticks N` runs N ticks as fast as possible.
 Every tick is one transaction: its events, a snapshot every game hour, the run's clock, and a NOTIFY.
 Admin commands (pause, speed) arrive through the `engine_commands` table.
@@ -33,7 +34,7 @@ from app.db.schemas import MAX_SPEED, ClockChange
 from app.lib.ulid import UlidFactory
 from app.observability.store import EventStore, create_run, discard_after, latest_run, latest_snapshot, pending_commands
 from app.sim.citizens import CITIZENS, load_citizens
-from app.sim.clock import TICKS_PER_HOUR
+from app.sim.clock import SECONDS_PER_TICK, TICKS_PER_HOUR
 from app.sim.navigation import Planner
 from app.sim.simulation import Simulation
 from app.sim.snapshot import SNAPSHOT_VERSION, SimSnapshot, restore, take_snapshot
@@ -94,7 +95,7 @@ def _reason(error: DBAPIError) -> str:
 
 @dataclass
 class Clock:
-    speed: int = 1  # ticks per real second
+    speed: int = 1  # game seconds per real second (1 = real time); a tick (1 game minute) every 60 / speed real s
     paused: bool = False
 
     def apply(self, change: ClockChange) -> None:
@@ -113,6 +114,10 @@ class EngineLoop:
     stopping: bool = False
     catch_up_to: int = 0  # ticks below this were committed before a reload; they are re-simulated without waiting
     retry_sleep: Callable[[float], None] = time.sleep
+    sleep: Callable[[float], None] = time.sleep
+    now: Callable[[], float] = time.monotonic
+    game_seconds: float = 0.0  # real-time game seconds passed since the last tick (a tick is due at SECONDS_PER_TICK)
+    counted_at: float | None = None  # when game_seconds was last brought up to date
 
     @property
     def run(self) -> Run:
@@ -145,35 +150,47 @@ class EngineLoop:
         A lost database connection reloads the last committed state and carries on toward the same final tick.
         """
         until = None if ticks is None else self.sim.tick + ticks
-        next_at = time.monotonic()
+        self.counted_at = self.now()
         while not self.stopping and (until is None or self.sim.tick < until):
             try:
-                next_at = self._advance(next_at, headless)
+                self._advance(headless)
             except DBAPIError as error:
                 if not is_connection_loss(error):
                     raise
                 self.recover(error)
-                next_at = time.monotonic()
+                self.counted_at = self.now()  # the outage isn't game time: carry on from where the clock stood
 
-    def _advance(self, next_at: float, headless: bool) -> float:
-        """One pass of the loop: apply commands, then tick, wait or heartbeat. Returns when the next tick is due."""
-        self.apply_commands()
+    def _advance(self, headless: bool) -> None:
+        """One pass of the loop: count the game time passed, apply commands, then tick, wait or heartbeat.
+
+        Game time runs at `speed` game seconds per real second while unpaused; a tick is due every SECONDS_PER_TICK
+        of it. A speed change mid-wait keeps the game seconds already passed, so the next tick comes as soon as the
+        new speed completes the minute (clients drawing the walk between ticks stay in step).
+        """
         realtime = not headless and self.sim.tick >= self.catch_up_to
-        if self.clock.paused and realtime:
-            self.store.commit(self.sim.tick, self.clock.speed, self.clock.paused)  # heartbeat
-            time.sleep(PAUSED_POLL_S)
-            return time.monotonic()
+        self._count_game_time(realtime)
+        self.apply_commands()
         if realtime:
-            delay = next_at - time.monotonic()
-            if delay > 0:
-                time.sleep(min(delay, PAUSED_POLL_S))
-                return next_at
-            next_at += 1.0 / self.clock.speed
+            if self.clock.paused:
+                self.store.commit(self.sim.tick, self.clock.speed, self.clock.paused)  # heartbeat
+                self.sleep(PAUSED_POLL_S)
+                return
+            wait = (SECONDS_PER_TICK - self.game_seconds) / self.clock.speed
+            if wait > 0:
+                self.sleep(min(wait, PAUSED_POLL_S))
+                return
+            self.game_seconds -= SECONDS_PER_TICK
         started = time.perf_counter()
         self.tick()
         if self.sim.tick % TICKS_PER_HOUR == 0:
             log.info("tick %s (%.1f ms)", self.sim.tick, (time.perf_counter() - started) * 1000)
-        return next_at
+
+    def _count_game_time(self, realtime: bool) -> None:
+        """Add the game seconds passed at the current speed since the last count (none while paused or catching up)."""
+        now = self.now()
+        if realtime and not self.clock.paused and self.counted_at is not None:
+            self.game_seconds += (now - self.counted_at) * self.clock.speed
+        self.counted_at = now
 
     def recover(self, error: DBAPIError) -> None:
         """Wait for the database (backoff from RETRY_FIRST_S to RETRY_MAX_S), then reload its last committed state."""
@@ -312,7 +329,12 @@ def resumable(session: Session, run: Run) -> bool:
 def main(argv: Sequence[str] | None = None, db_engine: DbEngine | None = None) -> None:
     parser = argparse.ArgumentParser(prog="python -m app.engine", description=__doc__.splitlines()[0])
     parser.add_argument("--new-run", action="store_true", help="start a new run instead of resuming the latest")
-    parser.add_argument("--speed", type=int, default=None, help=f"ticks per real second, 1..{MAX_SPEED}")
+    parser.add_argument(
+        "--speed",
+        type=int,
+        default=None,
+        help=f"game seconds per real second, 1 (real time, the default for a new run)..{MAX_SPEED}",
+    )
     parser.add_argument("--paused", action="store_true", help="start paused")
     parser.add_argument("--headless", action="store_true", help="no sleeping between ticks (fast-forward)")
     parser.add_argument("--ticks", type=int, default=None, help="stop after this many ticks")

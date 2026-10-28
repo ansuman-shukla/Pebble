@@ -1,15 +1,18 @@
 """The engine against Postgres (inside a rolled-back transaction): ticks persist, snapshots resume, commands apply."""
 
 from collections import Counter
+from collections.abc import Callable
 from typing import Any
 
+import pytest
 from sqlmodel import Session, col, select
 
 from app.db.models import EngineCommand, Event, Run, Snapshot
-from app.engine import Clock, open_loop
+from app.engine import Clock, EngineLoop, open_loop
 from app.observability.store import latest_snapshot, queue_command
 from app.sim.citizens import CITIZENS, DEV_CITIZENS, load_citizens
 from app.sim.clock import game_minute
+from app.sim.simulation import Simulation
 from app.sim.snapshot import SimSnapshot, canonical_json, take_snapshot
 from app.sim.world import SimWorld
 from app.world.store import WorldKey
@@ -104,3 +107,59 @@ def test_a_run_from_an_older_simulation_is_not_resumed(db_session: Session, sim_
     assert fresh.sim.tick == 0
     again = open_loop(db_session, sim_world, KEY, new_run=False, citizens=DEV_CITIZENS, clock=Clock())
     assert again.run.id == fresh.run.id  # the current one resumes
+
+
+class FakeTime:
+    """A monotonic clock that only moves when the loop sleeps; `at` runs a callback once the time reaches it."""
+
+    def __init__(self) -> None:
+        self.t = 0.0
+        self.ticked_at: list[float] = []
+        self.at: list[tuple[float, Callable[[], object]]] = []
+
+    def now(self) -> float:
+        return self.t
+
+    def sleep(self, seconds: float) -> None:
+        assert seconds > 0
+        self.t += seconds
+        while self.at and self.t >= self.at[0][0] - 1e-9:
+            self.at.pop(0)[1]()
+
+    def brain(self, sim: Simulation) -> None:  # noqa: ARG002  # brains get the simulation
+        self.ticked_at.append(self.t)
+
+
+def _timed_loop(db_session: Session, sim_world: SimWorld, speed: int) -> tuple[EngineLoop, FakeTime]:
+    loop = open_loop(db_session, sim_world, KEY, new_run=True, citizens=None, clock=Clock(speed=speed), brains=False)
+    fake = FakeTime()
+    loop.now, loop.sleep, loop.brains = fake.now, fake.sleep, [fake.brain]
+    return loop, fake
+
+
+@pytest.mark.parametrize(("speed", "interval_s"), [(1, 60.0), (10, 6.0), (60, 1.0), (600, 0.1)])
+def test_a_tick_comes_every_60_over_speed_real_seconds(
+    db_session: Session, sim_world: SimWorld, speed: int, interval_s: float
+) -> None:
+    loop, fake = _timed_loop(db_session, sim_world, speed)
+    loop.run_ticks(3, headless=False)
+    assert fake.ticked_at == pytest.approx([interval_s, 2 * interval_s, 3 * interval_s], abs=1e-6)
+    assert loop.sim.tick == 3
+
+
+def test_a_speed_change_keeps_the_game_seconds_already_passed(db_session: Session, sim_world: SimWorld) -> None:
+    loop, fake = _timed_loop(db_session, sim_world, speed=1)
+    fake.at = [(30.0, lambda: queue_command(db_session, loop.run.id, "clock", {"speed": 60}))]
+    loop.run_ticks(2, headless=False)
+    # 30 game seconds at real time, the other 30 at ×60 take half a second; then a tick every second
+    assert fake.ticked_at == pytest.approx([30.5, 31.5], abs=1e-6)
+
+
+def test_paused_time_is_not_game_time(db_session: Session, sim_world: SimWorld) -> None:
+    loop, fake = _timed_loop(db_session, sim_world, speed=1)
+    fake.at = [
+        (30.0, lambda: queue_command(db_session, loop.run.id, "clock", {"paused": True})),
+        (130.0, lambda: queue_command(db_session, loop.run.id, "clock", {"paused": False})),
+    ]
+    loop.run_ticks(1, headless=False)
+    assert fake.ticked_at == pytest.approx([160.0], abs=1e-6)
