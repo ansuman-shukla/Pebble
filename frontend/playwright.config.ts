@@ -21,7 +21,16 @@ export default defineConfig({
       name: 'smoke',
       testDir: './tests/smoke',
       testMatch: '**/*.spec.ts',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // headless Chrome renders WebGL in software (~4 fps for the town); on a Mac, use the real GPU
+        launchOptions: {
+          args:
+            process.platform === 'darwin'
+              ? ['--use-angle=metal', '--ignore-gpu-blocklist']
+              : [],
+        },
+      },
     },
   ],
   webServer: [
