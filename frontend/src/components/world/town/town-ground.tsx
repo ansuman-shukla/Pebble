@@ -82,6 +82,7 @@ type TownGroundProps = {
   outline?: Point[];
   /** Depth of a wall hanging from the outline, hiding the gap to terrain below it (0 = none). */
   skirt?: number;
+  grass?: string;
 };
 
 export function TownGround({
@@ -90,6 +91,7 @@ export function TownGround({
   mapping = FLAT_MAPPING,
   outline = FLAT_OUTLINE,
   skirt = 0,
+  grass: grassColor = GRASS,
 }: TownGroundProps) {
   const [grass, surface, banks] = useDisposed(
     useMemo(() => {
@@ -147,7 +149,7 @@ export function TownGround({
   return (
     <>
       <mesh geometry={grass} receiveShadow>
-        <meshStandardMaterial color={GRASS} />
+        <meshStandardMaterial color={grassColor} />
       </mesh>
       <mesh geometry={surface}>
         <meshStandardMaterial color={WATER} />

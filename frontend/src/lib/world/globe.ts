@@ -8,6 +8,9 @@ import { Matrix4, Vector3 } from 'three';
 import type { LocalMapping } from './local-mapping';
 import type { Anchor, WorldView } from './world-view';
 
+/** The rendered water surface above sea level: keeps beaches dry and shallows visibly under water. */
+export const WATER_SURFACE = 0.2;
+
 /** Not walkable: deep_ocean, shallow_ocean, lake. */
 export const WATER_BIOMES: ReadonlySet<number> = new Set([0, 1, 13]);
 
@@ -139,6 +142,13 @@ export function tangentFrame(direction: Vector3): TangentFrame {
   east.normalize();
   const north = new Vector3().crossVectors(up, east);
   return { up, east, north, south: north.clone().negate() };
+}
+
+/** Projects a vector onto the tangent plane at unit `up` and normalizes it (to `fallback` if it degenerates). */
+export function tangent(vector: Vector3, up: Vector3, fallback?: Vector3) {
+  vector.addScaledVector(up, -vector.dot(up));
+  if (vector.lengthSq() < 1e-12 && fallback) vector.copy(fallback);
+  return vector.normalize();
 }
 
 // --- local metres <-> globe (gnomonic, one per site) ---

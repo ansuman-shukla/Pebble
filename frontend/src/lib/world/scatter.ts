@@ -175,3 +175,5 @@ export function createScatter({
 
   return { spacing, cell, cellsAround };
 }
+
+export type Scatter = ReturnType<typeof createScatter>;
