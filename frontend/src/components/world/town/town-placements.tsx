@@ -1,10 +1,10 @@
 import { useGLTF } from '@react-three/drei';
 import { useEffect, useMemo } from 'react';
-import { InstancedMesh, Matrix4 } from 'three';
+import { InstancedMesh, Matrix4, Vector3 } from 'three';
 
 import { kindParts } from '@/components/world/kind-parts';
 import type { TownPlacement } from '@/lib/client/types.gen';
-import { assetBaseY, assetUrl } from '@/lib/world/assets';
+import { assetBaseY, assetUrl, kindScale } from '@/lib/world/assets';
 import { assetIdForKind } from '@/lib/world/collision';
 import { FLAT_MAPPING, type LocalMapping } from '@/lib/world/local-mapping';
 
@@ -37,14 +37,17 @@ function KindInstances({
   const meshes = useMemo(() => {
     const parts = kindParts(scene, id);
     const baseY = assetBaseY(id);
+    const scale = kindScale(kind);
     const placed = placements.map((placement) =>
-      mapping.matrix(
-        placement.x,
-        baseY + (lift?.(placement) ?? 0),
-        placement.z,
-        (placement.rotation_deg * Math.PI) / 180,
-        new Matrix4(),
-      ),
+      mapping
+        .matrix(
+          placement.x,
+          baseY + (lift?.(placement) ?? 0),
+          placement.z,
+          (placement.rotation_deg * Math.PI) / 180,
+          new Matrix4(),
+        )
+        .scale(new Vector3(scale, scale, scale)),
     );
     const matrix = new Matrix4();
     return parts.map(({ geometry, material, inModel }) => {

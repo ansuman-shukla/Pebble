@@ -4,7 +4,7 @@ import { type RefObject, useEffect, useMemo, useRef } from 'react';
 import { InstancedMesh, Matrix4, Quaternion, Vector3 } from 'three';
 
 import { kindParts } from '@/components/world/kind-parts';
-import { assetUrl, PROPS, type PropKind } from '@/lib/world/assets';
+import { assetUrl, kindScale, PROPS, type PropKind } from '@/lib/world/assets';
 import { BIOME_PROPS } from '@/lib/world/biome-props';
 import type { Scatter, ScatterInstance } from '@/lib/world/scatter';
 
@@ -45,7 +45,7 @@ function modelMatrix(instance: ScatterInstance) {
   return new Matrix4().compose(
     instance.position,
     upright,
-    scaled.setScalar(instance.scale),
+    scaled.setScalar(instance.scale * kindScale(instance.kind)),
   );
 }
 
