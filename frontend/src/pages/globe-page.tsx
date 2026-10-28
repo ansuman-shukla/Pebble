@@ -353,6 +353,7 @@ const GlobeScene = memo(function GlobeScene({
       <GlobeNpcs
         citizens={live.citizens}
         speed={live.speed}
+        paused={live.paused}
         speech={live.speech}
         terrain={terrain}
         town={walkTown}
@@ -539,13 +540,16 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   const markPlacementsReady = useCallback(() => setPlacementsReady(true), []);
   const ready = walkReady && placementsReady;
 
-  // a live feed drives the sky: engine time, running at the engine's speed (game minutes per real second)
+  // a live feed drives the sky: engine time, set on each tick (other feed changes would pull it back to the tick's
+  // minute) and running at the engine's speed (game seconds per real second; the sky's clock counts game minutes)
+  const { day: feedDay, time: feedTime, paused: feedPaused, speed } = live;
   useEffect(() => {
-    if (!feedLive) return;
-    const clock = clockRef.current;
-    clock.minutes = feedMinutes(live);
-    clock.rate = live.paused ? 0 : live.speed;
-  }, [feedLive, live]);
+    if (feedLive)
+      clockRef.current.minutes = feedMinutes({ day: feedDay, time: feedTime });
+  }, [feedLive, feedDay, feedTime]);
+  useEffect(() => {
+    if (feedLive) clockRef.current.rate = feedPaused ? 0 : speed / 60;
+  }, [feedLive, feedPaused, speed]);
   useEffect(() => {
     if (!feedLive) clockRef.current.rate = fastTime ? FAST_RATE : NORMAL_RATE;
   }, [feedLive, fastTime]);
@@ -617,7 +621,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
       data-avatar-clip={player?.clip ?? undefined}
       data-avatar-feet={player?.feet.map((value) => value.toFixed(4)).join(',')}
       data-dropping={dropping}
-      data-game-minutes={Math.floor(minutes)}
+      data-game-minutes={minutes.toFixed(3)}
       data-travel={travel}
       data-draw-calls={stats?.calls}
       data-draw-calls-mode={stats?.mode}
