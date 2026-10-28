@@ -4,16 +4,18 @@
  * rest, talk (emitting `said` events) and walk between spots at the engine's pace (5 km/h = 83 m per tick).
  * Messages have the contract's shapes; sockets are fake WebSockets driven by the same tick loop, so the client's
  * connect / reconnect path is the one the real feed uses. `window.__pebbleMockLive` lets tests drop connections
- * and make someone speak.
+ * and make someone speak, start a new run, or act as if there were no run.
  */
 import { Vector3 } from 'three';
 
-import type {
-  Activity,
-  LiveCitizen,
-  LiveEventMessage,
-  LiveFrame,
-  LiveMessage,
+import {
+  type Activity,
+  LIVE_CLOSE,
+  type LiveCitizen,
+  type LiveEventMessage,
+  type LiveFrame,
+  type LiveMessage,
+  tickMs,
 } from './live-contract';
 import type { Site, WorldView } from '@/lib/client/types.gen';
 import { CITIZEN_LOOKS } from '@/lib/world/citizen-looks';
@@ -357,28 +359,36 @@ export interface MockClock {
 }
 
 export class MockLiveServer {
-  readonly runId = 'mock-run';
+  runId = 'mock-run-1';
   /** Like a new engine run: tick 0 is 08:00 on day 0. */
   private tick = 0;
   private clock: MockClock = { speed: 1, paused: false };
   private timer: ReturnType<typeof setInterval> | null = null;
   private sockets = new Set<MockSocket>();
   private states: PersonState[];
+  private readonly world: WorldView;
   private events = 0;
   private pending: LiveEventMessage[] = [];
   /** Connections so far (tests read it to see a reconnect). */
   connects = 0;
+  /** Like a backend without a run (tests): every connection is accepted, then closed with 4404. */
+  noRun = false;
 
   constructor(world: WorldView) {
+    this.world = world;
+    this.states = this.freshStates();
+  }
+
+  private freshStates(): PersonState[] {
     const sites = new Map<string, Site>(
-      world.sites.map((site) => [site.id, site]),
+      this.world.sites.map((site) => [site.id, site]),
     );
-    this.states = PEOPLE.map((person) => {
+    return PEOPLE.map((person) => {
       const site = sites.get(person.site);
       if (!site) throw new Error(`the world has no ${person.site} site`);
       return {
         person,
-        mapping: anchorMapping(site.anchor, world.radius_m),
+        mapping: anchorMapping(site.anchor, this.world.radius_m),
         height: site.anchor.height_m,
         at: [...person.home],
         heading: 0,
@@ -407,7 +417,8 @@ export class MockLiveServer {
     setTimeout(() => {
       if (!this.sockets.has(socket)) return;
       socket.onopen?.();
-      socket.deliver(this.frame('snapshot'));
+      if (this.noRun) this.detach(socket, LIVE_CLOSE.noRun);
+      else socket.deliver(this.frame('snapshot'));
     }, 0);
     this.schedule();
     return socket;
@@ -416,6 +427,9 @@ export class MockLiveServer {
   setClock(change: Partial<MockClock>) {
     this.clock = { ...this.clock, ...change };
     this.schedule();
+    // like the engine: one extra tick (same tick number) carries the new speed or pause
+    const frame = this.frame('tick');
+    for (const socket of this.sockets) socket.deliver(frame);
   }
 
   /** Someone says something right now (tests): the `said` event goes out at once. */
@@ -427,8 +441,16 @@ export class MockLiveServer {
   }
 
   /** Simulates the server going away: every open socket closes abnormally. */
-  dropConnections() {
-    for (const socket of [...this.sockets]) this.detach(socket, 1006);
+  dropConnections(code = 1006) {
+    for (const socket of [...this.sockets]) this.detach(socket, code);
+  }
+
+  /** A new run starts (like the engine's `--new-run`): open sockets close with 1012, the clock starts at 08:00. */
+  restartRun() {
+    this.runId = `mock-run-${Number(this.runId.split('-').pop()) + 1}`;
+    this.tick = 0;
+    this.states = this.freshStates();
+    this.dropConnections(LIVE_CLOSE.newRun);
   }
 
   detach(socket: MockSocket, code: number) {
@@ -445,7 +467,7 @@ export class MockLiveServer {
   private schedule() {
     this.stop();
     if (this.clock.paused || this.sockets.size === 0) return;
-    this.timer = setInterval(() => this.step(), 1000 / this.clock.speed);
+    this.timer = setInterval(() => this.step(), tickMs(this.clock.speed));
   }
 
   private step() {

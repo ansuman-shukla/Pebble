@@ -22,7 +22,8 @@ import {
 
 /*
  * The live citizens on the planet: the dev/test mock feed (`?mockLive=1`) for movement, clips, speech, the
- * People panel, follow / go to, collisions and reconnecting; and the real `GET /api/v1/entities` once.
+ * People panel, follow / go to, collisions and reconnecting (dropped, 1012, 4404); and the real feed
+ * of the running engine once.
  */
 
 const ENTITIES_URL = `${process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:8100'}/api/v1/entities`;
@@ -59,8 +60,10 @@ interface Npc {
 type Dataset = { dataset: Record<string, string | undefined> };
 type MockLiveWindow = {
   __pebbleMockLive: {
-    dropConnections(): void;
+    dropConnections(code?: number): void;
     sayNow(actor: string, words: string): void;
+    restartRun(): void;
+    noRun: boolean;
   };
 };
 
@@ -211,8 +214,14 @@ test('a said event shows a speech bubble for a few seconds', async ({
   page,
 }) => {
   const errors: string[] = [];
-  await openLive(page, errors);
-  // Haru calls out at the market on the first tick (the feed's own said event)
+  const world = await openLive(page, errors);
+  // Haru calls out at the market on a run's first tick (the feed's own said event); a fresh run makes sure the
+  // bubble isn't already gone while a busy machine loads the page (its snapshot drops the old run's bubbles)
+  await page.evaluate(() =>
+    (globalThis as unknown as MockLiveWindow).__pebbleMockLive.restartRun(),
+  );
+  await expect(world).toHaveAttribute('data-live-connects', '2');
+  await expect(world).toHaveAttribute('data-live-status', 'live');
   await expect(page.locator('[data-label="say-haru"]')).toHaveText(
     /Fresh rice and good salt today/,
     { timeout: 5_000 },
@@ -356,33 +365,173 @@ test('the clock follows the feed, its speed buttons drive it, and a dropped feed
   expect(errors).toEqual([]);
 });
 
-test('the real feed: the citizens of GET /api/v1/entities stand where the backend says', async ({
+test('a new run (1012) resyncs at once; no run yet (4404) waits and retries', async ({
   page,
 }) => {
   const errors: string[] = [];
-  const api = await page.request.get(ENTITIES_URL);
-  expect(api.status()).toBe(200);
-  const entities = (await api.json()) as EntitiesView;
-  expect(entities.citizens.length).toBeGreaterThan(0);
+  const world = await openLive(page, errors);
+  await expect
+    .poll(async () => Number(await world.getAttribute('data-live-tick')))
+    .toBeGreaterThanOrEqual(3);
+  await page.evaluate(() =>
+    (globalThis as unknown as MockLiveWindow).__pebbleMockLive.restartRun(),
+  );
+  // the new run's snapshot: tick 0 again, 08:00, everyone back home, right away (no backoff)
+  await expect(world).toHaveAttribute('data-live-connects', '2', {
+    timeout: 1_000,
+  });
+  await expect(world).toHaveAttribute('data-live-status', 'live');
+  expect(Number(await world.getAttribute('data-live-tick'))).toBeLessThan(2);
+  await expect(page.getByTestId('live-time')).toHaveText(/08:0[01]$/);
+
+  // the run goes away: every connection is accepted and closed with 4404; the client says so and retries with
+  // backoff (0.5 s, 1 s, 2 s ...), not at once and not as "live"
+  await page.evaluate(() => {
+    const mock = (globalThis as unknown as MockLiveWindow).__pebbleMockLive;
+    mock.noRun = true;
+    mock.dropConnections();
+  });
+  const connects = async () =>
+    Number(await world.getAttribute('data-live-connects'));
+  await expect(world).toHaveAttribute('data-live-status', 'reconnecting');
+  await expect(world).toHaveAttribute('data-live-status', 'no-run');
+  await expect(page.getByTestId('live-clock')).toContainText('no run yet');
+  const refused = await connects();
+  const statuses = new Set<string>();
+  for (let k = 0; k < 30; k++) {
+    statuses.add((await world.getAttribute('data-live-status'))!);
+    await page.waitForTimeout(100);
+  }
+  expect([...statuses]).toEqual(['no-run']);
+  // 3 s of backoff after the first refusal: two or three more tries (not 6 at a steady 0.5 s)
+  expect((await connects()) - refused).toBeGreaterThanOrEqual(1);
+  expect((await connects()) - refused).toBeLessThanOrEqual(3);
+
+  // a run starts: the next try takes its snapshot
+  await page.evaluate(() => {
+    (globalThis as unknown as MockLiveWindow).__pebbleMockLive.noRun = false;
+  });
+  await expect(world).toHaveAttribute('data-live-status', 'live', {
+    timeout: 10_000,
+  });
+  const resumed = Number(await world.getAttribute('data-live-tick'));
+  await expect
+    .poll(async () => Number(await world.getAttribute('data-live-tick')), {
+      timeout: 5_000,
+    })
+    .toBeGreaterThan(resumed);
+  expect(errors).toEqual([]);
+});
+
+test('the real feed: the 15 citizens stand where the engine says, on the ground, and follow its ticks', async ({
+  page,
+}) => {
+  const errors: string[] = [];
   const world = await openGlobe(page, errors);
   await expect(page.getByTestId('npcs')).toHaveAttribute(
     'data-npcs-ready',
-    String(entities.citizens.length),
+    '15',
     { timeout: 30_000 },
   );
   await expect(world).toHaveAttribute('data-live-status', 'live');
+  const tick = async () => Number(await world.getAttribute('data-live-tick'));
+  const startTick = await tick();
+
+  // the feed is live: within a few seconds someone drawn moves or starts doing something else
+  const first = await npcs(page);
+  await expect
+    .poll(
+      async () =>
+        (await npcs(page)).filter((npc) => {
+          const was = first.find((candidate) => candidate.id === npc.id)!;
+          return (
+            npc.activity !== was.activity ||
+            npc.position.distanceTo(was.position) > 0.01
+          );
+        }).length,
+      { timeout: 5_000 },
+    )
+    .toBeGreaterThan(0);
+
+  // the engine's positions (at most a tick of walking apart while frames glide in)
+  const api = await page.request.get(ENTITIES_URL);
+  expect(api.status()).toBe(200);
+  const entities = (await api.json()) as EntitiesView;
+  expect(entities.citizens).toHaveLength(15);
+  expect(new Set(entities.citizens.map((citizen) => citizen.region))).toEqual(
+    new Set(['town', 'band_a', 'band_b']),
+  );
   const drawn = await npcs(page);
   for (const citizen of entities.citizens) {
     const npc = drawn.find((candidate) => candidate.id === citizen.id)!;
     expect(npc, citizen.id).toBeDefined();
-    // at most one tick of walking from where the answer put them
     const unit = new Vector3(...citizen.position.unit);
     expect(npc.position.clone().normalize().angleTo(unit) * R).toBeLessThan(90);
+    const direction = npc.position.clone().normalize();
+    expect(
+      Math.abs(npc.position.length() - (R + groundUnder(direction))),
+    ).toBeLessThan(0.5);
   }
+
+  // the engine ticks on and the drawn citizens follow it: at the page's tick, everyone who stood still since the
+  // tick before is exactly where the engine has them, and everyone does what the engine says
+  await expect.poll(tick, { timeout: 5_000 }).toBeGreaterThan(startTick);
+  const at = async (when: number) =>
+    (
+      (await (
+        await page.request.get(`${ENTITIES_URL}?at=${when}`)
+      ).json()) as EntitiesView
+    ).citizens;
+  await expect
+    .poll(
+      async () => {
+        const when = await tick();
+        const [now, previous] = await Promise.all([at(when), at(when - 1)]);
+        await page.waitForTimeout(150); // the hooks refresh every 100 ms
+        const shown = await npcs(page);
+        if ((await tick()) !== when) return ['the page moved on'];
+        return now.flatMap((citizen) => {
+          const npc = shown.find((candidate) => candidate.id === citizen.id)!;
+          const unit = new Vector3(...citizen.position.unit);
+          const before = previous.find((old) => old.id === citizen.id)!;
+          const still =
+            unit.angleTo(new Vector3(...before.position.unit)) * R < 0.01;
+          const off = npc.position.clone().normalize().angleTo(unit) * R;
+          return [
+            ...(npc.activity === citizen.activity
+              ? []
+              : [`${citizen.id}: ${npc.activity} ≠ ${citizen.activity}`]),
+            ...(off < (still ? 0.5 : 90)
+              ? []
+              : [`${citizen.id}: ${off.toFixed(2)} m off`]),
+          ];
+        });
+      },
+      { timeout: 15_000 },
+    )
+    .toEqual([]);
+
+  // the townspeople near the spawn play their activity's clip
+  await expect
+    .poll(async () => (await npcs(page)).filter((npc) => npc.loaded).length, {
+      timeout: 30_000,
+    })
+    .toBeGreaterThan(0);
+  await expect
+    .poll(async () =>
+      (await npcs(page))
+        .filter((npc) => npc.loaded && npc.clip && npc.activity !== 'walking')
+        .filter(
+          (npc) =>
+            npc.clip !==
+            npcLook({ activity: npc.activity, action_label: npc.label }).clip,
+        )
+        .map((npc) => `${npc.id} ${npc.activity} ${npc.label}: ${npc.clip}`),
+    )
+    .toEqual([]);
+
   await page.getByRole('button', { name: 'people', exact: true }).click();
-  await expect(page.locator('[data-person]')).toHaveCount(
-    entities.citizens.length,
-  );
+  await expect(page.locator('[data-person]')).toHaveCount(15);
   await expect(page.getByRole('region', { name: 'People' })).toContainText(
     entities.citizens[0].name,
   );

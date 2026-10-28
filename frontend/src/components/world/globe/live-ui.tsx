@@ -35,7 +35,7 @@ const STATUS_WORDS: Record<LiveStatus, string> = {
   connecting: 'connecting…',
   live: 'live',
   reconnecting: 'reconnecting…',
-  offline: 'offline',
+  'no-run': 'no run yet',
   off: 'no feed',
 };
 

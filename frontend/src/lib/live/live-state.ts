@@ -2,12 +2,7 @@
  * What the client knows of the live world: the latest frame of citizens and the clock, and the recent speech.
  * Pure: the hook feeds it the entities answer and every feed message.
  */
-import {
-  type LiveCitizen,
-  type LiveMessage,
-  normalizeCitizen,
-  type RawCitizen,
-} from './live-contract';
+import type { LiveCitizen, LiveMessage } from './live-contract';
 
 /** How long a speech bubble stays up, ms. */
 export const SPEECH_MS = 4000;
@@ -44,23 +39,15 @@ export const EMPTY_LIVE: LiveState = {
   speech: [],
 };
 
-/** The citizens of a frame, each normalized against what was known of it (for derived fields). */
-function citizensOf(state: LiveState, raws: RawCitizen[], sameRun: boolean) {
-  const known = new Map(
-    sameRun ? state.citizens.map((citizen) => [citizen.id, citizen]) : [],
-  );
-  return raws.map((raw) => normalizeCitizen(raw, known.get(raw.id)));
-}
-
 export interface EntitiesAnswer {
   run_id: string;
   tick: number;
   day: number;
   time: string;
-  citizens: RawCitizen[];
+  citizens: LiveCitizen[];
 }
 
-/** `GET /api/v1/entities` (the first load, and every poll while there is no socket). */
+/** `GET /api/v1/entities` (the first load, before the socket's snapshot). */
 export function applyEntities(
   state: LiveState,
   view: EntitiesAnswer,
@@ -73,7 +60,7 @@ export function applyEntities(
     tick: view.tick,
     day: view.day,
     time: view.time,
-    citizens: citizensOf(state, view.citizens, sameRun),
+    citizens: view.citizens,
     speech: sameRun ? state.speech : [],
   };
 }
@@ -96,9 +83,13 @@ export function applyMessage(
     const speech = { id: event.id, actorId: event.actor_id, words, at: now };
     return { ...state, speech: [...state.speech, speech].slice(-SPEECH_KEEP) };
   }
-  // a snapshot always resyncs; a tick only moves forward within the run it belongs to
-  if (message.type === 'tick' && sameRun && message.tick <= state.tick)
-    return state;
+  // a snapshot always resyncs; a tick only moves forward within the run it belongs to, except the extra tick a
+  // speed or pause change sends (same tick: only the clock changes)
+  if (message.type === 'tick' && sameRun) {
+    if (message.tick < state.tick) return state;
+    if (message.tick === state.tick)
+      return { ...state, speed: message.speed, paused: message.paused };
+  }
   return {
     runId: message.run_id,
     tick: message.tick,
@@ -106,7 +97,7 @@ export function applyMessage(
     time: message.time,
     speed: message.speed,
     paused: message.paused,
-    citizens: citizensOf(state, message.citizens, sameRun),
+    citizens: message.citizens,
     speech: sameRun ? state.speech : [],
   };
 }

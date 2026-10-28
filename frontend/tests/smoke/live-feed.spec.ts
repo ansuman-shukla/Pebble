@@ -1,12 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { Vector3 } from 'three';
 
-import type { CitizenEntity } from '../../src/lib/client/types.gen';
-import {
-  type LiveCitizen,
-  type LiveFrame,
-  normalizeCitizen,
-} from '../../src/lib/live/live-contract';
+import type { LiveCitizen, LiveFrame } from '../../src/lib/live/live-contract';
 import {
   applyEntities,
   applyMessage,
@@ -18,22 +13,25 @@ import {
 import { MockLiveServer } from '../../src/lib/live/mock-live';
 import { activityWords, npcLook } from '../../src/lib/live/npc-activity';
 import { CITIZEN_LOOKS } from '../../src/lib/world/citizen-looks';
-import { directionFromLatLon, tangentFrame } from '../../src/lib/world/globe';
+import { directionFromLatLon } from '../../src/lib/world/globe';
 import { createMockWorld } from '../../src/lib/world/mock-world';
 
 /*
- * The live feed without a browser: entities entering the client (the contract's fallbacks while the backend
- * doesn't send the new fields yet), the frame/event reducer, how activities show, and the mock feed.
+ * The live feed without a browser: the frame/event reducer, how activities show, and the mock feed.
  */
 
 const AT = directionFromLatLon(35, 12);
 
-function entity(overrides: Partial<CitizenEntity> = {}): CitizenEntity {
+function entity(overrides: Partial<LiveCitizen> = {}): LiveCitizen {
   return {
     id: 'dev-genzo',
     name: 'Genzo',
     look: 'town-farmer',
     appearance: 'a broad man in a straw hat',
+    role: 'Rice farmer',
+    region: 'town',
+    heading_deg: 0,
+    activity: 'idle',
     position: { unit: AT.toArray(), height_m: 8, lat: 35, lon: 12 },
     cell: 1,
     alive: true,
@@ -71,65 +69,8 @@ const said = (id: string, actor: string, words: unknown, run = 'run-1') => ({
   event: { id, type: 'said', actor_id: actor, payload: { words } },
 });
 
-test("today's entities get an activity, role, region and heading", () => {
-  const plain = normalizeCitizen(entity());
-  expect(plain).toMatchObject({
-    activity: 'idle',
-    role: 'Rice farmer',
-    region: 'town',
-    heading_deg: 0,
-  });
-  expect(normalizeCitizen(entity({ action: 'walk_to' })).activity).toBe(
-    'walking',
-  );
-  expect(normalizeCitizen(entity({ action: 'gather' })).activity).toBe(
-    'gathering',
-  );
-  expect(normalizeCitizen(entity({ action: 'no_such_thing' })).activity).toBe(
-    'idle',
-  );
-  expect(
-    normalizeCitizen(entity({ asleep: true, action: 'walk_to' })).activity,
-  ).toBe('sleeping');
-  expect(
-    normalizeCitizen(entity({ alive: false, asleep: true })).activity,
-  ).toBe('dead');
-  // fields the backend sends win
-  const sent = {
-    ...entity(),
-    activity: 'eating',
-    role: 'Cook',
-    region: 'band_a',
-    heading_deg: 42,
-  };
-  expect(normalizeCitizen(sent as never)).toMatchObject({
-    activity: 'eating',
-    role: 'Cook',
-    region: 'band_a',
-    heading_deg: 42,
-  });
-});
-
-test('without a heading a citizen faces the way it moved (0 = south, 180 = north)', () => {
-  const before = normalizeCitizen(entity());
-  const { north, east } = tangentFrame(AT);
-  const moved = (step: Vector3) => {
-    const unit = AT.clone().multiplyScalar(2000).add(step).normalize();
-    return normalizeCitizen(
-      entity({ position: { ...before.position, unit: unit.toArray() } }),
-      before,
-    ).heading_deg;
-  };
-  expect(moved(north.clone().multiplyScalar(5))).toBeCloseTo(180, 3);
-  expect(moved(north.clone().multiplyScalar(-5))).toBeCloseTo(0, 3);
-  expect(moved(east.clone().multiplyScalar(5))).toBeCloseTo(90, 3);
-  // standing still keeps the previous heading
-  const turned = { ...before, heading_deg: 77 };
-  expect(normalizeCitizen(entity(), turned).heading_deg).toBe(77);
-});
-
 test('frames replace the citizens; stale ticks are ignored; a snapshot or a new run resyncs', () => {
-  const genzo = normalizeCitizen(entity());
+  const genzo = entity();
   const walking = { ...genzo, activity: 'walking' as const };
   let state = applyMessage(EMPTY_LIVE, frame('snapshot', 5, [genzo]), 0);
   expect(state.tick).toBe(5);
@@ -138,7 +79,14 @@ test('frames replace the citizens; stale ticks are ignored; a snapshot or a new 
   expect(state.citizens[0].activity).toBe('walking');
   // an older tick of the same run changes nothing
   expect(applyMessage(state, frame('tick', 4, [genzo]), 0)).toBe(state);
-  expect(applyMessage(state, frame('tick', 6, [genzo]), 0)).toBe(state);
+  // the extra tick of a speed or pause change (same tick) only changes the clock
+  const paused = applyMessage(
+    state,
+    { ...frame('tick', 6, [genzo]), speed: 10, paused: true },
+    0,
+  );
+  expect(paused).toMatchObject({ tick: 6, speed: 10, paused: true });
+  expect(paused.citizens).toBe(state.citizens);
   // a snapshot always resyncs, even to an earlier tick
   expect(applyMessage(state, frame('snapshot', 4, [genzo]), 0).tick).toBe(4);
   // a new run starts over, dropping old speech
@@ -154,17 +102,13 @@ test('frames replace the citizens; stale ticks are ignored; a snapshot or a new 
   const later = applyEntities(state, {
     ...answer,
     tick: 7,
-    citizens: [entity({ action: 'eat' })],
+    citizens: [entity({ action: 'eat', activity: 'eating' })],
   });
   expect(later.citizens[0].activity).toBe('eating');
 });
 
 test('said events become speech that expires after a few seconds', () => {
-  let state = applyMessage(
-    EMPTY_LIVE,
-    frame('snapshot', 1, [normalizeCitizen(entity())]),
-    0,
-  );
+  let state = applyMessage(EMPTY_LIVE, frame('snapshot', 1, [entity()]), 0);
   state = applyMessage(
     state,
     said('e1', 'dev-genzo', 'Good rice this year'),
