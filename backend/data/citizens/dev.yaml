@@ -1,0 +1,32 @@
+# A small development cast for the M5 engine (the real 15 citizens arrive with M7).
+#
+# at = local metres (x east, z south) around the site's anchor; the town uses its own chart.
+# home = a townhouse/farmhouse placement id; knows_places = place ids (sites or data/town/places.yaml).
+
+citizens:
+  - id: dev-aiko
+    name: Aiko
+    look: town-weaver
+    appearance: a young woman in an indigo robe
+    age: 24
+    at: [-18, 54]
+    home: main-w-3
+    knows_places: [town, well, main-gate, market, west-gate]
+    knows_people: [dev-genzo]
+  - id: dev-genzo
+    name: Genzo
+    look: town-farmer
+    appearance: a broad man in a straw hat
+    age: 41
+    at: [-80, 92]
+    home: farmhouse-1
+    knows_places: [town, well, main-gate, west-gate, rice-fields]
+    knows_people: [dev-aiko]
+  - id: dev-haru
+    name: Haru
+    look: town-merchant
+    appearance: a thin old man with a walking stick
+    age: 63
+    at: [20, 56]
+    home: main-e-2
+    knows_places: [town, market, well, main-gate, storehouses, temple]
