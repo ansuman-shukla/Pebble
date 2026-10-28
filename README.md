@@ -22,16 +22,17 @@ The simulation runs as its own process next to the API (the API only reads what 
 
 ```sh
 make -C backend engine                                # resume the latest run, or start one with the 15 citizens
-make -C backend engine ENGINE_ARGS="--new-run --speed 10"   # new run, 10 game minutes per real second
+make -C backend engine ENGINE_ARGS="--new-run --speed 60"   # new run, a game hour per real minute
 ```
 
 New runs start with the 15 citizens of `backend/data/citizens/citizens.yaml` (town, band A, band B), each living
 their day through a scripted brain (`backend/app/brains/`, `--no-brains` to leave them standing; `--citizens PATH`
-for another cast, e.g. `data/citizens/dev.yaml`). It ticks one game minute per real second by default
-(`--speed 1..60`, `--paused`, `--headless --ticks N` to fast-forward) and stops cleanly on Ctrl-C (it snapshots, and
+for another cast, e.g. `data/citizens/dev.yaml`). A new run goes in real time (speed = game seconds per real second,
+1 by default, so a tick every real minute; `--speed 1..600`, `--paused`, `--headless --ticks N` to fast-forward) and stops cleanly on Ctrl-C (it snapshots, and
 the next start resumes). Watch and steer it through `GET /api/v1/clock`, `POST /api/v1/admin/clock`
-(`{"paused": true}`, `{"speed": 30}`), `GET /api/v1/entities[?at=tick]`, `GET /api/v1/events?actor=…&type=…&since_tick=…`
-and the live feed `WS /api/v1/live` (a snapshot, then events and one tick message per tick). In `backend/`,
+(`{"paused": true}`, `{"speed": 60}`), `GET /api/v1/entities[?at=tick]`, `GET /api/v1/events?actor=…&type=…&since_tick=…`
+and the live feed `WS /api/v1/live` (a snapshot, then events and one tick message per tick; walkers carry the path
+they will follow next, `route`, and their `speed_mps`). In `backend/`,
 `uv run python -m scripts.bench_sim 15 24` measures tick cost and event volume and
 `uv run python -m scripts.citizens_run 10` lives 10 game days headless and prints how they went.
 
