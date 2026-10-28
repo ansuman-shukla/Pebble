@@ -20,11 +20,14 @@ export type LiveEventMessage = LiveEvent;
 
 export type LiveMessage = LiveLiveSchemaResponse;
 
+/** Game seconds per tick (one game minute). */
+export const TICK_SECONDS = 60;
+
 /**
- * How long a tick lasts in real milliseconds at a clock speed. The engine's `speed` is ticks (game minutes) per
- * real second (`backend/app/engine.py`), so ×1 is a tick a second; a slower clock gives longer ticks.
+ * How long a tick lasts in real milliseconds at a clock speed. The engine's `speed` is game seconds per real second
+ * (`backend/app/engine.py`, D65): ×1 is real time, a tick a real minute; ×600 a tick every 0.1 s.
  */
-export const tickMs = (speed: number) => 1000 / speed;
+export const tickMs = (speed: number) => (TICK_SECONDS * 1000) / speed;
 
 /** WebSocket close codes of `/api/v1/live`. */
 export const LIVE_CLOSE = {
