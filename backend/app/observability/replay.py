@@ -19,6 +19,7 @@ from app.observability.events import (
     ItemLocation,
     ItemMoved,
     ResourceChanged,
+    RoutePoint,
     TickSummary,
 )
 from app.sim.items import RESOURCE_INDEX
@@ -51,6 +52,10 @@ class ReplayCitizen:
     action_label: str = ""
     inventory: dict[str, int] = field(default_factory=dict)
     said_tick: int | None = field(default=None, compare=False)  # last spoke (not in snapshots: a moment's flavour)
+    # the walk ahead from the latest tick summary (not in snapshots either: replay from the snapshot before a tick to
+    # see it at that tick)
+    route: tuple[RoutePoint, ...] = field(default=(), compare=False)
+    speed_mps: float = field(default=0.0, compare=False)
 
 
 @dataclass
@@ -135,10 +140,14 @@ def apply_event(state: ReplayState, event: ReplayEvent) -> None:
     if kind == "tick_summary":
         summary = TickSummary.model_validate(event.payload)
         state.tick = event.tick
-        for citizen_id, moved in summary.moved.items():
-            citizen = state.citizens[citizen_id]
+        for citizen_id, citizen in state.citizens.items():
+            moved = summary.moved.get(citizen_id)
+            if moved is None:  # standing still: not walking on
+                citizen.route, citizen.speed_mps = (), 0.0
+                continue
             citizen.position, citizen.height_m, citizen.cell = moved.position, moved.height_m, moved.cell
             citizen.heading_deg = moved.heading_deg
+            citizen.route, citizen.speed_mps = tuple(moved.route), moved.speed_mps
         for citizen_id, body in summary.bodies.items():
             state.citizens[citizen_id].body = body
     elif kind == "citizen_spawned":

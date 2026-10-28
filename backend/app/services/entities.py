@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel
 from sqlmodel import Session
 
+from app.observability.events import RoutePoint
 from app.observability.replay import ReplayCitizen, ReplayEvent, replay
 from app.observability.store import events_after, latest_snapshot
 from app.services.clock import run_or_latest
@@ -51,6 +52,10 @@ class CitizenEntity(BaseModel):
     region: Region
     position: Position
     heading_deg: float  # facing: yaw in the local tangent frame, 0 = south (+z local), 90 = east, 180 = north
+    # the planned walk ahead from `position` (its first point) over the next ~2 game minutes, along walkable ground;
+    # draw the walker moving along it at speed_mps × clock speed real metres per second until the next tick
+    route: list[RoutePoint]  # empty when not walking
+    speed_mps: float  # ground speed, game metres per game second (0 when not walking)
     activity: Activity  # what spectators see them doing (derived from the action, sleep, speech and death)
     cell: int
     alive: bool
@@ -92,6 +97,8 @@ def citizen_entity(citizen: ReplayCitizen, tick: int) -> CitizenEntity:
         region=citizen.region,
         position=Position(unit=citizen.position, height_m=citizen.height_m, lat=lat, lon=lon),
         heading_deg=citizen.heading_deg,
+        route=list(citizen.route),
+        speed_mps=citizen.speed_mps,
         activity=activity(citizen, tick),
         cell=citizen.cell,
         alive=citizen.alive,
@@ -103,6 +110,11 @@ def citizen_entity(citizen: ReplayCitizen, tick: int) -> CitizenEntity:
     )
 
 
+def snapshot_before(tick: int) -> int:
+    """The snapshot to replay a tick from: one before it, so the tick's own summary (walks ahead) is replayed too."""
+    return max(tick - 1, 0)
+
+
 def entities_at(session: Session, run_id: str | None = None, at: int | None = None) -> EntitiesView | None:
     """None when there is no run; raises TickNotReached for a tick the run hasn't simulated yet."""
     run = run_or_latest(session, run_id)
@@ -111,7 +123,7 @@ def entities_at(session: Session, run_id: str | None = None, at: int | None = No
     tick = run.tick if at is None else at
     if tick > run.tick:
         raise TickNotReached(f"tick {tick} hasn't happened yet (the run is at {run.tick})")
-    snapshot_row = latest_snapshot(session, run.id, at_or_before=tick)
+    snapshot_row = latest_snapshot(session, run.id, at_or_before=snapshot_before(tick))
     if snapshot_row is None:
         raise TickNotReached(f"run {run.id} has no snapshot at or before tick {tick}")
     events = [

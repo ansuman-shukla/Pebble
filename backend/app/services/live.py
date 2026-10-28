@@ -32,7 +32,7 @@ from sqlmodel import Session
 from app.db.models import Event, Run
 from app.observability.replay import ReplayEvent, ReplayState, apply_event, replay
 from app.observability.store import EVENTS_CHANNEL, events_after, latest_run, latest_snapshot
-from app.services.entities import CitizenEntity, citizen_entity
+from app.services.entities import CitizenEntity, citizen_entity, snapshot_before
 from app.sim.clock import town_clock
 from app.sim.snapshot import SimSnapshot
 
@@ -119,7 +119,7 @@ class RunFeed:
 
 
 def load_feed(session: Session, run: Run) -> RunFeed:
-    snapshot_row = latest_snapshot(session, run.id)
+    snapshot_row = latest_snapshot(session, run.id, at_or_before=snapshot_before(run.tick))
     if snapshot_row is None:
         raise LookupError(f"run {run.id} has no snapshot yet")
     rows = events_after(session, run.id, snapshot_row.last_seq)
