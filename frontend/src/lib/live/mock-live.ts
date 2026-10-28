@@ -105,9 +105,9 @@ const PEOPLE: MockPerson[] = [
         ticks: 3,
         say: 'Haru! Haru! Can I help at the stall?',
       },
-      { walk: [-17, 53], to: 'the well' },
+      { walk: [-26, 40], to: 'the street' },
       { activity: 'gathering', label: 'pebbles', ticks: 6 },
-      { walk: [-23, 47], to: 'the street' },
+      { walk: [-23, 47], to: 'the well' },
     ],
   },
   {
@@ -168,12 +168,12 @@ const PEOPLE: MockPerson[] = [
     appearance: 'a tall man in a fur stole',
     site: 'band_a_camp',
     pace: 0.9,
-    home: [2, -2],
+    home: [1.8, 1.6],
     plan: [
       { activity: 'resting', label: 'the fire pit', ticks: 8 },
       { walk: [32, 24], to: 'the thicket' },
       { activity: 'gathering', label: 'firewood', ticks: 8 },
-      { walk: [2, -2], to: 'camp' },
+      { walk: [1.8, 1.6], to: 'camp' },
       {
         activity: 'talking',
         label: 'Mena',
@@ -189,13 +189,13 @@ const PEOPLE: MockPerson[] = [
     appearance: 'an old woman with long white hair',
     site: 'band_a_camp',
     pace: 0.6,
-    home: [-3, 2],
+    home: [-1.6, -1.8],
     plan: [
       { activity: 'resting', label: 'the fire pit', ticks: 6 },
       { activity: 'eating', label: 'roasted roots', ticks: 5 },
       { walk: [-24, 18], to: 'the root patch' },
       { activity: 'gathering', label: 'roots', ticks: 10 },
-      { walk: [-3, 2], to: 'camp' },
+      { walk: [-1.6, -1.8], to: 'camp' },
     ],
   },
   {
@@ -237,12 +237,12 @@ const PEOPLE: MockPerson[] = [
     appearance: 'a strong woman with a reed basket',
     site: 'band_a_camp',
     pace: 1,
-    home: [-4, -3],
+    home: [3, 4.6],
     plan: [
       { activity: 'working', label: 'the drying rack', ticks: 7 },
       { walk: [-36, -12], to: 'the reed bed' },
       { activity: 'gathering', label: 'reeds', ticks: 9 },
-      { walk: [-4, -3], to: 'camp' },
+      { walk: [3, 4.6], to: 'the drying rack' },
     ],
   },
   {
@@ -252,7 +252,7 @@ const PEOPLE: MockPerson[] = [
     appearance: 'a heavy-set man with a beard',
     site: 'band_b_camp',
     pace: 0.9,
-    home: [2, -2],
+    home: [1.8, 1.6],
     plan: [
       {
         activity: 'talking',
@@ -262,7 +262,7 @@ const PEOPLE: MockPerson[] = [
       },
       { walk: [28, 30], to: 'the nut trees' },
       { activity: 'gathering', label: 'nuts', ticks: 9 },
-      { walk: [2, -2], to: 'camp' },
+      { walk: [1.8, 1.6], to: 'camp' },
       { activity: 'resting', label: 'the fire pit', ticks: 6 },
     ],
   },
@@ -273,13 +273,13 @@ const PEOPLE: MockPerson[] = [
     appearance: 'a woman with a baby sling',
     site: 'band_b_camp',
     pace: 1,
-    home: [-3, 3],
+    home: [-1.6, -1.8],
     plan: [
       { activity: 'resting', label: 'the fire pit', ticks: 5 },
       { activity: 'eating', label: 'dried fish', ticks: 5 },
       { walk: [-26, 20], to: 'the berry bushes' },
       { activity: 'gathering', label: 'berries', ticks: 8 },
-      { walk: [-3, 3], to: 'camp' },
+      { walk: [-1.6, -1.8], to: 'camp' },
     ],
   },
   {
@@ -289,12 +289,12 @@ const PEOPLE: MockPerson[] = [
     appearance: 'a young man with a short spear',
     site: 'band_b_camp',
     pace: 1,
-    home: [4, 5],
+    home: [4.6, 3.6],
     plan: [
       { activity: 'working', label: 'firewood', ticks: 6 },
       { walk: [40, -34], to: 'the stream' },
       { activity: 'drinking', label: 'the stream', ticks: 4 },
-      { walk: [4, 5], to: 'camp' },
+      { walk: [4.6, 3.6], to: 'camp' },
     ],
   },
   {
