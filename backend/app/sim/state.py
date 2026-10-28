@@ -19,7 +19,9 @@ AgeGroup = Literal["child", "teen", "young_adult", "middle_aged", "elder"]
 KnowledgeLevel = Literal["visited", "rough"]
 Region = Literal["town", "band_a", "band_b"]
 JsonScalar = str | int | float | bool | None
-RNG_STREAMS = ("ecology", "actions")
+RNG_STREAMS = ("ecology", "actions", "animals")
+AnimalActivity = Literal["idle", "grazing", "walking", "running", "hunting", "sleeping", "dead"]
+FireKind = Literal["pit", "basket", "campfire"]
 
 
 @dataclass(frozen=True)
@@ -129,6 +131,8 @@ class Citizen:
     results: dict[int, ActionResult] = field(default_factory=dict)
     heard: list[Heard] = field(default_factory=list)
     in_view: set[str] = field(default_factory=set)  # people seen at the end of the last tick
+    animals_in_view: set[str] = field(default_factory=set)  # animal groups seen at the end of the last tick
+    threats: set[str] = field(default_factory=set)  # predators stalking them at the end of the last tick
 
     @property
     def traits(self) -> AgeTraits:
@@ -145,6 +149,50 @@ class GroundStack:
 
 
 @dataclass
+class Animal:
+    id: str  # "<kind>:<number>"; ids of citizens never contain a colon
+    kind: str  # a species (app.sim.fauna), the spectator registry's kind name
+    group: str
+    position: Vec3
+    cell: int
+    height_m: float  # ground or water surface
+    heading_deg: float = 0.0  # yaw in the local tangent frame like citizens' (0 = south, 90 = east)
+    activity: AnimalActivity = "idle"
+    alive: bool = True
+    health: float = 100.0
+    hunger: float = 0.0  # predators: 0 fed .. 100 starving
+    goal: Vec3 | None = None  # where it is walking, running or swimming to
+    pace_m: float = 0.0  # metres per tick towards the goal
+    until: int = 0  # the tick it reconsiders what it is doing
+    target: str | None = None  # a predator's quarry (an animal or a citizen id) while hunting
+    bites: int = 0  # attacks on its current quarry
+    died_tick: int | None = None
+
+
+@dataclass
+class AnimalGroup:
+    id: str
+    kind: str
+    home: int  # the cell at the centre of its range
+    size: int  # its soft cap: dead members are replaced up to this many
+    members: list[str] = field(default_factory=list)  # one animal per slot (alive, or its remains until replaced)
+    goal: Vec3 | None = None  # where the group is heading (members spread around it)
+    next_move: int = 0  # the tick the group picks its next goal
+
+
+@dataclass
+class Fire:
+    id: str  # a hearth's structure/placement id, or "fire:<number>" for a campfire made anywhere
+    kind: FireKind
+    position: Vec3
+    cell: int
+    height_m: float
+    fuel: int = 0  # minutes of burning left
+    lit: bool = False
+    level: int = 0  # 0 out, 1 embers, 2 low, 3 burning (what spectators and perception see)
+
+
+@dataclass
 class WorldState:
     tick: int
     next_seq: int
@@ -156,3 +204,8 @@ class WorldState:
     rngs: dict[str, Rng]
     regrow: dict[str, int] = field(default_factory=dict)  # "cell:resource" -> tick it grows one more
     notes: dict[str, dict[str, JsonValue]] = field(default_factory=dict)  # scripted brains' working memory
+    animals: dict[str, Animal] = field(default_factory=dict)
+    groups: dict[str, AnimalGroup] = field(default_factory=dict)
+    fires: dict[str, Fire] = field(default_factory=dict)
+    next_animal: int = 1
+    next_fire: int = 1

@@ -37,6 +37,7 @@ class BrainProfile:
     role: str
     region: Literal["town", "band_a", "band_b"]
     home_area: str  # the name of their home ground as they know it ("The castle town", "Band A camp")
+    skills: tuple[str, ...] = ()  # what they know how to do ("hunting", "fire")
 
     @property
     def routine(self) -> Routine:

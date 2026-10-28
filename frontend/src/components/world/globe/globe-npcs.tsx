@@ -36,7 +36,7 @@ import { CITIZEN_LOOKS, type CitizenLook } from '@/lib/world/citizen-looks';
 import { type GlobeTerrain, tangentFrame } from '@/lib/world/globe';
 import type { LabelStore } from '@/lib/world/label-store';
 import { animateHumanoid } from '@/lib/world/humanoid-clips';
-import type { WalkTown } from '@/lib/world/walk-charts';
+import { groundUnder, type WalkTown } from '@/lib/world/walk-charts';
 import type { CharacterAnimation } from '@/vendor/polyfork/clips.mjs';
 import { createCharacter } from '@/vendor/polyfork/humanoid.mjs';
 
@@ -109,19 +109,6 @@ interface Track {
 
 const wrapAngle = (angle: number) =>
   Math.atan2(Math.sin(angle), Math.cos(angle));
-
-/** Ground height under a direction as it is drawn: the town's own disc, else the terrain. */
-function groundUnder(
-  terrain: GlobeTerrain,
-  town: WalkTown,
-  direction: Vector3,
-  scratch: Vector3,
-) {
-  town.mapping.toLocal(scratch.copy(direction), scratch);
-  return Math.hypot(scratch.x, scratch.z) < town.groundRadius
-    ? town.height
-    : terrain.heightAt(direction);
-}
 
 /** Plays the clip of the citizen's look (the gait paced to its walk) and records it for the page. */
 function playLook(

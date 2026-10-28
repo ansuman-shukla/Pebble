@@ -1,8 +1,13 @@
 /*
- * What the client knows of the live world: the latest frame of citizens and the clock, and the recent speech.
- * Pure: the hook feeds it the entities answer and every feed message.
+ * What the client knows of the live world: the latest frame of citizens, animals, fires and the clock, and the
+ * recent speech. Pure: the hook feeds it the entities answer and every feed message.
  */
-import type { LiveCitizen, LiveMessage } from './live-contract';
+import type {
+  LiveAnimal,
+  LiveCitizen,
+  LiveFire,
+  LiveMessage,
+} from './live-contract';
 
 /** How long a speech bubble stays up, ms. */
 export const SPEECH_MS = 4000;
@@ -25,6 +30,8 @@ export interface LiveState {
   speed: number;
   paused: boolean;
   citizens: LiveCitizen[];
+  animals: LiveAnimal[];
+  fires: LiveFire[];
   speech: Speech[];
 }
 
@@ -36,6 +43,8 @@ export const EMPTY_LIVE: LiveState = {
   speed: 1,
   paused: false,
   citizens: [],
+  animals: [],
+  fires: [],
   speech: [],
 };
 
@@ -45,6 +54,8 @@ export interface EntitiesAnswer {
   day: number;
   time: string;
   citizens: LiveCitizen[];
+  animals: LiveAnimal[];
+  fires: LiveFire[];
 }
 
 /** `GET /api/v1/entities` (the first load, before the socket's snapshot). */
@@ -61,6 +72,8 @@ export function applyEntities(
     day: view.day,
     time: view.time,
     citizens: view.citizens,
+    animals: view.animals,
+    fires: view.fires,
     speech: sameRun ? state.speech : [],
   };
 }
@@ -98,6 +111,8 @@ export function applyMessage(
     speed: message.speed,
     paused: message.paused,
     citizens: message.citizens,
+    animals: message.animals,
+    fires: message.fires,
     speech: sameRun ? state.speech : [],
   };
 }

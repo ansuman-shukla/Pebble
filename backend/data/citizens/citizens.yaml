@@ -8,7 +8,7 @@
 # knows_places / knows_people = starting knowledge (place ids from sites or data/town/places.yaml; citizen ids).
 
 stores:
-  store-2: {rice: 400} # the storehouse at the storehouses' stand: about six days for the town
+  store-2: {rice: 400, wood: 300} # the storehouses' stand: about six days of rice, firewood for the gate baskets
 
 citizens:
   # --- the castle town (Japanese names) ---
@@ -36,7 +36,7 @@ citizens:
     look: town-samurai
     appearance: a man with two swords at his belt
     personality: Loyal and stern on duty, but soft-hearted with children.
-    skills: [arms]
+    skills: [arms, fire]
     site: town
     at: [-20, 23]
     home: castle-keep
@@ -151,7 +151,7 @@ citizens:
     home: band_a_camp:shelter-e
     knows_places: [band_a_camp]
     knows_people: [ama, oru, lia, suna]
-    inventory: {dried meat: 10}
+    inventory: {dried meat: 10, spear: 1}
   - id: lia
     name: Lia
     role: teen gatherer
@@ -233,7 +233,7 @@ citizens:
     home: band_b_camp:shelter-e
     knows_places: [band_b_camp]
     knows_people: [barro, nim, pip]
-    inventory: {dried meat: 10}
+    inventory: {dried meat: 10, spear: 1}
   - id: pip
     name: Pip
     role: child

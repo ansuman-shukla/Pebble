@@ -2,8 +2,8 @@
 
 Sight: ~150 m by day, ~20 m at night (linear through twilight), ×0.4 in forest, ×1.3 on hills. No occlusion in v0.
 A look around groups like things ("three lean-tos", "plenty of wood on the ground"; D64) and lists them by importance
-within a word budget (D63): everyone in view, every water, your home, the nearest food, shelter and fire, then the rest
-nearest first.
+within a word budget (D63): everyone in view, every water, your home, the nearest food, shelter and fire (and every
+fire within a few paces), then the rest nearest first.
 """
 
 import math
@@ -13,11 +13,13 @@ from typing import Literal, get_args
 
 import numpy as np
 
+from app.sim import fire as fires
 from app.sim.bodies import body_words
 from app.sim.clock import local_minute, time_of_day
-from app.sim.core import SimCore
-from app.sim.items import ITEMS, RESOURCE_INDEX, RESOURCES, amount_words
-from app.sim.state import ActionState, Citizen
+from app.sim.core import FOREST_BIOMES, SimCore
+from app.sim.fauna import DANGEROUS, SPECIES
+from app.sim.items import GATHERED, ITEMS, RESOURCE_INDEX, amount_words
+from app.sim.state import ActionState, Animal, Citizen
 from app.sim.vec import Vec3, bearing_deg, lat_lon_deg
 from app.sim.world import CAMP_STRUCTURE_LABELS, HOME_KINDS, STRUCTURE_LABELS, WATER_BIOMES
 from app.world_api.models import (
@@ -33,6 +35,9 @@ from app.world_api.models import (
 )
 
 COMPASS = ("north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west")
+MAX_ANIMALS = 8
+FIRE_TOLD_M = 15.0  # every fire within a few paces is told (someone tending a pair of baskets sees both)
+WATCHING_M = 60.0  # an awake predator this close is "watching you"
 SIGHT_WORDS = 120  # people, animals and things seen are listed in about this many words (D63)
 COUNT_WORDS = {2: "two", 3: "three", 4: "four", 5: "five"}  # then "several", and "many" from ten
 GROUP_NOUNS: dict[str, str] = {  # structure kinds seen in numbers
@@ -85,6 +90,18 @@ DOING: dict[str, str] = {
     "wait": "standing about",
     "flee": "running",
     "work": "working",
+    "hunt": "hunting",
+    "fish": "fishing",
+    "make_fire": "making a fire",
+    "feed_fire": "tending a fire",
+    "attack": "fighting",
+}
+ANIMAL_DOING: dict[str, str] = {
+    "grazing": "grazing",
+    "walking": "on the move",
+    "running": "running",
+    "hunting": "hunting",
+    "sleeping": "asleep",
 }
 RESOURCE_KEYWORDS: dict[str, frozenset[str]] = {
     "berries": frozenset({"berries", "berry", "bush", "bushes"}),
@@ -140,10 +157,11 @@ class Thing:
     goal: Vec3  # where to walk to reach it
     distance_m: float
     bearing: float
-    kind: Literal["structure", "ground", "resource", "water"]
+    kind: Literal["structure", "ground", "resource", "water", "fire"]
     ref: str
     water: Literal["fresh", "salt"] | None = None
     item: str | None = None  # the resource of a plant, the item of a ground stack
+    state: str | None = None  # how a fire burns ("burning low"), told as what it is doing
 
 
 def person_label(observer: Citizen, other: Citizen) -> str:
@@ -206,15 +224,17 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
         label: str,
         keywords: frozenset[str],
         goal: Vec3,
-        kind: Literal["structure", "ground", "resource", "water"],
+        kind: Literal["structure", "ground", "resource", "water", "fire"],
         ref: str,
         water: Literal["fresh", "salt"] | None = None,
         at: Vec3 | None = None,
         item: str | None = None,
+        burning: str | None = None,
     ) -> None:
         target = goal if at is None else at
         distance = core.distance_m(position, target)
-        things.append(Thing(label, keywords, goal, distance, bearing_deg(position, target), kind, ref, water, item))
+        bearing = bearing_deg(position, target)
+        things.append(Thing(label, keywords, goal, distance, bearing, kind, ref, water, item, burning))
 
     # everyone of a band has their own seat round its fire
     seat = [other.id for other in core.citizens() if other.region == citizen.region].index(citizen.id)
@@ -233,15 +253,29 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
             )
         else:
             water: Literal["fresh"] | None = "fresh" if structure.kind == "well" else None
+            pit_fire = state.fires.get(structure.id)
+            burning = fires.state_words(pit_fire) if pit_fire is not None else None
+            keywords = STRUCTURE_KEYWORDS[structure.kind] | frozenset((burning or "").split())
             add(
                 structure.label,
-                STRUCTURE_KEYWORDS[structure.kind],
+                keywords,
                 structure.spot(seat),
                 "structure",
                 structure.id,
                 water,
                 structure.centre,
+                burning=burning,
             )
+
+    for fire in sorted(state.fires.values(), key=lambda f: f.id):
+        if fire.kind == "pit":
+            continue  # told as the fire pit (a structure), burning or cold
+        if core.distance_m(position, fire.position) <= sight:
+            hearth = world.hearths.get(fire.id)
+            goal = hearth.stand if hearth is not None else fire.position
+            burning = fires.state_words(fire)
+            keywords = fires.KEYWORDS | frozenset(burning.split())
+            add(fires.label(fire), keywords, goal, "fire", fire.id, at=fire.position, burning=burning)
 
     for stack in sorted(state.ground.values(), key=lambda s: s.id):
         if core.distance_m(position, stack.position) <= sight:
@@ -263,6 +297,8 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
         unit = world.unit(cell)
         biome = world.biome(cell)
         for resource, column in RESOURCE_INDEX.items():
+            if resource not in GATHERED:
+                continue  # fish are seen as shoals (animals) and caught with fish()
             count = int(resources[cell, column])
             if count > 0 and resource not in found_resource:
                 found_resource.add(resource)
@@ -342,10 +378,100 @@ def match_thing(core: SimCore, citizen: Citizen, what: str) -> Thing | None:
     if "water" in words:
         fresh = [thing for thing in matches if thing.water == "fresh"]
         matches = fresh or matches
-    return min(matches, key=lambda thing: (thing.distance_m, thing.ref)) if matches else None
+    exact = [thing for thing in matches if normalize(thing.label) == query]  # "the fire pit", not any fire
+    matches = exact or matches
+    # the best fit first ("the cold fire basket" over a burning one), then the nearest
+    return (
+        min(matches, key=lambda thing: (-len(thing.keywords & words), thing.distance_m, thing.ref)) if matches else None
+    )
 
 
 HOME_RADIUS_M = 6.0
+
+
+def animal_sightings(core: SimCore, citizens: list[Citizen]) -> dict[str, list[tuple[Animal, float]]]:
+    """For each citizen: the animals (living, and remains) within sight, nearest first."""
+    animals = [core.state.animals[aid] for aid in sorted(core.state.animals)]
+    if not animals or not citizens:
+        return {citizen.id: [] for citizen in citizens}
+    where = np.array([animal.position for animal in animals])
+    eyes = np.array([citizen.position for citizen in citizens])
+    distances = np.arccos(np.clip(where @ eyes.T, -1.0, 1.0)) * core.world.radius_m
+    sightings: dict[str, list[tuple[Animal, float]]] = {}
+    for column, citizen in enumerate(citizens):
+        rows = np.flatnonzero(distances[:, column] <= core.sight_range(citizen)).tolist()
+        seen = sorted((float(distances[row, column]), animals[row].id, animals[row]) for row in rows)
+        sightings[citizen.id] = [(animal, distance) for distance, _, animal in seen]
+    return sightings
+
+
+def visible_animals(core: SimCore, citizen: Citizen) -> list[tuple[Animal, float]]:
+    return animal_sightings(core, [citizen])[citizen.id]
+
+
+def animal_names(kind: str) -> set[str]:
+    species = SPECIES[kind]
+    return {kind.replace("_", " "), species.many, normalize(species.one), "animal", "animals"}
+
+
+def match_animal(core: SimCore, citizen: Citizen, words: str) -> Animal | None:
+    """The nearest living animal in view the words name ("the deer", "a wolf", "wolves", "that herd of elk")."""
+    query = normalize(words)
+    if not query:
+        return None
+    for animal, _ in visible_animals(core, citizen):
+        if not animal.alive:
+            continue
+        names = animal_names(animal.kind)
+        if query in names or any(name in query.split() or query.endswith(name) for name in names - {"animal"}):
+            return animal
+    return None
+
+
+def nearest_danger(core: SimCore, citizen: Citizen) -> tuple[Animal, float] | None:
+    """The nearest living animal in view that attacks people."""
+    return next(
+        ((animal, distance) for animal, distance in visible_animals(core, citizen)
+         if animal.alive and animal.kind in DANGEROUS),
+        None,
+    )  # fmt: skip
+
+
+def animal_doing(citizen: Citizen, animal: Animal, distance_m: float) -> str | None:
+    if animal.target == citizen.id:
+        return "coming at you"
+    if animal.kind in DANGEROUS and animal.activity not in ("sleeping", "dead") and distance_m <= WATCHING_M:
+        return "watching you"
+    return ANIMAL_DOING.get(animal.activity)
+
+
+def from_where(core: SimCore, citizen: Citizen, distance_m: float, bearing: float) -> str:
+    where = where_words(distance_m, bearing)
+    return f"from the trees, {where}" if core.world.biome(citizen.cell) in FOREST_BIOMES else where
+
+
+def seen_animals(citizen: Citizen, sightings: list[tuple[Animal, float]]) -> list[Seen]:
+    """Animals in view as a person would name them: each group once (nearest member), remains one by one."""
+    groups: dict[str, list[tuple[Animal, float]]] = {}
+    remains: list[Seen] = []
+    for animal, distance in sightings:
+        if animal.alive:
+            groups.setdefault(animal.group, []).append((animal, distance))
+        else:
+            where = where_words(distance, bearing_deg(citizen.position, animal.position))
+            remains.append(
+                Seen(label=f"the remains of {SPECIES[animal.kind].one}", where=where, nearness=nearness(distance))
+            )
+    seen: list[tuple[float, Seen]] = []
+    for members in groups.values():
+        nearest, distance = members[0]
+        species = SPECIES[nearest.kind]
+        where = where_words(distance, bearing_deg(citizen.position, nearest.position))
+        label = species.count_words(len(members))
+        doing = animal_doing(citizen, nearest, distance)
+        seen.append((distance, Seen(label=label, where=where, nearness=nearness(distance), doing=doing)))
+    seen.sort(key=lambda entry: (entry[0], entry[1].label))
+    return ([entry[1] for entry in seen] + remains)[:MAX_ANIMALS]
 
 
 def place_words(core: SimCore, citizen: Citizen) -> str:
@@ -425,7 +551,7 @@ def perceive(core: SimCore, citizen: Citizen) -> Perception:
         )
         for other, distance in visible_people(core, citizen)
     ]
-    animals: list[Seen] = []  # M6
+    animals = seen_animals(citizen, visible_animals(core, citizen))
     things = fit_to_budget(people, animals, sights(core, citizen, things_in_view(core, citizen)))
     heard = [HeardWords(who=entry.who, words=entry.words, volume=entry.volume) for entry in citizen.heard]
     citizen.heard.clear()
@@ -458,6 +584,8 @@ def _group_key(core: SimCore, citizen: Citizen, thing: Thing) -> str:
         return f"structure:{structure.kind}"
     if thing.kind == "ground":
         return f"ground:{thing.item}"
+    if thing.kind == "fire":
+        return f"fire:{thing.ref}"  # a fire on its own (a pit's fire shares the pit's id)
     return thing.ref  # each kind of plant and of water is already only its nearest
 
 
@@ -468,6 +596,8 @@ def _kind(core: SimCore, citizen: Citizen, thing: Thing) -> ThingKind:
         return "food" if thing.item in FOOD_PLANTS else "material"
     if thing.kind == "ground":
         return "item"
+    if thing.kind == "fire":
+        return "fire"
     structure = core.world.structures[thing.ref]
     if structure.id == citizen.home:
         return "home"
@@ -509,7 +639,14 @@ def sights(core: SimCore, citizen: Citizen, things: list[Thing]) -> list[Sight]:
         if any(where_words(member.distance_m, member.bearing) != where for member in members[1:]):
             where = NEAREST + where
         resource = RESOURCE_NAMES[nearest.item] if nearest.kind == "resource" and nearest.item is not None else None
-        seen = Seen(label=label, where=where, nearness=nearness(nearest.distance_m), kind=kind, resource=resource)
+        seen = Seen(
+            label=label,
+            where=where,
+            nearness=nearness(nearest.distance_m),
+            doing=nearest.state,
+            kind=kind,
+            resource=resource,
+        )
         found.append(Sight(seen, _tier(core, nearest, kind), nearest.distance_m))
     return found
 
@@ -520,7 +657,8 @@ def words(seen: Seen) -> int:
 
 def fit_to_budget(people: list[Seen], animals: list[Seen], found: list[Sight]) -> list[Seen]:
     """The things to tell, most important first. People and animals are always told and spend the budget first;
-    every water, your home and the nearest food, shelter and fire are always told; the rest follow by importance,
+    every water, your home, the nearest food and shelter and every fire within a few paces are always told; the
+    rest follow by importance,
     nearest first, while SIGHT_WORDS last (the first that doesn't fit ends the list)."""
     ranked = sorted(found, key=lambda sight: (sight.tier, sight.distance_m, sight.seen.label))
     must = {
@@ -528,6 +666,7 @@ def fit_to_budget(people: list[Seen], animals: list[Seen], found: list[Sight]) -
         for index, sight in enumerate(ranked)
         if sight.tier == TIERS["water"]
         or (sight.tier < IMPORTANT and (index == 0 or ranked[index - 1].tier != sight.tier))
+        or (sight.seen.kind == "fire" and sight.distance_m < FIRE_TOLD_M)
     }
     spare = SIGHT_WORDS - sum(words(seen) for seen in [*people, *animals]) - sum(words(ranked[i].seen) for i in must)
     chosen = set(must)
@@ -542,7 +681,7 @@ def fit_to_budget(people: list[Seen], animals: list[Seen], found: list[Sight]) -
     return [sight.seen for index, sight in enumerate(ranked) if index in chosen]
 
 
-if set(RESOURCE_NAMES) != set(RESOURCES):
+if set(RESOURCE_NAMES) != set(GATHERED):
     raise ValueError("the contract's resource names must be the simulation's resources")
 _LABELS = {**STRUCTURE_LABELS, **CAMP_STRUCTURE_LABELS}
 _UNGROUPED = {kind for kind, label in _LABELS.items() if label.startswith("a ")} - set(GROUP_NOUNS)

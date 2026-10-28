@@ -24,10 +24,20 @@ PHASES: dict[TimeOfDay, Phase] = {
 }
 AFTERNOON: frozenset[TimeOfDay] = frozenset({"early afternoon", "late afternoon"})
 # How filling a piece of each food is, as a person knows from eating it (names as the world says them).
-FOOD_VALUE: dict[str, float] = {"rice": 10.0, "dried meat": 8.0, "roots": 6.0, "nuts": 3.0, "berries": 2.0}
-FOOD_ONE: dict[str, str] = {
+FOOD_VALUE: dict[str, float] = {
+    "rice": 10.0,
+    "dried meat": 8.0,
+    "meat": 10.0,
+    "fish": 6.0,
+    "roots": 6.0,
+    "nuts": 3.0,
+    "berries": 2.0,
+}
+FOOD_ONE: dict[str, str] = {  # "dried meat" before "meat": the longer name wins
     "rice": "measure of rice",
     "dried meat": "strip of dried meat",
+    "meat": "piece of meat",
+    "fish": "a fish",
     "roots": "a root",
     "nuts": "a nut",
     "berries": "a berry",
@@ -70,6 +80,27 @@ class Needs:
             thirst=level("terribly thirsty", "thirsty", "a little thirsty"),
             tiredness=level("exhausted", "tired", "a little tired"),
         )
+
+
+DANGER_WORDS = ("wolf", "wolves", "bear", "lion", "shark")  # animals everyone knows can kill
+THREAT_DOING = frozenset({"coming at you", "watching you"})
+GAME_WORDS: tuple[tuple[str, str], ...] = (  # (word in what is seen, what a hunter calls it)
+    ("deer", "deer"),
+    ("elk", "elk"),
+    ("antelope", "antelope"),
+    ("boar", "boar"),
+    ("goat", "goat"),
+    ("rabbit", "rabbit"),
+    ("hare", "hare"),
+    ("duck", "duck"),
+)
+FIRE_STATES: dict[str, "FireState"] = {  # how a fire is told burning (its `doing`)
+    "burning": "burning",
+    "burning low": "low",
+    "glowing embers": "low",
+    "cold": "out",
+}
+FireState = Literal["burning", "low", "out"]
 
 
 @dataclass(frozen=True)
@@ -131,6 +162,50 @@ def water_here(perception: Perception) -> bool:
 
 def water_in_view(perception: Perception) -> bool:
     return any(thing.kind == "water" for thing in perception.things)
+
+
+def danger(perception: Perception) -> Seen | None:
+    """A dangerous animal coming at you or watching you (asleep or far off it's no reason to run)."""
+    return next(
+        (
+            animal
+            for animal in perception.animals
+            if animal.doing in THREAT_DOING and any(word in animal.label for word in DANGER_WORDS)
+        ),
+        None,
+    )
+
+
+def game(perception: Perception) -> list[tuple[str, Seen]]:
+    """Animals worth hunting in view, nearest first: (what to call it, how it is seen)."""
+    found: list[tuple[str, Seen]] = []
+    for animal in perception.animals:
+        if animal.label.startswith("the remains"):
+            continue
+        name = next((call for word, call in GAME_WORDS if word in animal.label), None)
+        if name is not None:
+            found.append((name, animal))
+    return found
+
+
+def fire_here(perception: Perception) -> FireState | None:
+    """How the best fire within a few paces burns ("out" for a cold one), or None if there's no fire here."""
+    states = [
+        FIRE_STATES.get(thing.doing or "cold", "out")
+        for thing in perception.things
+        if thing.kind == "fire" and beside(thing)
+    ]
+    for state in ("burning", "low", "out"):
+        if state in states:
+            return state
+    return None
+
+
+def wood_at_hand(perception: Perception) -> bool:
+    """Carrying wood, or wood lies on the ground close at hand (a fire's woodpile)."""
+    return carries(perception, "wood") or any(
+        thing.label.endswith("wood on the ground") and beside(thing) for thing in perception.things
+    )
 
 
 def is_name(label: str) -> bool:

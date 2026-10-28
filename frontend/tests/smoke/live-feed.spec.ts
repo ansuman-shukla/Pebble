@@ -1,7 +1,12 @@
 import { expect, test } from '@playwright/test';
 import { Vector3 } from 'three';
 
-import type { LiveCitizen, LiveFrame } from '../../src/lib/live/live-contract';
+import type {
+  LiveAnimal,
+  LiveCitizen,
+  LiveFire,
+  LiveFrame,
+} from '../../src/lib/live/live-contract';
 import {
   applyEntities,
   applyMessage,
@@ -58,6 +63,7 @@ function frame(
   tick: number,
   citizens: LiveCitizen[],
   run = 'run-1',
+  wild: Pick<LiveFrame, 'animals' | 'fires'> = { animals: [], fires: [] },
 ): LiveFrame {
   return {
     type,
@@ -68,6 +74,7 @@ function frame(
     speed: 1,
     paused: false,
     citizens,
+    ...wild,
   };
 }
 
@@ -106,7 +113,14 @@ test('frames replace the citizens; stale ticks are ignored; a snapshot or a new 
   expect(fresh.tick).toBe(1);
   expect(fresh.speech).toEqual([]);
   // the entities answer: same rules
-  const answer = { run_id: 'run-1', tick: 6, day: 0, time: '08:06' };
+  const answer = {
+    run_id: 'run-1',
+    tick: 6,
+    day: 0,
+    time: '08:06',
+    animals: [],
+    fires: [],
+  };
   expect(applyEntities(state, { ...answer, citizens: [entity()] })).toBe(state);
   const later = applyEntities(state, {
     ...answer,
@@ -114,6 +128,58 @@ test('frames replace the citizens; stale ticks are ignored; a snapshot or a new 
     citizens: [entity({ action: 'eat', activity: 'eating' })],
   });
   expect(later.citizens[0].activity).toBe('eating');
+});
+
+test('frames carry the animals and the fires', () => {
+  const deer: LiveAnimal = {
+    id: 'deer:1',
+    kind: 'deer',
+    group: 'deer-group:1',
+    position: { unit: [AT.x, AT.y, AT.z], height_m: 10, lat: 35, lon: 12 },
+    heading_deg: 90,
+    activity: 'grazing',
+  };
+  const pit: LiveFire = {
+    id: 'band_a_camp:fire-pit',
+    kind: 'pit',
+    position: deer.position,
+    lit: true,
+    strength: 1,
+  };
+  let state = applyMessage(
+    EMPTY_LIVE,
+    frame('snapshot', 1, [], 'run-1', { animals: [deer], fires: [pit] }),
+    0,
+  );
+  expect(state.animals).toEqual([deer]);
+  expect(state.fires).toEqual([pit]);
+  const running = { ...deer, activity: 'running' as const };
+  const out = { ...pit, lit: false, strength: 0 };
+  state = applyMessage(
+    state,
+    frame('tick', 2, [], 'run-1', { animals: [running], fires: [out] }),
+    0,
+  );
+  expect(state.animals[0].activity).toBe('running');
+  expect(state.fires[0].lit).toBe(false);
+  expect(applyMessage(state, frame('tick', 1, []), 0)).toBe(state); // stale
+});
+
+test('the mock feed has grazing deer, prowling wolves and fires that burn at night', () => {
+  const server = new MockLiveServer(createMockWorld());
+  const first = server.entities();
+  expect(new Set(first.animals.map((a) => a.kind))).toEqual(
+    new Set(['deer', 'fox', 'wolf']),
+  );
+  const lit = (fires: LiveFire[]) =>
+    fires.filter((fire) => fire.lit).map((fire) => fire.id);
+  expect(lit(first.fires)).toEqual([
+    'band_a_camp:fire-pit',
+    'band_b_camp:fire-pit',
+  ]); // 08:00: the gate baskets are out
+  expect(
+    first.animals.filter((a) => a.kind === 'wolf').map((a) => a.activity),
+  ).toEqual(['sleeping', 'sleeping']);
 });
 
 test('said events become speech that expires after a few seconds', () => {

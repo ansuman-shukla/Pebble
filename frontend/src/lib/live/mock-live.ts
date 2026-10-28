@@ -2,7 +2,8 @@
  * DEV/TEST ONLY: a deterministic stand-in for the engine's live feed (`?mockLive=1`). Fifteen citizens with the
  * 15 look ids live around the town and the two camps of whatever world is loaded: they work, gather, eat, drink,
  * rest, talk (emitting `said` events) and walk straight between spots at the engine's pace (5 km/h = 83 m per
- * tick), streaming the next two ticks of the walk as the engine does (`route`, `speed_mps`). Like a new engine run
+ * tick), streaming the next two ticks of the walk as the engine does (`route`, `speed_mps`); animals graze and prowl
+ * and fires burn (`mock-wild.ts`). Like a new engine run
  * it starts at ×1 (a tick a real minute); tests speed it up with `setClock`.
  * Messages have the contract's shapes; sockets are fake WebSockets driven by the same tick loop, so the client's
  * connect / reconnect path is the one the real feed uses. `window.__pebbleMockLive` lets tests drop connections
@@ -20,6 +21,7 @@ import {
   TICK_SECONDS,
   tickMs,
 } from './live-contract';
+import { MockWild } from './mock-wild';
 import type { Site, WorldView } from '@/lib/client/types.gen';
 import { CITIZEN_LOOKS } from '@/lib/world/citizen-looks';
 import {
@@ -36,6 +38,8 @@ const WALK_AHEAD_TICKS = 2;
 const START_MINUTE = 8 * 60;
 const DAY_MINUTES = 24 * 60;
 const NIGHT = { from: 22 * 60, to: 5 * 60 };
+/** Dark enough for fires and for the animals' night (sunset to sunrise, roughly). */
+const DARK = { from: 18 * 60 + 30, to: 6 * 60 };
 
 type Spot = [number, number];
 
@@ -371,6 +375,7 @@ export class MockLiveServer {
   private timer: ReturnType<typeof setInterval> | null = null;
   private sockets = new Set<MockSocket>();
   private states: PersonState[];
+  private wild: MockWild;
   private readonly world: WorldView;
   private events = 0;
   private pending: LiveEventMessage[] = [];
@@ -382,6 +387,7 @@ export class MockLiveServer {
   constructor(world: WorldView) {
     this.world = world;
     this.states = this.freshStates();
+    this.wild = new MockWild(world);
   }
 
   private freshStates(): PersonState[] {
@@ -412,6 +418,8 @@ export class MockLiveServer {
       day,
       time,
       citizens: this.citizens(),
+      animals: this.wild.animals(isDark(this.tick)),
+      fires: this.wild.fires(isDark(this.tick)),
     };
   }
 
@@ -445,6 +453,19 @@ export class MockLiveServer {
       events.forEach((event) => socket.deliver(event));
   }
 
+  /** Jumps the feed `ticks` ahead at once (tests: to the evening): one `tick` frame with where everything is. */
+  skip(ticks: number) {
+    for (let k = 0; k < ticks; k++) {
+      this.tick += 1;
+      const night = isNight(this.tick);
+      for (const state of this.states) this.advance(state, night);
+      this.wild.step(isDark(this.tick));
+    }
+    this.pending.splice(0);
+    const frame = this.frame('tick');
+    for (const socket of this.sockets) socket.deliver(frame);
+  }
+
   /** Simulates the server going away: every open socket closes abnormally. */
   dropConnections(code = 1006) {
     for (const socket of [...this.sockets]) this.detach(socket, code);
@@ -455,6 +476,7 @@ export class MockLiveServer {
     this.runId = `mock-run-${Number(this.runId.split('-').pop()) + 1}`;
     this.tick = 0;
     this.states = this.freshStates();
+    this.wild = new MockWild(this.world);
     this.dropConnections(LIVE_CLOSE.newRun);
   }
 
@@ -479,6 +501,7 @@ export class MockLiveServer {
     this.tick += 1;
     const night = isNight(this.tick);
     for (const state of this.states) this.advance(state, night);
+    this.wild.step(isDark(this.tick));
     const frame = this.frame('tick');
     const events = this.pending.splice(0);
     for (const socket of this.sockets) {
@@ -553,6 +576,8 @@ export class MockLiveServer {
       speed: this.clock.speed,
       paused: this.clock.paused,
       citizens: this.citizens(),
+      animals: this.wild.animals(isDark(this.tick)),
+      fires: this.wild.fires(isDark(this.tick)),
     };
   }
 
@@ -635,6 +660,11 @@ function walkAhead(
 function isNight(tick: number) {
   const minute = (START_MINUTE + tick) % DAY_MINUTES;
   return minute >= NIGHT.from || minute < NIGHT.to;
+}
+
+function isDark(tick: number) {
+  const minute = (START_MINUTE + tick) % DAY_MINUTES;
+  return minute >= DARK.from || minute < DARK.to;
 }
 
 const ACTIONS: Partial<Record<Activity, string>> = {

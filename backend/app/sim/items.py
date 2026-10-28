@@ -12,6 +12,7 @@ class ItemKind:
     weight_kg: float
     food: float  # hunger removed per piece eaten; 0 = not food
     mass: bool = False  # counted in measures ("some rice"), not pieces ("a handful of berries")
+    raw: bool = False  # better cooked: eaten by a fire it is roasted (more filling), raw it can make you sick
 
 
 ITEMS: dict[str, ItemKind] = {
@@ -22,9 +23,14 @@ ITEMS: dict[str, ItemKind] = {
     "wood": ItemKind("wood", "a piece of wood", 1.0, 0.0, mass=True),
     "rice": ItemKind("rice", "a measure of rice", 0.2, 10.0, mass=True),
     "dried meat": ItemKind("dried meat", "a strip of dried meat", 0.1, 8.0, mass=True),
+    "meat": ItemKind("meat", "a piece of meat", 0.5, 10.0, mass=True, raw=True),
+    "fish": ItemKind("fish", "a fish", 0.4, 6.0, raw=True),
+    "hide": ItemKind("hide", "a hide", 2.0, 0.0),
+    "spear": ItemKind("spear", "a spear", 1.5, 0.0),
 }
 
-RESOURCES: tuple[str, ...] = ("berries", "roots", "nuts", "reeds", "wood")  # column order of the per-cell counters
+RESOURCES: tuple[str, ...] = ("berries", "roots", "nuts", "reeds", "wood", "fish")  # column order of the counters
+GATHERED = frozenset({"berries", "roots", "nuts", "reeds", "wood"})  # picked by hand; fish are caught (`fish()`)
 RESOURCE_INDEX = {name: index for index, name in enumerate(RESOURCES)}
 
 # Most of each wild resource a cell holds, by biome (cells are ~40 m across). Rivers through these biomes also grow
@@ -37,11 +43,14 @@ RESOURCE_CAPS: dict[str, dict[str, int]] = {
     "savanna": {"roots": 15, "wood": 4},
     "tundra": {"berries": 6},
     "hills": {"roots": 6, "wood": 4},
+    "shallow_ocean": {"fish": 30},
+    "lake": {"fish": 20},
 }
 RIVER_REEDS = 12
+RIVER_FISH = 8
 
 # Game days a cell takes to grow back from bare to full (02-simulation: berries ~3, roots ~5, nuts ~7).
-REGROW_DAYS: dict[str, float] = {"berries": 3.0, "roots": 5.0, "nuts": 7.0, "reeds": 4.0, "wood": 6.0}
+REGROW_DAYS: dict[str, float] = {"berries": 3.0, "roots": 5.0, "nuts": 7.0, "reeds": 4.0, "wood": 6.0, "fish": 4.0}
 
 _UNKNOWN = set(RESOURCE_CAPS) - set(BIOME_NAMES)
 if _UNKNOWN:

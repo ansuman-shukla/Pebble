@@ -1,11 +1,12 @@
-"""Ecology: wild plants grow back after gathering (02-simulation: berries ~3 days, roots ~5, nuts ~7).
+"""Ecology, once per tick: fires burn down, animals live (`app.sim.animals`), wild plants and fish grow back.
 
-A gathered cell grows one piece back every `REGROW_DAYS × day / cap` ticks until it is full again, each piece one
-`resource_changed` event, so a bare berry cell is full three game days later. Cells nobody gathers keep their
-starting stock. Herds, predators, fish and fire (M6) hook in here too.
+Regrowth (02-simulation: berries ~3 days, roots ~5, nuts ~7): a gathered or fished cell grows one piece back every
+`REGROW_DAYS × day / cap` ticks until it is full again, each piece one `resource_changed` event, so a bare berry cell
+is full three game days later. Cells nobody touches keep their starting stock.
 """
 
 from app.observability.events import ResourceChanged
+from app.sim import animals, fire
 from app.sim.clock import DAY_MINUTES
 from app.sim.core import SimCore
 from app.sim.items import REGROW_DAYS, RESOURCE_INDEX
@@ -30,6 +31,12 @@ def schedule_regrowth(core: SimCore, cell: int, resource: str) -> None:
 
 def step(core: SimCore) -> None:
     """Advance the ecology by one tick."""
+    fire.burn(core)
+    animals.step(core)
+    _regrow(core)
+
+
+def _regrow(core: SimCore) -> None:
     state = core.state
     due = sorted(key for key, tick in state.regrow.items() if tick <= state.tick)
     for key in due:

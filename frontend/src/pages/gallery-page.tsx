@@ -181,7 +181,7 @@ const GalleryScene = memo(function GalleryScene({
               9 + Math.floor(index / ANIMALS_PER_ROW) * 4,
             ]}
           >
-            <AnimalModel kind={kind} moving={moving} />
+            <AnimalModel kind={kind} gait={moving ? 'move' : 'idle'} />
             <Label
               store={labels}
               id={kind}
