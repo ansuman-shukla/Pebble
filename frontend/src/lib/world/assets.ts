@@ -193,6 +193,15 @@ export const ANIMALS: Record<AnimalKind, AnimalAsset> = {
 
 export const assetUrl = (id: string) => `/assets/polyfork/${id}/${id}.glb`;
 
+/*
+ * Assets built to stand below the town ground. The moat bridge stands on the moat floor and its walked lips sit
+ * pierHeight (1.6 m) + the apron (0.1 m) above it, so it is lowered until the lips meet the ground at y = 0.
+ */
+const BASE_Y: Record<string, number> = { 'moat-bridge-4fbcd9': -1.7 };
+
+/** Height at which to place an asset in a flat town (0 for everything that rests on the ground). */
+export const assetBaseY = (id: string) => BASE_Y[id] ?? 0;
+
 const SIZES = new Map(manifest.assets.map((asset) => [asset.id, asset.size_m]));
 
 /** Real-world size in metres (Polyfork measures every asset; models rest on y = 0). */
