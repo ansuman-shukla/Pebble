@@ -17,8 +17,8 @@ import {
 /*
  * Read hooks of the spectator pages. `at` replays a past tick (a fixed answer, fetched once); without it the
  * answer is the world now and refreshes every LIVE_POLL_MS.
- * TODO(live feed): once `use-live-citizens` (the `/api/v1/live` WebSocket) is merged, invalidate these queries on
- * its `tick` messages instead of polling.
+ * TODO(live feed): invalidate these queries on the `/api/v1/live` WebSocket's `tick` messages instead of polling
+ * (`use-live-citizens` keeps the globe's own frame state, so the pages would need a small subscriber of their own).
  */
 const LIVE_POLL_MS = 2_000;
 

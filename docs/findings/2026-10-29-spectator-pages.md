@@ -65,8 +65,8 @@ narrows it to the few hundred `said` events). Needs read only `payload->'bodies'
 | `/stats` | alive, dead, meals in stock, game day; food stocks, wild plants now vs at the start, deaths by cause, actions and lines per day |
 
 Every spectator page takes `?at=N` (a banner says so, with **Back to live**); links between them keep it. Without
-`at` they poll every 2-4 s (TanStack Query `refetchInterval`); `src/hooks/use-spectator.ts` has the TODO to switch
-to invalidating on the live feed's tick messages once `use-live-citizens` (PR #15) is in.
+`at` they poll every 2-4 s (TanStack Query `refetchInterval`); `src/hooks/use-spectator.ts` notes the swap point for invalidating on
+the live feed's tick messages instead (the feed's hook drives the globe's own state, so the pages don't reuse it).
 
 Portraits are the citizens' 3D looks rendered once each (first frame of the Idle clip, head and shoulders) by one
 shared offscreen `WebGLRenderer` into PNG data URLs (`src/lib/world/portraits.ts`): fifteen canvases would need
@@ -75,11 +75,14 @@ initial shows.
 
 Charts are plain SVG (no chart library): needs lines with the 60/90 thresholds dashed, and bars.
 
-## Not in this change
+## The World at a past tick
 
-The World page side (`/?tick=N` drawing the citizens from `/entities?at=N` with the live feed paused, `/?follow=id`
-following a citizen on load) needs the live citizens on the globe from PR #15; it is a separate change on top of it.
-Until then the World page ignores those parameters.
+`/?tick=N` replays the globe: `useReplayCitizens` reads `GET /entities?at=N` once and hands it to the globe as a
+paused frame in the live state's shape, so the live citizens' drawing (D61) shows everyone where they were; the live
+feed stays off and the sky stops at that moment; a badge says so with **back to live** (drops `tick`, keeps the rest).
+`?follow=id` follows the citizen as soon as the world is ready and they are in the frame (live or replayed). Tested in
+`tests/smoke/world-replay.spec.ts`: every drawn citizen within 1 m of its `/entities?at=N` position, unchanged after
+2.5 s, and somebody has moved since (so it is really the past).
 
 ## Gotchas
 
