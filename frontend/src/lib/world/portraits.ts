@@ -1,4 +1,5 @@
 import {
+  type Bone,
   Box3,
   DirectionalLight,
   HemisphereLight,
@@ -47,12 +48,21 @@ async function render(lookId: string): Promise<string> {
   animation.update(0);
   character.updateMatrixWorld(true);
 
-  const box = new Box3().setFromObject(character);
-  const height = box.max.y - box.min.y;
-  const head = new Vector3(0, box.max.y - height * 0.13, 0);
+  // framed on the head bone, not the bounding box: a spear or a hat would shrink the face
+  const feet = new Box3().setFromObject(character).min.y;
+  const bone = character
+    .getObjectsByProperty('name', 'Head')
+    .find((object) => (object as Bone).isBone);
+  if (!bone) throw new Error(`look "${lookId}" has no Head bone`);
+  const head = bone.getWorldPosition(new Vector3());
+  const height = head.y - feet; // feet to the base of the head
   const camera = new PerspectiveCamera(30, 1, 0.05, 50);
-  camera.position.set(height * 0.12, head.y + height * 0.02, height * 0.95);
-  camera.lookAt(head.x, head.y - height * 0.05, head.z);
+  camera.position.set(
+    height * 0.1,
+    head.y + height * 0.05,
+    head.z + height * 0.75,
+  );
+  camera.lookAt(head.x, head.y - height * 0.04, head.z);
 
   const scene = new Scene();
   scene.add(new HemisphereLight('#ffffff', '#8a7a5a', 2));
