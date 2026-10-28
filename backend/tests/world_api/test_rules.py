@@ -8,6 +8,7 @@ import pytest
 
 from app.observability.events import EventDraft
 from app.sim.simulation import Simulation
+from app.sim.vec import step_towards
 from app.world_api.facade import WorldApi, run_until_done
 from app.world_api.models import ActionResult, Perception
 from tests.sim_helpers import GATE, WELL, make_spec
@@ -254,3 +255,100 @@ def test_names_and_places_are_learned_by_listening(new_sim: Callable[..., Simula
     assert "the market" in result.text
     sim.step()
     assert {newcomer.places["market"].level} == {"visited"}  # a set keeps mypy from narrowing the attribute
+
+
+def test_sight_shrinks_at_night_and_in_forest(new_sim: Callable[..., Simulation]) -> None:
+    sim = new_sim()
+    sim.add_citizen(make_spec("seer", at=(0.0, 150.0)))
+    sim.add_citizen(make_spec("seen", at=(0.0, 110.0), appearance="a woman in a red shawl"))  # 40 m away
+    seer = WorldApi(sim, "seer")
+    assert [p.label for p in seer.look_around().people] == ["a woman in a red shawl"]
+    sim.run(16 * 60)  # midnight
+    assert seer.look_around().people == []
+    sim.run(8 * 60)  # 08:00 again
+    assert len(seer.look_around().people) == 1
+
+    world = sim.world
+    forest = next(
+        cell
+        for cell in range(world.cell_count)
+        if world.biome(cell) == "broadleaf_forest"
+        and all(world.biome(o) == "broadleaf_forest" for o in world.neighbours[cell])
+    )
+    sim.core.place_at(sim.citizen("seer"), world.unit(forest))
+    assert world.biome(sim.citizen("seer").cell) == "broadleaf_forest"
+    sim.core.place_at(sim.citizen("seen"), step_towards(world.unit(forest), 0.0, 80.0, world.radius_m))
+    assert seer.look_around().people == []  # 80 m: beyond forest sight (150 m x 0.4)
+    sim.core.place_at(sim.citizen("seen"), step_towards(world.unit(forest), 0.0, 40.0, world.radius_m))
+    assert len(seer.look_around().people) == 1
+
+
+def test_giving_needs_the_receiver_within_reach(new_sim: Callable[..., Simulation]) -> None:
+    sim = new_sim()
+    giver = sim.add_citizen(make_spec("giver", at=WELL, knows_people=["taker"]))
+    sim.add_citizen(make_spec("taker", name="Taker", at=(-20.0, 62.0)))  # ~10 m off, in plain view
+    giver.inventory["roots"] = 2
+    assert WorldApi(sim, "giver").give("roots", "Taker").text == "Taker is too far away to hand anything to."
+    assert giver.inventory == {"roots": 2}
+
+
+def test_gathering_never_takes_more_than_grows_there(new_sim: Callable[..., Simulation]) -> None:
+    sim = new_sim()
+    citizen = sim.add_citizen(make_spec(at=GATE))
+    world = sim.world
+    cell = next(
+        c for c in range(world.cell_count) if sim.state.resources[c, 0] > 0 and sim.core.planner.outer.allowed[c]
+    )
+    sim.core.place_at(citizen, world.unit(cell))
+    sim.state.resources[cell, 0] = 2
+    api = WorldApi(sim, citizen.id)
+    assert run_until_done(sim, api.gather("berries"), 25).text == "You gather a few berries."
+    assert citizen.inventory == {"berries": 2}
+    assert sim.state.resources[cell, 0] == 0
+    assert run_until_done(sim, api.gather("berries"), 1).text == "There are no berries within reach."
+
+
+def _first_cell(sim: Simulation, test: Callable[[int], bool]) -> int:
+    world = sim.world
+    return next(c for c in range(world.cell_count) if sim.core.planner.outer.allowed[c] and test(c))
+
+
+def test_rivers_are_drinkable_and_hot_ground_dries_you_out(new_sim: Callable[..., Simulation]) -> None:
+    sim = new_sim()
+    world = sim.world
+    drinker = sim.add_citizen(make_spec("drinker", at=GATE))
+    sim.core.place_at(drinker, world.unit(_first_cell(sim, lambda c: bool(world.river[c]))))
+    drinker.body.thirst = 50.0
+    result = run_until_done(sim, WorldApi(sim, "drinker").drink(), 5)
+    assert result.text == "You drink from the river until you are no longer thirsty."
+
+    walker = sim.add_citizen(make_spec("walker", at=GATE))
+    hot = sim.add_citizen(make_spec("hot", at=GATE))
+    sim.core.place_at(hot, world.unit(_first_cell(sim, lambda c: world.biome(c) == "savanna")))
+    sim.run(60)
+    assert walker.body.thirst == pytest.approx(6.0)
+    assert hot.body.thirst == pytest.approx(9.0)
+
+
+def test_even_a_few_berries_are_seen(new_sim: Callable[..., Simulation]) -> None:
+    sim = new_sim()
+    citizen = sim.add_citizen(make_spec(at=GATE))
+    cell = _first_cell(sim, lambda c: sim.state.resources[c, 0] > 0)
+    sim.core.place_at(citizen, sim.world.unit(cell))
+    sim.state.resources[cell, 0] = 2
+    things = WorldApi(sim, citizen.id).look_around().things
+    assert ("a few berries on the bushes", "right beside you") in [(t.label, t.where) for t in things]
+
+
+def test_names_are_only_learned_from_someone_you_can_see(new_sim: Callable[..., Simulation]) -> None:
+    sim = new_sim()
+    sim.add_citizen(make_spec("ann", name="Ann", at=(0.0, 150.0)))
+    sim.add_citizen(make_spec("bob", name="Bob", at=(1.0, 150.0)))
+    listener = sim.add_citizen(make_spec("listener", at=(0.0, 60.0)))  # 90 m: seen by day, not at night
+    WorldApi(sim, "ann").say("I am Ann!", "shout")
+    assert listener.heard[-1].who == "a person in a ann cloak"
+    assert "ann" in listener.people
+    sim.run(16 * 60)  # midnight
+    WorldApi(sim, "bob").say("I am Bob!", "shout")
+    assert listener.heard[-1].who == "someone"
+    assert "bob" not in listener.people

@@ -150,3 +150,11 @@ def test_body_words_are_coarse() -> None:
         "tired",
         "weak and aching",
     ]
+
+
+def test_healing_needs_food_and_water() -> None:
+    hungry, thirsty, fed = Body(health=50.0, hunger=70.0), Body(health=50.0, thirst=70.0), Body(health=50.0)
+    for body in (hungry, thirsty, fed):
+        _hours(body, 2)
+    assert (hungry.health, thirsty.health) == (50.0, 50.0)
+    assert fed.health == pytest.approx(52.0)

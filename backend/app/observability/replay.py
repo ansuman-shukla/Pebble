@@ -205,11 +205,10 @@ def _put(state: ReplayState, where: ItemLocation, item: str, count: int) -> None
     elif where.kind == "ground":
         stack_id = _id(where)
         if stack_id in state.ground:
-            state.ground[stack_id].count += count
-        else:
-            if where.position is None or where.cell is None:
-                raise ValueError(f"new ground stack {stack_id} needs a position and cell")
-            state.ground[stack_id] = ReplayStack(item, count, where.position, where.cell)
+            raise ValueError(f"ground stack {stack_id} exists already (things put down always make a new stack)")
+        if where.position is None or where.cell is None:
+            raise ValueError(f"new ground stack {stack_id} needs a position and cell")
+        state.ground[stack_id] = ReplayStack(item, count, where.position, where.cell)
     elif where.kind == "store":
         store = state.stores.setdefault(_id(where), {})
         store[item] = store.get(item, 0) + count
