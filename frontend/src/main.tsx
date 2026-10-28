@@ -63,6 +63,13 @@ const router = createBrowserRouter([
         }),
       },
       {
+        path: 'stats',
+        hydrateFallbackElement: pageLoading,
+        lazy: async () => ({
+          Component: (await import('@/pages/stats-page')).StatsPage,
+        }),
+      },
+      {
         path: 'gallery',
         hydrateFallbackElement: pageLoading,
         lazy: async () => ({

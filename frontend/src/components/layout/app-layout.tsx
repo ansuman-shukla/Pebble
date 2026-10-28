@@ -6,6 +6,7 @@ const LINKS = [
   { to: '/people', label: 'People', end: false },
   { to: '/conversations', label: 'Conversations', end: true },
   { to: '/timeline', label: 'Timeline', end: true },
+  { to: '/stats', label: 'Stats', end: true },
   { to: '/gallery', label: 'Gallery', end: true },
   { to: '/status', label: 'Status', end: true },
 ];
