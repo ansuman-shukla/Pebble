@@ -1,8 +1,9 @@
 """The engine process: the only writer of world state. `python -m app.engine` (or `make engine`).
 
 Loads the stored world (current generator version) and the town, resumes the latest run of that world from its
-latest snapshot (or starts a new run with the dev cast), then ticks: 1 tick = 1 game minute, `speed` ticks per real
-second (1 = real time, up to 60), paused = no ticks. `--headless --ticks N` runs N ticks as fast as possible.
+latest snapshot (or starts a new run with the 15 citizens of `data/citizens/citizens.yaml`), then ticks:
+1 tick = 1 game minute, `speed` ticks per real second (1 = real time, up to 60), paused = no ticks.
+`--headless --ticks N` runs N ticks as fast as possible.
 Every tick is one transaction: its events, a snapshot every game hour, the run's clock, and a NOTIFY.
 Admin commands (pause, speed) arrive through the `engine_commands` table.
 If the database connection drops (Postgres restarts, a backend is terminated), the engine reconnects with backoff and
@@ -29,11 +30,11 @@ from app.db.models import Run
 from app.db.schemas import MAX_SPEED, ClockChange
 from app.lib.ulid import UlidFactory
 from app.observability.store import EventStore, create_run, discard_after, latest_run, latest_snapshot, pending_commands
-from app.sim.citizens import DEV_CITIZENS, load_citizens
+from app.sim.citizens import CITIZENS, load_citizens
 from app.sim.clock import TICKS_PER_HOUR
 from app.sim.navigation import Planner
 from app.sim.simulation import Simulation
-from app.sim.snapshot import SimSnapshot, restore, take_snapshot
+from app.sim.snapshot import SNAPSHOT_VERSION, SimSnapshot, restore, take_snapshot
 from app.sim.world import SimWorld, load_sim_world
 from app.world.generate import GENERATOR
 from app.world.spec import load_site_kinds, load_world_spec
@@ -210,7 +211,11 @@ def start_run(
     sim = Simulation.new(world, seed=key.seed)
     store = EventStore(session, run, ids)
     if citizens is not None:
-        for spec in load_citizens(citizens).citizens:
+        cast = load_citizens(citizens)
+        for store_id, items in sorted(cast.stores.items()):
+            for item, count in sorted(items.items()):
+                sim.stock_store(store_id, item, count)
+        for spec in cast.citizens:
             sim.add_citizen(spec)
     store.write(sim.drain())
     store.snapshot(take_snapshot(sim.state))
@@ -248,9 +253,18 @@ def open_loop(
 ) -> EngineLoop:
     ids = ids or UlidFactory()
     run = None if new_run else latest_run(session, key)
+    if run is not None and not resumable(session, run):
+        log.info("run %s was written by an older simulation; starting a new one", run.id)
+        run = None
     if run is None:
         return start_run(session, world, key, ids, citizens, clock)
     return resume_run(session, world, run, ids, clock)
+
+
+def resumable(session: Session, run: Run) -> bool:
+    """Whether this simulation can continue the run (its latest snapshot has the current snapshot version)."""
+    snapshot_row = latest_snapshot(session, run.id)
+    return snapshot_row is not None and snapshot_row.state.get("version") == SNAPSHOT_VERSION
 
 
 def main(argv: Sequence[str] | None = None, db_engine: DbEngine | None = None) -> None:
@@ -260,7 +274,7 @@ def main(argv: Sequence[str] | None = None, db_engine: DbEngine | None = None) -
     parser.add_argument("--paused", action="store_true", help="start paused")
     parser.add_argument("--headless", action="store_true", help="no sleeping between ticks (fast-forward)")
     parser.add_argument("--ticks", type=int, default=None, help="stop after this many ticks")
-    parser.add_argument("--citizens", type=Path, default=DEV_CITIZENS, help="cast for a new run (YAML)")
+    parser.add_argument("--citizens", type=Path, default=CITIZENS, help="cast for a new run (YAML)")
     parser.add_argument("--no-citizens", action="store_true", help="start a new run with nobody in it")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
