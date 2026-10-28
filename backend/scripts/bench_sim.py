@@ -1,4 +1,5 @@
-"""Tick cost and event volume of the simulation core: `uv run python -m scripts.bench_sim [citizens] [game hours]`.
+"""Tick cost and event volume of the simulation core:
+`uv run python -m scripts.bench_sim [citizens] [game hours] [known|strangers]` (default: everyone knows everyone).
 
 Citizens get a crude busy routine (walk between town places, drink when thirsty, chat now and then) through the
 world api, so walking, perception and interrupts all run. No database: events are only counted.
@@ -26,6 +27,7 @@ KNOWN = ["town", "well", "market", "main-gate", "west-gate", "castle", "storehou
 def main() -> None:
     count = int(sys.argv[1]) if len(sys.argv) > 1 else 15
     hours = int(sys.argv[2]) if len(sys.argv) > 2 else 24
+    strangers = len(sys.argv) > 3 and sys.argv[3] == "strangers"
     world = sim_world_from_view(GENERATOR.generate(load_world_spec(), load_site_kinds()))
     sim = Simulation.new(world, planner=Planner(world))
     homes = sorted(s.id for s in world.structures.values() if s.is_home)
@@ -42,12 +44,14 @@ def main() -> None:
                 at=home.door_xz,
                 home=home.id,
                 knows_places=KNOWN,
+                knows_people=[] if strangers else [f"c{other}" for other in range(count) if other != index],
             )
         )
     sim.drain()
     durations: list[float] = []
     inputs: list[float] = []
     events: Counter[str] = Counter()
+    interrupts: Counter[str] = Counter()
     for _ in range(hours * 60):
         started = time.perf_counter()
         for citizen in sim.core.living():
@@ -66,11 +70,17 @@ def main() -> None:
         started = time.perf_counter()
         sim.step()
         durations.append((time.perf_counter() - started) * 1000)
-        events.update(event.type for event in sim.drain())
+        drained = sim.drain()
+        events.update(event.type for event in drained)
+        interrupts.update(
+            _reason(event.payload.model_dump()["text"]) for event in drained if event.type == "action_interrupted"
+        )
     snapshot_kb = len(canonical_json(take_snapshot(sim.state))) / 1000
     durations.sort()
     per_day = 24 / hours
-    print(f"{count} citizens, {hours} game hours ({len(durations)} ticks)")
+    print(
+        f"{count} citizens ({'strangers' if strangers else 'all known'}), {hours} game hours ({len(durations)} ticks)"
+    )
     print(
         f"tick ms: mean {statistics.fmean(durations):.2f}, p50 {durations[len(durations) // 2]:.2f}, "
         f"p99 {durations[int(len(durations) * 0.99)]:.2f}, max {durations[-1]:.2f}"
@@ -78,7 +88,24 @@ def main() -> None:
     print(f"actions between ticks (planning walks etc.) ms: mean {statistics.fmean(inputs):.2f}, max {max(inputs):.2f}")
     print(f"events per game day: {round(sum(events.values()) * per_day)}")
     print("  " + ", ".join(f"{kind} {round(n * per_day)}" for kind, n in events.most_common()))
+    print("interrupts per game day: " + ", ".join(f"{why} {round(n * per_day)}" for why, n in interrupts.most_common()))
     print(f"snapshot {snapshot_kb:.0f} kB")
+
+
+def _reason(text: str) -> str:
+    for marker, reason in (
+        ("comes into view", "stranger in view"),
+        ("coming toward you", "known person approaching"),
+        ("to do something else", "new action"),
+        ("night is falling", "night"),
+        ("says,", "speech"),
+        ("shouts,", "speech"),
+        ("whispers,", "speech"),
+        ("you are", "need"),
+    ):
+        if marker in text:
+            return reason
+    return "other"
 
 
 if __name__ == "__main__":
