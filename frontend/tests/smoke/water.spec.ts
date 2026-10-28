@@ -101,19 +101,35 @@ test('rivers follow smooth curves instead of zig-zagging from cell to cell', () 
 test('rivers start thin at a spring, fade in, and never narrow downstream', () => {
   const { biomes } = terrain.globe;
   let springs = 0;
+  const narrowing: string[] = [];
   for (const { river, points } of layout.runs) {
+    // (a site's channel sets its own width: the river may be narrower again past it)
     for (let i = 1; i < points.length; i++)
-      expect(points[i].width).toBeGreaterThanOrEqual(points[i - 1].width);
+      if (points[i].width < points[i - 1].width && !points[i - 1].flat)
+        narrowing.push(`river ${river} at ${points[i].along} m`);
     const cells = view.rivers[river].cells;
     if (points[0].along > 0 || WATER_BIOMES.has(biomes[cells[0]])) continue;
     springs += 1;
     expect(points[0].width).toBeLessThan(1);
     expect(points[0].fade).toBe(0);
-    // grown to the river's own width a little way down
+    // grown gradually to the river's own width a little way down
+    const near = points.find((point) => point.along >= 10);
     const below = points.find((point) => point.along >= 60);
-    if (below) expect(below.width).toBeGreaterThan(3 * points[0].width);
+    if (near && below) {
+      expect(below.width).toBeGreaterThan(3 * points[0].width);
+      expect(near.width).toBeLessThan(0.6 * below.width);
+    }
   }
+  expect(narrowing).toEqual([]);
   expect(springs).toBeGreaterThan(30);
+  // a river leaving a lake starts at full width: the lake's water flows on
+  const outflows = layout.runs.filter(
+    ({ river, points }) =>
+      WATER_BIOMES.has(biomes[view.rivers[river].cells[0]]) &&
+      points[0] === layout.runs.find((run) => run.river === river)!.points[0],
+  );
+  expect(outflows.length).toBeGreaterThan(3);
+  for (const { points } of outflows) expect(points[0].width).toBeGreaterThan(5);
   // the long rivers end much wider than they start
   const mill = layout.runs.filter((run) => run.river === 0);
   expect(mill.at(-1)!.points.at(-1)!.width).toBeGreaterThan(10);
@@ -170,6 +186,8 @@ test('the Mill river runs through the town stream instead of stopping at the tow
   for (const [k, point] of through[0].points.entries()) {
     if (!point.flat) continue;
     zs.push(local[k].z);
+    // as wide as the stream it fills
+    expect(point.width).toBeGreaterThanOrEqual(8);
     expect(Math.abs(local[k].x - centreX)).toBeLessThan(0.01);
     expect(point.height).toBeCloseTo(site.anchor.height_m + TOWN_WATER_Y, 5);
     expect(point.fade).toBe(1);
@@ -198,6 +216,19 @@ test('the Mill river runs through the town stream instead of stopping at the tow
     ),
   );
   expect(intruders).toEqual([]);
+  // the ribbon lies flat on the stream's water, not on the ground the stream is cut into
+  const ribbons = riverGeometry(terrain, layout);
+  const position = ribbons.getAttribute('position');
+  const inStream: number[] = [];
+  for (let i = 0; i < position.count; i++) {
+    const at = new Vector3().fromBufferAttribute(position, i);
+    if (at.clone().normalize().angleTo(up) * R < 200)
+      inStream.push(at.length() - R);
+  }
+  expect(inStream.length).toBeGreaterThan(100);
+  const level = site.anchor.height_m + TOWN_WATER_Y;
+  expect(Math.min(...inStream)).toBeGreaterThan(level);
+  expect(Math.max(...inStream)).toBeLessThan(level + 0.3);
 });
 
 test('the great falls drops from its lip as a sheet clear of the cliff into the lake', () => {
@@ -229,6 +260,20 @@ test('the great falls drops from its lip as a sheet clear of the cliff into the 
       .normalize();
     expect(height).toBeGreaterThan(terrain.heightAt(below) + 1);
   });
+  // even where the water would land closer in, the sheet is pushed clear of the cliff
+  const closer = {
+    ...falls,
+    foot: falls.lip.clone().lerp(falls.foot, 0.15).normalize(),
+  };
+  fallPath(terrain, closer)
+    .slice(1, -1)
+    .forEach(({ x, height }) => {
+      const below = up
+        .clone()
+        .addScaledVector(out, x / R)
+        .normalize();
+      expect(height).toBeGreaterThan(terrain.heightAt(below) + 1);
+    });
   expect(path[0].height).toBe(falls.lipHeight);
   expect(path[path.length - 1].height).toBe(falls.footHeight);
   const sheet = fallSheetGeometry(terrain, falls);
@@ -284,6 +329,18 @@ test('the sea and the lakes carry the depth of the water under them', () => {
   expect(wrong).toEqual([]);
   expect(lakes).toBeGreaterThan(200);
   expect(seas).toBeGreaterThan(10_000);
+  // near the shore the sea is refined like the terrain (vertices between the cells), so its depth follows
+  // the real shoreline
+  let refinedShore = 0;
+  for (let i = 0; i < position.count; i++) {
+    const surface = point.fromBufferAttribute(position, i).length() - R;
+    if (Math.abs(surface - WATER_SURFACE) > 0.15 || Math.abs(water.getX(i)) > 1)
+      continue;
+    const cell = terrain.nearestCell(point.normalize());
+    const centre = cellDirection(terrain.globe, cell, new Vector3());
+    if (point.angleTo(centre) * R > 1) refinedShore += 1;
+  }
+  expect(refinedShore).toBeGreaterThan(5000);
   // a lake cell in the middle of the falls lake is deeper than one on its shore
   const deepest = Math.max(
     ...[...byCell].flatMap(([cell, ids]) =>

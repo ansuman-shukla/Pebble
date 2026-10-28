@@ -706,7 +706,6 @@ function shapeEnds(
 ) {
   const first = run[0].along;
   const last = run[run.length - 1].along;
-  let widest = 0;
   for (const point of run) {
     const fromStart = point.along - first;
     const toEnd = last - point.along;
@@ -721,8 +720,5 @@ function shapeEnds(
     }
     if (endsAt === 'hole' || endsAt === 'join')
       point.fade *= smoothstep(0, FADE, toEnd);
-    // never narrower downstream within a run
-    widest = Math.max(widest, point.width);
-    point.width = widest;
   }
 }
