@@ -347,7 +347,7 @@ def doing_words(action: ActionState | None, asleep: bool) -> str:
     if action is None:
         return "You are standing still."
     if action.kind == "walk_to":
-        return f"You are walking to {action.label}." if action.label else "You are walking."
+        return f"You are walking to {action.destination}." if action.destination else "You are walking."
     return f"You are {DOING.get(action.kind, 'busy')}."
 
 

@@ -6,7 +6,10 @@ ticking the simulation (as the engine does).
 
 from collections.abc import Callable
 
+from app.observability.events import ActionStarted
+from app.observability.replay import from_snapshot
 from app.sim.simulation import Simulation
+from app.sim.snapshot import take_snapshot
 from app.world_api.facade import WorldApi, run_until_done
 from tests.sim_helpers import HOME, compass_towards, local_hour, make_spec, nearest_cell_of
 
@@ -60,6 +63,21 @@ def test_walk_to_a_forest_gather_and_eat_berries(new_sim: Callable[..., Simulati
     assert eaten.text.startswith("You eat")
     assert citizen.body.hunger < 0.5  # only the drift of the last minute
     assert citizen.inventory == {"berries": 1}
+
+
+def test_a_walk_home_reads_home_to_spectators_and_your_home_to_the_walker(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    sim = new_sim()
+    citizen = sim.add_citizen(make_spec())
+    api = WorldApi(sim, citizen.id)
+    sim.drain()
+
+    api.walk_to_place("home")  # under way until the next tick (a minute's walk gets there)
+    assert api.check_self().doing == "You are walking to your home."
+    started = [event.payload for event in sim.drain() if isinstance(event.payload, ActionStarted)]
+    assert [payload.label for payload in started] == ["home"]
+    assert from_snapshot(take_snapshot(sim.state)).citizens[citizen.id].action_label == "home"
 
 
 def test_walk_home_and_sleep_through_the_night(new_sim: Callable[..., Simulation]) -> None:
