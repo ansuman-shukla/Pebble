@@ -47,6 +47,11 @@ const LYING_LABEL_HEIGHT = 0.7;
 /** The seated clip lowers the hips onto a seat; on the ground the body sits this much lower. */
 const SITTING_DROP = 0.42;
 const SITTING_LABEL_HEIGHT = 1.5;
+/** Children and teens are shorter: their labels hang lower. */
+const AGE_LABEL_SCALE: Partial<Record<string, number>> = {
+  kid: 0.7,
+  teen: 0.93,
+};
 /** Turning rate towards the heading (1/s). */
 const TURN_RATE = 8;
 /** Game seconds per tick (one game minute). */
@@ -364,11 +369,12 @@ function Npc({
     if (followId === citizen.id) copyPose(view.pose, subjectRef.current);
   });
 
-  const labelHeight = {
-    standing: LABEL_HEIGHT,
-    sitting: SITTING_LABEL_HEIGHT,
-    lying: LYING_LABEL_HEIGHT,
-  }[pose.pose];
+  const labelHeight =
+    {
+      standing: LABEL_HEIGHT,
+      sitting: SITTING_LABEL_HEIGHT,
+      lying: LYING_LABEL_HEIGHT,
+    }[pose.pose] * (AGE_LABEL_SCALE[look.config.age ?? 'adult'] ?? 1);
   return (
     <group ref={group}>
       {mounted && (
