@@ -15,6 +15,7 @@ import {
   type WalkTerrain,
 } from '../../src/lib/world/globe-walk';
 import { pickSurface } from '../../src/lib/world/globe-pick';
+import { clipWater } from '../../src/lib/world/ground-shape';
 import type { ScatterInstance } from '../../src/lib/world/scatter';
 import {
   type Explore,
@@ -23,6 +24,7 @@ import {
   TOWN_URL,
   walkTowards,
   WORLD_URL,
+  TOWN_GROUND_RADIUS,
 } from './explore-helpers';
 
 /*
@@ -384,4 +386,31 @@ test('a ray picks the ground under it, or the sea', () => {
       walk.floorAt,
     ),
   ).toBeNull();
+});
+
+test("the town's water ends at its ground disc, the moat is untouched", () => {
+  const water = world.town.water;
+  const clipped = clipWater(water, TOWN_GROUND_RADIUS);
+  const radiusOf = ([x, z]: [number, number]) => Math.hypot(x, z);
+  const area = (polygon: [number, number][]) =>
+    Math.abs(
+      polygon.reduce((sum, [x1, z1], i) => {
+        const [x2, z2] = polygon[(i + 1) % polygon.length];
+        return sum + x1 * z2 - x2 * z1;
+      }, 0),
+    ) / 2;
+  // the stream's corners stick out of the disc before clipping
+  expect(
+    Math.max(...water.flatMap((w) => w.polygon.map(radiusOf))),
+  ).toBeGreaterThan(TOWN_GROUND_RADIUS);
+  expect(clipped).toHaveLength(water.length);
+  for (const [k, area0] of water.entries()) {
+    const cut = clipped[k];
+    for (const point of [...cut.polygon, ...(cut.holes ?? []).flat()])
+      expect(radiusOf(point)).toBeLessThanOrEqual(TOWN_GROUND_RADIUS + 1e-6);
+    // only a sliver goes: the stream keeps nearly all of its 8 x 320 m, the moat all of it
+    expect(area(cut.polygon)).toBeGreaterThan(area(area0.polygon) * 0.99);
+    expect(area(cut.polygon)).toBeLessThanOrEqual(area(area0.polygon) + 1e-6);
+    expect(cut.holes).toEqual(area0.holes ?? []);
+  }
 });

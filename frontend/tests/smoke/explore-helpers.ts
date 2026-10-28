@@ -24,6 +24,7 @@ import {
   type GlobeWalk,
   type WildBlockers,
 } from '../../src/lib/world/globe-walk';
+import { clipWater } from '../../src/lib/world/ground-shape';
 import { createScatter, type Scatter } from '../../src/lib/world/scatter';
 import {
   BLOCKING_SCATTER_ASSETS,
@@ -109,7 +110,7 @@ export function explore(view: WorldView, town: TownView): Explore {
             mapping: townMapping,
             height: townSite.anchor.height_m,
             placements: town.placements,
-            water: town.water,
+            water: clipWater(town.water, TOWN_GROUND_RADIUS),
             groundRadius: TOWN_GROUND_RADIUS,
             citizenSpots: citizens,
           },

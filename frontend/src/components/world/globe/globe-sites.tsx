@@ -7,7 +7,8 @@ import {
 import { TownGround } from '@/components/world/town/town-ground';
 import { TownPlacements } from '@/components/world/town/town-placements';
 import type { Site, TownView } from '@/lib/client/types.gen';
-import type { Point } from '@/lib/world/collision';
+import type { WalkWater } from '@/lib/world/collision';
+import { discOutline } from '@/lib/world/ground-shape';
 import {
   anchorMapping,
   type GlobeTerrain,
@@ -27,15 +28,9 @@ const DISC_SEGMENTS = 96;
 /** Wall hanging from the disc's edge down to the terrain. */
 const DISC_SKIRT = 4;
 
-function circle(radius: number, segments = DISC_SEGMENTS): Point[] {
-  return Array.from({ length: segments }, (_, i) => {
-    const angle = (i / segments) * Math.PI * 2;
-    return [Math.cos(angle) * radius, -Math.sin(angle) * radius];
-  });
-}
-
 export function GlobeTown({
   town,
+  water,
   mapping,
   groundRadius,
   grass,
@@ -45,6 +40,8 @@ export function GlobeTown({
   onCitizenReady,
 }: {
   town: TownView;
+  /** The town's water cut to its ground disc. */
+  water: WalkWater[];
   mapping: SiteMapping;
   groundRadius: number;
   /** Colour of the ground disc, matched to the terrain around it. */
@@ -55,12 +52,15 @@ export function GlobeTown({
   onPlacementsReady: () => void;
   onCitizenReady: (id: string) => void;
 }) {
-  const outline = useMemo(() => circle(groundRadius), [groundRadius]);
+  const outline = useMemo(
+    () => discOutline(groundRadius, DISC_SEGMENTS),
+    [groundRadius],
+  );
   return (
     <>
       <TownGround
         areas={town.areas}
-        water={town.water}
+        water={water}
         mapping={mapping}
         outline={outline}
         skirt={DISC_SKIRT}

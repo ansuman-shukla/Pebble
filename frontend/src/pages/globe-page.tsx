@@ -72,6 +72,7 @@ import {
   tangentFrame,
 } from '@/lib/world/globe';
 import { biomeColor } from '@/lib/world/globe-mesh';
+import { clipWater } from '@/lib/world/ground-shape';
 import type { LabelStore } from '@/lib/world/label-store';
 import { createScatter, type Scatter } from '@/lib/world/scatter';
 import type { WalkTown } from '@/lib/world/walk-charts';
@@ -295,6 +296,7 @@ const GlobeScene = memo(function GlobeScene({
       <Suspense fallback={null}>
         <GlobeTown
           town={town}
+          water={walkTown.water}
           mapping={planet.town.mapping}
           groundRadius={TOWN_GROUND_RADIUS}
           grass={planet.town.grass}
@@ -367,16 +369,21 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   const at = params.get('at');
   const [start] = useState(() => startFor(planet, town, at));
   const [citizenSpots] = useState<CitizenSpots>(() => new Map());
+  // the stream runs on past the ground disc; outside it the terrain's own water rules
+  const townWater = useMemo(
+    () => clipWater(town.water, TOWN_GROUND_RADIUS),
+    [town],
+  );
   const walkTown = useMemo(
     (): WalkTown => ({
       mapping: planet.town.mapping,
       height: planet.town.height,
       placements: town.placements,
-      water: town.water,
+      water: townWater,
       groundRadius: TOWN_GROUND_RADIUS,
       citizenSpots,
     }),
-    [planet, town, citizenSpots],
+    [planet, town, townWater, citizenSpots],
   );
   const goTo = useMemo(() => goToSites(planet, town), [planet, town]);
   const dropRef = useRef<DropApi | null>(null);

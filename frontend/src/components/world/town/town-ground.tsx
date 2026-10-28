@@ -2,8 +2,8 @@ import { useEffect, useMemo } from 'react';
 import { BufferGeometry, DoubleSide, Float32BufferAttribute } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-import type { TownArea, TownWater } from '@/lib/client/types.gen';
-import type { Point } from '@/lib/world/collision';
+import type { TownArea } from '@/lib/client/types.gen';
+import type { Point, WalkWater } from '@/lib/world/collision';
 import { groundShape } from '@/lib/world/ground-shape';
 import { FLAT_MAPPING, type LocalMapping } from '@/lib/world/local-mapping';
 import { mapGeometry } from '@/lib/world/map-geometry';
@@ -76,7 +76,7 @@ function useDisposed<T extends { dispose(): void }>(items: T[]) {
 
 type TownGroundProps = {
   areas: TownArea[];
-  water: TownWater[];
+  water: WalkWater[];
   mapping?: LocalMapping;
   /** The grass's outer edge in local metres. */
   outline?: Point[];
