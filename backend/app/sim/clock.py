@@ -8,6 +8,7 @@ town (the same formula as the client's `game-clock.ts`).
 import math
 
 from app.sim.vec import Vec3, dot
+from app.world_api.models import TimeOfDay
 
 DAY_MINUTES = 24 * 60
 START_MINUTE = 8 * 60
@@ -50,21 +51,23 @@ def local_minute(tick: int, town_lon_deg: float, lon_deg: float) -> float:
     return local % DAY_MINUTES
 
 
-_TIME_WORDS: tuple[tuple[float, str], ...] = (
-    (4.0, "the middle of the night"),
-    (5.5, "the dark before dawn"),
-    (6.5, "dawn; the sun is rising"),
-    (9.0, "early morning"),
-    (11.0, "mid-morning"),
-    (13.0, "around midday; the sun is high"),
-    (15.5, "early afternoon"),
-    (17.25, "late afternoon"),
-    (18.0, "the sun is about to set"),
-    (19.0, "dusk"),
-    (24.0, "night"),
+# (until local hour, time of day, the sentence a citizen reads)
+TIMES: tuple[tuple[float, TimeOfDay, str], ...] = (
+    (4.0, "night", "It is the middle of the night."),
+    (5.5, "pre-dawn", "It is the dark before dawn."),
+    (6.5, "dawn", "It is dawn; the sun is rising."),
+    (9.0, "early morning", "It is early morning."),
+    (11.0, "mid-morning", "It is mid-morning."),
+    (13.0, "midday", "It is around midday; the sun is high."),
+    (15.5, "early afternoon", "It is early afternoon."),
+    (17.25, "late afternoon", "It is late afternoon."),
+    (18.0, "sunset", "The sun is about to set."),
+    (19.0, "dusk", "It is dusk."),
+    (24.0, "night", "It is night."),
 )
 
 
-def time_words(local_minute_of_day: float) -> str:
+def time_of_day(local_minute_of_day: float) -> tuple[TimeOfDay, str]:
+    """The coarse time of day and the sentence that tells it, from the local sun."""
     hour = local_minute_of_day / 60
-    return next(words for until, words in _TIME_WORDS if hour < until)
+    return next((when, sentence) for until, when, sentence in TIMES if hour < until)

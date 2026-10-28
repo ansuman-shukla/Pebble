@@ -19,9 +19,17 @@ What a citizen can sense depends on light, terrain and distance.
 A perception describes, in words:
 - **Self:** body in coarse words ("very thirsty", "a little tired", "your leg hurts"), what you carry.
 - **Place:** the place name if known ("the river by the camp"), else a description ("an unfamiliar pine forest").
-- **Time:** from the sun ("late afternoon", "the sun is about to set").
-- **Others:** people you know by name; strangers by appearance ("a man in a fur cloak"); animals by kind.
-- **Things:** visible food, water, items, structures, resources ("bushes heavy with berries").
+- **Time:** from the sun, as a sentence ("It is late afternoon.", "The sun is about to set."), plus a coarse
+  `time_of_day` (pre-dawn, dawn, early morning, mid-morning, midday, early afternoon, late afternoon, sunset, dusk,
+  night) for code that shouldn't parse prose.
+- **Others:** people you know by name; strangers by appearance ("a man in a fur cloak"); animals by kind. Everyone in
+  view is always told; people at the same spot doing the same share a phrase ("Aiko, Genzo and a man in a fur cloak
+  a few paces to the north").
+- **Things:** visible food, water, items, structures, resources ("bushes heavy with berries"), with like things grouped
+  ("three lean-tos, the nearest a few paces to the east", "plenty of wood on the ground"). Things are told by
+  importance within a word budget: every water in sight, your home, the nearest food, shelter and fire always, then
+  the rest (wood and reeds, items on the ground, other buildings) nearest first while the budget lasts. Each entry
+  also carries how near it is and what kind of thing it is (water, food, shelter, fire, …) as fixed words.
 - **Heard:** speech within range, with who said it if you can see them.
 
 Each citizen keeps **knowledge** the world tracks for it: known places (its mental map), known people, skills.
