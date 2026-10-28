@@ -20,9 +20,10 @@ terrain:
   hills_m: 55
   ridges: {frequency: 6.0, octaves: 4}
   relief: {frequency: 3.5, octaves: 4}
-  relief_m: 150
+  relief_m: 130
   relief_threshold: 0.55
   lowland_m: 30
+  smoothing: {passes: 6, strength: 0.5}
   max_land_m: 250
   min_sea_m: -120
   shelf_m: -25

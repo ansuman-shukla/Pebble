@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
+from app.world.grid import Grid, IntArray
 from app.world.noise import fbm, ridged, warp
 from app.world.spec import Falls, Hill, LatLon, Plateau, SiteSpec, Volcano, Waypoint, WorldSpec
 from app.world.sphere import FloatArray, angle_between, tangent_frame, unit_from_lat_lon
@@ -12,6 +13,9 @@ from app.world.sphere import FloatArray, angle_between, tangent_frame, unit_from
 BoolArray = NDArray[np.bool_]
 
 _MIN_LAND_M = 0.5
+_LOWEST_LAND_M = 1.0  # base land starts this high above the sea
+_SHALLOWEST_SEA_M = -2.0  # and the sea floor this deep
+_SHELF_FIELD = 0.6  # continental field depth where the sea floor reaches min_sea_m (a gentle shelf)
 _SEA_DEPTH = 0.25  # authored seas are shallower than open ocean
 _SEA_SHORE = 0.8  # noise on a sea's reach (in radii) so its shore isn't a circle
 
@@ -63,8 +67,21 @@ class BaseTerrain:
     continental: FloatArray  # > 0 on land before site shaping
 
 
-def base_terrain(spec: WorldSpec, units: FloatArray) -> BaseTerrain:
+def smooth(heights: FloatArray, neighbours: IntArray, passes: int, strength: float) -> FloatArray:
+    """Laplacian smoothing on the grid: each pass moves every cell `strength` of the way to its neighbours' mean."""
+    valid = neighbours >= 0
+    padded = np.where(valid, neighbours, 0)
+    counts = valid.sum(axis=1)
+    smoothed = heights.copy()
+    for _ in range(passes):
+        mean = np.where(valid, smoothed[padded], 0.0).sum(axis=1) / counts
+        smoothed += strength * (mean - smoothed)
+    return smoothed
+
+
+def base_terrain(spec: WorldSpec, grid: Grid) -> BaseTerrain:
     terrain, seed = spec.terrain, spec.seed
+    units = grid.positions
     warped = warp(units, seed + 1, terrain.warp.frequency, terrain.warp.octaves, terrain.warp.strength)
     warped /= np.linalg.norm(warped, axis=1, keepdims=True)
 
@@ -85,13 +102,17 @@ def base_terrain(spec: WorldSpec, units: FloatArray) -> BaseTerrain:
 
     inland = smoothstep(0.0, 0.5, field)
     hills = terrain.hills_m * (0.5 + 0.5 * fbm(units, seed + 4, terrain.hills.frequency, terrain.hills.octaves))
-    land = 1.0 + terrain.lowland_m * inland + hills * smoothstep(0.05, 0.4, field)
+    land = _LOWEST_LAND_M + terrain.lowland_m * inland + hills * smoothstep(0.05, 0.4, field)
     relief = ridged(units, seed + 7, terrain.relief.frequency, terrain.relief.octaves)
     land += terrain.relief_m * smoothstep(terrain.relief_threshold, 1.0, relief) * smoothstep(0.1, 0.45, field)
     land += _mountains(spec, units, seed) * smoothstep(0.0, 0.2, field)
-    land = np.where(core, np.maximum(land, spec.land_loop.core_height_m), land)
-    seabed = -2.0 + (terrain.min_sea_m + 2.0) * smoothstep(0.0, 0.35, -field)
-    heights = np.where(field > 0, np.minimum(land, terrain.max_land_m), seabed)
+    seabed = _SHALLOWEST_SEA_M + (terrain.min_sea_m - _SHALLOWEST_SEA_M) * smoothstep(0.0, _SHELF_FIELD, -field)
+    is_land = field > 0
+    heights = np.where(is_land, np.minimum(land, terrain.max_land_m), seabed)
+    # smoothing calms crests and coast cliffs; clamping back to each side of sea level keeps the coastline
+    heights = smooth(heights, grid.neighbours, terrain.smoothing.passes, terrain.smoothing.strength)
+    heights = np.where(is_land, np.maximum(heights, _LOWEST_LAND_M), np.minimum(heights, _SHALLOWEST_SEA_M))
+    heights = np.where(core, np.maximum(heights, spec.land_loop.core_height_m), heights)
     return BaseTerrain(heights=heights, continental=field)
 
 

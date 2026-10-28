@@ -32,7 +32,7 @@ from app.world.terrain import BoolArray, SiteArea, base_terrain, ensure_land, lo
 from app.world.town import KindSpec, place_kind
 from app.world.view import Anchor, River, Site, WorldView, encode_array
 
-GENERATOR_VERSION = "m3.1"
+GENERATOR_VERSION = "m3.2"
 PLATEAU_TOLERANCE_M = 0.01  # a plateau that moved more sat in a closed depression
 _LOOP_CENTRE_PULL = 4.0  # extra path cost per band half-width away from the loop spine
 
@@ -89,7 +89,7 @@ def generate_world(spec: WorldSpec, kinds: Mapping[str, KindSpec]) -> GeneratedW
     units = grid.positions
     timer.lap("grid")
 
-    heights = base_terrain(spec, units).heights
+    heights = base_terrain(spec, grid).heights
     timer.lap("terrain")
 
     areas = {site.id: shape_site(spec, site, units, heights) for site in spec.sites}

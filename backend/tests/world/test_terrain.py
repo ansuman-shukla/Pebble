@@ -4,7 +4,7 @@ import pytest
 from app.world.grid import build_grid
 from app.world.spec import Falls, Hill, Plateau, SiteSpec, Volcano, load_world_spec
 from app.world.sphere import angle_between, unit_from_lat_lon
-from app.world.terrain import base_terrain, loop_band, polyline_distance, shape_site, smoothstep
+from app.world.terrain import base_terrain, loop_band, polyline_distance, shape_site, smooth, smoothstep
 
 GRID = build_grid(30)
 SPEC = load_world_spec()
@@ -37,14 +37,36 @@ def test_polyline_distance_measures_to_arcs_and_ends() -> None:
 def test_the_land_loop_core_is_always_land() -> None:
     core = loop_band(SPEC, GRID.positions, SPEC.land_loop.core_fraction) <= 1
 
-    heights = base_terrain(SPEC, GRID.positions).heights
+    heights = base_terrain(SPEC, GRID).heights
 
     assert core.sum() > 100
     assert (heights[core] >= SPEC.land_loop.core_height_m).all()
 
 
+def test_smoothing_moves_cells_toward_their_neighbours_mean() -> None:
+    spike = np.zeros(GRID.cell_count)
+    spike[100] = 60.0
+    neighbours = [n for n in GRID.neighbours[100] if n >= 0]
+
+    once = smooth(spike, GRID.neighbours, passes=1, strength=0.5)
+
+    assert once[100] == pytest.approx(30.0)
+    np.testing.assert_allclose(once[neighbours], 60.0 / 6 * 0.5)
+    np.testing.assert_array_equal(smooth(spike, GRID.neighbours, passes=0, strength=0.5), spike)
+    np.testing.assert_allclose(smooth(np.full(GRID.cell_count, 7.0), GRID.neighbours, 3, 0.5), 7.0)
+    assert smooth(spike, GRID.neighbours, passes=4, strength=0.5)[100] < once[100]
+
+
+def test_smoothing_keeps_the_coastline() -> None:
+    base = base_terrain(SPEC, GRID)
+
+    np.testing.assert_array_equal(base.heights > 0, base.continental > 0)
+    assert (base.heights[base.continental > 0] >= 1.0).all()
+    assert (base.heights[base.continental <= 0] <= -2.0).all()
+
+
 def test_plateau_flattens_to_its_height_and_blends_out() -> None:
-    heights = base_terrain(SPEC, GRID.positions).heights
+    heights = base_terrain(SPEC, GRID).heights
     before = heights.copy()
     distance = _distance_m((38, 12))
 
@@ -64,7 +86,7 @@ def test_plateau_flattens_to_its_height_and_blends_out() -> None:
 
 
 def test_hill_rises_above_the_terrain() -> None:
-    heights = base_terrain(SPEC, GRID.positions).heights
+    heights = base_terrain(SPEC, GRID).heights
     anchor = int(np.argmin(_distance_m((28, -4))))
     ground = heights[anchor]
 
