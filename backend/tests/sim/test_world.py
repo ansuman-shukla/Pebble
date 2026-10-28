@@ -2,11 +2,13 @@ import math
 
 import numpy as np
 import pytest
+from sqlmodel import Session
 
 from app.sim.items import ITEMS, RESOURCE_INDEX, amount_words
 from app.sim.vec import angle, bearing_deg, lat_lon_deg, slerp, step_towards
-from app.sim.world import TERRAIN_COST, SimWorld
+from app.sim.world import TERRAIN_COST, SimWorld, load_sim_world
 from app.world.biomes import BIOME_IDS
+from app.world.generate import GENERATOR
 from app.world.town import load_town
 
 
@@ -85,3 +87,11 @@ def test_amount_words_never_say_numbers() -> None:
         "plenty of berries",
         "a great many berries",
     ]
+
+
+def test_the_engine_loads_the_current_world_version_through_the_store(db_session: Session, sim_world: SimWorld) -> None:
+    loaded = load_sim_world(db_session)
+    assert loaded.generator_version == GENERATOR.version == sim_world.generator_version
+    assert np.array_equal(loaded.heights, sim_world.heights)
+    assert np.array_equal(loaded.biomes, sim_world.biomes)
+    assert loaded.town.height_m == sim_world.town.height_m
