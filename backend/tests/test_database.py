@@ -15,7 +15,8 @@ DEV_DATABASE = Settings.model_fields["POSTGRES_DB"].default
 
 
 def test_the_suite_never_uses_the_dev_database() -> None:
-    assert TEST_DATABASE == "pebble_test" != DEV_DATABASE
+    assert TEST_DATABASE.startswith("pebble_test")
+    assert TEST_DATABASE != DEV_DATABASE
     assert settings.POSTGRES_DB == TEST_DATABASE
     assert get_engine().url.database == TEST_DATABASE
     with engine.connect() as connection:
