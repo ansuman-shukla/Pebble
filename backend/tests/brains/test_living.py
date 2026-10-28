@@ -48,6 +48,8 @@ class Life:
     hunts_won: int = 0
     camp_fire: Counter[str] = field(default_factory=Counter)  # (camp) minutes lit / (camp:night) night minutes
     baskets_lit: list[int] = field(default_factory=list)  # gate baskets burning at local midnight, each night
+    actions: Counter[str] = field(default_factory=Counter)  # durative actions started, by name
+    gifts: int = 0  # items handed from one citizen to another
 
 
 @pytest.fixture(scope="module")
@@ -90,8 +92,12 @@ def life(sim_world: SimWorld, planner: Planner) -> Life:
                 out.hunts_won += 1
             elif event.type == "said":
                 out.said += 1
+            elif event.type == "item_moved":
+                shift = event.payload.model_dump()
+                out.gifts += shift["source"]["kind"] == shift["destination"]["kind"] == "inventory"
             elif event.type == "action_started" and event.actor_id is not None:
                 payload = event.payload.model_dump()
+                out.actions[payload["action"]] += 1
                 kind = str(payload["args"].get("task", payload["action"]))
                 out.started[(event.actor_id, day, kind)] += 1
         for citizen in sim.state.citizens.values():
@@ -199,3 +205,11 @@ def test_hunters_hunt_and_the_fires_burn_through_the_night(life: Life) -> None:
         share = life.camp_fire[camp] / life.camp_fire[f"{camp}:night"]
         assert share > 0.8, f"{camp} burned only {share:.0%} of the night"
     assert life.baskets_lit[1:] and all(lit == 2 for lit in life.baskets_lit[1:])  # the guard lights both baskets
+
+
+def test_the_brains_use_every_action_but_recall(life: Life) -> None:
+    """M9: the scripted brains exercise the whole v0 contract; `recall` belongs to agent minds (D74)."""
+    durative = {"walk_to", "follow", "gather", "fish", "hunt", "eat", "drink", "make_fire", "feed_fire", "rest"}
+    durative |= {"sleep", "work", "attack", "flee", "wait"}
+    assert {name for name in durative if not life.actions[name]} == set()
+    assert life.said > 0 and life.gifts > 0  # say, and give (hunters share their meat at camp)
