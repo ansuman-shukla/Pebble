@@ -373,6 +373,72 @@
         }
       }
     },
+    "/api/v1/live/schema": {
+      "get": {
+        "tags": [
+          "live"
+        ],
+        "summary": "Live Schema",
+        "description": "The live feed's message types for clients (this answers with the current `snapshot` message).",
+        "operationId": "live-live_schema",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/LiveState"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LiveEvent"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "type",
+                    "mapping": {
+                      "snapshot": "#/components/schemas/LiveState",
+                      "tick": "#/components/schemas/LiveState",
+                      "event": "#/components/schemas/LiveEvent"
+                    }
+                  },
+                  "title": "Response Live-Live Schema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/town": {
       "get": {
         "tags": [
@@ -504,8 +570,41 @@
             "type": "string",
             "title": "Appearance"
           },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "region": {
+            "type": "string",
+            "enum": [
+              "town",
+              "band_a",
+              "band_b"
+            ],
+            "title": "Region"
+          },
           "position": {
             "$ref": "#/components/schemas/Position"
+          },
+          "heading_deg": {
+            "type": "number",
+            "title": "Heading Deg"
+          },
+          "activity": {
+            "type": "string",
+            "enum": [
+              "idle",
+              "walking",
+              "sleeping",
+              "resting",
+              "gathering",
+              "eating",
+              "drinking",
+              "working",
+              "talking",
+              "dead"
+            ],
+            "title": "Activity"
           },
           "cell": {
             "type": "integer",
@@ -559,7 +658,11 @@
           "name",
           "look",
           "appearance",
+          "role",
+          "region",
           "position",
+          "heading_deg",
+          "activity",
           "cell",
           "alive",
           "asleep",
@@ -972,6 +1075,127 @@
           "database"
         ],
         "title": "HealthStatus"
+      },
+      "LiveEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "event",
+            "title": "Type"
+          },
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "event": {
+            "$ref": "#/components/schemas/LiveEventDetail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "run_id",
+          "tick",
+          "event"
+        ],
+        "title": "LiveEvent",
+        "description": "A public event of interest, sent just before the `tick` message of its tick."
+      },
+      "LiveEventDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "actor_id",
+          "payload"
+        ],
+        "title": "LiveEventDetail"
+      },
+      "LiveState": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "snapshot",
+              "tick"
+            ],
+            "title": "Type"
+          },
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "day": {
+            "type": "integer",
+            "title": "Day"
+          },
+          "time": {
+            "type": "string",
+            "title": "Time"
+          },
+          "speed": {
+            "type": "number",
+            "title": "Speed"
+          },
+          "paused": {
+            "type": "boolean",
+            "title": "Paused"
+          },
+          "citizens": {
+            "items": {
+              "$ref": "#/components/schemas/CitizenEntity"
+            },
+            "type": "array",
+            "title": "Citizens"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "run_id",
+          "tick",
+          "day",
+          "time",
+          "speed",
+          "paused",
+          "citizens"
+        ],
+        "title": "LiveState",
+        "description": "Where everyone is: on connect (`snapshot`) and after every engine tick (`tick`)."
       },
       "Position": {
         "properties": {

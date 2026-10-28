@@ -58,7 +58,23 @@ export type CitizenEntity = {
      * Appearance
      */
     appearance: string;
+    /**
+     * Role
+     */
+    role: string;
+    /**
+     * Region
+     */
+    region: 'town' | 'band_a' | 'band_b';
     position: Position;
+    /**
+     * Heading Deg
+     */
+    heading_deg: number;
+    /**
+     * Activity
+     */
+    activity: 'idle' | 'walking' | 'sleeping' | 'resting' | 'gathering' | 'eating' | 'drinking' | 'working' | 'talking' | 'dead';
     /**
      * Cell
      */
@@ -335,6 +351,91 @@ export type HealthStatus = {
      * Database
      */
     database: 'up' | 'down';
+};
+
+/**
+ * LiveEvent
+ *
+ * A public event of interest, sent just before the `tick` message of its tick.
+ */
+export type LiveEvent = {
+    /**
+     * Type
+     */
+    type: 'event';
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Tick
+     */
+    tick: number;
+    event: LiveEventDetail;
+};
+
+/**
+ * LiveEventDetail
+ */
+export type LiveEventDetail = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Type
+     */
+    type: string;
+    /**
+     * Actor Id
+     */
+    actor_id: string | null;
+    /**
+     * Payload
+     */
+    payload: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * LiveState
+ *
+ * Where everyone is: on connect (`snapshot`) and after every engine tick (`tick`).
+ */
+export type LiveState = {
+    /**
+     * Type
+     */
+    type: 'snapshot' | 'tick';
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Tick
+     */
+    tick: number;
+    /**
+     * Day
+     */
+    day: number;
+    /**
+     * Time
+     */
+    time: string;
+    /**
+     * Speed
+     */
+    speed: number;
+    /**
+     * Paused
+     */
+    paused: boolean;
+    /**
+     * Citizens
+     */
+    citizens: Array<CitizenEntity>;
 };
 
 /**
@@ -814,6 +915,42 @@ export type HealthReadHealthResponses = {
 };
 
 export type HealthReadHealthResponse = HealthReadHealthResponses[keyof HealthReadHealthResponses];
+
+export type LiveLiveSchemaData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Run Id
+         */
+        run_id?: string | null;
+    };
+    url: '/api/v1/live/schema';
+};
+
+export type LiveLiveSchemaErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type LiveLiveSchemaError = LiveLiveSchemaErrors[keyof LiveLiveSchemaErrors];
+
+export type LiveLiveSchemaResponses = {
+    /**
+     * Response Live-Live Schema
+     *
+     * Successful Response
+     */
+    200: ({
+        type: 'snapshot' | 'tick';
+    } & LiveState) | ({
+        type: 'event';
+    } & LiveEvent);
+};
+
+export type LiveLiveSchemaResponse = LiveLiveSchemaResponses[keyof LiveLiveSchemaResponses];
 
 export type TownReadTownData = {
     body?: never;
