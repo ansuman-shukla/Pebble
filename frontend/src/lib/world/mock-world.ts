@@ -232,6 +232,9 @@ const SITES: SiteSpec[] = [
 /** The land loop: the great circle whose highest point is the ice gate (72°N, 180°). */
 const LOOP_AXIS = directionFromLatLon(18, 0);
 const LOOP_WIDTH = 0.1;
+/** Half-width of the always-dry causeway along the loop, and of the shelf down to the sea floor beside it. */
+const LOOP_CAUSEWAY = 90;
+const LOOP_SHELF = 200;
 const VOLCANO_RADIUS = 700;
 const VOLCANO_PEAK = 320;
 
@@ -284,12 +287,18 @@ export function createMockWorld({
     }
   });
 
-  // the land loop stays walkable all the way round
+  // the land loop stays walkable all the way round: a causeway with shelving sides
   const loop = traceCells(terrain, greatCircle(LOOP_AXIS, 720));
-  for (const cell of loop) {
-    for (const near of [cell, ...terrain.neighbours(cell)])
-      heights[near] = Math.max(heights[near], 3 + 6 * hash(near, 1, 2, seed));
-  }
+  dirs.forEach((u, i) => {
+    const off = Math.abs(u.dot(LOOP_AXIS)) * RADIUS;
+    if (off < LOOP_CAUSEWAY)
+      heights[i] = Math.max(heights[i], 3 + 6 * hash(i, 1, 2, seed));
+    else if (off < LOOP_CAUSEWAY + LOOP_SHELF)
+      heights[i] = Math.max(
+        heights[i],
+        lerp(3, -40, (off - LOOP_CAUSEWAY) / LOOP_SHELF),
+      );
+  });
 
   // town: land around it, the sea to its south (local z > 420)
   const town = at('town');
@@ -605,7 +614,7 @@ function assignBiomes(
       biome = ocean[i] ? (h < -25 ? B.deep_ocean : B.shallow_ocean) : B.lake;
     else if (lat > 78) biome = B.ice;
     else if (nearTown < TOWN_BLEND) biome = B.grassland;
-    else if (nearVolcano < 520) biome = B.volcanic;
+    else if (nearVolcano < 330) biome = B.volcanic;
     else if (temperature < 0.08) biome = B.snow;
     else if (temperature < 0.18) biome = B.tundra;
     else if (h > 175) biome = temperature < 0.4 ? B.snow : B.mountain;
