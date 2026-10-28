@@ -5,6 +5,44 @@ export type ClientOptions = {
 };
 
 /**
+ * Extent
+ */
+export type Extent = {
+    /**
+     * Min X
+     */
+    min_x: number;
+    /**
+     * Max X
+     */
+    max_x: number;
+    /**
+     * Min Z
+     */
+    min_z: number;
+    /**
+     * Max Z
+     */
+    max_z: number;
+};
+
+/**
+ * Footprint
+ *
+ * Axis-aligned size after rotation.
+ */
+export type Footprint = {
+    /**
+     * X
+     */
+    x: number;
+    /**
+     * Z
+     */
+    z: number;
+};
+
+/**
  * HealthStatus
  */
 export type HealthStatus = {
@@ -16,6 +54,161 @@ export type HealthStatus = {
      * Database
      */
     database: 'up' | 'down';
+};
+
+/**
+ * Spawn
+ */
+export type Spawn = {
+    /**
+     * X
+     */
+    x: number;
+    /**
+     * Z
+     */
+    z: number;
+    /**
+     * Heading Deg
+     */
+    heading_deg: number;
+};
+
+/**
+ * TownArea
+ */
+export type TownArea = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: 'street' | 'road' | 'plaza' | 'courtyard' | 'field';
+    /**
+     * Polygon
+     */
+    polygon: Array<[
+        number,
+        number
+    ]>;
+};
+
+/**
+ * TownCitizen
+ */
+export type TownCitizen = {
+    /**
+     * Look
+     */
+    look: string;
+    /**
+     * X
+     */
+    x: number;
+    /**
+     * Z
+     */
+    z: number;
+    /**
+     * Heading Deg
+     */
+    heading_deg: number;
+    /**
+     * Route
+     */
+    route?: Array<[
+        number,
+        number
+    ]>;
+};
+
+/**
+ * TownPlacement
+ */
+export type TownPlacement = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * X
+     */
+    x: number;
+    /**
+     * Z
+     */
+    z: number;
+    /**
+     * Rotation Deg
+     */
+    rotation_deg: 0 | 90 | 180 | 270;
+    footprint: Footprint;
+    /**
+     * Walk
+     */
+    walk: 'solid' | 'surface' | 'none';
+};
+
+/**
+ * TownView
+ */
+export type TownView = {
+    /**
+     * Name
+     */
+    name: string;
+    extent: Extent;
+    spawn: Spawn;
+    /**
+     * Areas
+     */
+    areas: Array<TownArea>;
+    /**
+     * Water
+     */
+    water: Array<TownWater>;
+    /**
+     * Placements
+     */
+    placements: Array<TownPlacement>;
+    /**
+     * Citizens
+     */
+    citizens: Array<TownCitizen>;
+};
+
+/**
+ * TownWater
+ */
+export type TownWater = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: 'moat' | 'stream';
+    /**
+     * Polygon
+     */
+    polygon: Array<[
+        number,
+        number
+    ]>;
+    /**
+     * Holes
+     */
+    holes?: Array<Array<[
+        number,
+        number
+    ]>>;
 };
 
 export type HealthReadHealthData = {
@@ -33,3 +226,19 @@ export type HealthReadHealthResponses = {
 };
 
 export type HealthReadHealthResponse = HealthReadHealthResponses[keyof HealthReadHealthResponses];
+
+export type TownReadTownData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/town';
+};
+
+export type TownReadTownResponses = {
+    /**
+     * Successful Response
+     */
+    200: TownView;
+};
+
+export type TownReadTownResponse = TownReadTownResponses[keyof TownReadTownResponses];

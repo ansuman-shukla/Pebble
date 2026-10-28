@@ -25,10 +25,78 @@
           }
         }
       }
+    },
+    "/api/v1/town": {
+      "get": {
+        "tags": [
+          "town"
+        ],
+        "summary": "Read Town",
+        "operationId": "town-read_town",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TownView"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "Extent": {
+        "properties": {
+          "min_x": {
+            "type": "number",
+            "title": "Min X"
+          },
+          "max_x": {
+            "type": "number",
+            "title": "Max X"
+          },
+          "min_z": {
+            "type": "number",
+            "title": "Min Z"
+          },
+          "max_z": {
+            "type": "number",
+            "title": "Max Z"
+          }
+        },
+        "type": "object",
+        "required": [
+          "min_x",
+          "max_x",
+          "min_z",
+          "max_z"
+        ],
+        "title": "Extent"
+      },
+      "Footprint": {
+        "properties": {
+          "x": {
+            "type": "number",
+            "title": "X"
+          },
+          "z": {
+            "type": "number",
+            "title": "Z"
+          }
+        },
+        "type": "object",
+        "required": [
+          "x",
+          "z"
+        ],
+        "title": "Footprint",
+        "description": "Axis-aligned size after rotation."
+      },
       "HealthStatus": {
         "properties": {
           "status": {
@@ -51,6 +119,285 @@
           "database"
         ],
         "title": "HealthStatus"
+      },
+      "Spawn": {
+        "properties": {
+          "x": {
+            "type": "number",
+            "title": "X"
+          },
+          "z": {
+            "type": "number",
+            "title": "Z"
+          },
+          "heading_deg": {
+            "type": "number",
+            "title": "Heading Deg"
+          }
+        },
+        "type": "object",
+        "required": [
+          "x",
+          "z",
+          "heading_deg"
+        ],
+        "title": "Spawn"
+      },
+      "TownArea": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "street",
+              "road",
+              "plaza",
+              "courtyard",
+              "field"
+            ],
+            "title": "Kind"
+          },
+          "polygon": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "title": "Polygon"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "polygon"
+        ],
+        "title": "TownArea"
+      },
+      "TownCitizen": {
+        "properties": {
+          "look": {
+            "type": "string",
+            "title": "Look"
+          },
+          "x": {
+            "type": "number",
+            "title": "X"
+          },
+          "z": {
+            "type": "number",
+            "title": "Z"
+          },
+          "heading_deg": {
+            "type": "number",
+            "title": "Heading Deg"
+          },
+          "route": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "title": "Route",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "look",
+          "x",
+          "z",
+          "heading_deg"
+        ],
+        "title": "TownCitizen"
+      },
+      "TownPlacement": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "x": {
+            "type": "number",
+            "title": "X"
+          },
+          "z": {
+            "type": "number",
+            "title": "Z"
+          },
+          "rotation_deg": {
+            "type": "integer",
+            "enum": [
+              0,
+              90,
+              180,
+              270
+            ],
+            "title": "Rotation Deg"
+          },
+          "footprint": {
+            "$ref": "#/components/schemas/Footprint"
+          },
+          "walk": {
+            "type": "string",
+            "enum": [
+              "solid",
+              "surface",
+              "none"
+            ],
+            "title": "Walk"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "x",
+          "z",
+          "rotation_deg",
+          "footprint",
+          "walk"
+        ],
+        "title": "TownPlacement"
+      },
+      "TownView": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "extent": {
+            "$ref": "#/components/schemas/Extent"
+          },
+          "spawn": {
+            "$ref": "#/components/schemas/Spawn"
+          },
+          "areas": {
+            "items": {
+              "$ref": "#/components/schemas/TownArea"
+            },
+            "type": "array",
+            "title": "Areas"
+          },
+          "water": {
+            "items": {
+              "$ref": "#/components/schemas/TownWater"
+            },
+            "type": "array",
+            "title": "Water"
+          },
+          "placements": {
+            "items": {
+              "$ref": "#/components/schemas/TownPlacement"
+            },
+            "type": "array",
+            "title": "Placements"
+          },
+          "citizens": {
+            "items": {
+              "$ref": "#/components/schemas/TownCitizen"
+            },
+            "type": "array",
+            "title": "Citizens"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "extent",
+          "spawn",
+          "areas",
+          "water",
+          "placements",
+          "citizens"
+        ],
+        "title": "TownView"
+      },
+      "TownWater": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "moat",
+              "stream"
+            ],
+            "title": "Kind"
+          },
+          "polygon": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "title": "Polygon"
+          },
+          "holes": {
+            "items": {
+              "items": {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Holes",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "polygon"
+        ],
+        "title": "TownWater"
       }
     }
   }
