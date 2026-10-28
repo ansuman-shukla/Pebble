@@ -35,7 +35,7 @@ export function walkPath(
   const starts = [0];
   for (let k = 1; k < points.length; k++)
     starts.push(starts[k - 1] + points[k - 1].angleTo(points[k]) * radius);
-  return { points, starts, along: 0, speed: points.length > 1 ? speed : 0 };
+  return { points, starts, along: 0, speed };
 }
 
 /** The feed's path for a citizen: the route while walking on, else just where they stand. */
