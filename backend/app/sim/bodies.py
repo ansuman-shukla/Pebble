@@ -16,11 +16,11 @@ ENERGY_ASLEEP_PER_HOUR = 12.0
 STARVING_DAMAGE_PER_HOUR = 2.0
 PARCHED_DAMAGE_PER_HOUR = 6.0
 HEAL_PER_HOUR = 1.0
-ACTIVE_RATE = 1.25  # hunger and thirst while walking, gathering or fleeing
+ACTIVE_RATE = 1.25  # hunger and thirst while walking, gathering, fleeing or farming
 ASLEEP_RATE = 0.75
 HEAT_THIRST_RATE = 1.5  # savanna and volcanic ground
 HOT_BIOMES = frozenset({"savanna", "volcanic"})
-ACTIVE_ACTIONS = frozenset({"walk_to", "gather", "flee"})
+ACTIVE_ACTIONS = frozenset({"walk_to", "gather", "flee", "farm"})  # actions and work tasks (`body_activity`)
 RESTING_ACTIONS = frozenset({"rest"})
 COLLAPSE_WAKE_ENERGY = 30.0  # a collapsed citizen sleeps at least until this rested
 

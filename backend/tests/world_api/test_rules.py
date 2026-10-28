@@ -64,7 +64,7 @@ def test_nothing_within_reach_fails_without_changing_the_world(new_sim: Callable
     results = [
         run_until_done(sim, api.drink(), 1),
         run_until_done(sim, api.gather("berries"), 1),
-        run_until_done(sim, api.gather("wood"), 1),
+        run_until_done(sim, api.gather("flint"), 1),
         run_until_done(sim, api.eat("berries"), 1),
         api.pick_up("berries"),
         api.drop("nuts"),
@@ -73,7 +73,7 @@ def test_nothing_within_reach_fails_without_changing_the_world(new_sim: Callable
     assert [r.text for r in results] == [
         "There's no water within reach.",
         "There are no berries within reach.",
-        "You can't gather wood here.",
+        "You can't gather flint here.",
         "You have no berries, and there are none within reach.",
         "There's no berries within reach.",
         "You aren't carrying any nuts.",
@@ -222,9 +222,9 @@ def test_not_yet_actions_answer_in_world(new_sim: Callable[..., Simulation]) -> 
     sim = new_sim()
     api = WorldApi(sim, sim.add_citizen(make_spec(at=GATE)).id)
     handles = [api.follow("someone"), api.fish(), api.hunt("deer"), api.make_fire(), api.feed_fire()]
-    handles += [api.work("farm"), api.attack("someone")]
+    handles += [api.attack("someone")]
     results = [handle.result for handle in handles] + [api.recall("yesterday")]
-    assert [(r.outcome, r.text) for r in results if r is not None] == [("failed", "You can't do that yet.")] * 8
+    assert [(r.outcome, r.text) for r in results if r is not None] == [("failed", "You can't do that yet.")] * 7
 
 
 def test_giving_needs_reach_and_a_waking_receiver(new_sim: Callable[..., Simulation]) -> None:

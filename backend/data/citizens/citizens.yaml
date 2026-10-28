@@ -1,0 +1,252 @@
+# The v0 cast: 15 citizens (docs/design/04-minds.md roster; D7). The engine starts new runs with this file.
+#
+# site + at = where they start, in local metres (x east, z south) around the site's anchor (the town uses its chart).
+# home      = a town house placement id (townhouse, farmhouse, castle-keep) or "<camp site>:<lean-to placement id>".
+# look      = a look id from frontend/src/lib/world/citizen-looks.ts (sex follows the look's figure).
+# skills    = what work(task) and later crafts need: farming, weaving, trade, arms, governing (town);
+#             gathering, hunting, fire, healing (bands).
+# knows_places / knows_people = starting knowledge (place ids from sites or data/town/places.yaml; citizen ids).
+
+stores:
+  store-2: {rice: 400} # the storehouse at the storehouses' stand: about six days for the town
+
+citizens:
+  # --- the castle town (Japanese names) ---
+  - id: masanori
+    name: Masanori
+    role: lord of the castle
+    region: town
+    age: 55
+    sex: male
+    look: town-lord
+    appearance: an old man in a stiff black surcoat
+    personality: Proud and careful; weighs every word and remembers every slight.
+    skills: [governing, arms]
+    site: town
+    at: [0, 3]
+    home: castle-keep
+    knows_places: [town, castle, well, market, main-gate, west-gate, temple, storehouses, training-ground, rice-fields]
+    knows_people: [kenji, fumiko, genzo, aiko, hana]
+  - id: kenji
+    name: Kenji
+    role: samurai retainer
+    region: town
+    age: 34
+    sex: male
+    look: town-samurai
+    appearance: a man with two swords at his belt
+    personality: Loyal and stern on duty, but soft-hearted with children.
+    skills: [arms]
+    site: town
+    at: [-20, 23]
+    home: castle-keep
+    knows_places: [town, castle, well, market, main-gate, west-gate, temple, storehouses, training-ground, rice-fields]
+    knows_people: [masanori, fumiko, genzo, aiko, hana]
+  - id: fumiko
+    name: Fumiko
+    role: merchant
+    region: town
+    age: 40
+    sex: female
+    look: town-merchant
+    appearance: a woman in a fine patterned kimono
+    personality: Shrewd, talkative and curious about anything new or far away.
+    skills: [trade]
+    site: town
+    at: [20, 54]
+    home: main-e-2
+    knows_places: [town, market, well, main-gate, west-gate, storehouses, temple, castle]
+    knows_people: [masanori, kenji, genzo, aiko, hana]
+  - id: genzo
+    name: Genzo
+    role: rice farmer
+    region: town
+    age: 28
+    sex: male
+    look: town-farmer
+    appearance: a young man in a straw hat and a rain cape
+    personality: Hard-working and plain-spoken; worries about the harvest.
+    skills: [farming]
+    site: town
+    at: [-128, 44]
+    home: farmhouse-1
+    knows_places: [town, rice-fields, well, west-gate, main-gate, storehouses, market]
+    knows_people: [masanori, kenji, fumiko, aiko, hana]
+  - id: aiko
+    name: Aiko
+    role: weaver, the farmer's wife
+    region: town
+    age: 26
+    sex: female
+    look: town-weaver
+    appearance: a young woman in a headwrap
+    personality: Warm and quick-witted; keeps the household running and the gossip flowing.
+    skills: [weaving, farming]
+    site: town
+    at: [-78, 93]
+    home: farmhouse-1
+    knows_places: [town, rice-fields, well, west-gate, main-gate, storehouses, market, temple]
+    knows_people: [masanori, kenji, fumiko, genzo, hana]
+  - id: hana
+    name: Hana
+    role: the farmer's child
+    region: town
+    age: 9
+    sex: female
+    look: town-child
+    appearance: a little girl with a bob of black hair
+    personality: Restless and fearless; asks why about everything.
+    skills: []
+    site: town
+    at: [-23, 47]
+    home: farmhouse-1
+    knows_places: [town, well, market, rice-fields, west-gate, storehouses]
+    knows_people: [masanori, kenji, fumiko, genzo, aiko]
+
+  # --- band A (invented, simple names) ---
+  - id: ama
+    name: Ama
+    role: band leader
+    region: band_a
+    age: 44
+    sex: female
+    look: band-a-leader
+    appearance: a tall woman with a feather headdress
+    personality: Calm and decisive; thinks of the band before herself.
+    skills: [gathering, hunting, fire]
+    site: band_a_camp
+    at: [1.5, 3]
+    home: band_a_camp:shelter-n
+    knows_places: [band_a_camp]
+    knows_people: [oru, tek, lia, suna]
+    inventory: {dried meat: 8}
+  - id: oru
+    name: Oru
+    role: elder healer
+    region: band_a
+    age: 63
+    sex: male
+    look: band-a-healer
+    appearance: an old man in a long fur mantle
+    personality: Slow, patient and full of old stories; knows every root and leaf.
+    skills: [gathering, healing, fire]
+    site: band_a_camp
+    at: [-3, 2.5]
+    home: band_a_camp:shelter-w
+    knows_places: [band_a_camp]
+    knows_people: [ama, tek, lia, suna]
+    inventory: {dried meat: 6}
+  - id: tek
+    name: Tek
+    role: hunter
+    region: band_a
+    age: 24
+    sex: male
+    look: band-a-hunter
+    appearance: a lean young man with a spear
+    personality: Bold and impatient; wants to see what lies beyond the hills.
+    skills: [gathering, hunting, fire]
+    site: band_a_camp
+    at: [3.5, 1]
+    home: band_a_camp:shelter-e
+    knows_places: [band_a_camp]
+    knows_people: [ama, oru, lia, suna]
+    inventory: {dried meat: 10}
+  - id: lia
+    name: Lia
+    role: teen gatherer
+    region: band_a
+    age: 15
+    sex: female
+    look: band-a-gatherer-teen
+    appearance: a girl with long auburn hair and a basket
+    personality: Dreamy and observant; collects pretty stones and new words.
+    skills: [gathering]
+    site: band_a_camp
+    at: [-1, -3]
+    home: band_a_camp:shelter-n
+    knows_places: [band_a_camp]
+    knows_people: [ama, oru, tek, suna]
+    inventory: {dried meat: 6}
+  - id: suna
+    name: Suna
+    role: gatherer
+    region: band_a
+    age: 30
+    sex: female
+    look: band-a-gatherer
+    appearance: a woman in a knee-length hide tunic
+    personality: Practical and cheerful; the best forager in the band.
+    skills: [gathering, fire]
+    site: band_a_camp
+    at: [2, -1.5]
+    home: band_a_camp:shelter-e
+    knows_places: [band_a_camp]
+    knows_people: [ama, oru, tek, lia]
+    inventory: {dried meat: 8}
+
+  # --- band B ---
+  - id: barro
+    name: Barro
+    role: band leader
+    region: band_b
+    age: 38
+    sex: male
+    look: band-b-leader
+    appearance: a broad man with tattooed arms
+    personality: Gruff and protective; slow to trust strangers.
+    skills: [gathering, hunting, fire]
+    site: band_b_camp
+    at: [1.5, 3]
+    home: band_b_camp:shelter-n
+    knows_places: [band_b_camp]
+    knows_people: [nim, kaz, pip]
+    inventory: {dried meat: 8}
+  - id: nim
+    name: Nim
+    role: mother
+    region: band_b
+    age: 29
+    sex: female
+    look: band-b-mother
+    appearance: a woman with a fur stole
+    personality: Gentle and sharp-eyed; never lets the boy out of her sight for long.
+    skills: [gathering, fire]
+    site: band_b_camp
+    at: [-3, 2.5]
+    home: band_b_camp:shelter-n
+    knows_places: [band_b_camp]
+    knows_people: [barro, kaz, pip]
+    inventory: {dried meat: 8}
+  - id: kaz
+    name: Kaz
+    role: young hunter
+    region: band_b
+    age: 19
+    sex: male
+    look: band-b-hunter
+    appearance: a young man with a spear and a short hide tunic
+    personality: Eager to prove himself; laughs loudly and often.
+    skills: [gathering, hunting]
+    site: band_b_camp
+    at: [3.5, 1]
+    home: band_b_camp:shelter-e
+    knows_places: [band_b_camp]
+    knows_people: [barro, nim, pip]
+    inventory: {dried meat: 10}
+  - id: pip
+    name: Pip
+    role: child
+    region: band_b
+    age: 7
+    sex: male
+    look: band-b-child
+    appearance: a small boy in a hide tunic
+    personality: Playful and noisy; copies everything the hunters do.
+    skills: [gathering]
+    site: band_b_camp
+    at: [-1, -3]
+    home: band_b_camp:shelter-n
+    knows_places: [band_b_camp]
+    knows_people: [barro, nim, kaz]
+    inventory: {dried meat: 4}

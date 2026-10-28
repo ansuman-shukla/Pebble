@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 import pytest
 
 from app.sim.bodies import (
@@ -16,9 +18,11 @@ from app.sim.clock import (
     time_words,
     town_clock,
 )
+from app.sim.simulation import Simulation
 from app.sim.state import AGE_GROUPS, Body, age_group
 from app.sim.vec import Vec3
 from app.sim.world import SimWorld
+from tests.sim_helpers import make_spec
 
 ADULT = AGE_GROUPS["young_adult"]
 
@@ -158,3 +162,20 @@ def test_healing_needs_food_and_water() -> None:
         _hours(body, 2)
     assert (hungry.health, thirsty.health) == (50.0, 50.0)
     assert fed.health == pytest.approx(52.0)
+
+
+def test_walkers_face_where_they_go(new_sim: Callable[..., Simulation]) -> None:
+    """heading_deg is the town's yaw: 0 = facing south (+z), 90 = east, 180 = north, 270 = west."""
+    sim = new_sim()
+    citizen = sim.add_citizen(make_spec(at=(-20.0, 60.0)))
+    for target, heading in (
+        ((-20.0, 63.0), 0.0),
+        ((-14.0, 63.0), 90.0),
+        ((-14.0, 59.0), 180.0),
+        ((-19.0, 59.0), 270.0),
+    ):
+        sim.core.place_at(citizen, sim.world.town.to_unit(*target))
+        assert abs((citizen.heading_deg - heading + 180) % 360 - 180) < 1.0, target
+    standing = citizen.heading_deg
+    sim.core.place_at(citizen, citizen.position)
+    assert citizen.heading_deg == standing  # standing still keeps the facing

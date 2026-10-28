@@ -16,7 +16,7 @@ from numpy.typing import NDArray
 from pydantic import BaseModel, ConfigDict, Field
 from sqlmodel import Session
 
-from app.sim.items import RESOURCE_CAPS, RESOURCES
+from app.sim.items import RESOURCE_CAPS, RESOURCE_INDEX, RESOURCES, RIVER_REEDS
 from app.sim.vec import Vec3, angle, as_vec, dot, normalize
 from app.world.biomes import BIOME_IDS
 from app.world.generate import GENERATOR
@@ -51,14 +51,16 @@ TERRAIN_COST: dict[str, float] = {
 WATER_BIOMES = ("deep_ocean", "shallow_ocean", "lake")
 RIVER_FORD_COST = 1.5  # rivers are fordable: at least this slow
 SITE_RADIUS_M: dict[str, float] = {"town": 230.0, "camp": 60.0, "landmark": 80.0}
-HOME_KINDS = frozenset({"townhouse", "farmhouse"})
-STRUCTURE_LABELS: dict[str, str] = {
+HOME_KINDS = frozenset({"townhouse", "farmhouse", "castle_keep", "lean_to"})
+STRUCTURE_LABELS: dict[str, str] = {  # town placements
     "well": "the well",
     "storehouse": "a storehouse",
     "townhouse": "a house",
     "farmhouse": "a farmhouse",
     "castle_gatehouse": "a gatehouse",
+    "castle_keep": "the keep",
 }
+CAMP_STRUCTURE_LABELS: dict[str, str] = {"lean_to": "a lean-to", "fire_pit": "the fire pit"}  # camp placements
 STRUCTURE_NAMES: dict[str, str] = {  # structures with a name of their own (by placement id)
     "main-gate": "the main gate",
     "west-gate": "the west gate",
@@ -130,13 +132,16 @@ class Place:
 
 @dataclass(frozen=True)
 class Structure:
+    """A town placement (id = placement id) or a camp's (id = "<camp site>:<placement id>")."""
+
     id: str
     kind: str
     label: str
-    centre_xz: tuple[float, float]
+    centre_xz: tuple[float, float]  # local metres of its chart: the town's, or around its camp's anchor
     door_xz: tuple[float, float]  # a walkable spot in front of it
     centre: Vec3
     door: Vec3
+    site: str = "town"
 
     @property
     def is_home(self) -> bool:
@@ -214,6 +219,14 @@ def _frame(site: Site) -> TangentFrame:
     return TangentFrame(up=up, east=np.array(anchor.east), north=north)
 
 
+def site_unit(radius_m: float, site: Site, x: float, z: float) -> Vec3:
+    """A site's local metres (x east, z south around its anchor, on its plateau) as a direction on the globe."""
+    anchor = site.anchor
+    r = radius_m + anchor.height_m
+    up, east, north = np.array(anchor.position), np.array(anchor.east), np.array(anchor.north)
+    return normalize(as_vec(up * r + east * x - north * z))
+
+
 def _nearest_walkable(walk: WalkGrid, x: float, z: float) -> tuple[float, float]:
     """The centre of the walkable cell nearest to the point (searching outward in rings)."""
     size = walk.cell_size
@@ -275,6 +288,9 @@ def build_sim_world(
         rows = biomes == BIOME_IDS[biome_name]
         for column, resource in enumerate(RESOURCES):
             caps[rows, column] = biome_caps.get(resource, 0)
+    reeds = caps[:, RESOURCE_INDEX["reeds"]]
+    banks = river & np.isin(biomes, [BIOME_IDS[name] for name in RESOURCE_CAPS])  # rivers through living ground
+    reeds[banks] = np.maximum(reeds[banks], RIVER_REEDS)
     caps[in_town] = 0
 
     places: dict[str, Place] = {}
@@ -313,6 +329,25 @@ def build_sim_world(
             centre=chart.to_unit(placement.x, placement.z),
             door=chart.to_unit(*door),
         )
+
+    for camp in view.sites:
+        if camp.kind != "camp":
+            continue
+        for placement in camp.placements:
+            if placement.kind not in CAMP_STRUCTURE_LABELS:
+                continue
+            door = placement.front(0.75)
+            structure_id = f"{camp.id}:{placement.id}"
+            structures[structure_id] = Structure(
+                id=structure_id,
+                kind=placement.kind,
+                label=CAMP_STRUCTURE_LABELS[placement.kind],
+                centre_xz=(placement.x, placement.z),
+                door_xz=door,
+                centre=site_unit(view.radius_m, camp, placement.x, placement.z),
+                door=site_unit(view.radius_m, camp, *door),
+                site=camp.id,
+            )
 
     _, town_lon = lat_lon(chart.frame.up)
     return SimWorld(
