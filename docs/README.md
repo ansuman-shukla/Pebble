@@ -16,3 +16,4 @@ Start with the vision, then read in order. Each design doc is short and owns one
 | [design/09-roadmap.md](design/09-roadmap.md) | milestones M0-M11 and later versions |
 | [decisions.md](decisions.md) | accepted decisions and open questions |
 | [findings/](findings/) | dated experiment results |
+| [plans/](plans/) | execution briefs per phase (start: [phase A](plans/2026-10-28-phase-a-world.md)) |
