@@ -1,10 +1,11 @@
-import { CameraControls } from '@react-three/drei';
+import { CameraControls, useGLTF } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
 import {
   memo,
   Suspense,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -15,7 +16,16 @@ import { Label, LabelOverlay, LabelProjector } from '@/components/world/labels';
 import { useLabelStore } from '@/hooks/use-label-store';
 import type { LabelStore } from '@/lib/world/label-store';
 import { Button } from '@/components/ui/button';
-import { ANIMALS, type AnimalKind, assetSize } from '@/lib/world/assets';
+import {
+  ANIMALS,
+  type AnimalKind,
+  assetBaseY,
+  assetSize,
+  assetUrl,
+  PROPS,
+  type PropKind,
+} from '@/lib/world/assets';
+import { BIOME_PROPS, LANDMARK_KINDS } from '@/lib/world/biome-props';
 import { CITIZEN_LOOKS, type Region } from '@/lib/world/citizen-looks';
 
 const ROW_Z: Record<Region, number> = { town: -4.5, band_a: 0, band_b: 4.5 };
@@ -24,11 +34,27 @@ const ANIMAL_SPACING = 3.6;
 const ANIMALS_PER_ROW = 8;
 const ANIMAL_KINDS = Object.keys(ANIMALS) as AnimalKind[];
 
+// every kind the globe scatters or builds landmarks from, shortest first so tall trees stand at the back
+const WILD_KINDS = [
+  ...new Set<PropKind>([
+    ...Object.values(BIOME_PROPS).flatMap((entries) =>
+      entries.map((entry) => entry.kind),
+    ),
+    ...LANDMARK_KINDS,
+  ]),
+].sort((a, b) => assetSize(PROPS[a]).y - assetSize(PROPS[b]).y);
+const WILD_SPACING = 6;
+const WILD_ROW_DEPTH = 7;
+const WILD_PER_ROW = 8;
+const WILD_FRONT_Z = -26;
+const WILD_ROWS = Math.ceil(WILD_KINDS.length / WILD_PER_ROW);
+
 // camera position + target per view
 const VIEWS = {
   citizens: [0, 9, 13, 0, 0.6, 0],
   animals: [0, 6, 22, 0, 0.8, 11],
   all: [0, 10, 24, 0, 1, 5],
+  'plants & rocks': [0, 25, 6, 0, 0, -40],
 } as const;
 type View = keyof typeof VIEWS;
 
@@ -50,6 +76,51 @@ function animalLabelHeight(kind: AnimalKind) {
 
 function rowX(index: number, count: number, spacing: number) {
   return (index - (count - 1) / 2) * spacing;
+}
+
+function PropModel({ kind }: { kind: PropKind }) {
+  const id = PROPS[kind];
+  const { scene } = useGLTF(assetUrl(id));
+  const model = useMemo(() => scene.clone(true), [scene]);
+  return <primitive object={model} position-y={assetBaseY(id)} />;
+}
+
+function WildProps({ labels }: { labels: LabelStore }) {
+  return (
+    <>
+      <mesh
+        rotation-x={-Math.PI / 2}
+        position-z={WILD_FRONT_Z - ((WILD_ROWS - 1) * WILD_ROW_DEPTH) / 2}
+        receiveShadow
+      >
+        <planeGeometry
+          args={[
+            WILD_PER_ROW * WILD_SPACING + 8,
+            WILD_ROWS * WILD_ROW_DEPTH + 6,
+          ]}
+        />
+        <meshStandardMaterial color="#b5b48a" />
+      </mesh>
+      {WILD_KINDS.map((kind, index) => (
+        <group
+          key={kind}
+          position={[
+            rowX(index % WILD_PER_ROW, WILD_PER_ROW, WILD_SPACING),
+            0,
+            WILD_FRONT_Z - Math.floor(index / WILD_PER_ROW) * WILD_ROW_DEPTH,
+          ]}
+        >
+          <PropModel kind={kind} />
+          <Label
+            store={labels}
+            id={`prop-${kind}`}
+            text={kind.replaceAll('_', ' ')}
+            height={assetSize(PROPS[kind]).y + 0.3}
+          />
+        </group>
+      ))}
+    </>
+  );
 }
 
 type GallerySceneProps = {
@@ -120,6 +191,11 @@ const GalleryScene = memo(function GalleryScene({
           </group>
         ))}
       </Suspense>
+      {view === 'plants & rocks' && (
+        <Suspense fallback={null}>
+          <WildProps labels={labels} />
+        </Suspense>
+      )}
       <GalleryCamera view={view} />
       <LabelProjector store={labels} />
     </Canvas>
@@ -152,7 +228,7 @@ export function GalleryPage() {
       <div className="absolute top-3 left-3 flex items-center gap-2 rounded-lg bg-white/80 p-2 text-sm shadow">
         <span>
           {ready.size}/{CITIZEN_LOOKS.length} citizens, {ANIMAL_KINDS.length}{' '}
-          animals
+          animals, {WILD_KINDS.length} plants &amp; rocks
         </span>
         <Button
           size="sm"

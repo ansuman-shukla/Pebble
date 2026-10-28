@@ -154,6 +154,72 @@
       }
     },
     {
+      "id": "basalt-column-outcrop-f1339d",
+      "title": "Basalt Column Outcrop",
+      "kit": "prehistoric-valley-8638dc",
+      "class": "prop",
+      "triangles": 408,
+      "size_m": {
+        "x": 1.5,
+        "y": 3.01,
+        "z": 2
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/basalt-column-outcrop-f1339d.glb",
+          "path": "public/assets/polyfork/basalt-column-outcrop-f1339d/basalt-column-outcrop-f1339d.glb",
+          "sha256": "d1d1e59a1dcc055e581794428d6240fb67a289e4aac05e336395816122f5adde",
+          "bytes": 47888
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/basalt-column-outcrop-f1339d-params.json",
+          "path": "public/assets/polyfork/basalt-column-outcrop-f1339d/basalt-column-outcrop-f1339d-params.json",
+          "sha256": "4f10a7113277a6f343e855eb2170bfff6588003fed9e9aad46f7e1227f1b9fc8",
+          "bytes": 3399
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/basalt-column-outcrop-f1339d-colliders.json",
+          "path": "public/assets/polyfork/basalt-column-outcrop-f1339d/basalt-column-outcrop-f1339d-colliders.json",
+          "sha256": "3436885a58673d8ca8095c008e8599931815af6ad265bf8b235b9cbf76a843fb",
+          "bytes": 5224
+        }
+      }
+    },
+    {
+      "id": "birch-tree-181b33",
+      "title": "Birch Tree",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "prop",
+      "triangles": 619,
+      "size_m": {
+        "x": 3.01,
+        "y": 6.49,
+        "z": 2.1
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/birch-tree-181b33.glb",
+          "path": "public/assets/polyfork/birch-tree-181b33/birch-tree-181b33.glb",
+          "sha256": "7a676f59c617785c2fc757a6bd9b86fcc6aa79dbae43b8f452b6ad2cdc0684f8",
+          "bytes": 71992
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/birch-tree-181b33-params.json",
+          "path": "public/assets/polyfork/birch-tree-181b33/birch-tree-181b33-params.json",
+          "sha256": "399809db021b7ea1cf3c27a6282becec0a8b4981b2d90bdccd92078feacef204",
+          "bytes": 5953
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/birch-tree-181b33-colliders.json",
+          "path": "public/assets/polyfork/birch-tree-181b33/birch-tree-181b33-colliders.json",
+          "sha256": "7a08e3628c95310412568b7e276eec503a1feedcc274a2d26955340b3798353d",
+          "bytes": 5066
+        }
+      }
+    },
+    {
       "id": "black-bear-adbdc7",
       "title": "Black Bear",
       "kit": "nature-forest-kit-f29d6a",
@@ -183,6 +249,72 @@
           "path": "public/assets/polyfork/black-bear-adbdc7/black-bear-adbdc7-colliders.json",
           "sha256": "100ac24c919f7523c185c674aff99c2dc0537a355f3361ceea8bf4a21be126e6",
           "bytes": 6665
+        }
+      }
+    },
+    {
+      "id": "boulder-field-cluster-08e364",
+      "title": "Boulder Field Cluster",
+      "kit": "alpine-and-snow-092f66",
+      "class": "prop",
+      "triangles": 734,
+      "size_m": {
+        "x": 2.5,
+        "y": 1.45,
+        "z": 2
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/boulder-field-cluster-08e364.glb",
+          "path": "public/assets/polyfork/boulder-field-cluster-08e364/boulder-field-cluster-08e364.glb",
+          "sha256": "ef36f2a69a13a9e56f478e3e789a2f7ad7bdd0b0eb284a3f53cf95b3ba4a861d",
+          "bytes": 115476
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/boulder-field-cluster-08e364-params.json",
+          "path": "public/assets/polyfork/boulder-field-cluster-08e364/boulder-field-cluster-08e364-params.json",
+          "sha256": "32594892205b6b302419e6b4ac8b49a35bdb194cbfba09f45993ec1439b4fe3c",
+          "bytes": 6066
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/boulder-field-cluster-08e364-colliders.json",
+          "path": "public/assets/polyfork/boulder-field-cluster-08e364/boulder-field-cluster-08e364-colliders.json",
+          "sha256": "5a416e8d7d8b8dd3dbc30b73cbb8bce32b608b381e3b2af0c27bf0270cc8bf99",
+          "bytes": 5930
+        }
+      }
+    },
+    {
+      "id": "broadleaf-oak-997c22",
+      "title": "Broadleaf Oak",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "prop",
+      "triangles": 457,
+      "size_m": {
+        "x": 4.5,
+        "y": 6.98,
+        "z": 3.57
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/broadleaf-oak-997c22.glb",
+          "path": "public/assets/polyfork/broadleaf-oak-997c22/broadleaf-oak-997c22.glb",
+          "sha256": "73621a66709a1cf5cfa9df60aac2c818c530f8063cd00255e4a1a402d2987b46",
+          "bytes": 53536
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/broadleaf-oak-997c22-params.json",
+          "path": "public/assets/polyfork/broadleaf-oak-997c22/broadleaf-oak-997c22-params.json",
+          "sha256": "dded64f4c0e55462d2818bec8617041007b3a78ea315e7656c6c0928acefec33",
+          "bytes": 5581
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/broadleaf-oak-997c22-colliders.json",
+          "path": "public/assets/polyfork/broadleaf-oak-997c22/broadleaf-oak-997c22-colliders.json",
+          "sha256": "8178a51f28dc4472af26a94231b086a11925ee1034ce2435ca0631502c488594",
+          "bytes": 4784
         }
       }
     },
@@ -286,6 +418,39 @@
       }
     },
     {
+      "id": "cattail-reed-6abbb3",
+      "title": "Cattail Reed",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "prop",
+      "triangles": 388,
+      "size_m": {
+        "x": 0.39,
+        "y": 1.2,
+        "z": 0.29
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/cattail-reed-6abbb3.glb",
+          "path": "public/assets/polyfork/cattail-reed-6abbb3/cattail-reed-6abbb3.glb",
+          "sha256": "f8a37854d278e32da87471d1994454256a1e19864e209af1e86066eb7d743c18",
+          "bytes": 45612
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/cattail-reed-6abbb3-params.json",
+          "path": "public/assets/polyfork/cattail-reed-6abbb3/cattail-reed-6abbb3-params.json",
+          "sha256": "9d27a38c568574f509aa02aa15e1697d2b75d4a818b8c3251bc7d15c75aeeca7",
+          "bytes": 5960
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/cattail-reed-6abbb3-colliders.json",
+          "path": "public/assets/polyfork/cattail-reed-6abbb3/cattail-reed-6abbb3-colliders.json",
+          "sha256": "7ddaabb4a970ffea52893f270aa58eb3dd05e96bf9e47ba6da3f5834a11be494",
+          "bytes": 4142
+        }
+      }
+    },
+    {
       "id": "cherry-tree-a710a9",
       "title": "Cherry Tree",
       "kit": "medieval-japan-cb01ad",
@@ -385,6 +550,39 @@
       }
     },
     {
+      "id": "dead-tree-6795fa",
+      "title": "Dead Tree",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "prop",
+      "triangles": 536,
+      "size_m": {
+        "x": 3.19,
+        "y": 5,
+        "z": 1.87
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/dead-tree-6795fa.glb",
+          "path": "public/assets/polyfork/dead-tree-6795fa/dead-tree-6795fa.glb",
+          "sha256": "3e77302edc86d4a8f798fd1e0632d7480388ced94f9a5aca6efeeedef3073203",
+          "bytes": 62488
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/dead-tree-6795fa-params.json",
+          "path": "public/assets/polyfork/dead-tree-6795fa/dead-tree-6795fa-params.json",
+          "sha256": "45708150caf3c5c16b15e07de4b85c7c461e2932cd0a664a2d5bc1d02f62d2c8",
+          "bytes": 4395
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/dead-tree-6795fa-colliders.json",
+          "path": "public/assets/polyfork/dead-tree-6795fa/dead-tree-6795fa-colliders.json",
+          "sha256": "fecbea50544870f201b37c5c128390292038a9b6c4623c04690a79134933456e",
+          "bytes": 4252
+        }
+      }
+    },
+    {
       "id": "dobei-plaster-wall-b75823",
       "title": "Dobei Plaster Wall",
       "kit": "medieval-japan-cb01ad",
@@ -414,6 +612,39 @@
           "path": "public/assets/polyfork/dobei-plaster-wall-b75823/dobei-plaster-wall-b75823-colliders.json",
           "sha256": "493f1a2b44e4de29b21488f862573cf67bf73a351e049566f756d32bc5517439",
           "bytes": 2085
+        }
+      }
+    },
+    {
+      "id": "driftwood-log-90340b",
+      "title": "Driftwood Log",
+      "kit": "pirate-cove-2ebea4",
+      "class": "prop",
+      "triangles": 522,
+      "size_m": {
+        "x": 2.02,
+        "y": 0.81,
+        "z": 0.81
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/driftwood-log-90340b.glb",
+          "path": "public/assets/polyfork/driftwood-log-90340b/driftwood-log-90340b.glb",
+          "sha256": "8df9dc4a90aa43e1c253888fa7e16cd40220d54ce0e584ca77fd8464d065eaf6",
+          "bytes": 60940
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/driftwood-log-90340b-params.json",
+          "path": "public/assets/polyfork/driftwood-log-90340b/driftwood-log-90340b-params.json",
+          "sha256": "9c49356b6bb5e3f19b00a8d8e63c2488d6a68af23f5df2ceb64a0311de933e84",
+          "bytes": 3436
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/driftwood-log-90340b-colliders.json",
+          "path": "public/assets/polyfork/driftwood-log-90340b/driftwood-log-90340b-colliders.json",
+          "sha256": "a7d89562259c7d0a0c1d95f283cbfb88a449bbb1689fd38cf88ee804a127a53f",
+          "bytes": 4984
         }
       }
     },
@@ -451,6 +682,72 @@
       }
     },
     {
+      "id": "dwarf-pine-mat-faee77",
+      "title": "Dwarf Pine Mat",
+      "kit": "alpine-and-snow-092f66",
+      "class": "prop",
+      "triangles": 798,
+      "size_m": {
+        "x": 2.5,
+        "y": 1.29,
+        "z": 2.5
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/dwarf-pine-mat-faee77.glb",
+          "path": "public/assets/polyfork/dwarf-pine-mat-faee77/dwarf-pine-mat-faee77.glb",
+          "sha256": "145f494434a36671e9718f2ae5673b708d7cc58c7f3d9d1ae1e72eec26b1db80",
+          "bytes": 92308
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/dwarf-pine-mat-faee77-params.json",
+          "path": "public/assets/polyfork/dwarf-pine-mat-faee77/dwarf-pine-mat-faee77-params.json",
+          "sha256": "3c2934df267bbadcb0b0db26a2965e6ea9b13899a613fe45d68254a0c4d46b7a",
+          "bytes": 5125
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/dwarf-pine-mat-faee77-colliders.json",
+          "path": "public/assets/polyfork/dwarf-pine-mat-faee77/dwarf-pine-mat-faee77-colliders.json",
+          "sha256": "092187793256bc4090449b91ea9d7ce715fec2f0d860658c60fa38e2b69eb263",
+          "bytes": 9043
+        }
+      }
+    },
+    {
+      "id": "espino-cd3edd",
+      "title": "Espino",
+      "kit": "chile-fiestas-patrias-87e847",
+      "class": "prop",
+      "triangles": 791,
+      "size_m": {
+        "x": 4.6,
+        "y": 3.54,
+        "z": 4.03
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/espino-cd3edd.glb",
+          "path": "public/assets/polyfork/espino-cd3edd/espino-cd3edd.glb",
+          "sha256": "218b5bcdeca4d245f14ae9babd1ee9c10eefe7e305b33a7c8d6a1a79a6275795",
+          "bytes": 97460
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/espino-cd3edd-params.json",
+          "path": "public/assets/polyfork/espino-cd3edd/espino-cd3edd-params.json",
+          "sha256": "0148e8f01abb52863e9c93ed8fb63bb4a46f2c051cbdf977b724319f40f72637",
+          "bytes": 3749
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/espino-cd3edd-colliders.json",
+          "path": "public/assets/polyfork/espino-cd3edd/espino-cd3edd-colliders.json",
+          "sha256": "32fb504ec8bf04564257a008c29bf73023f25047cfce0cd0182e9aead6c66522",
+          "bytes": 5621
+        }
+      }
+    },
+    {
       "id": "fallen-log-1685fb",
       "title": "Fallen Log",
       "kit": "nature-forest-kit-f29d6a",
@@ -480,6 +777,39 @@
           "path": "public/assets/polyfork/fallen-log-1685fb/fallen-log-1685fb-colliders.json",
           "sha256": "a37a0b8f54bf29dbaffa8edb7ec3c4e67b10e8dccf8269a7d54263236f544ccd",
           "bytes": 3667
+        }
+      }
+    },
+    {
+      "id": "fern-plant-1559b8",
+      "title": "Fern Plant",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "prop",
+      "triangles": 802,
+      "size_m": {
+        "x": 1.02,
+        "y": 0.72,
+        "z": 0.97
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/fern-plant-1559b8.glb",
+          "path": "public/assets/polyfork/fern-plant-1559b8/fern-plant-1559b8.glb",
+          "sha256": "eb623fb5ad8896f204c65c426816af8ddd1d2fdd7ce9e60fa1698999cfc276f3",
+          "bytes": 92852
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/fern-plant-1559b8-params.json",
+          "path": "public/assets/polyfork/fern-plant-1559b8/fern-plant-1559b8-params.json",
+          "sha256": "b0369032ef11630fd5cddfc5c882d792b9fa7390c845cf92a1accf8e327b8517",
+          "bytes": 5333
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/fern-plant-1559b8-colliders.json",
+          "path": "public/assets/polyfork/fern-plant-1559b8/fern-plant-1559b8-colliders.json",
+          "sha256": "3d25ec91f1d0dc563ab83db702f5e33249ea8b06b88cc36228f202eac2650ba0",
+          "bytes": 4716
         }
       }
     },
@@ -649,6 +979,138 @@
       }
     },
     {
+      "id": "fumarole-vent-8280ba",
+      "title": "Fumarole Vent",
+      "kit": "prehistoric-valley-8638dc",
+      "class": "prop",
+      "triangles": 898,
+      "size_m": {
+        "x": 1.5,
+        "y": 1.62,
+        "z": 1.5
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/fumarole-vent-8280ba.glb",
+          "path": "public/assets/polyfork/fumarole-vent-8280ba/fumarole-vent-8280ba.glb",
+          "sha256": "e693588a3eebc5ecd57c5cb98c910109d56370a3e0760fee4ab8a59343b4b064",
+          "bytes": 224048
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/fumarole-vent-8280ba-params.json",
+          "path": "public/assets/polyfork/fumarole-vent-8280ba/fumarole-vent-8280ba-params.json",
+          "sha256": "c72a8275ccf1b32766210b72ea3217ec30572db2bd325f35543635ebd94e3d65",
+          "bytes": 6104
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/fumarole-vent-8280ba-colliders.json",
+          "path": "public/assets/polyfork/fumarole-vent-8280ba/fumarole-vent-8280ba-colliders.json",
+          "sha256": "46d32a8b8f1a3ce3ff4e3c7d895633ba3e4f07e2120ef148d8cbeeae8122ae38",
+          "bytes": 8001
+        }
+      }
+    },
+    {
+      "id": "geyser-cone-2b5033",
+      "title": "Geyser Cone",
+      "kit": "prehistoric-valley-8638dc",
+      "class": "prop",
+      "triangles": 524,
+      "size_m": {
+        "x": 3,
+        "y": 1.21,
+        "z": 3
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/geyser-cone-2b5033.glb",
+          "path": "public/assets/polyfork/geyser-cone-2b5033/geyser-cone-2b5033.glb",
+          "sha256": "396135cb4f2d52ba8a85f3e7875fb46b8d2e8246331d26a7a906e825f32500d8",
+          "bytes": 66260
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/geyser-cone-2b5033-params.json",
+          "path": "public/assets/polyfork/geyser-cone-2b5033/geyser-cone-2b5033-params.json",
+          "sha256": "aa313c271d404d27be27f501f972174a2c820cf0fab986e19f625983ea74cecc",
+          "bytes": 5594
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/geyser-cone-2b5033-colliders.json",
+          "path": "public/assets/polyfork/geyser-cone-2b5033/geyser-cone-2b5033-colliders.json",
+          "sha256": "e3e5502b49741e3821f9c4abc14c966c15f5ccf06a186e0d9c54161a28fe4649",
+          "bytes": 3736
+        }
+      }
+    },
+    {
+      "id": "grass-tuft-62e90c",
+      "title": "Grass tuft",
+      "kit": "salvage-commons-d0be9f",
+      "class": "prop",
+      "triangles": 532,
+      "size_m": {
+        "x": 0.34,
+        "y": 0.3,
+        "z": 0.28
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/grass-tuft-62e90c.glb",
+          "path": "public/assets/polyfork/grass-tuft-62e90c/grass-tuft-62e90c.glb",
+          "sha256": "9d36caacd10befb970b8311455c71c9704ac12cb521cace27ab059c021106bae",
+          "bytes": 62076
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/grass-tuft-62e90c-params.json",
+          "path": "public/assets/polyfork/grass-tuft-62e90c/grass-tuft-62e90c-params.json",
+          "sha256": "c98c4ef4c896ba6625c5bf3170fd0a76ef7bd82ccf5de17d588bc91dca806b6f",
+          "bytes": 5347
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/grass-tuft-62e90c-colliders.json",
+          "path": "public/assets/polyfork/grass-tuft-62e90c/grass-tuft-62e90c-colliders.json",
+          "sha256": "57837c281377d5a3630e373a09d0c1b6eb375aa181665e0565ea285c20af9e91",
+          "bytes": 5507
+        }
+      }
+    },
+    {
+      "id": "grass-tuft-a40a08",
+      "title": "Grass Tuft",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "prop",
+      "triangles": 368,
+      "size_m": {
+        "x": 0.34,
+        "y": 0.35,
+        "z": 0.31
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/grass-tuft-a40a08.glb",
+          "path": "public/assets/polyfork/grass-tuft-a40a08/grass-tuft-a40a08.glb",
+          "sha256": "c56e86d9474b47bff64e51750a42e6b11c3a438bd502c3c625c7e7bb9e7ed1e0",
+          "bytes": 43384
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/grass-tuft-a40a08-params.json",
+          "path": "public/assets/polyfork/grass-tuft-a40a08/grass-tuft-a40a08-params.json",
+          "sha256": "dc989c29a2c54ff2c72cf2aaa14679fa7ff2656f259b5cc1cb765543c95e0b66",
+          "bytes": 4352
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/grass-tuft-a40a08-colliders.json",
+          "path": "public/assets/polyfork/grass-tuft-a40a08/grass-tuft-a40a08-colliders.json",
+          "sha256": "0a46a2fa5454c5ddc22c31ecd3cd2f86fad87a006f5b6df18cc9962140f9939c",
+          "bytes": 3730
+        }
+      }
+    },
+    {
       "id": "hasa-rice-drying-rack-d545bc",
       "title": "Hasa Rice Drying Rack",
       "kit": "medieval-japan-cb01ad",
@@ -711,6 +1173,72 @@
           "path": "public/assets/polyfork/horse-tether-rail-b26462/horse-tether-rail-b26462-colliders.json",
           "sha256": "25bf73cbce5529f820f4068bd50ae7934cb2cadaeeea7a448ad58b5489e913cb",
           "bytes": 6120
+        }
+      }
+    },
+    {
+      "id": "hot-spring-pool-26312c",
+      "title": "Hot Spring Pool",
+      "kit": "prehistoric-valley-8638dc",
+      "class": "prop",
+      "triangles": 680,
+      "size_m": {
+        "x": 3,
+        "y": 3.32,
+        "z": 2.5
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/hot-spring-pool-26312c.glb",
+          "path": "public/assets/polyfork/hot-spring-pool-26312c/hot-spring-pool-26312c.glb",
+          "sha256": "2ecab2a0b9cafd7d33addd47868813a538326b4e72f279c81fec6e8eb6c388fb",
+          "bytes": 217492
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/hot-spring-pool-26312c-params.json",
+          "path": "public/assets/polyfork/hot-spring-pool-26312c/hot-spring-pool-26312c-params.json",
+          "sha256": "154b87131b1d3c1949389676da9e5a9a28ad06464aa13519532d5ada0e411002",
+          "bytes": 5432
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/hot-spring-pool-26312c-colliders.json",
+          "path": "public/assets/polyfork/hot-spring-pool-26312c/hot-spring-pool-26312c-colliders.json",
+          "sha256": "8197fdcaab44d1686dbd5abc5fa7a8148c8dbcd339ea68398e0286d580db7bc0",
+          "bytes": 6018
+        }
+      }
+    },
+    {
+      "id": "ice-chunk-b23ad7",
+      "title": "Ice Chunk",
+      "kit": "space-base-kit-cf65de",
+      "class": "prop",
+      "triangles": 253,
+      "size_m": {
+        "x": 0.83,
+        "y": 0.88,
+        "z": 0.86
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/ice-chunk-b23ad7.glb",
+          "path": "public/assets/polyfork/ice-chunk-b23ad7/ice-chunk-b23ad7.glb",
+          "sha256": "1dda0a5231c8ac4e05294b385b22f243033d760c994e4cdecdac9acbc2c84639",
+          "bytes": 30452
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/ice-chunk-b23ad7-params.json",
+          "path": "public/assets/polyfork/ice-chunk-b23ad7/ice-chunk-b23ad7-params.json",
+          "sha256": "ffa8f59a00b3a077b48aa43b9d8d747f539893563d6925972d4214084c933c71",
+          "bytes": 3586
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/ice-chunk-b23ad7-colliders.json",
+          "path": "public/assets/polyfork/ice-chunk-b23ad7/ice-chunk-b23ad7-colliders.json",
+          "sha256": "d78bdb4e38d8949401aa237e25dbf59027a8ccc3e7fef666290ae96594cb0a6c",
+          "bytes": 2484
         }
       }
     },
@@ -946,6 +1474,105 @@
       }
     },
     {
+      "id": "large-boulder-a29b99",
+      "title": "Large Boulder",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "prop",
+      "triangles": 566,
+      "size_m": {
+        "x": 2.2,
+        "y": 0.66,
+        "z": 1.39
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/large-boulder-a29b99.glb",
+          "path": "public/assets/polyfork/large-boulder-a29b99/large-boulder-a29b99.glb",
+          "sha256": "4146a165b9085fca7260c7cf9cdc2261aa4dc5bbd46b119c6040096b71040c16",
+          "bytes": 65964
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/large-boulder-a29b99-params.json",
+          "path": "public/assets/polyfork/large-boulder-a29b99/large-boulder-a29b99-params.json",
+          "sha256": "04728759edc69c6030f8e869c3e0aa96beca58528515de7f417269079871f882",
+          "bytes": 4759
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/large-boulder-a29b99-colliders.json",
+          "path": "public/assets/polyfork/large-boulder-a29b99/large-boulder-a29b99-colliders.json",
+          "sha256": "f421fffdf228a812fc64fe4d59043562144e9b84fdd24767c1cf1d33d5426c35",
+          "bytes": 7653
+        }
+      }
+    },
+    {
+      "id": "large-coastal-boulder-a2cab1",
+      "title": "Large Coastal Boulder",
+      "kit": "pirate-cove-2ebea4",
+      "class": "prop",
+      "triangles": 190,
+      "size_m": {
+        "x": 2.4,
+        "y": 1.54,
+        "z": 1.73
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/large-coastal-boulder-a2cab1.glb",
+          "path": "public/assets/polyfork/large-coastal-boulder-a2cab1/large-coastal-boulder-a2cab1.glb",
+          "sha256": "60957d77680ac691d1134202667c1e0148f3ace629f1b2e8fbb29fdc368de572",
+          "bytes": 23080
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/large-coastal-boulder-a2cab1-params.json",
+          "path": "public/assets/polyfork/large-coastal-boulder-a2cab1/large-coastal-boulder-a2cab1-params.json",
+          "sha256": "2b216ab4b48af186c984413561fa63975ceb31d246f92e451134119e0a5688a3",
+          "bytes": 4015
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/large-coastal-boulder-a2cab1-colliders.json",
+          "path": "public/assets/polyfork/large-coastal-boulder-a2cab1/large-coastal-boulder-a2cab1-colliders.json",
+          "sha256": "e2888b044fdedffdade55c3966eabae52469077ae6aa3bef538ac5fee10c81e0",
+          "bytes": 3781
+        }
+      }
+    },
+    {
+      "id": "lava-rock-pile-d56d19",
+      "title": "Lava Rock Pile",
+      "kit": "prehistoric-valley-8638dc",
+      "class": "prop",
+      "triangles": 866,
+      "size_m": {
+        "x": 2,
+        "y": 0.9,
+        "z": 1.5
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/lava-rock-pile-d56d19.glb",
+          "path": "public/assets/polyfork/lava-rock-pile-d56d19/lava-rock-pile-d56d19.glb",
+          "sha256": "61e8cb76fdc263cbfdc6ba9e756e393d6edf61a7997bb42a6dc8a89aa903b5fe",
+          "bytes": 100104
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/lava-rock-pile-d56d19-params.json",
+          "path": "public/assets/polyfork/lava-rock-pile-d56d19/lava-rock-pile-d56d19-params.json",
+          "sha256": "ccdb01d552ac7db8ad5e69d376cd14f204a0c33d77238c2c82c8fe1d191f5fbc",
+          "bytes": 5837
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/lava-rock-pile-d56d19-colliders.json",
+          "path": "public/assets/polyfork/lava-rock-pile-d56d19/lava-rock-pile-d56d19-colliders.json",
+          "sha256": "6c94631043eaaa7b5b41bb75810c821a3081360850fd75701132779ad3b7718e",
+          "bytes": 9280
+        }
+      }
+    },
+    {
       "id": "lean-to-shelter-f0709f",
       "title": "Lean-To Shelter",
       "kit": "nature-forest-kit-f29d6a",
@@ -1041,6 +1668,39 @@
           "path": "public/assets/polyfork/machiya-townhouse-8ef64e/machiya-townhouse-8ef64e-colliders.json",
           "sha256": "20b826377069226c44393514880c840b41322c9689a32f029c19ad81909365ff",
           "bytes": 1792
+        }
+      }
+    },
+    {
+      "id": "marram-grass-tuft-8c7a99",
+      "title": "Marram Grass Tuft",
+      "kit": "coast-and-boardwalk-d883fd",
+      "class": "prop",
+      "triangles": 574,
+      "size_m": {
+        "x": 1.16,
+        "y": 0.93,
+        "z": 1.08
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/marram-grass-tuft-8c7a99.glb",
+          "path": "public/assets/polyfork/marram-grass-tuft-8c7a99/marram-grass-tuft-8c7a99.glb",
+          "sha256": "c174b14843823a7c2a6d93eb3dcad47493c73a8e01bd9e1451811ddf39bd7458",
+          "bytes": 202044
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/marram-grass-tuft-8c7a99-params.json",
+          "path": "public/assets/polyfork/marram-grass-tuft-8c7a99/marram-grass-tuft-8c7a99-params.json",
+          "sha256": "4490116fb070faacdedc1ea86c552862a0bb8ee5a292f989c3d8785e42815f2a",
+          "bytes": 6021
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/marram-grass-tuft-8c7a99-colliders.json",
+          "path": "public/assets/polyfork/marram-grass-tuft-8c7a99/marram-grass-tuft-8c7a99-colliders.json",
+          "sha256": "748a8912f0497d2410090e0655b17a396151afce618aadc2736798a2ab9e73b3",
+          "bytes": 6446
         }
       }
     },
@@ -1239,6 +1899,72 @@
           "path": "public/assets/polyfork/nobori-banner-ae4d88/nobori-banner-ae4d88-colliders.json",
           "sha256": "e687f054b03021846b52e839e2f5fa87217b1d747f3bcccc211eb6819b2f8863",
           "bytes": 3886
+        }
+      }
+    },
+    {
+      "id": "oak-tree-50ee7c",
+      "title": "Oak Tree",
+      "kit": "medieval-village-kit-ca0b43",
+      "class": "prop",
+      "triangles": 686,
+      "size_m": {
+        "x": 5.14,
+        "y": 6.17,
+        "z": 4.22
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/oak-tree-50ee7c.glb",
+          "path": "public/assets/polyfork/oak-tree-50ee7c/oak-tree-50ee7c.glb",
+          "sha256": "4a8aca87c32c4356a22babdfa9f53f701a867454e6391f568790952ffbc66e9f",
+          "bytes": 79620
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/oak-tree-50ee7c-params.json",
+          "path": "public/assets/polyfork/oak-tree-50ee7c/oak-tree-50ee7c-params.json",
+          "sha256": "ab649e0bdc98c4192d6cc28a854ababfee05d6eb3aed9df09f5e540f12cc0661",
+          "bytes": 5694
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/oak-tree-50ee7c-colliders.json",
+          "path": "public/assets/polyfork/oak-tree-50ee7c/oak-tree-50ee7c-colliders.json",
+          "sha256": "d6e02ef3c82db7e5179cd15cdf38782be9a198f2398cae1fe3c7eaf5c904f08e",
+          "bytes": 7784
+        }
+      }
+    },
+    {
+      "id": "obsidian-shard-cluster-c8f5d3",
+      "title": "Obsidian Shard Cluster",
+      "kit": "prehistoric-valley-8638dc",
+      "class": "prop",
+      "triangles": 530,
+      "size_m": {
+        "x": 1,
+        "y": 0.9,
+        "z": 1
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/obsidian-shard-cluster-c8f5d3.glb",
+          "path": "public/assets/polyfork/obsidian-shard-cluster-c8f5d3/obsidian-shard-cluster-c8f5d3.glb",
+          "sha256": "1b711aa501d9009908c0bb4f0f9461c988f78a9d3ec1f690a3fc61de325451f4",
+          "bytes": 61528
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/obsidian-shard-cluster-c8f5d3-params.json",
+          "path": "public/assets/polyfork/obsidian-shard-cluster-c8f5d3/obsidian-shard-cluster-c8f5d3-params.json",
+          "sha256": "3cc461c922b95842fccb5d5d9e6f80ad94c446007659fdf56b517bf191e5d205",
+          "bytes": 5143
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/obsidian-shard-cluster-c8f5d3-colliders.json",
+          "path": "public/assets/polyfork/obsidian-shard-cluster-c8f5d3/obsidian-shard-cluster-c8f5d3-colliders.json",
+          "sha256": "1cd6c461714895c423a91f61b801aee2802d2098f2451cea892ee430b835fb0d",
+          "bytes": 7624
         }
       }
     },
@@ -1540,6 +2266,72 @@
       }
     },
     {
+      "id": "rock-outcrop-158ac3",
+      "title": "Rock Outcrop",
+      "kit": "alpine-and-snow-092f66",
+      "class": "prop",
+      "triangles": 756,
+      "size_m": {
+        "x": 2.5,
+        "y": 2.05,
+        "z": 2.5
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/rock-outcrop-158ac3.glb",
+          "path": "public/assets/polyfork/rock-outcrop-158ac3/rock-outcrop-158ac3.glb",
+          "sha256": "11f80615734f350443f473223f825651dc1dc70d039ed9fbe161c37fcbc383f2",
+          "bytes": 119152
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/rock-outcrop-158ac3-params.json",
+          "path": "public/assets/polyfork/rock-outcrop-158ac3/rock-outcrop-158ac3-params.json",
+          "sha256": "147403c2f8086640a9e4e7c22389af362bd5b9655f8701b3cdf187b42bdc0aae",
+          "bytes": 7229
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/rock-outcrop-158ac3-colliders.json",
+          "path": "public/assets/polyfork/rock-outcrop-158ac3/rock-outcrop-158ac3-colliders.json",
+          "sha256": "cdc4ac9525b675b9b3201ed78b9f76169e56cca8837b8a2950a678bed85997d9",
+          "bytes": 8582
+        }
+      }
+    },
+    {
+      "id": "rock-spire-13819c",
+      "title": "Rock Spire",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "prop",
+      "triangles": 378,
+      "size_m": {
+        "x": 1.29,
+        "y": 3.5,
+        "z": 1.46
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/rock-spire-13819c.glb",
+          "path": "public/assets/polyfork/rock-spire-13819c/rock-spire-13819c.glb",
+          "sha256": "c1bbd4d0c9494d1065f373f652208155ed66e56b433befa9eea3761e49c2842e",
+          "bytes": 44508
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/rock-spire-13819c-params.json",
+          "path": "public/assets/polyfork/rock-spire-13819c/rock-spire-13819c-params.json",
+          "sha256": "3fa2223907dc9cff91c284be977b1c7122492c5533b5d33958600829743da7fc",
+          "bytes": 5425
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/rock-spire-13819c-colliders.json",
+          "path": "public/assets/polyfork/rock-spire-13819c/rock-spire-13819c-colliders.json",
+          "sha256": "53686bbcc79d422589e28e1961b96c7313055b5d8c14ee344b07dd9b08a83508",
+          "bytes": 3184
+        }
+      }
+    },
+    {
       "id": "roofed-well-43a2fc",
       "title": "Roofed Well",
       "kit": "medieval-japan-cb01ad",
@@ -1573,6 +2365,105 @@
       }
     },
     {
+      "id": "round-bush-cd2ac0",
+      "title": "Round Bush",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "prop",
+      "triangles": 573,
+      "size_m": {
+        "x": 1.27,
+        "y": 0.63,
+        "z": 0.87
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/round-bush-cd2ac0.glb",
+          "path": "public/assets/polyfork/round-bush-cd2ac0/round-bush-cd2ac0.glb",
+          "sha256": "51bcd13d32af61f10f1714049e25cc937946aad36c051d96d6e591b621d5e7b2",
+          "bytes": 66752
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/round-bush-cd2ac0-params.json",
+          "path": "public/assets/polyfork/round-bush-cd2ac0/round-bush-cd2ac0-params.json",
+          "sha256": "4243d5f28753207a12c39160f5dbdb7a813ee12f81ef7b6adecf1a73161b274e",
+          "bytes": 4677
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/round-bush-cd2ac0-colliders.json",
+          "path": "public/assets/polyfork/round-bush-cd2ac0/round-bush-cd2ac0-colliders.json",
+          "sha256": "5ed469251a12036c6cc3db946c08a9951e04c09f6cc341825f51d72415a29f46",
+          "bytes": 9703
+        }
+      }
+    },
+    {
+      "id": "sagebrush-700b03",
+      "title": "Sagebrush",
+      "kit": "frontier-town-a0085b",
+      "class": "prop",
+      "triangles": 684,
+      "size_m": {
+        "x": 1.05,
+        "y": 0.78,
+        "z": 0.82
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/sagebrush-700b03.glb",
+          "path": "public/assets/polyfork/sagebrush-700b03/sagebrush-700b03.glb",
+          "sha256": "eea2696f75c4011843f9b60ccf2718d94e12e23b41d72b76078fdaddd284af40",
+          "bytes": 141112
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/sagebrush-700b03-params.json",
+          "path": "public/assets/polyfork/sagebrush-700b03/sagebrush-700b03-params.json",
+          "sha256": "69d0a50fe3b77eed7d96a891634ff0c33d8597010457185f66d31f09e781e0d4",
+          "bytes": 5380
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/sagebrush-700b03-colliders.json",
+          "path": "public/assets/polyfork/sagebrush-700b03/sagebrush-700b03-colliders.json",
+          "sha256": "1b9ad9ebac606a9a882589a93103e3306cd322c0e1401c061a757951184fc7d6",
+          "bytes": 7733
+        }
+      }
+    },
+    {
+      "id": "scree-heap-42cce5",
+      "title": "Scree Heap",
+      "kit": "alpine-and-snow-092f66",
+      "class": "prop",
+      "triangles": 674,
+      "size_m": {
+        "x": 2.5,
+        "y": 0.52,
+        "z": 2.5
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/scree-heap-42cce5.glb",
+          "path": "public/assets/polyfork/scree-heap-42cce5/scree-heap-42cce5.glb",
+          "sha256": "fb66c9855705fdb3ce7a4e4ae6d4802952ce5962e6473f9afa47950b1e09b8eb",
+          "bytes": 78192
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/scree-heap-42cce5-params.json",
+          "path": "public/assets/polyfork/scree-heap-42cce5/scree-heap-42cce5-params.json",
+          "sha256": "e4b320b0afdd939732dd197fc53c059ad65a3fbabc6a460ad7a13dfdc3398bd1",
+          "bytes": 5140
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/scree-heap-42cce5-colliders.json",
+          "path": "public/assets/polyfork/scree-heap-42cce5/scree-heap-42cce5-colliders.json",
+          "sha256": "45d8d64f66dddb2ce18412e79c436ddf8f53b579d34975076c2d763a69b59a2e",
+          "bytes": 9063
+        }
+      }
+    },
+    {
       "id": "sculpted-pine-e45d4f",
       "title": "Sculpted Pine",
       "kit": "medieval-japan-cb01ad",
@@ -1602,6 +2493,72 @@
           "path": "public/assets/polyfork/sculpted-pine-e45d4f/sculpted-pine-e45d4f-colliders.json",
           "sha256": "2f1b77b57051101c058a139cb5c9587b53c64776f863fd1cecc88b17b681a344",
           "bytes": 5584
+        }
+      }
+    },
+    {
+      "id": "small-rock-db33a7",
+      "title": "Small Rock",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "prop",
+      "triangles": 202,
+      "size_m": {
+        "x": 0.35,
+        "y": 0.22,
+        "z": 0.26
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/small-rock-db33a7.glb",
+          "path": "public/assets/polyfork/small-rock-db33a7/small-rock-db33a7.glb",
+          "sha256": "fba46712adb7024252dcb6b7c4914abbb2210899c5718567b20d1524a4893322",
+          "bytes": 24436
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/small-rock-db33a7-params.json",
+          "path": "public/assets/polyfork/small-rock-db33a7/small-rock-db33a7-params.json",
+          "sha256": "53a25956a9f70c97f17ecd52d786f8aa5a1a4a34c481e792d98c8c9713e110c9",
+          "bytes": 5590
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/small-rock-db33a7-colliders.json",
+          "path": "public/assets/polyfork/small-rock-db33a7/small-rock-db33a7-colliders.json",
+          "sha256": "6a00acb95580601d6e7a6e7b68124704c841f6c05af91b61f146cbc6d90595fa",
+          "bytes": 3500
+        }
+      }
+    },
+    {
+      "id": "snow-laden-spruce-36716e",
+      "title": "Snow-Laden Spruce",
+      "kit": "alpine-and-snow-092f66",
+      "class": "prop",
+      "triangles": 765,
+      "size_m": {
+        "x": 3,
+        "y": 6.06,
+        "z": 3
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/snow-laden-spruce-36716e.glb",
+          "path": "public/assets/polyfork/snow-laden-spruce-36716e/snow-laden-spruce-36716e.glb",
+          "sha256": "657c865ee226efb9753e6939b3512848f265e9ff3e7ad9fef09c75cd65406a2e",
+          "bytes": 123568
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/snow-laden-spruce-36716e-params.json",
+          "path": "public/assets/polyfork/snow-laden-spruce-36716e/snow-laden-spruce-36716e-params.json",
+          "sha256": "99f4d2d970d2c9a3c53d5444c5d5c9b1b3477170be583a8495ac3dc93aa1261d",
+          "bytes": 5614
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/snow-laden-spruce-36716e-colliders.json",
+          "path": "public/assets/polyfork/snow-laden-spruce-36716e/snow-laden-spruce-36716e-colliders.json",
+          "sha256": "87b0554bf4a01d6ddb60b17e9081d7a7d68c3df5034da707fbc59a066f1443f2",
+          "bytes": 7141
         }
       }
     },
@@ -1738,6 +2695,39 @@
       }
     },
     {
+      "id": "tall-pine-tree-ab4108",
+      "title": "Tall Pine Tree",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "prop",
+      "triangles": 350,
+      "size_m": {
+        "x": 3.67,
+        "y": 9,
+        "z": 3.56
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/tall-pine-tree-ab4108.glb",
+          "path": "public/assets/polyfork/tall-pine-tree-ab4108/tall-pine-tree-ab4108.glb",
+          "sha256": "7f170b5f1abf6257cd22d2654743e0442b2a12b3453320f43f713877d336a9cd",
+          "bytes": 41304
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/tall-pine-tree-ab4108-params.json",
+          "path": "public/assets/polyfork/tall-pine-tree-ab4108/tall-pine-tree-ab4108-params.json",
+          "sha256": "3f251ef8c5b9db12e7cf9455d49ae526bf126cc7063c4ef3891b0fc0a0535e37",
+          "bytes": 3527
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/tall-pine-tree-ab4108-colliders.json",
+          "path": "public/assets/polyfork/tall-pine-tree-ab4108/tall-pine-tree-ab4108-colliders.json",
+          "sha256": "d3c05f6874f408c00028f1107881d11e50177514fe356840da8b5e85a003d7b6",
+          "bytes": 2352
+        }
+      }
+    },
+    {
       "id": "teahouse-bench-6b34e1",
       "title": "Teahouse Bench",
       "kit": "medieval-japan-cb01ad",
@@ -1837,6 +2827,39 @@
       }
     },
     {
+      "id": "termite-mound-9bc94b",
+      "title": "Termite Mound",
+      "kit": "prehistoric-valley-8638dc",
+      "class": "prop",
+      "triangles": 762,
+      "size_m": {
+        "x": 1.5,
+        "y": 2.01,
+        "z": 1.5
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/termite-mound-9bc94b.glb",
+          "path": "public/assets/polyfork/termite-mound-9bc94b/termite-mound-9bc94b.glb",
+          "sha256": "6a3c0d4e4e3c3e2ac2558346a1a4b40b295af7a3834ce394bb2e92c2312ce96a",
+          "bytes": 88232
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/termite-mound-9bc94b-params.json",
+          "path": "public/assets/polyfork/termite-mound-9bc94b/termite-mound-9bc94b-params.json",
+          "sha256": "d119168464fa16670da7ff49007c9ea1136421258305b402c12441e89bc4d7c9",
+          "bytes": 4494
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/termite-mound-9bc94b-colliders.json",
+          "path": "public/assets/polyfork/termite-mound-9bc94b/termite-mound-9bc94b-colliders.json",
+          "sha256": "a54b76c4633384009c0849d76c291e9961f669e4b2daf6c8516eeb49c72937a6",
+          "bytes": 2231
+        }
+      }
+    },
+    {
       "id": "terrace-stone-stair-494ef8",
       "title": "Terrace Stone Stair",
       "kit": "medieval-japan-cb01ad",
@@ -1903,6 +2926,39 @@
       }
     },
     {
+      "id": "tree-fern-78320e",
+      "title": "Tree Fern",
+      "kit": "prehistoric-valley-8638dc",
+      "class": "prop",
+      "triangles": 794,
+      "size_m": {
+        "x": 4.44,
+        "y": 8,
+        "z": 4.03
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/tree-fern-78320e.glb",
+          "path": "public/assets/polyfork/tree-fern-78320e/tree-fern-78320e.glb",
+          "sha256": "a06afa29e3a92acce04e3ae45bf99f2d667d1ba1835979b5442ac9b08c14a2a1",
+          "bytes": 102628
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/tree-fern-78320e-params.json",
+          "path": "public/assets/polyfork/tree-fern-78320e/tree-fern-78320e-params.json",
+          "sha256": "0ea453827500f4db97ddcd176e4a222aaa78eae7be1c7d90fef962d802e270a4",
+          "bytes": 6318
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/tree-fern-78320e-colliders.json",
+          "path": "public/assets/polyfork/tree-fern-78320e/tree-fern-78320e-colliders.json",
+          "sha256": "3edee43780fd1aed8fd8b0774b148e9041a2907998d9b6884c5eaad25b5b7044",
+          "bytes": 2825
+        }
+      }
+    },
+    {
       "id": "tsukubai-stone-basin-677586",
       "title": "Tsukubai Stone Basin",
       "kit": "medieval-japan-cb01ad",
@@ -1965,6 +3021,39 @@
           "path": "public/assets/polyfork/war-drum-on-stand-cbb91a/war-drum-on-stand-cbb91a-colliders.json",
           "sha256": "69bdf45fd815cda5f8b49327f60a472d6598f52e2bc51ce4e32acb3af2a465b7",
           "bytes": 5224
+        }
+      }
+    },
+    {
+      "id": "wildflower-68d3a1",
+      "title": "Wildflower",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "prop",
+      "triangles": 405,
+      "size_m": {
+        "x": 0.15,
+        "y": 0.4,
+        "z": 0.15
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/wildflower-68d3a1.glb",
+          "path": "public/assets/polyfork/wildflower-68d3a1/wildflower-68d3a1.glb",
+          "sha256": "1e06e538e14c436ace323c0b3d5c367b3569bf88550fdf64b0aa282b43f90bf4",
+          "bytes": 47616
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/wildflower-68d3a1-params.json",
+          "path": "public/assets/polyfork/wildflower-68d3a1/wildflower-68d3a1-params.json",
+          "sha256": "45f3add71f13e1b073d22be8f2238b74d233258e7a8ec8be124efa7f71efbfab",
+          "bytes": 4649
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/wildflower-68d3a1-colliders.json",
+          "path": "public/assets/polyfork/wildflower-68d3a1/wildflower-68d3a1-colliders.json",
+          "sha256": "bb42bc181f6c9f0812be72516f14d11d39e85792d39d5300d854bf6971a46b54",
+          "bytes": 6278
         }
       }
     },
@@ -2064,6 +3153,39 @@
           "path": "public/assets/polyfork/wooden-teoke-bucket-e65f35/wooden-teoke-bucket-e65f35-colliders.json",
           "sha256": "20e381401f30d8696d7111b5a8f115e4f37ed6dffbeece00b1b781642f71ccce",
           "bytes": 6891
+        }
+      }
+    },
+    {
+      "id": "young-pine-0d7695",
+      "title": "Young Pine",
+      "kit": "nature-forest-kit-f29d6a",
+      "class": "prop",
+      "triangles": 270,
+      "size_m": {
+        "x": 1.84,
+        "y": 3,
+        "z": 1.87
+      },
+      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
+      "files": {
+        "glb": {
+          "url": "https://polyfork.dev/cdn/young-pine-0d7695.glb",
+          "path": "public/assets/polyfork/young-pine-0d7695/young-pine-0d7695.glb",
+          "sha256": "e85c0c4ebbd855ecc04d2487c14e42870b44ae034358bb9dccc3ff7059bc93d2",
+          "bytes": 32212
+        },
+        "params": {
+          "url": "https://polyfork.dev/cdn/young-pine-0d7695-params.json",
+          "path": "public/assets/polyfork/young-pine-0d7695/young-pine-0d7695-params.json",
+          "sha256": "50a71f6c4ea5650110a88e63e28ca615dcbd311ecf404850c5ca7eeb370ffc32",
+          "bytes": 5066
+        },
+        "colliders": {
+          "url": "https://polyfork.dev/cdn/young-pine-0d7695-colliders.json",
+          "path": "public/assets/polyfork/young-pine-0d7695/young-pine-0d7695-colliders.json",
+          "sha256": "fcdb52151afe73a68673a3b21b587666b2c73c7623a0a9830d577a9c0c591046",
+          "bytes": 2711
         }
       }
     }

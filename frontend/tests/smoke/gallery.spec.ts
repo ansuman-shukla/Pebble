@@ -27,3 +27,34 @@ test('gallery shows all 15 citizens animated and every animal labelled', async (
   await expect(page.getByRole('button', { name: 'Stand still' })).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('gallery shows every landmark kind in the plants and rocks view', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+
+  await page.goto('/gallery');
+  await page.getByRole('button', { name: 'plants & rocks' }).click();
+
+  for (const kind of [
+    'giant_tree',
+    'rock_spire',
+    'boulder',
+    'basalt_column',
+    'lava_rock',
+    'fumarole',
+    'geyser',
+    'hot_spring_pool',
+    'obsidian',
+    'snowy_spruce',
+    'ice_block',
+  ]) {
+    await expect(page.locator(`[data-label="prop-${kind}"]`)).toHaveText(
+      kind.replaceAll('_', ' '),
+      { timeout: 20_000 },
+    );
+  }
+  await expect(page.locator('[data-label="prop-oak_tree"]')).toBeVisible();
+  expect(errors).toEqual([]);
+});

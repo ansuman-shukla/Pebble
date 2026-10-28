@@ -42,6 +42,7 @@
 | D36 | Lakes: a depression ≥ 3 m deep holds a lake that fills to its spill level when ≤ 8 m deep, else stays 8 m deep as a closed sink; other depressions fill into level flats; rivers follow the flood tree | filling every basin flooded 3 % of the planet with lakes; heights stay non-increasing along every river | 2026-10-28 |
 | D37 | Rivers the story needs (the town's mill river, the great falls and its outflow) are authored polylines cut as monotone channels; the rest emerge from flow accumulation | the town's stream and the falls must exist on every run of the spec | 2026-10-28 |
 | D38 | Noise is our own hash-based 3D gradient noise in numpy (numpy is the only new backend dependency) | same seed = same field on every numpy version; no extra package | 2026-10-28 |
+| D39 | The elder tree is the `giant_tree` kind (Medieval Village oak, 6.2 m) drawn scaled ×3-4, the one landmark exception to real-world scale | the catalogue has no giant tree; a gnarled multi-crown oak distinct from the forest oak reads as ancient when enlarged | 2026-10-28 |
 
 ## Open (recommendation first)
 
