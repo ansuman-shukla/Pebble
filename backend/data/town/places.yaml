@@ -1,0 +1,15 @@
+# Named places in the town: what citizens can know, walk to by name and talk about.
+#
+# at = where someone going there stands (town local metres, x east, z south; must be walkable);
+# radius_m = how close counts as being there. Homes are the houses themselves (townhouse, farmhouse placements).
+
+places:
+  - {id: well, name: the well, at: [-20, 52.5], radius_m: 6}
+  - {id: main-gate, name: the main gate, at: [0, 104], radius_m: 8}
+  - {id: west-gate, name: the west gate, at: [-104, 76], radius_m: 8}
+  - {id: market, name: the market, at: [20, 56], radius_m: 12}
+  - {id: castle, name: the castle, at: [0, 20], radius_m: 30}
+  - {id: temple, name: the temple, at: [70, -58], radius_m: 22}
+  - {id: storehouses, name: the storehouses, at: [70, 85], radius_m: 16}
+  - {id: training-ground, name: the training ground, at: [-70, -70], radius_m: 22}
+  - {id: rice-fields, name: the rice fields, at: [-112, 58], radius_m: 30}

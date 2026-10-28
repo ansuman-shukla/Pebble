@@ -39,6 +39,243 @@ export type Anchor = {
 };
 
 /**
+ * CitizenEntity
+ */
+export type CitizenEntity = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Look
+     */
+    look: string;
+    /**
+     * Appearance
+     */
+    appearance: string;
+    position: Position;
+    /**
+     * Cell
+     */
+    cell: number;
+    /**
+     * Alive
+     */
+    alive: boolean;
+    /**
+     * Asleep
+     */
+    asleep: boolean;
+    /**
+     * Action
+     */
+    action: string | null;
+    /**
+     * Action Label
+     */
+    action_label: string;
+    /**
+     * State
+     */
+    state: Array<string>;
+    /**
+     * Cause Of Death
+     */
+    cause_of_death: string | null;
+};
+
+/**
+ * ClockChange
+ *
+ * Payload of a `clock` engine command (also the admin request body).
+ */
+export type ClockChange = {
+    /**
+     * Speed
+     */
+    speed?: number | null;
+    /**
+     * Paused
+     */
+    paused?: boolean | null;
+};
+
+/**
+ * ClockCommandAccepted
+ */
+export type ClockCommandAccepted = {
+    /**
+     * Command Id
+     */
+    command_id: number;
+    /**
+     * Run Id
+     */
+    run_id: string;
+};
+
+/**
+ * ClockView
+ */
+export type ClockView = {
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Engine Alive
+     */
+    engine_alive: boolean;
+    /**
+     * Tick
+     */
+    tick: number;
+    /**
+     * Game Time
+     */
+    game_time: number;
+    /**
+     * Day
+     */
+    day: number;
+    /**
+     * Time
+     */
+    time: string;
+    /**
+     * Speed
+     */
+    speed: number;
+    /**
+     * Paused
+     */
+    paused: boolean;
+};
+
+/**
+ * EntitiesView
+ */
+export type EntitiesView = {
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Tick
+     */
+    tick: number;
+    /**
+     * Day
+     */
+    day: number;
+    /**
+     * Time
+     */
+    time: string;
+    /**
+     * Citizens
+     */
+    citizens: Array<CitizenEntity>;
+};
+
+/**
+ * EventView
+ */
+export type EventView = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Seq
+     */
+    seq: number;
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * World Seed
+     */
+    world_seed: number;
+    /**
+     * Tick
+     */
+    tick: number;
+    /**
+     * Game Time
+     */
+    game_time: number;
+    /**
+     * Real Time
+     */
+    real_time: string;
+    /**
+     * Actor Kind
+     */
+    actor_kind: 'citizen' | 'animal' | 'world' | 'player' | 'god';
+    /**
+     * Actor Id
+     */
+    actor_id: string | null;
+    /**
+     * Type
+     */
+    type: 'tick_summary' | 'citizen_spawned' | 'perceived' | 'action_started' | 'action_finished' | 'action_interrupted' | 'said' | 'thought' | 'need_changed' | 'injured' | 'died' | 'item_moved' | 'resource_changed' | 'knowledge_changed' | 'animal_spawned' | 'fire_changed' | 'intervention' | 'snapshot';
+    /**
+     * Cell
+     */
+    cell: number | null;
+    /**
+     * Position
+     */
+    position: Array<number> | null;
+    /**
+     * Visibility
+     */
+    visibility: 'public' | 'private';
+    /**
+     * Cause Id
+     */
+    cause_id: string | null;
+    /**
+     * Mind
+     */
+    mind: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Payload
+     */
+    payload: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * EventsPage
+ */
+export type EventsPage = {
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Events
+     */
+    events: Array<EventView>;
+};
+
+/**
  * Extent
  */
 export type Extent = {
@@ -77,6 +314,16 @@ export type Footprint = {
 };
 
 /**
+ * HTTPValidationError
+ */
+export type HttpValidationError = {
+    /**
+     * Detail
+     */
+    detail?: Array<ValidationError>;
+};
+
+/**
  * HealthStatus
  */
 export type HealthStatus = {
@@ -88,6 +335,32 @@ export type HealthStatus = {
      * Database
      */
     database: 'up' | 'down';
+};
+
+/**
+ * Position
+ */
+export type Position = {
+    /**
+     * Unit
+     */
+    unit: [
+        number,
+        number,
+        number
+    ];
+    /**
+     * Height M
+     */
+    height_m: number;
+    /**
+     * Lat
+     */
+    lat: number;
+    /**
+     * Lon
+     */
+    lon: number;
 };
 
 /**
@@ -291,6 +564,34 @@ export type TownWater = {
 };
 
 /**
+ * ValidationError
+ */
+export type ValidationError = {
+    /**
+     * Location
+     */
+    loc: Array<string | number>;
+    /**
+     * Message
+     */
+    msg: string;
+    /**
+     * Error Type
+     */
+    type: string;
+    /**
+     * Input
+     */
+    input?: unknown;
+    /**
+     * Context
+     */
+    ctx?: {
+        [key: string]: unknown;
+    };
+};
+
+/**
  * WorldView
  */
 export type WorldView = {
@@ -347,6 +648,156 @@ export type WorldView = {
      */
     sites: Array<Site>;
 };
+
+export type AdminChangeClockData = {
+    body: ClockChange;
+    path?: never;
+    query?: {
+        /**
+         * Run Id
+         */
+        run_id?: string | null;
+    };
+    url: '/api/v1/admin/clock';
+};
+
+export type AdminChangeClockErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AdminChangeClockError = AdminChangeClockErrors[keyof AdminChangeClockErrors];
+
+export type AdminChangeClockResponses = {
+    /**
+     * Successful Response
+     */
+    202: ClockCommandAccepted;
+};
+
+export type AdminChangeClockResponse = AdminChangeClockResponses[keyof AdminChangeClockResponses];
+
+export type ClockReadGameClockData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Run Id
+         */
+        run_id?: string | null;
+    };
+    url: '/api/v1/clock';
+};
+
+export type ClockReadGameClockErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ClockReadGameClockError = ClockReadGameClockErrors[keyof ClockReadGameClockErrors];
+
+export type ClockReadGameClockResponses = {
+    /**
+     * Successful Response
+     */
+    200: ClockView;
+};
+
+export type ClockReadGameClockResponse = ClockReadGameClockResponses[keyof ClockReadGameClockResponses];
+
+export type EntitiesReadEntitiesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Run Id
+         */
+        run_id?: string | null;
+        /**
+         * At
+         *
+         * replay this tick instead of now
+         */
+        at?: number | null;
+    };
+    url: '/api/v1/entities';
+};
+
+export type EntitiesReadEntitiesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EntitiesReadEntitiesError = EntitiesReadEntitiesErrors[keyof EntitiesReadEntitiesErrors];
+
+export type EntitiesReadEntitiesResponses = {
+    /**
+     * Successful Response
+     */
+    200: EntitiesView;
+};
+
+export type EntitiesReadEntitiesResponse = EntitiesReadEntitiesResponses[keyof EntitiesReadEntitiesResponses];
+
+export type EventsReadEventsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Run Id
+         */
+        run_id?: string | null;
+        /**
+         * Actor
+         */
+        actor?: string | null;
+        /**
+         * Type
+         */
+        type?: Array<'tick_summary' | 'citizen_spawned' | 'perceived' | 'action_started' | 'action_finished' | 'action_interrupted' | 'said' | 'thought' | 'need_changed' | 'injured' | 'died' | 'item_moved' | 'resource_changed' | 'knowledge_changed' | 'animal_spawned' | 'fire_changed' | 'intervention' | 'snapshot'> | null;
+        /**
+         * Since Tick
+         */
+        since_tick?: number | null;
+        /**
+         * Until Tick
+         */
+        until_tick?: number | null;
+        /**
+         * After Seq
+         */
+        after_seq?: number | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/events';
+};
+
+export type EventsReadEventsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EventsReadEventsError = EventsReadEventsErrors[keyof EventsReadEventsErrors];
+
+export type EventsReadEventsResponses = {
+    /**
+     * Successful Response
+     */
+    200: EventsPage;
+};
+
+export type EventsReadEventsResponse = EventsReadEventsResponses[keyof EventsReadEventsResponses];
 
 export type HealthReadHealthData = {
     body?: never;

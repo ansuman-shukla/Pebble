@@ -18,6 +18,19 @@ make -C backend dev                                   # Postgres :5544 + API htt
 cd frontend && ./scripts/pnpm.sh install && ./scripts/pnpm.sh dev   # http://localhost:5180
 ```
 
+The simulation runs as its own process next to the API (the API only reads what it writes):
+
+```sh
+make -C backend engine                                # resume the latest run, or start one with the dev cast
+make -C backend engine ENGINE_ARGS="--new-run --speed 10"   # new run, 10 game minutes per real second
+```
+
+It ticks one game minute per real second by default (`--speed 1..60`, `--paused`, `--headless --ticks N` to
+fast-forward) and stops cleanly on Ctrl-C (it snapshots, and the next start resumes). Watch and steer it through
+`GET /api/v1/clock`, `POST /api/v1/admin/clock` (`{"paused": true}`, `{"speed": 30}`), `GET /api/v1/entities[?at=tick]`
+and `GET /api/v1/events?actor=…&type=…&since_tick=…`. `uv run python -m scripts.bench_sim 15 24` (in `backend/`)
+measures tick cost and event volume.
+
 The browser only talks to the frontend's own origin: vite (`dev` and `preview`) proxies `/api` to the backend
 (`PEBBLE_API_TARGET`, default http://localhost:8100), so the world also loads through http://127.0.0.1:5180 or a
 preview proxy. Set `VITE_API_URL` only to call the backend directly (its `FRONTEND_ORIGINS` must allow the origin).
@@ -46,4 +59,4 @@ town's main gate.
 
 `/town` shows the flat town alone; `/?mock=1` uses the small test world instead of the backend's.
 
-Status: phase A, M4 planet viewer.
+Status: phase A, M5 simulation core (engine, bodies, world contract, event store).
