@@ -76,6 +76,8 @@ const TOWN_GROUND_RADIUS = 225;
 const TOWN_CLEARING = 300;
 /** ... and from camps and landmarks. */
 const SITE_CLEARING = 45;
+/** The readout names a camp or landmark within this many metres of its anchor (the town: its clearing). */
+const SITE_NEARBY = 100;
 const LABEL_DISTANCE = 40;
 
 interface Start {
@@ -83,8 +85,17 @@ interface Start {
   facing: Vector3;
 }
 
+interface PlanetSite {
+  id: string;
+  name: string;
+  direction: Vector3;
+  /** Metres from the anchor within which the player is "at" the site. */
+  reach: number;
+}
+
 interface Planet {
   view: WorldView;
+  sites: PlanetSite[];
   terrain: GlobeTerrain;
   town: { mapping: SiteMapping; height: number; lon: number; grass: string };
   hole: TerrainHole;
@@ -104,6 +115,12 @@ function buildPlanet(view: WorldView): Planet {
   );
   return {
     view,
+    sites: view.sites.map((candidate) => ({
+      id: candidate.id,
+      name: candidate.name,
+      direction: new Vector3(...candidate.anchor.position),
+      reach: candidate.kind === 'town' ? TOWN_CLEARING : SITE_NEARBY,
+    })),
     terrain,
     town: {
       mapping: anchorMapping(site.anchor, globe.radius),
@@ -134,6 +151,17 @@ function buildPlanet(view: WorldView): Planet {
         }
       : null,
   };
+}
+
+/** The site the player stands at, if any. */
+function siteAt(planet: Planet, move: GlobeMove): PlanetSite | null {
+  const here = new Vector3(move.x, move.y, move.z).normalize();
+  const radius = planet.terrain.globe.radius;
+  return (
+    planet.sites.find(
+      (site) => here.angleTo(site.direction) * radius < site.reach,
+    ) ?? null
+  );
 }
 
 /** The town spawn mapped onto the planet, or `?at=lat,lon[,bearing]`. */
@@ -342,6 +370,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
     ? localMinutes(minutes, planet.town.lon, player.lon)
     : null;
   const biome = player ? view.biome_names[player.biome] : null;
+  const site = player ? siteAt(planet, player) : null;
 
   return (
     <div
@@ -356,6 +385,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
       data-player-lat={player && player.lat.toFixed(5)}
       data-player-lon={player && player.lon.toFixed(5)}
       data-player-biome={biome}
+      data-player-site={site?.id}
       data-town-x={player?.town && round(player.town.x)}
       data-town-z={player?.town && round(player.town.z)}
       data-camera-mode={cameraMode}
@@ -443,6 +473,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
           {Math.abs(player.lat).toFixed(2)}°{player.lat >= 0 ? 'N' : 'S'}{' '}
           {Math.abs(player.lon).toFixed(2)}°{player.lon >= 0 ? 'E' : 'W'} ·{' '}
           {biome?.replace('_', ' ')}
+          {site && ` · ${site.name}`}
           {player.town &&
             ` · town ${player.town.x.toFixed(0)}, ${player.town.z.toFixed(0)}`}
         </div>
