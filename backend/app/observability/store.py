@@ -91,6 +91,8 @@ class EventStore:
     def __init__(self, session: Session, run: Run, ids: UlidFactory, clock: Callable[[], datetime] = _now) -> None:
         self.session = session
         self.run = run
+        # kept apart: `run` expires on every commit and can't be refreshed once the connection is lost
+        self.run_id = run.id
         self.ids = ids
         self.clock = clock
         self._ids_by_seq: dict[int, str] = {}
@@ -99,10 +101,10 @@ class EventStore:
         if seq is None:
             return None
         if seq not in self._ids_by_seq:
-            statement = select(Event.id).where(Event.run_id == self.run.id, Event.seq == seq)
+            statement = select(Event.id).where(Event.run_id == self.run_id, Event.seq == seq)
             found = self.session.exec(statement).first()
             if found is None:
-                raise ValueError(f"cause seq {seq} of run {self.run.id} is not stored")
+                raise ValueError(f"cause seq {seq} of run {self.run_id} is not stored")
             self._ids_by_seq[seq] = found
         return self._ids_by_seq[seq]
 
@@ -116,7 +118,7 @@ class EventStore:
             rows.append(
                 {
                     "id": event_id,
-                    "run_id": self.run.id,
+                    "run_id": self.run_id,
                     "seq": draft.seq,
                     "world_seed": self.run.world_seed,
                     "tick": draft.tick,
@@ -138,7 +140,7 @@ class EventStore:
         self.notify(drafts[0].seq, drafts[-1].seq, drafts[-1].tick)
 
     def notify(self, first_seq: int, last_seq: int, tick: int) -> None:
-        payload = json.dumps({"run_id": self.run.id, "tick": tick, "first_seq": first_seq, "last_seq": last_seq})
+        payload = json.dumps({"run_id": self.run_id, "tick": tick, "first_seq": first_seq, "last_seq": last_seq})
         self.session.execute(
             text("SELECT pg_notify(:channel, :payload)"), {"channel": EVENTS_CHANNEL, "payload": payload}
         )
@@ -146,7 +148,7 @@ class EventStore:
     def snapshot(self, snapshot: SimSnapshot) -> Snapshot:
         row = Snapshot(
             id=self.ids.new(),
-            run_id=self.run.id,
+            run_id=self.run_id,
             tick=snapshot.tick,
             last_seq=snapshot.next_seq - 1,
             state=snapshot.model_dump(mode="json"),
