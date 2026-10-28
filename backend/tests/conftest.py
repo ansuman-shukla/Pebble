@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel
 
 from app.core.db import engine
-from app.db.models import World
+from app.db import models as _db_models  # noqa: F401  # registers every table on SQLModel.metadata
 from app.main import app
 from app.sim.navigation import Planner
 from app.sim.simulation import Simulation
@@ -25,7 +25,7 @@ def db_session() -> Iterator[Session]:
     """A session inside a transaction that is rolled back afterwards; its commits only release savepoints."""
     with engine.connect() as connection:
         transaction = connection.begin()
-        SQLModel.metadata.create_all(connection, tables=[SQLModel.metadata.tables[World.__tablename__]])
+        SQLModel.metadata.create_all(connection)  # every table in app.db.models, inside the rolled-back transaction
         with Session(bind=connection, join_transaction_mode="create_savepoint") as session:
             yield session
         transaction.rollback()
