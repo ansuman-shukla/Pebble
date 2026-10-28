@@ -258,9 +258,19 @@ test('the mock feed streams each walk ahead like the engine: the next tick lands
       expect(citizen.speed_mps).toBeGreaterThan(0.8); // 5 km/h × pace (elders 0.6)
       expect(citizen.speed_mps).toBeLessThan(1.4);
       const path = citizenPath(citizen, world.radius_m);
-      expect(pathLength(path)).toBeLessThanOrEqual(
-        2 * 60 * citizen.speed_mps + 1e-6,
-      );
+      // two ticks of walking ahead, or up to where the walk ends (straight here)
+      const stop = frames
+        .slice(k + 1)
+        .map((later) => later.citizens.find(({ id }) => id === citizen.id)!)
+        .find((later) => later.activity !== 'walking');
+      if (stop) {
+        const left =
+          new Vector3(...citizen.position.unit).angleTo(
+            new Vector3(...stop.position.unit),
+          ) * world.radius_m;
+        const ahead = Math.min(2 * 60 * citizen.speed_mps, left);
+        expect(pathLength(path)).toBeCloseTo(ahead, 0);
+      }
       advance(path, 60);
       const landed = next.citizens.find(({ id }) => id === citizen.id)!;
       const metres =
