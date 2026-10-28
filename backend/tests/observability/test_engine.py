@@ -8,7 +8,7 @@ import pytest
 from sqlmodel import Session, col, select
 
 from app.db.models import EngineCommand, Event, Run, Snapshot
-from app.engine import Clock, EngineLoop, open_loop
+from app.engine import HEARTBEAT_S, POLL_S, Clock, EngineLoop, open_loop
 from app.observability.store import latest_snapshot, queue_command
 from app.sim.citizens import CITIZENS, DEV_CITIZENS, load_citizens
 from app.sim.clock import game_minute
@@ -163,3 +163,22 @@ def test_paused_time_is_not_game_time(db_session: Session, sim_world: SimWorld) 
     ]
     loop.run_ticks(1, headless=False)
     assert fake.ticked_at == pytest.approx([160.0], abs=1e-6)
+
+
+def test_an_engine_waiting_for_its_next_tick_stamps_a_heartbeat_every_second(
+    db_session: Session, sim_world: SimWorld, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    loop, fake = _timed_loop(db_session, sim_world, speed=1)
+    stamps: list[float] = []
+    commit = loop.store.commit
+
+    def stamped(*args: Any, **kwargs: Any) -> None:
+        stamps.append(fake.t)
+        commit(*args, **kwargs)
+
+    monkeypatch.setattr(loop.store, "commit", stamped)
+    loop.run_ticks(1, headless=False)
+    assert fake.ticked_at == pytest.approx([60.0])
+    gaps = [later - earlier for earlier, later in zip(stamps, stamps[1:], strict=False)]
+    assert max(gaps) <= HEARTBEAT_S + POLL_S  # alive within the api's 5 s
+    assert 50 <= len(stamps) <= 70  # about once a second, not on every quarter-second poll

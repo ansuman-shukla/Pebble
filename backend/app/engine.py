@@ -44,7 +44,8 @@ from app.world.spec import load_site_kinds, load_world_spec
 from app.world.store import WorldKey, world_key
 from app.world_api.facade import WorldApi
 
-PAUSED_POLL_S = 0.25
+POLL_S = 0.25  # how often a waiting engine looks for commands
+HEARTBEAT_S = 1.0  # a waiting engine (paused, or between real-time ticks) stamps the run this often
 RETRY_FIRST_S = 0.5  # reconnect backoff: doubles per failed attempt up to the cap, forever
 RETRY_MAX_S = 10.0
 APPLICATION_NAME = "pebble-engine"  # the engine's connections in pg_stat_activity
@@ -118,6 +119,7 @@ class EngineLoop:
     now: Callable[[], float] = time.monotonic
     game_seconds: float = 0.0  # real-time game seconds passed since the last tick (a tick is due at SECONDS_PER_TICK)
     counted_at: float | None = None  # when game_seconds was last brought up to date
+    beat_at: float | None = None  # when a waiting engine last stamped its heartbeat
 
     @property
     def run(self) -> Run:
@@ -173,20 +175,26 @@ class EngineLoop:
         self._count_game_time(realtime)
         self.apply_commands()
         if realtime:
-            if self.clock.paused:
-                self.store.commit(self.sim.tick, self.clock.speed, self.clock.paused)  # heartbeat
-                self.idle_sleep(PAUSED_POLL_S)
-                return
-            wait = (SECONDS_PER_TICK - self.game_seconds) / self.clock.speed
+            wait = POLL_S if self.clock.paused else (SECONDS_PER_TICK - self.game_seconds) / self.clock.speed
             if wait > 0:
-                self.store.session.commit()  # ends the poll's read
-                self.idle_sleep(min(wait, PAUSED_POLL_S))
+                self._heartbeat()
+                self.idle_sleep(min(wait, POLL_S))
                 return
             self.game_seconds -= SECONDS_PER_TICK
         started = time.perf_counter()
         self.tick()
         if self.sim.tick % TICKS_PER_HOUR == 0:
             log.info("tick %s (%.1f ms)", self.sim.tick, (time.perf_counter() - started) * 1000)
+
+    def _heartbeat(self) -> None:
+        """Stamp the run about once a second while no ticks come (a tick a real minute at ×1), so spectators see the
+        engine is alive; in between, just end the poll's read."""
+        now = self.now()
+        if self.beat_at is None or now - self.beat_at >= HEARTBEAT_S:
+            self.store.commit(self.sim.tick, self.clock.speed, self.clock.paused)
+            self.beat_at = now
+        else:
+            self.store.session.commit()
 
     def _count_game_time(self, realtime: bool) -> None:
         """Add the game seconds passed at the current speed since the last count (none while paused or catching up)."""
