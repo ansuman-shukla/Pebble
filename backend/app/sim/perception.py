@@ -1,8 +1,8 @@
 """What a citizen senses, in words (03-actions-perception, "Perception"), and resolving what they refer to.
 
 Sight: ~150 m by day, ~20 m at night (linear through twilight), ×0.4 in forest, ×1.3 on hills. No occlusion in v0.
-A look around groups like things ("three lean-tos", "plenty of wood on the ground"; D62) and lists them by importance
-within a word budget (D61): everyone in view, every water, your home, the nearest food, shelter and fire, then the rest
+A look around groups like things ("three lean-tos", "plenty of wood on the ground"; D64) and lists them by importance
+within a word budget (D63): everyone in view, every water, your home, the nearest food, shelter and fire, then the rest
 nearest first.
 """
 
@@ -33,7 +33,7 @@ from app.world_api.models import (
 )
 
 COMPASS = ("north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west")
-SIGHT_WORDS = 120  # people, animals and things seen are listed in about this many words (D61)
+SIGHT_WORDS = 120  # people, animals and things seen are listed in about this many words (D63)
 COUNT_WORDS = {2: "two", 3: "three", 4: "four", 5: "five"}  # then "several", and "many" from ten
 GROUP_NOUNS: dict[str, str] = {  # structure kinds seen in numbers
     "storehouse": "storehouses",
