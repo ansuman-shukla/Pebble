@@ -62,7 +62,7 @@ export const BIOME_PROPS: Record<BiomeName, ScatterEntry[]> = {
   taiga: [
     { kind: 'pine_tree', perCell: 7, scale: [0.8, 1.3] },
     { kind: 'young_pine', perCell: 3, scale: [0.7, 1.2] },
-    { kind: 'snowy_spruce', perCell: 1, scale: [0.85, 1.2] },
+    { kind: 'snowy_spruce', perCell: 0.5, scale: [0.85, 1.2] },
     { kind: 'fern', perCell: 1.5, scale: [0.8, 1.2] },
     { kind: 'small_rock', perCell: 1, scale: [0.8, 1.6] },
     { kind: 'fallen_log', perCell: 0.3, scale: [0.9, 1.2] },
