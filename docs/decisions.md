@@ -32,6 +32,9 @@
 | D26 | Citizen looks are configs for Polyfork's shared humanoid engine, authored in the frontend by look id; the backend citizens spec will reference look ids | covers Stone Age people with no custom modelling; one rig for all | 2026-10-28 |
 | D27 | Missing animals are recoloured/rescaled relatives (elk, antelope, boar, polar bear, goat); seal and snake are dropped from v0 | catalogue gaps; remix GLBs lose their animations | 2026-10-28 |
 | D28 | Milestone PRs are stacked (each branch starts from the previous milestone's branch, PR base = that branch) while earlier PRs await review | work continues without merging | 2026-10-28 |
+| D29 | Doors of walk-through buildings (the gatehouse) are opened at runtime on the model, and the matching collider parts swing with them | Polyfork ships models and colliders with doors shut; the gate must be walkable and look open | 2026-10-28 |
+| D30 | On flat ground the moat bridge is lowered (y = -1.68) so its deck meets the ground; revisit with terrain in M3 | the model is built to stand on a moat floor 1.6 m below the banks | 2026-10-28 |
+| D31 | The town spec is authored YAML in local metres (x east, z south) with runs, tiles, areas and water; the backend's walkability grid is the reachability truth for tests and later the simulation | readable, diffable layout that drops onto the globe unchanged; one place to check that every building is reachable | 2026-10-28 |
 
 ## Open (recommendation first)
 
