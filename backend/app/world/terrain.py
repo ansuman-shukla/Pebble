@@ -15,6 +15,7 @@ BoolArray = NDArray[np.bool_]
 _MIN_LAND_M = 0.5
 _LOWEST_LAND_M = 1.0  # base land starts this high above the sea
 _SHALLOWEST_SEA_M = -2.0  # and the sea floor this deep
+BLEND_GRADE = 0.6  # steepest rise or fall (≈ 31°) around a plateau or hill
 _SHELF_FIELD = 0.6  # continental field depth where the sea floor reaches min_sea_m (a gentle shelf)
 _SEA_DEPTH = 0.25  # authored seas are shallower than open ocean
 _SEA_SHORE = 0.8  # noise on a sea's reach (in radii) so its shore isn't a circle
@@ -173,7 +174,10 @@ def _flatten(
     site_id: str, heights: FloatArray, distance: FloatArray, h0: float, radius: float, blend: float, authored: bool
 ) -> SiteArea:
     weight = smoothstep(radius + blend, radius, distance)
-    heights[:] = heights + (h0 - heights) * weight
+    blended = heights + (h0 - heights) * weight
+    # past the plateau the ground may rise or fall at most BLEND_GRADE (a valley or a ramp, never a wall)
+    reach = np.maximum(distance - radius, 0.0) * BLEND_GRADE
+    heights[:] = np.clip(blended, h0 - reach, h0 + reach)
     flat = distance <= max(radius, float(distance.min()))
     heights[flat] = h0
     return SiteArea(

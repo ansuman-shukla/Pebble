@@ -4,7 +4,7 @@ import pytest
 from app.world.grid import build_grid
 from app.world.spec import Falls, Hill, Plateau, SiteSpec, Volcano, load_world_spec
 from app.world.sphere import angle_between, unit_from_lat_lon
-from app.world.terrain import base_terrain, loop_band, polyline_distance, shape_site, smooth, smoothstep
+from app.world.terrain import BLEND_GRADE, base_terrain, loop_band, polyline_distance, shape_site, smooth, smoothstep
 
 GRID = build_grid(30)
 SPEC = load_world_spec()
@@ -77,12 +77,18 @@ def test_plateau_flattens_to_its_height_and_blends_out() -> None:
     assert area.height_m == 8 and area.authored_height
     np.testing.assert_array_equal(heights[distance <= 230], 8)
     np.testing.assert_array_equal(area.flat, distance <= 230)
-    np.testing.assert_array_equal(heights[distance > 300], before[distance > 300])
+    # past the blend the terrain is untouched unless it rises or falls faster than the blend grade from the rim
+    outside = distance > 300
+    reach = (distance[outside] - 230) * BLEND_GRADE
+    np.testing.assert_array_equal(heights[outside], np.clip(before[outside], 8 - reach, 8 + reach))
+    assert (heights[outside] != before[outside]).any()
     ring = (distance > 240) & (distance < 290)
     between = (np.minimum(before[ring], 8) <= heights[ring] + 1e-9) & (
         heights[ring] <= np.maximum(before[ring], 8) + 1e-9
     )
     assert between.all()
+    rim = distance > 230
+    assert (np.abs(heights[rim] - 8) <= (distance[rim] - 230) * BLEND_GRADE + 1e-9).all()
 
 
 def test_hill_rises_above_the_terrain() -> None:
