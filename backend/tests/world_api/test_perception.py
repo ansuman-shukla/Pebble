@@ -181,6 +181,37 @@ def test_a_lake_you_can_drink_from_is_right_beside_you(new_sim: Callable[..., Si
     assert refused is not None and refused.text == "There's no water within reach."
 
 
+def test_no_river_is_told_inside_the_town_where_only_the_well_gives_water(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    """Regression (#21): on the world's river cells under the town a look said "a river right beside you" while
+    `drink` refused there, as the well is the town's only water."""
+    sim = new_sim()
+    world = sim.world
+    spots = [
+        world.unit(cell)
+        for cell in range(world.cell_count)
+        if world.river[cell] and world.town.walk.is_walkable(*(world.town_point(world.unit(cell)) or (1e9, 1e9)))
+    ]
+    assert spots  # the town's own walkable ground lies on some of the world's river cells
+    citizen = sim.add_citizen(make_spec())
+    citizen.body.thirst = 50.0
+    api = WorldApi(sim, citizen.id)
+    for spot in spots:
+        _put(sim, citizen, spot)
+        assert not any(
+            seen.label == "a river" and seen.nearness == "right beside you" for seen in api.look_around().things
+        )
+        rivers = [
+            int(thing.ref.split(":")[1])
+            for thing in things_in_view(sim.core, citizen)
+            if thing.ref.startswith("river:")
+        ]
+        assert not any(world.in_town[cell] for cell in rivers)  # a river told is one you can drink from at its cell
+        refused = api.drink().result
+        assert refused is not None and refused.text == "There's no water within reach."
+
+
 def _sight(label: str, kind: ThingKind, tier: int, distance_m: float) -> Sight:
     return Sight(Seen(label=label, where="close by to the west", nearness="close by", kind=kind), tier, distance_m)
 

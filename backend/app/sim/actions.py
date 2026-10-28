@@ -518,7 +518,8 @@ def _resolve_direction(core: SimCore, citizen: Citizen, target: DirectionTarget)
     else:
         return f"You can't go {target.distance} to the {target.direction} from here."
     label = f"to the {target.direction}"
-    return _Destination(goal, label, None, f"You walk {DISTANCE_PHRASE[target.distance]} {label} and stop.", label)
+    arrive = f"You walk {DISTANCE_PHRASE[target.distance]} {label} and stop."
+    return _Destination(goal, f"the {target.direction}", None, arrive, label)
 
 
 def _start_gather(core: SimCore, citizen: Citizen, action: Gather) -> int:
