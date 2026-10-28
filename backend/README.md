@@ -21,6 +21,9 @@ make pre-commit  # lint (ruff, mypy strict) + tests; run before every commit
   Postgres), creates it if missing, migrates it to head and empties its tables once per run. Use `db_session` for DB
   tests (one transaction, rolled back after the test; pass it to the app with `app.dependency_overrides[get_session]`).
   Tests that must really commit (e.g. LISTEN/NOTIFY) use `committing_engine`, which empties every table afterwards.
+- Each checkout gets its own test database so concurrent runs can't wipe each other's rows: `pebble_test` in the
+  main checkout, `pebble_test_<worktree dir>` in a git worktree (`tests/database_name.py`). Set `PEBBLE_TEST_DB`
+  (must start with `pebble_test`) to override.
 - `make export-openapi` writes `../frontend/openapi.json`; the frontend generates its client from it.
 - `scripts/` holds the isolated launchers (`ds.sh`, `claude.sh`) and one-time `setup.sh`; they never touch the main
   devin-switch or global Devin/Claude config.
