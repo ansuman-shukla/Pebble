@@ -247,25 +247,30 @@ const siteAt = (id: string, x: number, z: number) =>
     .toWorld(x, 0, z, new Vector3())
     .normalize();
 
-test('a camp lean-to and the elder tree block from every side', () => {
+test('a camp lean-to, the elder tree and a hot spring pool block from every side', () => {
   const walk = world.walk();
-  const camp = world.site('band_a_camp');
-  const leanTo = camp.placements!.find((p) => p.kind === 'lean_to')!;
-  const elder = world.site('elder_tree');
-  const tree = elder.placements!.find((p) => p.kind === 'giant_tree')!;
-  for (const [id, placement, from, stop] of [
-    [camp.id, leanTo, 3.5, 0.6],
-    [elder.id, tree, 7, 1.2],
+  const placed = (siteId: string, kind: string) => {
+    const site = world.site(siteId);
+    const placement = site.placements!.find((p) => p.kind === kind)!;
+    return siteAt(siteId, placement.x, placement.z);
+  };
+  for (const [centre, from, stop] of [
+    [placed('band_a_camp', 'lean_to'), 3.5, 0.6],
+    [placed('elder_tree', 'giant_tree'), 7, 1.2],
+    // the pool's rim is 3 x 2.5 m
+    [placed('hot_springs', 'hot_spring_pool'), 4, 1.2],
   ] as const) {
-    const centre = siteAt(id, placement.x, placement.z);
+    let sides = 0;
     for (const bearing of [0, 90, 180, 270]) {
       const start = offset(centre, bearing, from);
       if (!walk.isFree(start)) continue;
+      sides += 1;
       const path = walkTowards(world, walk, start, centre);
       expect(metres(world, path[path.length - 1], centre)).toBeGreaterThan(
         stop,
       );
     }
+    expect(sides).toBeGreaterThanOrEqual(2);
   }
 });
 

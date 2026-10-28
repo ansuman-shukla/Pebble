@@ -128,7 +128,7 @@ draw calls (orbit 227).
 Notes:
 - Low parts (under the body band's 0.3 m) are stepped over everywhere, so the fire pit's stone ring doesn't block; only
   its logs do.
-- `hot_spring_pool` is `walk: none` in the backend world spec, so the pools don't block (the rocks around them do).
+- Hot spring pools are solid (`walk: solid` in `kinds.yaml`, footprint = the 3 x 2.5 m asset): their rim blocks.
 - `/town` (the flat debugging page) still uses the old follow camera without the spring arm.
 
 ## Known limitations
