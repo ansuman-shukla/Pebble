@@ -72,6 +72,8 @@ const MAX_GRADE = 1;
 const WILD_REACH = 70;
 /** ...and is re-anchored once the player is this far from it. */
 const WILD_RECENTER = 35;
+/** Wild charts kept at once (the player's and a followed citizen's). */
+const WILD_CHARTS = 2;
 /** Look-ahead and spacing of the terrain gradient samples, metres. */
 const SLOPE_AHEAD = 0.3;
 const SLOPE_SAMPLE = 0.5;
@@ -137,16 +139,17 @@ export function createGlobeWalk(
   const sample = new Vector3();
   const wildAt = new Vector3();
   const town = charts.find((chart) => chart.ground) ?? null;
-  let wild: (WalkChart & { anchor: Vector3; props: boolean }) | null = null;
+  /** The latest wild charts: the player's and, while the camera follows a citizen elsewhere, the citizen's. */
+  const wilds: (WalkChart & { anchor: Vector3; props: boolean })[] = [];
 
   function wildChart(direction: Vector3, props: boolean): WalkChart {
     const unit = wildAt.copy(direction).normalize();
-    if (
-      wild &&
-      wild.props === props &&
-      wild.anchor.angleTo(unit) * radius < WILD_RECENTER
-    )
-      return wild;
+    const cached = wilds.find(
+      (wild) =>
+        wild.props === props &&
+        wild.anchor.angleTo(unit) * radius < WILD_RECENTER,
+    );
+    if (cached) return cached;
     const anchor = unit.clone();
     const height = terrain.heightAt(anchor);
     const mapping = siteMapping(tangentFrame(anchor), radius + height);
@@ -154,7 +157,7 @@ export function createGlobeWalk(
       props && wildBlockers
         ? wildBlockers(mapping, anchor, WILD_REACH + WILD_RECENTER)
         : [];
-    wild = {
+    const wild = {
       id: 'wild',
       anchor,
       props,
@@ -163,6 +166,8 @@ export function createGlobeWalk(
       radius: Infinity,
       world: blockerWorld(shapes),
     };
+    wilds.unshift(wild);
+    wilds.length = Math.min(wilds.length, WILD_CHARTS);
     return wild;
   }
 
