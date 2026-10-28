@@ -274,13 +274,13 @@ def placement_blockers(placement: TownPlacement, kind: KindSpec) -> list[Rect]:
 
 def _expand_placements(spec: TownSpec, kinds: Mapping[str, KindSpec]) -> Iterator[TownPlacement]:
     for single in spec.placements:
-        yield _place(single.id, single.kind, single.at, single.rotation_deg, kinds)
+        yield place_kind(single.id, single.kind, single.at, single.rotation_deg, kinds)
     for run in spec.runs:
         for index, (at, rotation) in enumerate(_run_segments(run, _kind(run.kind, kinds))):
-            yield _place(f"{run.id}-{index}", run.kind, at, rotation, kinds)
+            yield place_kind(f"{run.id}-{index}", run.kind, at, rotation, kinds)
     for tiles in spec.tiles:
         for index, at in enumerate(_tile_centres(tiles, _kind(tiles.kind, kinds))):
-            yield _place(f"{tiles.id}-{index}", tiles.kind, at, 0, kinds)
+            yield place_kind(f"{tiles.id}-{index}", tiles.kind, at, 0, kinds)
 
 
 def _kind(name: str, kinds: Mapping[str, KindSpec]) -> KindSpec:
@@ -289,7 +289,7 @@ def _kind(name: str, kinds: Mapping[str, KindSpec]) -> KindSpec:
     return kinds[name]
 
 
-def _place(
+def place_kind(
     placement_id: str, kind_name: str, at: Point, rotation: Rotation, kinds: Mapping[str, KindSpec]
 ) -> TownPlacement:
     kind = _kind(kind_name, kinds)
