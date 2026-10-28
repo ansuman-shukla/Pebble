@@ -74,11 +74,11 @@ Takeaways:
 ## How to reproduce
 
 ```sh
-scripts/setup.sh                       # private devin-switch + Claude Code
-python3 scripts/import_ds_accounts.py  # copy logins (read-only source)
-python3 scripts/apply_npc_config.py    # jail every Pebble account
-scripts/ds.sh use <alias>
-scripts/claude.sh setup-token          # then CLAUDE_CODE_OAUTH_TOKEN=... in .env
+backend/scripts/setup.sh                       # private devin-switch + Claude Code
+python3 backend/scripts/import_ds_accounts.py  # copy logins (read-only source)
+python3 backend/scripts/apply_npc_config.py    # jail every Pebble account
+backend/scripts/ds.sh use <alias>
+backend/scripts/claude.sh setup-token          # then CLAUDE_CODE_OAUTH_TOKEN=... in .env
 cd experiments/devin_jail
 python3 run.py jail --model gpt-6-1-terra-medium
 python3 run.py jail --backend claude --model haiku
