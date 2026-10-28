@@ -8,7 +8,7 @@ LISTENs on that channel, keeps a replayed state per followed run (latest snapsho
  engine ── NOTIFY {run, tick, seqs} ──▶ listener thread ── fetch events after the last seq ──▶ replay per tick
                                               │                                                     │
              WebSocket /api/v1/live ◀── queue ◀── "event" messages (said, died, action_started/finished)
-                                              ◀── one "tick" message per tick (all citizens)
+                                              ◀── one "tick" message per tick (citizens, animals, fires)
 ```
 
 On connect a client gets a `snapshot` message; when the clock's speed or pause changes without a tick, a `tick`
@@ -32,7 +32,7 @@ from sqlmodel import Session
 from app.db.models import Event, Run
 from app.observability.replay import ReplayEvent, ReplayState, apply_event, replay
 from app.observability.store import EVENTS_CHANNEL, events_after, latest_run, latest_snapshot
-from app.services.entities import CitizenEntity, citizen_entity
+from app.services.entities import AnimalEntity, CitizenEntity, FireEntity, citizen_entity, wild_entities
 from app.sim.clock import town_clock
 from app.sim.snapshot import SimSnapshot
 
@@ -54,6 +54,8 @@ class LiveState(BaseModel):
     speed: float  # ticks (game minutes) per real second
     paused: bool
     citizens: list[CitizenEntity]
+    animals: list[AnimalEntity]
+    fires: list[FireEntity]
 
 
 class LiveEventDetail(BaseModel):
@@ -88,6 +90,7 @@ class RunFeed:
     def message(self, kind: Literal["snapshot", "tick"]) -> LiveState:
         day, time = town_clock(self.state.tick)
         citizens = [citizen_entity(citizen, self.state.tick) for _, citizen in sorted(self.state.citizens.items())]
+        animals, fires = wild_entities(self.state)
         return LiveState(
             type=kind,
             run_id=self.run_id,
@@ -97,6 +100,8 @@ class RunFeed:
             speed=self.speed,
             paused=self.paused,
             citizens=citizens,
+            animals=animals,
+            fires=fires,
         )
 
     def advance(self, session: Session, run: Run) -> list[LiveMessage]:

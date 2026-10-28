@@ -1,5 +1,6 @@
-"""Replay: rebuild what spectators see (positions, bodies, actions, items, resources) from the nearest snapshot plus
-the events after it. The same reducer backs `GET /entities?at=tick` and the "every change has an event" test.
+"""Replay: rebuild what spectators see (positions, bodies, actions, items, resources, animals, fires) from the
+nearest snapshot plus the events after it. The same reducer backs `GET /entities?at=tick` and the "every change has
+an event" test.
 """
 
 import base64
@@ -13,17 +14,20 @@ from numpy.typing import NDArray
 from app.observability.events import (
     ActionEnded,
     ActionStarted,
+    AnimalSpawned,
     BodyValues,
     CitizenSpawned,
     Died,
+    FireChanged,
     ItemLocation,
     ItemMoved,
     ResourceChanged,
     TickSummary,
 )
+from app.sim.fire import strength
 from app.sim.items import RESOURCE_INDEX
 from app.sim.snapshot import SimSnapshot
-from app.sim.state import Region
+from app.sim.state import AnimalActivity, FireKind, Region
 from app.sim.vec import Vec3
 
 
@@ -62,12 +66,38 @@ class ReplayStack:
 
 
 @dataclass
+class ReplayAnimal:
+    id: str
+    kind: str
+    group: str
+    position: Vec3
+    height_m: float
+    cell: int
+    heading_deg: float
+    activity: AnimalActivity
+    alive: bool = True
+
+
+@dataclass
+class ReplayFire:
+    id: str
+    kind: FireKind
+    position: Vec3
+    height_m: float
+    cell: int
+    lit: bool
+    strength: float
+
+
+@dataclass
 class ReplayState:
     tick: int
     citizens: dict[str, ReplayCitizen]
     ground: dict[str, ReplayStack]
     stores: dict[str, dict[str, int]]
     resources: NDArray[np.uint8]
+    animals: dict[str, ReplayAnimal] = field(default_factory=dict)
+    fires: dict[str, ReplayFire] = field(default_factory=dict)
 
     def same_as(self, other: "ReplayState") -> bool:
         return (
@@ -76,6 +106,8 @@ class ReplayState:
             and self.ground == other.ground
             and self.stores == other.stores
             and np.array_equal(self.resources, other.resources)
+            and self.animals == other.animals
+            and self.fires == other.fires
         )
 
 
@@ -114,12 +146,21 @@ def from_snapshot(snapshot: SimSnapshot) -> ReplayState:
             inventory={item: count for item, count in c.inventory.items() if count},
         )
     resources = np.frombuffer(base64.b64decode(snapshot.resources), dtype=np.uint8)
+    animals = {
+        a.id: ReplayAnimal(a.id, a.kind, a.group, a.position, a.height_m, a.cell, a.heading_deg, a.activity, a.alive)
+        for a in snapshot.animals
+    }
+    fires = {
+        f.id: ReplayFire(f.id, f.kind, f.position, f.height_m, f.cell, f.lit, strength(f.level)) for f in snapshot.fires
+    }
     return ReplayState(
         tick=snapshot.tick,
         citizens=citizens,
         ground={s.id: ReplayStack(s.item, s.count, s.position, s.cell) for s in snapshot.ground},
         stores={store: dict(items) for store, items in snapshot.stores.items()},
         resources=resources.reshape(-1, snapshot.resource_columns).copy(),
+        animals=animals,
+        fires=fires,
     )
 
 
@@ -141,6 +182,10 @@ def apply_event(state: ReplayState, event: ReplayEvent) -> None:
             citizen.heading_deg = moved.heading_deg
         for citizen_id, body in summary.bodies.items():
             state.citizens[citizen_id].body = body
+        for animal_id, pose in summary.animals.items():
+            animal = state.animals[animal_id]
+            animal.position, animal.height_m, animal.cell = pose.position, pose.height_m, pose.cell
+            animal.heading_deg, animal.activity = pose.heading_deg, pose.activity
     elif kind == "citizen_spawned":
         spawned = CitizenSpawned.model_validate(event.payload)
         state.citizens[spawned.id] = ReplayCitizen(
@@ -177,8 +222,31 @@ def apply_event(state: ReplayState, event: ReplayEvent) -> None:
         state.citizens[_actor(event)].said_tick = event.tick
     elif kind == "died":
         died = Died.model_validate(event.payload)
-        citizen = state.citizens[_actor(event)]
-        citizen.alive, citizen.asleep, citizen.cause_of_death = False, False, died.cause
+        actor = _actor(event)
+        if actor in state.animals:  # animal ids ("deer:12") never clash with citizens'
+            state.animals[actor].alive, state.animals[actor].activity = False, "dead"
+        else:
+            citizen = state.citizens[actor]
+            citizen.alive, citizen.asleep, citizen.cause_of_death = False, False, died.cause
+    elif kind == "animal_spawned":
+        spawned_animal = AnimalSpawned.model_validate(event.payload)
+        if spawned_animal.replaces is not None:
+            del state.animals[spawned_animal.replaces]
+        state.animals[spawned_animal.id] = ReplayAnimal(
+            id=spawned_animal.id,
+            kind=spawned_animal.kind,
+            group=spawned_animal.group,
+            position=spawned_animal.position,
+            height_m=spawned_animal.height_m,
+            cell=spawned_animal.cell,
+            heading_deg=spawned_animal.heading_deg,
+            activity="idle",
+        )
+    elif kind == "fire_changed":
+        fire = FireChanged.model_validate(event.payload)
+        state.fires[fire.id] = ReplayFire(
+            fire.id, fire.kind, fire.position, fire.height_m, fire.cell, fire.lit, fire.strength
+        )
     elif kind == "item_moved":
         moved_item = ItemMoved.model_validate(event.payload)
         _take(state, moved_item.source, moved_item.item, moved_item.count)
@@ -210,7 +278,7 @@ def _take(state: ReplayState, where: ItemLocation, item: str, count: int) -> Non
         store[item] -= count
         if store[item] == 0:
             del store[item]
-    # resources change through their own `resource_changed` event; `world` items come from nowhere
+    # resources change through their own `resource_changed` event; `world` and `animal` items come from nowhere
 
 
 def _put(state: ReplayState, where: ItemLocation, item: str, count: int) -> None:
