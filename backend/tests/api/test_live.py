@@ -1,25 +1,22 @@
 """The live feed over a real WebSocket: a snapshot on connect, then event and tick messages as the engine commits.
 
-NOTIFY only reaches listeners on commit, so this test commits its own run for real (back-dated so no one takes it for
-the latest run) and deletes it afterwards.
+NOTIFY only reaches listeners on commit, so these tests commit for real (`committing_engine` empties the test
+database afterwards).
 """
 
 import queue
 import threading
 from collections.abc import Iterator
-from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete
-from sqlmodel import Session, col
+from sqlalchemy import Engine
+from sqlmodel import Session
 from starlette.testclient import WebSocketTestSession
 from starlette.websockets import WebSocketDisconnect
 
 from app.core.config import settings
-from app.core.db import engine
-from app.db.models import EngineCommand, Event, Run, Snapshot
 from app.engine import Clock, EngineLoop, open_loop
 from app.observability.store import queue_command
 from app.services.live import LiveEvent, LiveState
@@ -34,22 +31,9 @@ RECEIVE_TIMEOUT_S = 15.0
 
 
 @pytest.fixture
-def committed_run(sim_world: SimWorld) -> Iterator[EngineLoop]:
-    session = Session(engine)
-    loop = open_loop(session, sim_world, KEY, new_run=True, citizens=CITIZENS, clock=Clock(), brains=False)
-    run_id = loop.run.id
-    loop.run.created_at = datetime(2000, 1, 1, tzinfo=UTC)
-    session.add(loop.run)
-    session.commit()
-    try:
-        yield loop
-    finally:
-        session.rollback()
-        for table in (Event, Snapshot, EngineCommand):
-            session.execute(delete(table).where(col(table.run_id) == run_id))
-        session.execute(delete(Run).where(col(Run.id) == run_id))
-        session.commit()
-        session.close()
+def committed_run(committing_engine: Engine, sim_world: SimWorld) -> Iterator[EngineLoop]:
+    with Session(committing_engine) as session:
+        yield open_loop(session, sim_world, KEY, new_run=True, citizens=CITIZENS, clock=Clock(), brains=False)
 
 
 def _receive(ws: WebSocketTestSession) -> dict[str, Any]:

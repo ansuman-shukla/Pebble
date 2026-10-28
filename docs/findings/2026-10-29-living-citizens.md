@@ -142,5 +142,8 @@ night" guard: night's home-and-sleep options outscore foraging anyway).
 - Bands don't share food yet (`give` and the `GiftPolicy` hook are unused by brains); hunters gather like everyone
   else until M6 brings animals.
 - Ground stacks of wood and reeds grow by the fire pits (one stack per drop) until fire (M6) burns them.
-- NOTIFY reaches listeners only on commit, so the live feed test commits a real run (back-dated, so nothing takes it
-  for the latest run) and deletes it afterwards, rather than using the rolled-back `db_session`.
+- NOTIFY reaches listeners only on commit, so the live feed test commits for real (`committing_engine` on the test
+  database) rather than using the rolled-back `db_session`.
+- When the engine reconnects after a lost database connection it rebuilds the simulation from the database; the
+  citizens' brains are rebuilt on the fresh simulation too (their notes come back with the snapshot), so the
+  reconnect test's "same as uninterrupted" check now covers 3 citizens living with brains.
