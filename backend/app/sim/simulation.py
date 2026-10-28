@@ -137,6 +137,11 @@ class Simulation:
             ),
             actor=citizen,
         )
+        seen = self._visibility(self.core.living())  # placing someone isn't anyone "coming into view"
+        for other in self.core.living():
+            if citizen.id in seen[other.id]:
+                other.in_view.add(citizen.id)
+        citizen.in_view = seen[citizen.id]
         self._visit(citizen)
         return citizen
 
