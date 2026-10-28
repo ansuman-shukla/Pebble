@@ -194,7 +194,7 @@ test('walking out of the main gate leads south onto the terrain', async ({
   expect(errors).toEqual([]);
 });
 
-test('the follow camera stays above a hill rising behind the player', async ({
+test('at the reported spot the player stands on the drawn ground and the camera stays above the hill behind', async ({
   page,
 }) => {
   // the reported spot (a forest slope south of the town), facing north with the hill behind
@@ -210,6 +210,10 @@ test('the follow camera stays above a hill rising behind the player', async ({
 
   const player = await sample(world);
   const up = directionOf(player);
+  // the walker's ground is the drawn surface (planet-mesh.spec.ts: heightAt lies on the mesh faces)
+  expect(Math.abs(radiusOf(player) - (R + terrain.heightAt(up)))).toBeLessThan(
+    0.05,
+  );
   const { north } = tangentFrame(up);
   const pitch = 0.05;
   const boom = new Vector3(player.x, player.y, player.z)
