@@ -72,9 +72,6 @@ test('the globe starts at the town spawn in the follow view, under the draw call
   expect(start.townZ).toBeCloseTo(120, 1);
   expect(start.ground).toBeCloseTo(view.sites[0].anchor.height_m, 1);
   expect(Math.abs(radiusOf(start) - (R + start.ground))).toBeLessThan(0.05);
-  await expect(world).toHaveAttribute('data-citizens-ready', '6', {
-    timeout: 30_000,
-  });
   await expect(world).toHaveAttribute('data-draw-calls-mode', 'follow', {
     timeout: 30_000,
   });

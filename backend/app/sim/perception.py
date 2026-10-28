@@ -216,6 +216,8 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
         distance = core.distance_m(position, target)
         things.append(Thing(label, keywords, goal, distance, bearing_deg(position, target), kind, ref, water, item))
 
+    # everyone of a band has their own seat round its fire
+    seat = [other.id for other in core.citizens() if other.region == citizen.region].index(citizen.id)
     for structure in world.structures.values():
         distance = core.distance_m(position, structure.centre)
         if distance > sight:
@@ -234,7 +236,7 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
             add(
                 structure.label,
                 STRUCTURE_KEYWORDS[structure.kind],
-                structure.door,
+                structure.spot(seat),
                 "structure",
                 structure.id,
                 water,
@@ -392,7 +394,7 @@ def doing_words(action: ActionState | None, asleep: bool) -> str:
     if action is None:
         return "You are standing still."
     if action.kind == "walk_to":
-        return f"You are walking to {action.label}." if action.label else "You are walking."
+        return f"You are walking to {action.destination}." if action.destination else "You are walking."
     return f"You are {DOING.get(action.kind, 'busy')}."
 
 

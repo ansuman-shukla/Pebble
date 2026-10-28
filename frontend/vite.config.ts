@@ -3,9 +3,12 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
-// The browser only calls its own origin; vite (dev and preview) forwards /api to the backend.
+// The browser only calls its own origin; vite (dev and preview) forwards /api (and the live WebSocket) to the backend.
 const apiProxy = {
-  '/api': process.env.PEBBLE_API_TARGET ?? 'http://localhost:8100',
+  '/api': {
+    target: process.env.PEBBLE_API_TARGET ?? 'http://localhost:8100',
+    ws: true,
+  },
 };
 
 export default defineConfig({

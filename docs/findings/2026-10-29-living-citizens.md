@@ -99,23 +99,23 @@ against a scratch database give the same world (deterministic):
 
 | Day | Deaths | Storehouse rice | Food the bands carry (hunger) | Events | Decisions (look_around) | Said | Plants regrown |
 |---|---|---|---|---|---|---|---|
-| 1 | 0 | 433 | 1 464 | 5 336 | 1 152 | 60 | 66 |
-| 2 | 0 | 474 | 1 443 | 5 704 | 1 252 | 32 | 186 |
-| 3 | 0 | 527 | 1 448 | 6 038 | 1 365 | 40 | 210 |
-| 4 | 0 | 569 | 1 366 | 5 761 | 1 257 | 31 | 235 |
-| 5 | 0 | 598 | 1 239 | 6 007 | 1 333 | 35 | 262 |
-| 6 | 0 | 637 | 1 344 | 5 530 | 1 153 | 32 | 238 |
-| 7 | 0 | 688 | 1 291 | 5 563 | 1 175 | 40 | 273 |
-| 8 | 0 | 742 | 1 309 | 5 673 | 1 201 | 38 | 260 |
-| 9 | 0 | 801 | 1 373 | 5 856 | 1 259 | 36 | 290 |
-| 10 | 0 | 886 | 1 191 | 5 909 | 1 286 | 27 | 290 |
+| 1 | 0 | 433 | 1 615 | 5 322 | 1 144 | 57 | 66 |
+| 2 | 0 | 474 | 1 321 | 5 940 | 1 345 | 36 | 193 |
+| 3 | 0 | 527 | 1 421 | 5 692 | 1 224 | 38 | 212 |
+| 4 | 0 | 569 | 1 355 | 5 849 | 1 276 | 39 | 231 |
+| 5 | 0 | 598 | 1 213 | 5 905 | 1 297 | 34 | 244 |
+| 6 | 0 | 637 | 1 377 | 5 409 | 1 111 | 33 | 258 |
+| 7 | 0 | 688 | 1 373 | 5 533 | 1 147 | 37 | 272 |
+| 8 | 0 | 742 | 1 381 | 5 658 | 1 201 | 26 | 268 |
+| 9 | 0 | 801 | 1 220 | 6 115 | 1 351 | 32 | 297 |
+| 10 | 0 | 886 | 1 189 | 5 768 | 1 237 | 29 | 272 |
 
-- Nobody died; on day 10 every body is healthy (health 100, hunger and thirst under 60), and nobody's health dips
-  below 99 on the way (the living test now fails under 90). The storehouse more than doubled; the bands hold a
+- Nobody died; on day 10 every body is healthy (health 100, hunger and thirst under 60), and nobody's health
+  dips at all on the way (the living test now fails under 90). The storehouse more than doubled; the bands hold a
   steady day or two of food each and regrowth keeps pace near the camps.
-- Time shares: town workers ~45 % working, ~45 % asleep; bands ~45 % asleep, 14-24 % gathering, 20-28 % resting
-  (dusk by the fire, rests between outings; the healer rests most), 2-8 % walking. The longest awake stretch
-  without progress (only waiting or resting) is 4.0 h (Oru); the town stays under 1.8 h.
+- Time shares: town workers ~45 % working, ~45 % asleep; bands ~45 % asleep, 15-22 % gathering, 18-27 % resting
+  (dusk by the fire, rests between outings; the healer rests most), 3-7 % walking. The longest awake stretch
+  without progress (only waiting or resting) is 3.1 h (Oru); the town stays under 1.8 h.
 - Tick cost without the database: simulation 0.28 ms mean (p99 0.4-0.9 ms), brains 0.6 ms mean (max 40 ms when
   several plan walks at once). With the database: 10 game days in 65 s (~4.5 ms a tick including writes and
   hourly snapshots), 92 MB for the whole run.
