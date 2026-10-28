@@ -9,6 +9,7 @@ import {
   type GlobeTerrain,
   latLonFromDirection,
   type SiteMapping,
+  siteMapping,
   tangent,
   tangentFrame,
 } from '@/lib/world/globe';
@@ -18,7 +19,7 @@ import type { GlobeWalk } from '@/lib/world/globe-walk';
 /*
  * Dropping the player anywhere (Street View's pegman): a point picked on the screen is traced onto the
  * rendered planet; on land the player is put there, facing where the camera looked, and the camera flies down
- * into the follow view; water is refused. "Go to" drops the player at a named site.
+ * into the follow view; water is refused. "Go to" drops the player at a named site or next to a citizen.
  */
 
 /** Where a drop put the player, or why it didn't. */
@@ -36,6 +37,8 @@ export interface DropApi {
   /** Drops at the planet point under a client (CSS pixel) position on the canvas. */
   atScreen(clientX: number, clientY: number): DropResult;
   goTo(siteId: string): DropResult;
+  /** Drops the player next to someone standing at a unit direction, facing them. */
+  goNear(direction: Vector3): DropResult;
 }
 
 /** A site the "Go to" menu offers. */
@@ -47,9 +50,11 @@ export interface GoToSite {
   spawn: { position: Vector3; facing: Vector3 } | null;
 }
 
-/** Rings (metres from the anchor) searched for a free spot to stand at a site. */
+/** Rings (metres from the anchor) searched for a free spot to stand at a site... */
 const SITE_RINGS = [6, 8, 10, 12, 15, 18, 22, 26, 30];
-const SITE_RING_POINTS = 16;
+/** ...and next to a citizen. */
+const PERSON_RINGS = [1.5, 2, 3, 4, 6, 8];
+const RING_POINTS = 16;
 /** Ground probes for a drop start this high (above any walkable surface). */
 const PROBE_FROM = 1000;
 
@@ -79,12 +84,16 @@ function viewFacing(camera: Camera, ray: Vector3, up: Vector3) {
   return tangent(along, up, tangentFrame(up).north);
 }
 
-/** A free spot on a ring around the site's anchor (south first), facing the anchor. */
-function siteSpawn(walk: GlobeWalk, mapping: SiteMapping) {
+/** A free spot on a ring around the mapping's anchor (south first), facing the anchor. */
+function ringSpawn(
+  walk: GlobeWalk,
+  mapping: Pick<SiteMapping, 'toWorld'>,
+  rings: readonly number[],
+) {
   const anchor = mapping.toWorld(0, 0, 0, new Vector3()).normalize();
-  for (const ring of SITE_RINGS) {
-    for (let k = 0; k < SITE_RING_POINTS; k++) {
-      const angle = (k / SITE_RING_POINTS) * Math.PI * 2;
+  for (const ring of rings) {
+    for (let k = 0; k < RING_POINTS; k++) {
+      const angle = (k / RING_POINTS) * Math.PI * 2;
       const position = mapping
         .toWorld(
           Math.sin(angle) * ring,
@@ -193,7 +202,15 @@ export function GlobeDrop({
               position: site.spawn.position.clone().normalize(),
               facing: site.spawn.facing,
             }
-          : siteSpawn(walk, site.mapping);
+          : ringSpawn(walk, site.mapping, SITE_RINGS);
+        if (!spawn) return { ok: false, reason: 'miss' };
+        return place(spawn.position, spawn.facing);
+      },
+      goNear(direction) {
+        const walk = walkRef.current;
+        if (!walk) return { ok: false, reason: 'loading' };
+        const around = siteMapping(tangentFrame(direction), radius);
+        const spawn = ringSpawn(walk, around, PERSON_RINGS);
         if (!spawn) return { ok: false, reason: 'miss' };
         return place(spawn.position, spawn.facing);
       },

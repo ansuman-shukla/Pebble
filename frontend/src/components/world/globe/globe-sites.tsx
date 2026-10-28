@@ -1,9 +1,5 @@
 import { useMemo } from 'react';
 
-import {
-  type CitizenSpots,
-  TownCitizens,
-} from '@/components/world/town/town-citizens';
 import { TownGround } from '@/components/world/town/town-ground';
 import { TownPlacements } from '@/components/world/town/town-placements';
 import type { Site, TownView } from '@/lib/client/types.gen';
@@ -14,12 +10,12 @@ import {
   type GlobeTerrain,
   type SiteMapping,
 } from '@/lib/world/globe';
-import type { LabelStore } from '@/lib/world/label-store';
 import { terrainLift } from '@/lib/world/walk-charts';
 
 /*
  * Sites on the planet. The town lays its own ground disc at the plateau height (the terrain leaves a hole for
- * it) and renders its full placement set, ground areas, water and townspeople through the site mapping. Camps
+ * it) and renders its full placement set, ground areas and water through the site mapping (its people are the
+ * live citizens, drawn by globe-npcs). Camps
  * and landmarks have no ground of their own: each placement stands on the rendered terrain under it.
  */
 
@@ -34,10 +30,7 @@ export function GlobeTown({
   mapping,
   groundRadius,
   grass,
-  labels,
-  citizenSpots,
   onPlacementsReady,
-  onCitizenReady,
 }: {
   town: TownView;
   /** The town's water cut to its ground disc. */
@@ -46,11 +39,7 @@ export function GlobeTown({
   groundRadius: number;
   /** Colour of the ground disc, matched to the terrain around it. */
   grass: string;
-  labels: LabelStore;
-  /** Filled with where the townspeople stand, for the walker's collisions. */
-  citizenSpots: CitizenSpots;
   onPlacementsReady: () => void;
-  onCitizenReady: (id: string) => void;
 }) {
   const outline = useMemo(
     () => discOutline(groundRadius, DISC_SEGMENTS),
@@ -70,13 +59,6 @@ export function GlobeTown({
         placements={town.placements}
         mapping={mapping}
         onReady={onPlacementsReady}
-      />
-      <TownCitizens
-        citizens={town.citizens}
-        mapping={mapping}
-        labels={labels}
-        spots={citizenSpots}
-        onReady={onCitizenReady}
       />
     </>
   );

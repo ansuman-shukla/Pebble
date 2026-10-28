@@ -26,14 +26,23 @@ import {
   PEGMAN_DRAG,
   DropPin,
 } from '@/components/world/globe/globe-explore-ui';
+import { GlobeNpcs, type NpcViews } from '@/components/world/globe/globe-npcs';
 import { GlobeSites, GlobeTown } from '@/components/world/globe/globe-sites';
 import { GlobeSky } from '@/components/world/globe/globe-sky';
 import {
   GlobeSurface,
   type TerrainHole,
 } from '@/components/world/globe/globe-surface';
-import type { GlobeMove } from '@/components/world/globe/globe-player';
+import type {
+  GlobeMove,
+  GlobePlayerState,
+} from '@/components/world/globe/globe-player';
 import { GlobeWalker } from '@/components/world/globe/globe-walker';
+import {
+  LiveClock,
+  NpcHooks,
+  PeoplePanel,
+} from '@/components/world/globe/live-ui';
 import { VolcanoSmoke } from '@/components/world/globe/volcano-smoke';
 import { LabelOverlay, LabelProjector } from '@/components/world/labels';
 import {
@@ -41,15 +50,16 @@ import {
   type CameraMode,
 } from '@/components/world/player/camera-mode';
 import { useKeys } from '@/components/world/player/use-keys';
-import type { CitizenSpots } from '@/components/world/town/town-citizens';
 import {
   type RenderStats,
   RenderStatsProbe,
 } from '@/components/world/render-stats';
 import { useLabelStore } from '@/hooks/use-label-store';
+import { type LiveFeed, useLiveCitizens } from '@/hooks/use-live-citizens';
 import { useTown } from '@/hooks/use-town';
 import { useWorld } from '@/hooks/use-world';
 import type { TownView, WorldView } from '@/lib/client/types.gen';
+import { feedMinutes } from '@/lib/live/live-state';
 import { BIOME_PROPS } from '@/lib/world/biome-props';
 import {
   FAST_RATE,
@@ -79,8 +89,9 @@ import type { WalkTown } from '@/lib/world/walk-charts';
 
 /*
  * The planet at /: terrain, ocean, rivers, sites and the castle town, a sun on the game clock, and the player
- * walking out of the town into the wild. `?mock=1` uses the dev/test mock world; `?at=lat,lon[,bearing]` starts
- * the player somewhere else (bearing in degrees clockwise from north); `?time=HH:MM` sets the starting town time.
+ * walking out of the town into the wild, among the live citizens. `?mock=1` uses the dev/test mock world,
+ * `?mockLive=1` the dev/test mock feed; `?at=lat,lon[,bearing]` starts the player somewhere else (bearing in
+ * degrees clockwise from north); `?time=HH:MM` sets the starting town time (while no feed is live).
  */
 
 /** The town's own ground disc (local metres): inside the 230 m plateau, around the ±160 m town. */
@@ -213,7 +224,11 @@ type GlobeSceneProps = {
   planet: Planet;
   town: TownView;
   walkTown: WalkTown;
-  citizenSpots: CitizenSpots;
+  live: LiveFeed['state'];
+  peopleRef: RefObject<Map<string, Vector3>>;
+  npcViews: NpcViews;
+  followId: string | null;
+  subjectRef: RefObject<GlobePlayerState>;
   start: Start;
   dropRef: RefObject<DropApi | null>;
   goTo: GoToSite[];
@@ -228,7 +243,6 @@ type GlobeSceneProps = {
   onTick: (minutes: number) => void;
   onWalkReady: () => void;
   onPlacementsReady: () => void;
-  onCitizenReady: (id: string) => void;
   onStats: (stats: ModeStats) => void;
 };
 
@@ -238,7 +252,11 @@ const GlobeScene = memo(function GlobeScene({
   planet,
   town,
   walkTown,
-  citizenSpots,
+  live,
+  peopleRef,
+  npcViews,
+  followId,
+  subjectRef,
   start,
   dropRef,
   goTo,
@@ -253,7 +271,6 @@ const GlobeScene = memo(function GlobeScene({
   onTick,
   onWalkReady,
   onPlacementsReady,
-  onCitizenReady,
   onStats,
 }: GlobeSceneProps) {
   const { view, terrain } = planet;
@@ -300,10 +317,7 @@ const GlobeScene = memo(function GlobeScene({
           mapping={planet.town.mapping}
           groundRadius={TOWN_GROUND_RADIUS}
           grass={planet.town.grass}
-          labels={labels}
-          citizenSpots={citizenSpots}
           onPlacementsReady={onPlacementsReady}
-          onCitizenReady={onCitizenReady}
         />
         <GlobeSites sites={view.sites} terrain={terrain} />
         <BiomeScatter
@@ -312,6 +326,18 @@ const GlobeScene = memo(function GlobeScene({
           radius={terrain.globe.radius}
         />
       </Suspense>
+      <GlobeNpcs
+        citizens={live.citizens}
+        tick={live.tick}
+        speech={live.speech}
+        terrain={terrain}
+        town={walkTown}
+        labels={labels}
+        peopleRef={peopleRef}
+        views={npcViews}
+        followId={followId}
+        subjectRef={subjectRef}
+      />
       <GlobeWalker
         terrain={terrain}
         town={walkTown}
@@ -320,6 +346,8 @@ const GlobeScene = memo(function GlobeScene({
         start={start}
         dropRef={dropRef}
         goTo={goTo}
+        peopleRef={peopleRef}
+        subjectRef={followId ? subjectRef : null}
         cameraMode={cameraMode}
         onCameraModeChange={onCameraModeChange}
         travel={travel}
@@ -368,7 +396,6 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   const planet = useMemo(() => buildPlanet(view), [view]);
   const at = params.get('at');
   const [start] = useState(() => startFor(planet, town, at));
-  const [citizenSpots] = useState<CitizenSpots>(() => new Map());
   // the stream runs on past the ground disc; outside it the terrain's own water rules
   const townWater = useMemo(
     () => clipWater(town.water, TOWN_GROUND_RADIUS),
@@ -381,9 +408,8 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
       placements: town.placements,
       water: townWater,
       groundRadius: TOWN_GROUND_RADIUS,
-      citizenSpots,
     }),
-    [planet, town, townWater, citizenSpots],
+    [planet, town, townWater],
   );
   const goTo = useMemo(() => goToSites(planet, town), [planet, town]);
   const dropRef = useRef<DropApi | null>(null);
@@ -454,6 +480,27 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
     () => parseTime(params.get('time')) ?? START_MINUTES,
   );
   const clockRef = useRef(createClock(startTime));
+  // the engine's citizens live on the real world; the mock world has only the mock feed
+  const feed = useLiveCitizens(view, {
+    source: params.has('mockLive')
+      ? 'mock'
+      : params.has('mock')
+        ? 'off'
+        : 'backend',
+    startMinute: startTime,
+  });
+  const live = feed.state;
+  const feedLive = feed.status === 'live' && live.runId !== null;
+  const peopleRef = useRef(new Map<string, Vector3>());
+  const [npcViews] = useState<NpcViews>(() => new Map());
+  const subjectRef = useRef<GlobePlayerState>({
+    position: new Vector3(),
+    facing: new Vector3(),
+    ground: 0,
+  });
+  const [followId, setFollowId] = useState<string | null>(null);
+  const [peopleOpen, setPeopleOpen] = useState(false);
+  const followed = live.citizens.find((citizen) => citizen.id === followId);
   const focusRef = useRef(start.position.clone());
   const [player, setPlayer] = useState<GlobeMove | null>(null);
   const [minutes, setMinutes] = useState(startTime);
@@ -461,29 +508,53 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   const [travel, setTravel] = useState(false);
   const [walkReady, setWalkReady] = useState(false);
   const [placementsReady, setPlacementsReady] = useState(false);
-  const [citizensReady, setCitizensReady] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
   const [cameraMode, setCameraMode] = useState<CameraMode>('follow');
   const [stats, setStats] = useState<ModeStats | null>(null);
   const markWalkReady = useCallback(() => setWalkReady(true), []);
   const markPlacementsReady = useCallback(() => setPlacementsReady(true), []);
-  const markCitizenReady = useCallback(
-    (id: string) => setCitizensReady((ready) => new Set(ready).add(id)),
-    [],
-  );
   const ready = walkReady && placementsReady;
 
-  const toggleFastTime = useCallback(() => {
-    setFastTime((fast) => {
-      clockRef.current.rate = fast ? NORMAL_RATE : FAST_RATE;
-      return !fast;
-    });
+  // a live feed drives the sky: engine time, running at the engine's speed (game minutes per real second)
+  useEffect(() => {
+    if (!feedLive) return;
+    const clock = clockRef.current;
+    clock.minutes = feedMinutes(live);
+    clock.rate = live.paused ? 0 : live.speed;
+  }, [feedLive, live]);
+  useEffect(() => {
+    if (!feedLive) clockRef.current.rate = fastTime ? FAST_RATE : NORMAL_RATE;
+  }, [feedLive, fastTime]);
+
+  const changeCameraMode = useCallback((mode: CameraMode) => {
+    setCameraMode(mode);
+    if (mode !== 'follow') setFollowId(null);
   }, []);
+  const follow = useCallback((id: string) => {
+    setFollowId(id);
+    setCameraMode('follow');
+  }, []);
+  const goToCitizen = useCallback(
+    (id: string) => {
+      const view = npcViews.get(id);
+      const api = dropRef.current;
+      setFollowId(null);
+      if (!view) return;
+      settle(
+        api
+          ? api.goNear(view.pose.position.clone().normalize())
+          : { ok: false, reason: 'loading' },
+      );
+    },
+    [npcViews, settle],
+  );
+
   useKeys(
     useCallback((code: string) => {
       if (code === 'KeyT') setTravel((on) => !on);
-      if (code === 'Escape') setDropping(false);
+      if (code === 'Escape') {
+        setDropping(false);
+        setFollowId(null);
+      }
     }, []),
   );
 
@@ -498,7 +569,10 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
       className="relative h-full w-full"
       data-testid="world"
       data-world-ready={ready}
-      data-citizens-ready={citizensReady.size}
+      data-follow={followId ?? undefined}
+      data-live-status={feed.status}
+      data-live-connects={feed.connects}
+      data-live-tick={live.tick}
       data-player-x={player && round(player.x)}
       data-player-y={player && round(player.y)}
       data-player-z={player && round(player.z)}
@@ -561,7 +635,11 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
         planet={planet}
         town={town}
         walkTown={walkTown}
-        citizenSpots={citizenSpots}
+        live={live}
+        peopleRef={peopleRef}
+        npcViews={npcViews}
+        followId={followId}
+        subjectRef={subjectRef}
         start={start}
         dropRef={dropRef}
         goTo={goTo}
@@ -571,15 +649,15 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
         cameraMode={cameraMode}
         travel={travel}
         ready={ready}
-        onCameraModeChange={setCameraMode}
+        onCameraModeChange={changeCameraMode}
         onPlayerMove={setPlayer}
         onTick={setMinutes}
         onWalkReady={markWalkReady}
         onPlacementsReady={markPlacementsReady}
-        onCitizenReady={markCitizenReady}
         onStats={setStats}
       />
       <LabelOverlay store={labels} />
+      <NpcHooks citizens={live.citizens} views={npcViews} focusRef={focusRef} />
       {!ready && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <span className="rounded-lg bg-white/80 px-3 py-2 text-sm shadow">
@@ -595,7 +673,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
             variant={mode === cameraMode ? 'default' : 'ghost'}
             aria-pressed={mode === cameraMode}
             onClick={(event) => {
-              setCameraMode(mode);
+              changeCameraMode(mode);
               // hand the keyboard back to the scene (key presses on buttons are ignored)
               event.currentTarget.blur();
             }}
@@ -614,17 +692,19 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
         >
           travel
         </Button>
-        <Button
-          size="sm"
-          variant={fastTime ? 'default' : 'outline'}
-          aria-pressed={fastTime}
-          onClick={(event) => {
-            toggleFastTime();
-            event.currentTarget.blur();
-          }}
-        >
-          time ×60
-        </Button>
+        {!feedLive && (
+          <Button
+            size="sm"
+            variant={fastTime ? 'default' : 'outline'}
+            aria-pressed={fastTime}
+            onClick={(event) => {
+              setFastTime((fast) => !fast);
+              event.currentTarget.blur();
+            }}
+          >
+            time ×60
+          </Button>
+        )}
         <Pegman
           active={dropping}
           onToggle={() => {
@@ -633,6 +713,19 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
           }}
         />
         <GoToMenu sites={goTo} onPick={goToSite} />
+        {feed.status !== 'off' && (
+          <Button
+            size="sm"
+            variant={peopleOpen ? 'default' : 'outline'}
+            aria-pressed={peopleOpen}
+            onClick={(event) => {
+              setPeopleOpen((open) => !open);
+              event.currentTarget.blur();
+            }}
+          >
+            people
+          </Button>
+        )}
         <span>
           WASD move, Shift run, T travel (25 m/s), drag to look, wheel zoom, C
           camera
@@ -640,6 +733,38 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
           {dropping && '. Click land to drop there, Esc cancels'}
         </span>
       </div>
+      <div className="absolute right-3 bottom-3 flex flex-col items-end gap-2">
+        {feed.status !== 'off' && (
+          <LiveClock
+            state={live}
+            status={feed.status}
+            onChange={feed.setClock}
+          />
+        )}
+        {followed && (
+          <div className="flex items-center gap-2 rounded-lg bg-white/80 p-1 pl-2 text-sm shadow">
+            following {followed.name}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={(event) => {
+                setFollowId(null);
+                event.currentTarget.blur();
+              }}
+            >
+              stop following
+            </Button>
+          </div>
+        )}
+      </div>
+      {peopleOpen && (
+        <PeoplePanel
+          citizens={live.citizens}
+          followId={followId}
+          onFollow={follow}
+          onGoTo={goToCitizen}
+        />
+      )}
       {hover && <DropPin {...hover} />}
       {message && (
         <div
