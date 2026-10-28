@@ -44,11 +44,20 @@ class Payload(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
+class RoutePoint(Payload):
+    unit: Vec3  # direction from the planet's centre
+    height_m: float  # ground height above sea level
+
+
 class Moved(Payload):
     position: Vec3
     height_m: float
     cell: int
     heading_deg: float = 0.0  # facing after the move (yaw in the local tangent frame, 0 = south, 180 = north)
+    # a walker's planned path ahead, from `position` (its first point) over the next couple of game minutes of
+    # walking, so clients can draw the walk between ticks; empty when they're not walking on
+    route: list[RoutePoint] = []
+    speed_mps: float = 0.0  # ground speed on the current leg, game metres per game second (0 when not walking)
 
 
 class AnimalPose(Payload):

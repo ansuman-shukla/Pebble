@@ -5,9 +5,11 @@ writes every change to the event store.
 
 ## Clock and tick
 
-- **Tick = 1 game minute.** At default speed one tick runs every real second. Speed is configurable (pause, ×1…×60).
+- **Tick = 1 game minute.** Speed = game seconds per real second: at the default ×1 (real time) one tick runs every
+  real minute; pause, ×10, ×60 and ×600 are the spectator choices (1..600 accepted, D65).
 - Each tick: advance durative actions → move entities → update bodies → ecology → perception/interrupts → emit events.
-- Positions are continuous on the sphere; the client interpolates between ticks.
+- Positions are continuous on the sphere; each tick's summary carries every walker's path for the next 2 game minutes
+  and their ground speed, and the client moves them along it between ticks.
 - Seeded RNG per subsystem; state snapshots every game hour so any run can be resumed or replayed.
 
 ## Entities
@@ -53,7 +55,7 @@ and no aging over time (ages are fixed); both arrive with v2.
   attacks can kill.
 - **Fish** are stocks in water cells; shallow water fish can be caught by hand or spear, deep water needs a boat (v1).
 - Populations have soft caps per biome and respawn slowly, so hunting pressure matters.
-- v0 numbers (D65-D69): ~270 animals in groups (herds, packs, shoals) whose sizes are the caps; a dead member is
+- v0 numbers (D66-D70): ~270 animals in groups (herds, packs, shoals) whose sizes are the caps; a dead member is
   replaced after 1-6 game days. Predators hunt below +4° sun when hungry; a person is safe within 15 m of a lit
   fire, with 2 others within 10 m, or inside the walls. Fish are a per-cell stock (shallow sea, lakes, rivers)
   that grows back in ~4 days; visible shoals swim near the shores.

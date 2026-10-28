@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-MAX_SPEED = 60
+MAX_SPEED = 600  # game seconds per real second (×600 = a game day in 2.4 real minutes)
 
 
 class ClockChange(BaseModel):
@@ -10,7 +10,7 @@ class ClockChange(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    speed: int | None = Field(default=None, ge=1, le=MAX_SPEED)  # ticks per real second
+    speed: int | None = Field(default=None, ge=1, le=MAX_SPEED)  # game seconds per real second
     paused: bool | None = None
 
     @model_validator(mode="after")

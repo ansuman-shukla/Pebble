@@ -123,6 +123,13 @@ export function pruneSpeech(state: LiveState, now: number): LiveState {
   return speech.length === state.speech.length ? state : { ...state, speech };
 }
 
+/** The clock's speed in words: "paused", "real time" (×1, D65) or "×60". */
+export const speedWords = ({
+  speed,
+  paused,
+}: Pick<LiveState, 'speed' | 'paused'>) =>
+  paused ? 'paused' : speed === 1 ? 'real time' : `×${speed}`;
+
 /** Town time of the feed in game minutes since the start of day 0 (the sky's clock). */
 export function feedMinutes(state: Pick<LiveState, 'day' | 'time'>) {
   const [hours, minutes] = state.time.split(':').map(Number);

@@ -13,8 +13,17 @@ import { type Group, Matrix4, type Mesh, Vector3 } from 'three';
 import type { GlobePlayerState } from './globe-player';
 import { Label } from '@/components/world/labels';
 import { MAX_FRAME, smoothing } from '@/components/world/player/motion';
-import { type LiveCitizen, tickMs } from '@/lib/live/live-contract';
+import type { LiveCitizen } from '@/lib/live/live-contract';
 import type { Speech } from '@/lib/live/live-state';
+import {
+  advance,
+  citizenPath,
+  headingAt,
+  joinAt,
+  pointAt,
+  type WalkPath,
+  walking,
+} from '@/lib/live/walk-path';
 import {
   activityWords,
   BASE_CLIPS,
@@ -32,8 +41,10 @@ import type { CharacterAnimation } from '@/vendor/polyfork/clips.mjs';
 import { createCharacter } from '@/vendor/polyfork/humanoid.mjs';
 
 /*
- * The citizens on the planet, where the live feed says they are. Between ticks each one glides from where it
- * was drawn to the new position over one tick at the feed's speed (1 s at ×1, a minute at one tick a minute),
+ * The citizens on the planet, where the live feed says they are. Between ticks a walker walks the path the tick
+ * streamed ahead (`route`) at its ground speed × the clock's speed (`walk-path.ts`): at ×1 that's a real 1.4 m/s
+ * for a real minute, along the route's corners; a new tick eases the drawn spot onto the new path. Each one faces
+ * the way it walks (its heading when standing),
  * turns smoothly to its heading and stands on the rendered ground (the town's plateau on its disc, else the
  * terrain). Models load only within NEAR metres of the camera (and hide again past it); clips load per activity
  * as first needed.
@@ -58,17 +69,10 @@ const AGE_LABEL_SCALE: Partial<Record<string, number>> = {
 };
 /** Turning rate towards the heading (1/s). */
 const TURN_RATE = 8;
-/** Game seconds per tick (one game minute). */
-const TICK_SECONDS = 60;
-/** The shortest glide (ms): one frame at 60 fps. */
-const MIN_GLIDE = 16;
-
-/** Activities that move a citizen along (the gait is paced to the glide). */
-const MOVING: ReadonlySet<string> = new Set(['walking', 'running', 'hunting']);
-
-/** How long a glide to a new frame's position takes: one tick at the feed's speed. */
-const glideMs = (speed: number) =>
-  speed > 0 ? Math.max(tickMs(speed), MIN_GLIDE) : tickMs(1);
+/** How fast the drawn spot eases onto a new tick's path, or a standing citizen onto a new spot (1/s). */
+const CATCH_UP_RATE = 3;
+/** Drawn farther off than this (a resync, a hidden tab), the citizen is put on the spot at once. */
+const SNAP_M = 30;
 
 const LOOKS = new Map(CITIZEN_LOOKS.map((look) => [look.id, look]));
 const basis = new Matrix4();
@@ -93,14 +97,13 @@ interface NpcView {
 export type NpcViews = Map<string, NpcView>;
 
 interface Track {
-  from: Vector3;
-  to: Vector3;
-  /** performance.now() when the glide started, and its length (ms). */
-  start: number;
-  duration: number;
+  /** The path the feed streamed for this tick (one point when standing) and how far along it the citizen is. */
+  path: WalkPath;
+  /** Drawn spot minus the spot on the path (unit-sphere vector), easing to zero after a new tick. */
+  offset: Vector3;
   /** Rendered yaw (radians, the heading convention). */
   yaw: number;
-  /** Game metres per second of the current glide (the gait's pace). */
+  /** Game metres per second of the gait: the path's speed while walking on, else 0. */
   pace: number;
 }
 
@@ -204,52 +207,52 @@ function NpcModel({
   );
 }
 
-/** The gait's pace now: the glide's while it lasts, standing once it has arrived (e.g. the clock paused). */
-const currentPace = (track: Track) =>
-  performance.now() - track.start < track.duration ? track.pace : 0;
+const currentPace = (track: Track) => track.pace;
 
-/** Starts the glide to a new frame's position from wherever the citizen is drawn now. */
-function startGlide(
-  track: Track,
-  citizen: LiveCitizen,
-  interval: number,
-  radius: number,
-) {
-  const now = performance.now();
-  const t = Math.min((now - track.start) / track.duration, 1);
-  track.from.lerp(track.to, t).normalize();
-  track.to.set(...citizen.position.unit);
-  track.start = now;
-  track.duration = interval;
-  track.pace = MOVING.has(citizen.activity)
-    ? (track.from.angleTo(track.to) * radius) / TICK_SECONDS
-    : 0;
+/** Where the citizen is drawn: on its path, eased by the catch-up offset (a unit direction into `out`). */
+const drawnAt = (track: Track, out: Vector3) =>
+  pointAt(track.path, out).add(track.offset).normalize();
+
+/** Puts a new frame's path under the citizen, joined where it is drawn now (no jump, no step back). */
+function follow(track: Track, citizen: LiveCitizen, radius: number) {
+  const drawn = drawnAt(track, new Vector3());
+  const path = citizenPath(citizen, radius);
+  const off = joinAt(path, drawn, radius);
+  track.path = path;
+  if (off > SNAP_M) track.offset.set(0, 0, 0);
+  else track.offset.subVectors(drawn, pointAt(path, new Vector3()));
 }
 
 interface PlaceContext {
   terrain: GlobeTerrain;
   town: WalkTown;
-  scratch: { direction: Vector3; local: Vector3 };
+  scratch: { direction: Vector3; local: Vector3; going: Vector3 };
   heading: number;
+  /** Game seconds per real second (0 paused). */
+  rate: number;
   delta: number;
 }
 
-/** Moves the citizen along its glide, onto the ground, turning towards its heading. */
+/** Walks the citizen on along its path, onto the ground, turning the way it walks (its heading standing). */
 function placeAlong(
   track: Track,
   view: NpcView,
   body: Group,
   context: PlaceContext,
 ) {
-  const { terrain, town, scratch, heading, delta } = context;
+  const { terrain, town, scratch, heading, rate, delta } = context;
   const radius = terrain.globe.radius;
-  const t = Math.min((performance.now() - track.start) / track.duration, 1);
-  const direction = scratch.direction
-    .lerpVectors(track.from, track.to, t)
-    .normalize();
+  advance(track.path, delta * rate);
+  track.offset.multiplyScalar(Math.exp(-CATCH_UP_RATE * delta));
+  const onward = walking(track.path);
+  track.pace = onward && rate > 0 ? track.path.speed : 0;
+  const direction = drawnAt(track, scratch.direction);
   const ground = groundUnder(terrain, town, direction, scratch.local);
   const { east, south, up } = tangentFrame(direction);
-  const wanted = (heading * Math.PI) / 180;
+  const going = onward ? headingAt(track.path, scratch.going) : null;
+  const wanted = going
+    ? Math.atan2(going.dot(east), going.dot(south))
+    : (heading * Math.PI) / 180;
   track.yaw += wrapAngle(wanted - track.yaw) * smoothing(TURN_RATE, delta);
   const { position, facing } = view.pose;
   position.copy(direction).multiplyScalar(radius + ground);
@@ -278,13 +281,10 @@ function copyPose(from: GlobePlayerState, to: GlobePlayerState) {
   to.ground = from.ground;
 }
 
-function newTrack(citizen: LiveCitizen): Track {
-  const at = new Vector3(...citizen.position.unit);
+function newTrack(citizen: LiveCitizen, radius: number): Track {
   return {
-    from: at.clone(),
-    to: at.clone(),
-    start: 0,
-    duration: 1,
+    path: citizenPath(citizen, radius),
+    offset: new Vector3(),
     yaw: (citizen.heading_deg * Math.PI) / 180,
     pace: 0,
   };
@@ -308,7 +308,7 @@ function Npc({
   terrain,
   town,
   labels,
-  interval,
+  rate,
   peopleRef,
   views,
   followId,
@@ -319,8 +319,8 @@ function Npc({
   terrain: GlobeTerrain;
   town: WalkTown;
   labels: LabelStore;
-  /** Real milliseconds per tick: how long a glide to a new frame's position takes. */
-  interval: number;
+  /** The clock: game seconds per real second (0 paused). */
+  rate: number;
   peopleRef: RefObject<Map<string, Vector3>>;
   views: NpcViews;
   followId: string | null;
@@ -331,10 +331,14 @@ function Npc({
   if (!look) throw new Error(`unknown citizen look ${citizen.look}`);
   const group = useRef<Group>(null);
   const [mounted, setMounted] = useState(false);
-  const trackRef = useRef<Track>(newTrack(citizen));
+  const trackRef = useRef<Track>(newTrack(citizen, radius));
   const viewRef = useRef<NpcView>(newView(citizen));
   const scratch = useMemo(
-    () => ({ direction: new Vector3(), local: new Vector3() }),
+    () => ({
+      direction: new Vector3(),
+      local: new Vector3(),
+      going: new Vector3(),
+    }),
     [],
   );
   const { activity, action_label: label } = citizen;
@@ -343,13 +347,13 @@ function Npc({
     [activity, label],
   );
 
-  // every new frame: glide from where the citizen is drawn to the new spot over one tick interval (a speed change
-  // alone doesn't restart the glide)
-  const glide = useEffectEvent((next: LiveCitizen) => {
-    startGlide(trackRef.current, next, interval, radius);
+  // every new frame: the walk ahead it streams, joined where the citizen is drawn (a speed change alone sends the
+  // same citizens and keeps the path)
+  const onFrame = useEffectEvent((next: LiveCitizen) => {
+    follow(trackRef.current, next, radius);
     viewRef.current.activity = next.activity;
   });
-  useLayoutEffect(() => glide(citizen), [citizen]);
+  useLayoutEffect(() => onFrame(citizen), [citizen]);
 
   useEffect(() => {
     const id = citizen.id;
@@ -370,6 +374,7 @@ function Npc({
       town,
       scratch,
       heading: citizen.heading_deg,
+      rate,
       delta: Math.min(frameDelta, MAX_FRAME),
     });
     const people = peopleRef.current;
@@ -424,6 +429,7 @@ function Npc({
 export function GlobeNpcs({
   citizens,
   speed,
+  paused,
   speech,
   terrain,
   town,
@@ -434,8 +440,9 @@ export function GlobeNpcs({
   subjectRef,
 }: {
   citizens: LiveCitizen[];
-  /** The feed's speed (ticks per real second): how long glides between frames take. */
+  /** The feed's clock: game seconds per real second, and whether it is paused. */
   speed: number;
+  paused: boolean;
   speech: Speech[];
   terrain: GlobeTerrain;
   town: WalkTown;
@@ -464,7 +471,7 @@ export function GlobeNpcs({
           terrain={terrain}
           town={town}
           labels={labels}
-          interval={glideMs(speed)}
+          rate={paused ? 0 : speed}
           peopleRef={peopleRef}
           views={views}
           followId={followId}

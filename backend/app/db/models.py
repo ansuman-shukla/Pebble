@@ -35,7 +35,7 @@ class Run(SQLModel, table=True):
     spec_hash: str = Field(max_length=64)
     status: str = Field(max_length=16)  # running | stopped
     tick: int = Field(default=0, sa_type=BigInteger)
-    speed: int = 1  # ticks per real second
+    speed: int = 1  # game seconds per real second (1 = real time)
     paused: bool = Field(default=False, sa_type=Boolean)
     created_at: datetime | None = Field(
         default=None, nullable=False, sa_type=DateTime(timezone=True), sa_column_kwargs={"server_default": func.now()}

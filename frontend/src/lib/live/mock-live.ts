@@ -1,8 +1,10 @@
 /*
  * DEV/TEST ONLY: a deterministic stand-in for the engine's live feed (`?mockLive=1`). Fifteen citizens with the
  * 15 look ids live around the town and the two camps of whatever world is loaded: they work, gather, eat, drink,
- * rest, talk (emitting `said` events) and walk between spots at the engine's pace (5 km/h = 83 m per tick);
- * animals graze and prowl and fires burn (`mock-wild.ts`).
+ * rest, talk (emitting `said` events) and walk straight between spots at the engine's pace (5 km/h = 83 m per
+ * tick), streaming the next two ticks of the walk as the engine does (`route`, `speed_mps`); animals graze and prowl
+ * and fires burn (`mock-wild.ts`). Like a new engine run
+ * it starts at ×1 (a tick a real minute); tests speed it up with `setClock`.
  * Messages have the contract's shapes; sockets are fake WebSockets driven by the same tick loop, so the client's
  * connect / reconnect path is the one the real feed uses. `window.__pebbleMockLive` lets tests drop connections
  * and make someone speak, start a new run, or act as if there were no run.
@@ -16,6 +18,7 @@ import {
   type LiveEventMessage,
   type LiveFrame,
   type LiveMessage,
+  TICK_SECONDS,
   tickMs,
 } from './live-contract';
 import { MockWild } from './mock-wild';
@@ -29,6 +32,8 @@ import {
 
 /** The engine's walking pace (backend `WALK_M_PER_TICK`), metres per tick. */
 const WALK_M_PER_TICK = 5000 / 60;
+/** How many ticks of a walk each frame streams ahead (backend `WALK_AHEAD_TICKS`). */
+const WALK_AHEAD_TICKS = 2;
 /** Tick 0 is 08:00 on day 0, one tick per game minute (backend `app/sim/clock.py`). */
 const START_MINUTE = 8 * 60;
 const DAY_MINUTES = 24 * 60;
@@ -583,21 +588,38 @@ export class MockLiveServer {
       const step = person.plan[state.step];
       const look = ROLES.get(person.look);
       if (!look) throw new Error(`unknown look ${person.look}`);
-      const unit = state.mapping
-        .toWorld(state.at[0], 0, state.at[1], new Vector3())
-        .normalize();
-      const { lat, lon } = latLonFromDirection(unit);
+      const unitAt = ([x, z]: Spot) =>
+        state.mapping.toWorld(x, 0, z, new Vector3()).normalize().toArray();
+      const unit = unitAt(state.at);
+      const { lat, lon } = latLonFromDirection(new Vector3(...unit));
       const activity: Activity = night
         ? 'sleeping'
         : 'walk' in step
           ? 'walking'
           : step.activity;
+      const ahead = activity === 'walking' && 'walk' in step;
+      const reach = WALK_M_PER_TICK * person.pace;
       return {
         id: person.id,
         name: person.name,
         look: person.look,
         appearance: person.appearance,
-        position: { unit: unit.toArray(), height_m: state.height, lat, lon },
+        position: { unit, height_m: state.height, lat, lon },
+        route: ahead
+          ? [state.at, walkAhead(state.at, step.walk, WALK_AHEAD_TICKS * reach)]
+              .map(unitAt)
+              .map((point) => ({ unit: point, height_m: state.height }))
+          : [],
+        // the arc of a full tick's walk that way (the site's local metres stretch a little away from its anchor)
+        speed_mps: ahead
+          ? (new Vector3(...unit).angleTo(
+              new Vector3(
+                ...unitAt(walkAhead(state.at, step.walk, reach, false)),
+              ),
+            ) *
+              this.world.radius_m) /
+            TICK_SECONDS
+          : 0,
         cell: 0,
         alive: true,
         asleep: activity === 'sleeping',
@@ -619,6 +641,21 @@ export class MockLiveServer {
 }
 
 const stepTicks = (step: Step) => ('walk' in step ? 0 : step.ticks);
+
+/** Where `metres` of walking from `from` towards `to` ends (at `to` if it is closer, unless `stop` is false). */
+function walkAhead(
+  [x, z]: Spot,
+  [tx, tz]: Spot,
+  metres: number,
+  stop = true,
+): Spot {
+  const distance = Math.hypot(tx - x, tz - z);
+  if (distance < 1e-9 || (stop && distance <= metres)) return [tx, tz];
+  return [
+    x + ((tx - x) * metres) / distance,
+    z + ((tz - z) * metres) / distance,
+  ];
+}
 
 function isNight(tick: number) {
   const minute = (START_MINUTE + tick) % DAY_MINUTES;

@@ -336,13 +336,18 @@ class Simulation:
             citizen.threats = stalkers[citizen.id]
             self._visit(citizen)
 
-        moved = {
-            citizen.id: Moved(
-                position=citizen.position, height_m=citizen.height_m, cell=citizen.cell, heading_deg=citizen.heading_deg
-            )
-            for citizen in core.citizens()
-            if citizen.id in before and citizen.position != before[citizen.id]
-        }
+        moved: dict[str, Moved] = {}
+        for citizen in core.citizens():
+            if citizen.id in before and citizen.position != before[citizen.id]:
+                route, speed_mps = actions.walk_ahead(core, citizen)
+                moved[citizen.id] = Moved(
+                    position=citizen.position,
+                    height_m=citizen.height_m,
+                    cell=citizen.cell,
+                    heading_deg=citizen.heading_deg,
+                    route=route,
+                    speed_mps=speed_mps,
+                )
         bodies = {
             citizen.id: (citizen.body.hunger, citizen.body.thirst, citizen.body.energy, citizen.body.health)
             for citizen in core.living()
