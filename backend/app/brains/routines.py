@@ -225,13 +225,16 @@ def lord(ctx: Context) -> list[Option]:
 
 
 def town_child(ctx: Context) -> list[Option]:
-    """Plays around the well; sometimes runs off to the market or to the fields."""
+    """Plays around the well; sometimes tags along after someone close by, or runs off to the market or the fields."""
     if not _daytime(ctx):
         return []
     p = ctx.perception
     if not (at(p, WELL) or at(p, MARKET) or at(p, FIELDS)):
         return [_go(ctx, WELL)]
     roll = ctx.pick(10)
+    close = [person.label for person in p.people if DISTANCE[person.nearness] in ("near", "close")]
+    if roll < 1 and close:
+        return [Option(WORK, f"tag along after {close[0]}", partial(ctx.api.follow, close[0]))]
     if roll < 4:
         direction = COMPASS[ctx.pick(len(COMPASS))]
         return [Option(WORK, "play", lambda: ctx.api.walk_towards(direction, "a few steps"))]
