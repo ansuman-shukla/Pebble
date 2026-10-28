@@ -63,5 +63,18 @@ town's main gate.
 
 `/town` shows the flat town alone; `/?mock=1` uses the small test world instead of the backend's.
 
-Status: phase A, M7 scripted citizens (15 citizens with utility brains, town economy, plant regrowth) and the first
-slice of M8 (live feed).
+The spectator pages read the archive (all take `?at=tick` to replay a past moment):
+
+| Page | What |
+|---|---|
+| `/people` | everyone by region: portrait, role, age, what they are doing and where |
+| `/people/:id` | one citizen: profile, needs now and over the last day, what they carry and know, their whole life as a timeline (scroll for more); `Show on map` |
+| `/conversations` | threads of speech by place and time (`?day=N`, `?place=`), with who heard what |
+| `/timeline` | a scrubber over game time: who was where, what was said, the stocks then; opens the World at that moment |
+| `/stats` | population, deaths by cause, food stocks, wild plants, actions and speech per day |
+
+Their api: `GET /api/v1/citizens`, `/citizens/{id}`, `/citizens/{id}/timeline`, `/citizens/{id}/needs`,
+`/conversations` and `/stats` (see [the spectator findings](docs/findings/2026-10-29-spectator-pages.md)).
+
+Status: phase A, M7 scripted citizens (15 citizens with utility brains, town economy, plant regrowth) and M8 in
+progress (live feed, spectator pages).
