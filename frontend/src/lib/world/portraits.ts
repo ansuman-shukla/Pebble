@@ -43,7 +43,7 @@ async function render(lookId: string): Promise<string> {
   const look = CITIZEN_LOOKS.find((candidate) => candidate.id === lookId);
   if (!look) throw new Error(`no citizen look "${lookId}"`);
   const character = createCharacter(look.config);
-  const animation = await animateHumanoid(character, ['Idle']);
+  const animation = await animateHumanoid(character, { clips: ['Idle'] });
   animation.play('Idle');
   animation.update(0);
   character.updateMatrixWorld(true);
