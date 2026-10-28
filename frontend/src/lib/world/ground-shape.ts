@@ -20,7 +20,7 @@ export function discOutline(radius: number, segments = 96): Point[] {
 }
 
 /** The part of a polygon inside a convex polygon (Sutherland-Hodgman); empty if none is. */
-export function clipToConvex(polygon: Point[], convex: Point[]): Point[] {
+function clipToConvex(polygon: Point[], convex: Point[]): Point[] {
   // orientation of the clip polygon, so "inside" is on the correct side of each edge
   const area = convex.reduce((sum, [x1, z1], i) => {
     const [x2, z2] = convex[(i + 1) % convex.length];

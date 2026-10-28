@@ -67,7 +67,7 @@ export type WildBlockers = (
 ) => Shape[];
 
 /** Steepest slope (rise per metre) the player can walk up: 45°. */
-export const MAX_GRADE = 1;
+const MAX_GRADE = 1;
 /** The wild chart covers this many metres around its anchor... */
 const WILD_REACH = 70;
 /** ...and is re-anchored once the player is this far from it. */
