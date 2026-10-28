@@ -16,13 +16,14 @@ from app.sim.clock import local_minute, time_words
 from app.sim.core import FOREST_BIOMES, SimCore
 from app.sim.fauna import DANGEROUS, SPECIES
 from app.sim.items import GATHERED, ITEMS, RESOURCE_INDEX, amount_words
-from app.sim.state import ActionState, Animal, Citizen
+from app.sim.state import ActionState, Animal, Citizen, GroundStack
 from app.sim.vec import Vec3, bearing_deg, lat_lon_deg
 from app.world_api.models import HeardWords, Perception, Seen, SelfView
 
 COMPASS = ("north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west")
 MAX_THINGS = 12
 MAX_ANIMALS = 8
+HEAP_M = 5.0  # stacks of one item this close to the nearest one are one heap to the eye
 WATCHING_M = 60.0  # an awake predator this close is "watching you"
 _CELL_MARGIN_M = 25.0  # cells whose centre is this much beyond sight still count (cells are ~40 m across)
 _ARTICLES = frozenset({"the", "a", "an", "some", "any", "my", "your"})
@@ -237,11 +238,27 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
             goal = hearth.stand if hearth is not None else fire.position
             add(fires.label(fire), fires.KEYWORDS, goal, "fire", fire.id, at=fire.position)
 
-    for stack in sorted(state.ground.values(), key=lambda s: s.id):
-        if core.distance_m(position, stack.position) <= sight:
-            item = ITEMS[stack.item]
-            keywords = frozenset({item.name, item.one.split()[-1]})
-            add(f"{amount_words(stack.count, item)} on the ground", keywords, stack.position, "ground", stack.id)
+    # stacks of one item lying together (a woodpile of many drops) are seen as one heap, at its nearest stack
+    heaps: list[tuple[GroundStack, int]] = []
+    seen_stacks = sorted(
+        (core.distance_m(position, stack.position), stack.id, stack)
+        for stack in state.ground.values()
+        if core.distance_m(position, stack.position) <= sight
+    )
+    for _, _, stack in seen_stacks:
+        heap = next(
+            (i for i, (first, _) in enumerate(heaps)
+             if first.item == stack.item and core.distance_m(first.position, stack.position) <= HEAP_M),
+            None,
+        )  # fmt: skip
+        if heap is None:
+            heaps.append((stack, stack.count))
+        else:
+            heaps[heap] = (heaps[heap][0], heaps[heap][1] + stack.count)
+    for stack, count in heaps:
+        item = ITEMS[stack.item]
+        keywords = frozenset({item.name, item.one.split()[-1]})
+        add(f"{amount_words(count, item)} on the ground", keywords, stack.position, "ground", stack.id)
 
     cos_limit = math.cos(min(math.pi, (sight + _CELL_MARGIN_M) / world.radius_m))
     cells = np.flatnonzero(world.grid.positions @ np.array(position) >= cos_limit)
