@@ -23,6 +23,7 @@ from app.observability.events import (
 )
 from app.sim.items import RESOURCE_INDEX
 from app.sim.snapshot import SimSnapshot
+from app.sim.state import Region
 from app.sim.vec import Vec3
 
 
@@ -40,7 +41,7 @@ class ReplayCitizen:
     cell: int
     body: BodyValues
     role: str = ""
-    region: str = "town"
+    region: Region = "town"
     heading_deg: float = 0.0
     alive: bool = True
     asleep: bool = False

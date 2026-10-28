@@ -95,7 +95,11 @@ def test_entities_now_match_the_simulation(client: TestClient, loop: EngineLoop)
         assert entity["position"]["height_m"] == pytest.approx(citizen.height_m)
         assert entity["action"] == (citizen.action.kind if citizen.action else None)
         assert entity["alive"] is True
+        assert entity["heading_deg"] == pytest.approx(citizen.heading_deg)
+        assert (entity["role"], entity["region"]) == (citizen.role, citizen.region)
+        assert entity["activity"] == {"walk_to": "walking", "sleep": "sleeping"}.get(entity["action"], "idle")
     aiko = by_id["dev-aiko"]
+    assert aiko["heading_deg"] != 0.0  # she walked to the gate and faces the way she went
     assert loop.sim.world.distance_m(tuple(aiko["position"]["unit"]), loop.sim.world.places["main-gate"].stand) < 1
     lat, lon = lat_lon_deg(loop.sim.citizen("dev-aiko").position)
     assert (aiko["position"]["lat"], aiko["position"]["lon"]) == pytest.approx((lat, lon))

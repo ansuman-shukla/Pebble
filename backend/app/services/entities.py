@@ -1,5 +1,7 @@
 """Where everyone is and what they're doing, now or at any past tick (nearest snapshot + events)."""
 
+from typing import Literal
+
 from pydantic import BaseModel
 from sqlmodel import Session
 
@@ -9,8 +11,24 @@ from app.services.clock import run_or_latest
 from app.sim.bodies import body_words
 from app.sim.clock import town_clock
 from app.sim.snapshot import SimSnapshot
-from app.sim.state import Body
+from app.sim.state import Body, Region
 from app.sim.vec import Vec3, lat_lon_deg
+
+Activity = Literal[
+    "idle", "walking", "sleeping", "resting", "gathering", "eating", "drinking", "working", "talking", "dead"
+]
+ACTIVITIES: dict[str, Activity] = {
+    "walk_to": "walking",
+    "follow": "walking",
+    "flee": "walking",
+    "sleep": "sleeping",
+    "rest": "resting",
+    "gather": "gathering",
+    "eat": "eating",
+    "drink": "drinking",
+    "work": "working",
+}
+TALKING_TICKS = 3  # someone who just spoke (and isn't busy with something else) shows as talking this long
 
 
 class TickNotReached(ValueError):
@@ -29,7 +47,11 @@ class CitizenEntity(BaseModel):
     name: str
     look: str
     appearance: str
+    role: str
+    region: Region
     position: Position
+    heading_deg: float  # facing: yaw in the local tangent frame, 0 = south (+z local), 90 = east, 180 = north
+    activity: Activity  # what spectators see them doing (derived from the action, sleep, speech and death)
     cell: int
     alive: bool
     asleep: bool
@@ -47,7 +69,20 @@ class EntitiesView(BaseModel):
     citizens: list[CitizenEntity]
 
 
-def _entity(citizen: ReplayCitizen) -> CitizenEntity:
+def activity(citizen: ReplayCitizen, tick: int) -> Activity:
+    if not citizen.alive:
+        return "dead"
+    if citizen.asleep:
+        return "sleeping"
+    doing = ACTIVITIES.get(citizen.action or "")
+    if doing is not None:
+        return doing
+    if citizen.said_tick is not None and tick - citizen.said_tick < TALKING_TICKS:
+        return "talking"
+    return "idle"
+
+
+def citizen_entity(citizen: ReplayCitizen, tick: int) -> CitizenEntity:
     hunger, thirst, energy, health = citizen.body
     lat, lon = lat_lon_deg(citizen.position)
     return CitizenEntity(
@@ -55,7 +90,11 @@ def _entity(citizen: ReplayCitizen) -> CitizenEntity:
         name=citizen.name,
         look=citizen.look,
         appearance=citizen.appearance,
+        role=citizen.role,
+        region=citizen.region,
         position=Position(unit=citizen.position, height_m=citizen.height_m, lat=lat, lon=lon),
+        heading_deg=citizen.heading_deg,
+        activity=activity(citizen, tick),
         cell=citizen.cell,
         alive=citizen.alive,
         asleep=citizen.asleep,
@@ -83,5 +122,5 @@ def entities_at(session: Session, run_id: str | None = None, at: int | None = No
     ]
     state = replay(SimSnapshot.model_validate(snapshot_row.state), events)
     day, time = town_clock(tick)
-    citizens = [_entity(citizen) for _, citizen in sorted(state.citizens.items())]
+    citizens = [citizen_entity(citizen, tick) for _, citizen in sorted(state.citizens.items())]
     return EntitiesView(run_id=run.id, tick=tick, day=day, time=time, citizens=citizens)
