@@ -259,6 +259,8 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
     found_water: set[str] = set()
     # a lake or the sea next to your cell is right beside you: you can drink from it there (`water_within_reach`)
     beside = {_water_kind(world.biome(other)) for other in world.neighbours[here] if world.biome(other) in WATER}
+    # in the town chart the well is the only water (D72): rivers are told only where `water_within_reach` drinks them
+    river_here = bool(world.river[here]) and world.town_point(position) is None
     for cell in [here, *[int(c) for c in cells if c != here]]:
         unit = world.unit(cell)
         biome = world.biome(cell)
@@ -276,7 +278,8 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
                     at=at,
                     item=resource,
                 )
-        if world.river[cell] and "river" not in found_water:
+        river = river_here if cell == here else bool(world.river[cell] and not world.in_town[cell])
+        if river and "river" not in found_water:
             found_water.add("river")
             add(
                 "a river",
