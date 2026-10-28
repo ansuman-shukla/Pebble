@@ -5,16 +5,19 @@ import { InstancedMesh, Matrix4, Quaternion, Vector3 } from 'three';
 
 import { kindParts } from '@/components/world/kind-parts';
 import { assetUrl, kindScale, PROPS, type PropKind } from '@/lib/world/assets';
-import { BIOME_PROPS } from '@/lib/world/biome-props';
+import { BIOME_PROPS, GROUND_COVER } from '@/lib/world/biome-props';
 import type { Scatter, ScatterInstance } from '@/lib/world/scatter';
 
 /*
- * Biome props around the focus: the cells within REACH are scattered (each cell is cached; it always grows the
- * same), re-gathered when the focus moves more than REBUILD metres, and drawn as one InstancedMesh per sub-mesh
- * of each kind. Instances within SHADOW_REACH go into a second set that casts shadows.
+ * Biome props around the focus, in two distance tiers: ground cover (grass, flowers, ferns, pebbles, reeds)
+ * within NEAR_REACH, everything else within FAR_REACH. The cells within FAR_REACH + REBUILD are scattered
+ * (each cell is cached; it always grows the same) and re-gathered when the focus moves more than REBUILD
+ * metres; every RESPLIT metres the gathered instances are re-filtered by tier and drawn as one InstancedMesh
+ * per sub-mesh of each kind. Instances within SHADOW_REACH go into a second set that casts shadows.
  */
 
-const REACH = 600;
+const NEAR_REACH = 150;
+const FAR_REACH = 500;
 const REBUILD = 100;
 const SHADOW_REACH = 70;
 const RESPLIT = 20;
@@ -51,6 +54,7 @@ function modelMatrix(instance: ScatterInstance) {
 
 interface KindSet {
   kind: PropKind;
+  reach: number;
   inModel: Matrix4[];
   near: InstancedMesh[];
   far: InstancedMesh[];
@@ -98,6 +102,7 @@ export function BiomeScatter({
           });
         return {
           kind,
+          reach: GROUND_COVER.has(kind) ? NEAR_REACH : FAR_REACH,
           inModel: parts.map((p) => p.inModel),
           near: make(NEAR_CAPACITY, true),
           far: make(CAPACITY, false),
@@ -138,7 +143,7 @@ export function BiomeScatter({
       current.builtAt = focus.clone();
       current.splitAt = null;
       current.instances = new Map(KINDS.map((kind) => [kind, []]));
-      for (const cell of scatter.cellsAround(focus, REACH)) {
+      for (const cell of scatter.cellsAround(focus, FAR_REACH + REBUILD)) {
         let grown = current.cache.get(cell);
         if (!grown) {
           grown = scatter.cell(cell);
@@ -156,11 +161,11 @@ export function BiomeScatter({
       for (const set of sets) {
         const near: Matrix4[] = [];
         const far: Matrix4[] = [];
-        for (const { instance, model } of current.instances.get(set.kind)!)
-          (instance.position.distanceTo(focus) < SHADOW_REACH
-            ? near
-            : far
-          ).push(model);
+        for (const { instance, model } of current.instances.get(set.kind)!) {
+          const distance = instance.position.distanceTo(focus);
+          if (distance < SHADOW_REACH) near.push(model);
+          else if (distance < set.reach) far.push(model);
+        }
         fill(set.near, set.inModel, near);
         fill(set.far, set.inModel, far);
       }

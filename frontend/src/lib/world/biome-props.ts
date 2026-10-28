@@ -124,6 +124,21 @@ export const BIOME_PROPS: Record<BiomeName, ScatterEntry[]> = {
   ],
 };
 
+/**
+ * Small kinds (grass, flowers, ferns, pebbles, reeds) are only scattered within the near reach of the camera
+ * target; trees, bushes and rocks reach much further (see BiomeScatter).
+ */
+export const GROUND_COVER: ReadonlySet<PropKind> = new Set<PropKind>([
+  'grass_tuft',
+  'dry_grass',
+  'dune_grass',
+  'wildflower',
+  'fern',
+  'small_rock',
+  'cattail',
+  'reeds',
+]);
+
 /** Kinds the backend world spec places at landmark sites (giant_tree is the elder tree, drawn scaled up). */
 export const LANDMARK_KINDS = [
   'rock_spire',
