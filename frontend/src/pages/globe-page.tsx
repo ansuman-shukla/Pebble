@@ -4,6 +4,7 @@ import {
   type RefObject,
   Suspense,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -13,6 +14,18 @@ import { Matrix4, Vector3 } from 'three';
 
 import { Button } from '@/components/ui/button';
 import { BiomeScatter } from '@/components/world/globe/biome-scatter';
+import {
+  type DropApi,
+  type DropResult,
+  type DropTarget,
+  type GoToSite,
+} from '@/components/world/globe/globe-drop';
+import {
+  GoToMenu,
+  Pegman,
+  PEGMAN_DRAG,
+  DropPin,
+} from '@/components/world/globe/globe-explore-ui';
 import { GlobeSites, GlobeTown } from '@/components/world/globe/globe-sites';
 import { GlobeSky } from '@/components/world/globe/globe-sky';
 import {
@@ -20,10 +33,7 @@ import {
   type TerrainHole,
 } from '@/components/world/globe/globe-surface';
 import type { GlobeMove } from '@/components/world/globe/globe-player';
-import {
-  GlobeWalker,
-  type WalkTown,
-} from '@/components/world/globe/globe-walker';
+import { GlobeWalker } from '@/components/world/globe/globe-walker';
 import { VolcanoSmoke } from '@/components/world/globe/volcano-smoke';
 import { LabelOverlay, LabelProjector } from '@/components/world/labels';
 import {
@@ -31,6 +41,7 @@ import {
   type CameraMode,
 } from '@/components/world/player/camera-mode';
 import { useKeys } from '@/components/world/player/use-keys';
+import type { CitizenSpots } from '@/components/world/town/town-citizens';
 import {
   type RenderStats,
   RenderStatsProbe,
@@ -61,8 +72,10 @@ import {
   tangentFrame,
 } from '@/lib/world/globe';
 import { biomeColor } from '@/lib/world/globe-mesh';
+import { clipWater } from '@/lib/world/ground-shape';
 import type { LabelStore } from '@/lib/world/label-store';
 import { createScatter, type Scatter } from '@/lib/world/scatter';
+import type { WalkTown } from '@/lib/world/walk-charts';
 
 /*
  * The planet at /: terrain, ocean, rivers, sites and the castle town, a sun on the game clock, and the player
@@ -200,7 +213,10 @@ type GlobeSceneProps = {
   planet: Planet;
   town: TownView;
   walkTown: WalkTown;
+  citizenSpots: CitizenSpots;
   start: Start;
+  dropRef: RefObject<DropApi | null>;
+  goTo: GoToSite[];
   labels: LabelStore;
   clockRef: RefObject<GameClock>;
   focusRef: RefObject<Vector3>;
@@ -222,7 +238,10 @@ const GlobeScene = memo(function GlobeScene({
   planet,
   town,
   walkTown,
+  citizenSpots,
   start,
+  dropRef,
+  goTo,
   labels,
   clockRef,
   focusRef,
@@ -277,10 +296,12 @@ const GlobeScene = memo(function GlobeScene({
       <Suspense fallback={null}>
         <GlobeTown
           town={town}
+          water={walkTown.water}
           mapping={planet.town.mapping}
           groundRadius={TOWN_GROUND_RADIUS}
           grass={planet.town.grass}
           labels={labels}
+          citizenSpots={citizenSpots}
           onPlacementsReady={onPlacementsReady}
           onCitizenReady={onCitizenReady}
         />
@@ -294,7 +315,11 @@ const GlobeScene = memo(function GlobeScene({
       <GlobeWalker
         terrain={terrain}
         town={walkTown}
+        sites={view.sites}
+        scatter={planet.scatter}
         start={start}
+        dropRef={dropRef}
+        goTo={goTo}
         cameraMode={cameraMode}
         onCameraModeChange={onCameraModeChange}
         travel={travel}
@@ -314,20 +339,115 @@ const GlobeScene = memo(function GlobeScene({
 
 const round = (value: number) => value.toFixed(2);
 
+/** The "Go to" sites: the town at its spawn by the main gate, then every camp and landmark. */
+function goToSites(planet: Planet, town: TownView): GoToSite[] {
+  const radius = planet.terrain.globe.radius;
+  return planet.view.sites.map((site) => ({
+    id: site.id,
+    name: site.name,
+    mapping: anchorMapping(site.anchor, radius),
+    spawn: site.kind === 'town' ? startFor(planet, town, null) : null,
+  }));
+}
+
+const DROP_MESSAGES: Record<
+  Exclude<DropResult, { ok: true }>['reason'],
+  string
+> = {
+  water: "That's water. Pick a spot on land.",
+  miss: 'Pick a spot on the planet.',
+  loading: 'Still loading, try again in a moment.',
+};
+/** How long a drop message stays up, ms. */
+const MESSAGE_MS = 4000;
+/** A press that moves less than this (px) is a click, not a drag. */
+const CLICK_SLOP = 6;
+
 function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   const [params] = useSearchParams();
   const planet = useMemo(() => buildPlanet(view), [view]);
   const at = params.get('at');
   const [start] = useState(() => startFor(planet, town, at));
+  const [citizenSpots] = useState<CitizenSpots>(() => new Map());
+  // the stream runs on past the ground disc; outside it the terrain's own water rules
+  const townWater = useMemo(
+    () => clipWater(town.water, TOWN_GROUND_RADIUS),
+    [town],
+  );
   const walkTown = useMemo(
     (): WalkTown => ({
       mapping: planet.town.mapping,
       height: planet.town.height,
       placements: town.placements,
-      water: town.water,
+      water: townWater,
       groundRadius: TOWN_GROUND_RADIUS,
+      citizenSpots,
     }),
-    [planet, town],
+    [planet, town, townWater, citizenSpots],
+  );
+  const goTo = useMemo(() => goToSites(planet, town), [planet, town]);
+  const dropRef = useRef<DropApi | null>(null);
+  const [dropping, setDropping] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const press = useRef<{ x: number; y: number } | null>(null);
+  /** Where the pin hovers while dropping (client pixels) and what is under it. */
+  const [hover, setHover] = useState<{
+    x: number;
+    y: number;
+    target: DropTarget;
+  } | null>(null);
+  const hoverAt = useCallback((clientX: number, clientY: number) => {
+    const target = dropRef.current?.probe(clientX, clientY) ?? null;
+    setHover({ x: clientX, y: clientY, target });
+  }, []);
+
+  useEffect(() => {
+    if (!message) return;
+    const timer = window.setTimeout(() => setMessage(null), MESSAGE_MS);
+    return () => window.clearTimeout(timer);
+  }, [message]);
+
+  /** Shows the outcome of a drop; a successful one goes into `?at=` so the spot can be shared. */
+  const settle = useCallback((result: DropResult) => {
+    if (!result.ok) {
+      setMessage(DROP_MESSAGES[result.reason]);
+      return;
+    }
+    setMessage(null);
+    setDropping(false);
+    setHover(null);
+    // replace the URL in place (commas kept readable); `?at=` is only read on load
+    const rest = window.location.search
+      .slice(1)
+      .split('&')
+      .filter((part) => part && !part.startsWith('at='))
+      .join('&');
+    const spot = [
+      result.lat.toFixed(5),
+      result.lon.toFixed(5),
+      Math.round(result.bearing) % 360,
+    ].join(',');
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${window.location.pathname}?at=${spot}${rest ? `&${rest}` : ''}`,
+    );
+  }, []);
+  const dropAtScreen = useCallback(
+    (clientX: number, clientY: number) => {
+      const api = dropRef.current;
+      settle(
+        api ? api.atScreen(clientX, clientY) : { ok: false, reason: 'loading' },
+      );
+    },
+    [settle],
+  );
+  const goToSite = useCallback(
+    (id: string) => {
+      const api = dropRef.current;
+      settle(api ? api.goTo(id) : { ok: false, reason: 'loading' });
+    },
+    [settle],
   );
   const labels = useLabelStore();
   const [startTime] = useState(
@@ -363,6 +483,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   useKeys(
     useCallback((code: string) => {
       if (code === 'KeyT') setTravel((on) => !on);
+      if (code === 'Escape') setDropping(false);
     }, []),
   );
 
@@ -390,17 +511,60 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
       data-town-z={player?.town && round(player.town.z)}
       data-camera-mode={cameraMode}
       data-camera-distance={player && round(player.cameraDistance)}
+      data-camera={player?.camera.map((value) => value.toFixed(4)).join(',')}
+      data-camera-arm={player && player.arm.toFixed(2)}
+      data-camera-flying={player?.flying}
+      data-dropping={dropping}
       data-game-minutes={Math.floor(minutes)}
       data-travel={travel}
       data-draw-calls={stats?.calls}
       data-draw-calls-mode={stats?.mode}
       data-triangles={stats?.triangles}
+      style={dropping && hover ? { cursor: 'none' } : undefined}
+      onPointerMove={(event) => {
+        if (dropping && event.target instanceof HTMLCanvasElement)
+          hoverAt(event.clientX, event.clientY);
+        else if (hover) setHover(null);
+      }}
+      onPointerLeave={() => setHover(null)}
+      onPointerDown={(event) => {
+        press.current = { x: event.clientX, y: event.clientY };
+      }}
+      onPointerUp={(event) => {
+        const from = press.current;
+        press.current = null;
+        if (
+          dropping &&
+          from &&
+          event.target instanceof HTMLCanvasElement &&
+          Math.hypot(event.clientX - from.x, event.clientY - from.y) <
+            CLICK_SLOP
+        )
+          dropAtScreen(event.clientX, event.clientY);
+      }}
+      onDragOver={(event) => {
+        if (event.dataTransfer.types.includes(PEGMAN_DRAG)) {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+          hoverAt(event.clientX, event.clientY);
+        }
+      }}
+      onDragLeave={() => setHover(null)}
+      onDrop={(event) => {
+        if (!event.dataTransfer.types.includes(PEGMAN_DRAG)) return;
+        event.preventDefault();
+        setHover(null);
+        dropAtScreen(event.clientX, event.clientY);
+      }}
     >
       <GlobeScene
         planet={planet}
         town={town}
         walkTown={walkTown}
+        citizenSpots={citizenSpots}
         start={start}
+        dropRef={dropRef}
+        goTo={goTo}
         labels={labels}
         clockRef={clockRef}
         focusRef={focusRef}
@@ -461,12 +625,30 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
         >
           time ×60
         </Button>
+        <Pegman
+          active={dropping}
+          onToggle={() => {
+            setDropping((on) => !on);
+            setMessage(null);
+          }}
+        />
+        <GoToMenu sites={goTo} onPick={goToSite} />
         <span>
           WASD move, Shift run, T travel (25 m/s), drag to look, wheel zoom, C
           camera
           {cameraMode === 'fly' && ', Q/E down/up'}
+          {dropping && '. Click land to drop there, Esc cancels'}
         </span>
       </div>
+      {hover && <DropPin {...hover} />}
+      {message && (
+        <div
+          role="status"
+          className="absolute top-16 left-1/2 -translate-x-1/2 rounded-lg bg-white/90 px-3 py-2 text-sm shadow"
+        >
+          {message}
+        </div>
+      )}
       {player && (
         <div className="absolute bottom-3 left-3 rounded-lg bg-white/80 px-2 py-1 font-mono text-xs shadow">
           {localTime !== null && formatTime(localTime)} ·{' '}

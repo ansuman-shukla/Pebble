@@ -6,6 +6,7 @@
 import { Matrix4, Vector3 } from 'three';
 
 import type { LocalMapping } from './local-mapping';
+import { createSurface, type TerrainSurface } from './terrain-surface';
 import type { Anchor, WorldView } from '@/lib/client/types.gen';
 
 /** The rendered water surface above sea level: keeps beaches dry and shallows visibly under water. */
@@ -234,17 +235,20 @@ export const anchorMapping = (anchor: Anchor, radius: number) =>
 // --- terrain lookup ---
 
 interface TerrainHit {
-  /** Height above sea level of the rendered surface (flat triangles through u·(R + h) corners). */
+  /** Height above sea level of the rendered surface (the refined faces of terrain-surface.ts). */
   height: number;
+  /** The grid triangle under the direction. */
   triangle: number;
   /** The cell nearest to the direction. */
   cell: number;
-  /** 1 − cos(slope) of the triangle: 0 on level ground. */
+  /** 1 − cos(slope) of the rendered face: 0 on level ground. */
   tilt: number;
 }
 
 export interface GlobeTerrain {
   globe: Globe;
+  /** The refined surface the terrain mesh draws and the lookups sample. */
+  surface: TerrainSurface;
   /** Cells sharing a triangle edge with `cell`. */
   neighbours(cell: number): Uint32Array;
   /** Greedy walk over neighbours from `hint` (or the last answer) towards the direction. */
@@ -274,10 +278,13 @@ function buildRows(lists: Iterable<number>[]): Rows {
 const row = (rows: Rows, index: number) =>
   rows.values.subarray(rows.offsets[index], rows.offsets[index + 1]);
 
-const BARY_EPSILON = 1e-9;
+/** A direction on a grid triangle's edge belongs to both triangles. */
+const INSIDE_TOLERANCE = -1e-12;
 
 export function buildTerrain(globe: Globe): GlobeTerrain {
-  const { positions, heights, biomes, triangles, cellCount, radius } = globe;
+  const { positions, biomes, triangles, cellCount, radius } = globe;
+  const surface = createSurface(globe);
+  const divisions = surface.divisions;
   const near: Set<number>[] = Array.from(
     { length: cellCount },
     () => new Set(),
@@ -320,33 +327,78 @@ export function buildTerrain(globe: Globe): GlobeTerrain {
     return cell;
   }
 
-  const corner = [new Vector3(), new Vector3(), new Vector3()];
+  /** dir · (p × q) for cells p and q. */
+  function spans(direction: Vector3, p: number, q: number) {
+    const [px, py, pz] = [
+      positions[p * 3],
+      positions[p * 3 + 1],
+      positions[p * 3 + 2],
+    ];
+    const [qx, qy, qz] = [
+      positions[q * 3],
+      positions[q * 3 + 1],
+      positions[q * 3 + 2],
+    ];
+    return (
+      direction.x * (py * qz - pz * qy) +
+      direction.y * (pz * qx - px * qz) +
+      direction.z * (px * qy - py * qx)
+    );
+  }
+
+  /** Barycentric weights of the direction on triangle t's cone (A, B, C), or null when it passes outside. */
+  const weights = [0, 0, 0];
+  function inside(direction: Vector3, t: number) {
+    const [a, b, c] = [
+      triangles[t * 3],
+      triangles[t * 3 + 1],
+      triangles[t * 3 + 2],
+    ];
+    const w0 = spans(direction, b, c);
+    const w1 = spans(direction, c, a);
+    const w2 = spans(direction, a, b);
+    const sum = w0 + w1 + w2;
+    if (sum <= 0) return false;
+    weights[0] = w0 / sum;
+    weights[1] = w1 / sum;
+    weights[2] = w2 / sum;
+    return Math.min(...weights) >= INSIDE_TOLERANCE;
+  }
+
+  const face = new Float64Array(9);
   const e1 = new Vector3();
   const e2 = new Vector3();
-  const p = new Vector3();
-  const q = new Vector3();
+  const normal = new Vector3();
+  const origin = new Vector3();
 
-  /** Distance along the unit direction to the triangle's plane if the ray passes inside it, else null. */
-  function hitTriangle(direction: Vector3, t: number): number | null {
-    for (let k = 0; k < 3; k++) {
-      const cell = triangles[t * 3 + k];
-      corner[k]
-        .fromArray(positions, cell * 3)
-        .multiplyScalar(radius + heights[cell]);
-    }
-    e1.subVectors(corner[1], corner[0]);
-    e2.subVectors(corner[2], corner[0]);
-    p.crossVectors(direction, e2);
-    const det = e1.dot(p);
-    if (Math.abs(det) < BARY_EPSILON) return null;
-    const toOrigin = corner[0].negate();
-    const u = toOrigin.dot(p) / det;
-    q.crossVectors(toOrigin, e1);
-    const v = direction.dot(q) / det;
-    const tolerance = 1e-7;
-    if (u < -tolerance || v < -tolerance || u + v > 1 + tolerance) return null;
-    const distance = e2.dot(q) / det;
-    return distance > 0 ? distance : null;
+  /** Height and tilt of the rendered face of triangle t that the direction passes through (weights set). */
+  function hitFace(direction: Vector3, t: number) {
+    const x = Math.max(weights[1], 0) * divisions;
+    const y = Math.max(weights[2], 0) * divisions;
+    const i = Math.min(Math.floor(x), divisions - 1);
+    const j = Math.min(Math.floor(y), divisions - 1 - i);
+    const upper = x - i + (y - j) > 1 && i + j < divisions - 1;
+    const corners: [number, number][] = upper
+      ? [
+          [i + 1, j],
+          [i + 1, j + 1],
+          [i, j + 1],
+        ]
+      : [
+          [i, j],
+          [i + 1, j],
+          [i, j + 1],
+        ];
+    corners.forEach(([ci, cj], k) => surface.vertex(t, ci, cj, face, k * 3));
+    origin.fromArray(face, 0);
+    e1.fromArray(face, 3).sub(origin);
+    e2.fromArray(face, 6).sub(origin);
+    normal.crossVectors(e1, e2);
+    const distance = origin.dot(normal) / direction.dot(normal);
+    return {
+      height: distance - radius,
+      tilt: 1 - Math.abs(normal.normalize().dot(direction)),
+    };
   }
 
   const dir = new Vector3();
@@ -357,10 +409,8 @@ export function buildTerrain(globe: Globe): GlobeTerrain {
     const candidates = [cell, ...row(neighbourRows, cell)];
     for (const owner of candidates) {
       for (const t of row(triangleRows, owner)) {
-        const distance = hitTriangle(dir, t);
-        if (distance === null) continue;
-        const tilt = 1 - p.crossVectors(e1, e2).normalize().dot(dir);
-        return { height: distance - radius, triangle: t, cell, tilt };
+        if (!inside(dir, t)) continue;
+        return { ...hitFace(dir, t), triangle: t, cell };
       }
     }
     throw new Error('no terrain triangle under the direction');
@@ -368,6 +418,7 @@ export function buildTerrain(globe: Globe): GlobeTerrain {
 
   return {
     globe,
+    surface,
     neighbours: (cell) => row(neighbourRows, cell),
     nearestCell,
     locate,

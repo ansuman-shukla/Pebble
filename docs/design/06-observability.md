@@ -24,7 +24,7 @@ Event types (v0): `tick_summary`, `perceived`, `action_started`, `action_finishe
 `thought` (turn text), `need_changed` (on threshold crossings only), `injured`, `died`, `item_moved`,
 `resource_changed`, `knowledge_changed` (places/people learned), `citizen_spawned`, `animal_spawned`,
 `fire_changed`, `intervention`, `snapshot`. Continuous change (walkers' positions, needs drifting) is the tick's
-single `tick_summary` (D43).
+single `tick_summary` (D46).
 Phase B adds: `mind_turn` (latency, tool calls), `mind_unavailable`, `memory_written`, `belief_updated`,
 `relationship_changed`, `self_disclosure`.
 

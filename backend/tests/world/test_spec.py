@@ -24,6 +24,16 @@ def test_site_kinds_extend_the_town_kinds() -> None:
         assert all(placement.kind in kinds for placement in site.placements), site.id
 
 
+def test_every_landmark_placement_blocks_the_walk() -> None:
+    kinds = load_site_kinds()
+
+    for site in load_world_spec().sites:
+        if site.kind != "landmark":
+            continue
+        for placement in site.placements:
+            assert kinds[placement.kind].walk == "solid", (site.id, placement.kind)
+
+
 def test_spec_rejects_a_missing_site() -> None:
     raw = load_world_spec().model_dump(by_alias=True)
     raw["sites"] = [site for site in raw["sites"] if site["id"] != "painted_cave"]
