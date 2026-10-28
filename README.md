@@ -18,4 +18,7 @@ make -C backend dev                                   # Postgres :5544 + API htt
 cd frontend && ./scripts/pnpm.sh install && ./scripts/pnpm.sh dev   # http://localhost:5180
 ```
 
+`./scripts/pnpm.sh dev` and `build` first run `fetch-assets`, which downloads the pinned Polyfork files (~24 MB) into
+gitignored folders.
+
 Status: phase A, M0 scaffold.
