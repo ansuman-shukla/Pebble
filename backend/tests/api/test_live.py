@@ -4,8 +4,9 @@ NOTIFY only reaches listeners on commit, so this test commits its own run for re
 the latest run) and deletes it afterwards.
 """
 
+import queue
+import threading
 from collections.abc import Iterator
-from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Any
 
@@ -51,22 +52,28 @@ def committed_run(sim_world: SimWorld) -> Iterator[EngineLoop]:
         session.close()
 
 
-def _receive(ws: WebSocketTestSession, pool: ThreadPoolExecutor) -> dict[str, Any]:
-    message: dict[str, Any] = pool.submit(ws.receive_json).result(timeout=RECEIVE_TIMEOUT_S)
-    return message
+def _receive(ws: WebSocketTestSession) -> dict[str, Any]:
+    """The next message, or a failure after RECEIVE_TIMEOUT_S (a daemon thread waits, so a silent feed can't hang
+    the test run)."""
+    box: queue.Queue[dict[str, Any]] = queue.Queue()
+    threading.Thread(target=lambda: box.put(ws.receive_json()), daemon=True).start()
+    try:
+        return box.get(timeout=RECEIVE_TIMEOUT_S)
+    except queue.Empty:
+        raise AssertionError(f"no live message within {RECEIVE_TIMEOUT_S} s") from None
 
 
-def _until_tick(ws: WebSocketTestSession, pool: ThreadPoolExecutor, tick: int) -> list[dict[str, Any]]:
+def _until_tick(ws: WebSocketTestSession, tick: int) -> list[dict[str, Any]]:
     messages: list[dict[str, Any]] = []
     while not messages or messages[-1]["type"] != "tick" or messages[-1]["tick"] < tick:
-        messages.append(_receive(ws, pool))
+        messages.append(_receive(ws))
     return messages
 
 
 def test_the_live_feed_streams_snapshot_events_and_ticks(client: TestClient, committed_run: EngineLoop) -> None:
     loop = committed_run
-    with ThreadPoolExecutor(max_workers=1) as pool, client.websocket_connect(f"{API}/live?run_id={loop.run.id}") as ws:
-        snapshot = LiveState.model_validate(_receive(ws, pool))
+    with client.websocket_connect(f"{API}/live?run_id={loop.run.id}") as ws:
+        snapshot = LiveState.model_validate(_receive(ws))
         assert (snapshot.type, snapshot.run_id, snapshot.tick, snapshot.time) == ("snapshot", loop.run.id, 0, "08:00")
         assert len(snapshot.citizens) == 15
         assert {c.region for c in snapshot.citizens} == {"town", "band_a", "band_b"}
@@ -76,7 +83,7 @@ def test_the_live_feed_streams_snapshot_events_and_ticks(client: TestClient, com
         WorldApi(loop.sim, "genzo").say("Good morning, Aiko!")
         WorldApi(loop.sim, "hana").walk_to_place("the storehouses")  # over 100 m: still walking at tick 1
         loop.run_ticks(3, headless=True)
-        messages = _until_tick(ws, pool, 3)
+        messages = _until_tick(ws, 3)
         ticks = [LiveState.model_validate(m) for m in messages if m["type"] == "tick"]
         assert [t.tick for t in ticks] == [1, 2, 3]
         events = [LiveEvent.model_validate(m) for m in messages if m["type"] == "event"]
@@ -95,7 +102,7 @@ def test_the_live_feed_streams_snapshot_events_and_ticks(client: TestClient, com
 
         queue_command(loop.store.session, loop.run.id, "clock", {"speed": 7})
         loop.apply_commands()  # commits the new speed without a tick: the feed notices within a second
-        changed = LiveState.model_validate(_receive(ws, pool))
+        changed = LiveState.model_validate(_receive(ws))
         assert (changed.type, changed.tick, changed.speed, changed.paused) == ("tick", 3, 7.0, False)
 
 

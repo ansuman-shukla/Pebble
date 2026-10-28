@@ -72,8 +72,6 @@ class EntitiesView(BaseModel):
 def activity(citizen: ReplayCitizen, tick: int) -> Activity:
     if not citizen.alive:
         return "dead"
-    if citizen.asleep:
-        return "sleeping"
     doing = ACTIVITIES.get(citizen.action or "")
     if doing is not None:
         return doing

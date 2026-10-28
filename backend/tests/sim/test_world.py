@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from sqlmodel import Session
 
-from app.sim.items import ITEMS, RESOURCE_INDEX, amount_words
+from app.sim.items import ITEMS, RESOURCE_INDEX, RIVER_REEDS, amount_words
 from app.sim.navigation import Planner
 from app.sim.vec import angle, bearing_deg, lat_lon_deg, slerp, step_towards
 from app.sim.world import TERRAIN_COST, SimWorld, load_sim_world
@@ -55,6 +55,20 @@ def test_cells_inside_the_town_chart_have_no_wild_resources(sim_world: SimWorld)
     forest = sim_world.biomes == BIOME_IDS["broadleaf_forest"]
     assert (sim_world.resource_caps[forest & ~sim_world.in_town, RESOURCE_INDEX["berries"]] == 40).all()
     assert not sim_world.resource_caps[sim_world.biomes == BIOME_IDS["snow"]].any()
+
+
+def test_reeds_grow_on_rivers_through_living_ground(sim_world: SimWorld) -> None:
+    reeds = sim_world.resource_caps[:, RESOURCE_INDEX["reeds"]]
+    banks = (
+        sim_world.river
+        & ~sim_world.in_town
+        & np.isin(sim_world.biomes, [BIOME_IDS["grassland"], BIOME_IDS["broadleaf_forest"]])
+    )
+    assert banks.sum() > 50
+    assert (reeds[banks] == RIVER_REEDS).all()
+    assert (reeds[sim_world.biomes == BIOME_IDS["wetland"]] == 40).all()
+    dry = ~sim_world.river & np.isin(sim_world.biomes, [BIOME_IDS["grassland"], BIOME_IDS["broadleaf_forest"]])
+    assert not reeds[dry].any()
 
 
 def test_terrain_costs_follow_the_world_doc(sim_world: SimWorld) -> None:
