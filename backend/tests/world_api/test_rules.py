@@ -352,3 +352,64 @@ def test_names_are_only_learned_from_someone_you_can_see(new_sim: Callable[..., 
     WorldApi(sim, "bob").say("I am Bob!", "shout")
     assert listener.heard[-1].who == "someone"
     assert "bob" not in listener.people
+
+
+def test_known_people_walking_by_in_a_crowded_town_dont_interrupt(new_sim: Callable[..., Simulation]) -> None:
+    sim = new_sim()
+    walkers = [f"walker{i}" for i in range(6)]
+    for index, walker in enumerate(walkers):  # out of sight on the training ground (~160 m off)
+        sim.add_citizen(make_spec(walker, at=(-78.0 + 3 * index, -70.0), knows_places=["town", "main-gate"]))
+    watcher = sim.add_citizen(make_spec("watcher", at=(-3.0, 75.0), knows_people=walkers))  # on the main street
+    wait = WorldApi(sim, "watcher").wait(30)
+    assert not watcher.in_view
+    for walker in walkers:  # down the main street, past the watcher, to the gate
+        WorldApi(sim, walker).walk_to_place("the main gate")
+    passed = False
+    for _ in range(30):
+        sim.step()
+        passed = passed or set(walkers) <= watcher.in_view
+    assert passed  # they all came into view
+    assert run_until_done(sim, wait, 5).text == "You wait a while."
+
+
+def test_a_stranger_among_known_people_interrupts(new_sim: Callable[..., Simulation]) -> None:
+    sim = new_sim()
+    sim.add_citizen(make_spec("friend", at=(-78.0, -70.0)))
+    sim.add_citizen(make_spec("stranger", at=(-72.0, -70.0), appearance="a tall man with a bow"))
+    sim.add_citizen(make_spec("watcher", at=(-3.0, 75.0), knows_people=["friend"]))
+    wait = WorldApi(sim, "watcher").wait(30)
+    WorldApi(sim, "friend").walk_to_place("the main gate")
+    WorldApi(sim, "stranger").walk_to_place("the main gate")
+    result = run_until_done(sim, wait, 30)
+    assert result.outcome == "interrupted"
+    assert result.text.startswith("You stop waiting: a tall man with a bow comes into view")
+
+
+def test_a_known_person_walking_up_to_you_interrupts_once_close(new_sim: Callable[..., Simulation]) -> None:
+    sim = new_sim()
+    beside_well = (-20.0, 58.5)  # 6 m from where people stand at the well, on the cross street
+    sim.add_citizen(make_spec("passer", name="Mio", at=(-90.0, 61.0), knows_places=["town", "market"]))
+    sim.add_citizen(make_spec("visitor", name="Sora", at=(20.0, 56.0)))
+    sim.add_citizen(make_spec("friend", name="Kenji", age=70, at=(-76.0, 61.0)))  # 56 m off along the street
+    watcher = sim.add_citizen(make_spec("watcher", at=beside_well, knows_people=["friend", "passer", "visitor"]))
+
+    wait = WorldApi(sim, "watcher").wait(60)
+    WorldApi(sim, "passer").walk_to_place("the market")  # straight past the watcher along the cross street
+    WorldApi(sim, "visitor").walk_to_place("the well")  # to the well, 6 m from the watcher
+    closest = {"passer": 99.0, "visitor": 99.0}
+    for _ in range(4):
+        sim.step()
+        for other in closest:
+            distance = sim.world.distance_m(watcher.position, sim.citizen(other).position)
+            closest[other] = min(closest[other], distance)
+    assert max(closest.values()) < 10.0  # both came close...
+    assert wait.result is None  # ...without stopping the watcher
+
+    walk = WorldApi(sim, "friend").walk_to_person("a person in a watcher cloak")
+    result = run_until_done(sim, wait, 10)
+    assert result.text == "You stop waiting: Kenji is coming toward you."
+    assert 3.0 < sim.world.distance_m(watcher.position, sim.citizen("friend").position) <= 10.0
+
+    again = WorldApi(sim, "watcher").wait(10)  # already close: no second interrupt as he arrives
+    assert run_until_done(sim, walk, 5).text == "You reach a person in a watcher cloak."
+    assert run_until_done(sim, again, 12).text == "You wait a while."

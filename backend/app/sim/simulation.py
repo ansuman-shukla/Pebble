@@ -229,6 +229,7 @@ class Simulation:
         core = self.core
         core.state.tick += 1
         before = {citizen.id: citizen.position for citizen in core.living()}
+        headings = {citizen.id: actions.walk_heading(citizen) for citizen in core.living()}
 
         for citizen in core.living():
             actions.advance(core, citizen)
@@ -242,8 +243,10 @@ class Simulation:
         living = core.living()
         seen = self._visibility(living)
         for citizen in living:
-            newly_seen = sorted(seen[citizen.id] - citizen.in_view)
-            actions.interrupt(core, citizen, worse[citizen.id], newly_seen, actions.night_fell(core, citizen))
+            strangers = sorted(other for other in seen[citizen.id] - citizen.in_view if other not in citizen.people)
+            coming = actions.approaching(core, citizen, seen[citizen.id], before, headings)
+            night = actions.night_fell(core, citizen)
+            actions.interrupt(core, citizen, worse[citizen.id], strangers, coming, night)
         for citizen in living:
             citizen.in_view = seen[citizen.id]
             self._visit(citizen)

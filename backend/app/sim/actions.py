@@ -27,7 +27,7 @@ from app.sim.perception import (
     where_words,
 )
 from app.sim.state import ActionState, Citizen, Heard
-from app.sim.vec import bearing_deg, step_towards
+from app.sim.vec import Vec3, bearing_deg, step_towards
 from app.world_api.models import (
     Action,
     ActionName,
@@ -60,6 +60,8 @@ GATHER_MINUTES = 20
 GATHER_YIELD = (3, 6)
 DRINK_MINUTES = 3
 SLEEPY_ENERGY = 80.0  # above this nobody falls asleep by day
+APPROACH_M = 10.0  # a known person walking up to you interrupts once they come this close
+BESIDE_M = 3.0  # "walking up to you": to you, or to a spot this close to you
 ROUGH_DISTANCE_M: dict[str, float] = {
     "a few steps": 15.0,
     "a short walk": 100.0,
@@ -609,8 +611,19 @@ def end_for_death(core: SimCore, citizen: Citizen, died_seq: int) -> None:
 # --- interrupts (once per tick, after bodies) ---
 
 
-def interrupt(core: SimCore, citizen: Citizen, worse: list[Crossing], newly_seen: list[str], night_fell: bool) -> None:
-    """End the running durative action early when something happens (03, "Interrupts")."""
+def interrupt(
+    core: SimCore,
+    citizen: Citizen,
+    worse: list[Crossing],
+    strangers_seen: list[str],
+    approaching: list[str],
+    night_fell: bool,
+) -> None:
+    """End the running durative action early when something happens (03, "Interrupts").
+
+    People interrupt when a stranger comes into view or someone known comes up to you; known people merely walking
+    by don't (animals join with M6).
+    """
     action = citizen.action
     if action is None:
         return
@@ -630,15 +643,56 @@ def interrupt(core: SimCore, citizen: Citizen, worse: list[Crossing], newly_seen
             _interrupt(core, citizen, action, f"{stop}: you are {NEED_WORDS[crossing.words]}.", None)
             return
     if not asleep:
-        for person_id in newly_seen:
+        for person_id in strangers_seen:
             if person_id == action.target_id:
                 continue
             other = core.state.citizens[person_id]
             where = _where(core, citizen, other)
             _interrupt(core, citizen, action, f"{stop}: {person_label(citizen, other)} comes into view {where}.", None)
             return
+        for person_id in approaching:
+            if person_id == action.target_id:
+                continue
+            label = person_label(citizen, core.state.citizens[person_id])
+            _interrupt(core, citizen, action, f"{stop}: {label} is coming toward you.", None)
+            return
     if night_fell and action.kind in _NIGHT_STOPS:
         _interrupt(core, citizen, action, f"{stop}: night is falling.", None)
+
+
+WalkHeading = tuple[str | None, Vec3 | None]  # (person walked to, where the walk goes)
+
+
+def walk_heading(citizen: Citizen) -> WalkHeading | None:
+    action = citizen.action
+    if action is None or action.kind != "walk_to":
+        return None
+    return action.target_id, action.goal
+
+
+def approaching(
+    core: SimCore,
+    citizen: Citizen,
+    seen: set[str],
+    before: dict[str, Vec3],
+    headings: dict[str, WalkHeading | None],
+) -> list[str]:
+    """Known people in view who came within APPROACH_M this tick while walking to the citizen or to a spot beside
+    them (someone merely heading to the same well or market as you doesn't count)."""
+    found: list[str] = []
+    for person_id in sorted(seen & citizen.people):
+        heading = headings.get(person_id)
+        if heading is None or person_id not in before:
+            continue
+        other = core.state.citizens[person_id]
+        if core.distance_m(citizen.position, other.position) > APPROACH_M:
+            continue
+        if core.distance_m(before.get(citizen.id, citizen.position), before[person_id]) <= APPROACH_M:
+            continue  # already close
+        target_id, goal = heading
+        if target_id == citizen.id or (goal is not None and core.distance_m(goal, citizen.position) <= BESIDE_M):
+            found.append(person_id)
+    return found
 
 
 def _interrupt(core: SimCore, citizen: Citizen, action: ActionState, text: str, cause_seq: int | None) -> None:
