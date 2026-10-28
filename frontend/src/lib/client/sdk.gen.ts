@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { HealthReadHealthData, HealthReadHealthResponses, TownReadTownData, TownReadTownResponses, WorldReadWorldData, WorldReadWorldResponses } from './types.gen';
+import type { AdminChangeClockData, AdminChangeClockErrors, AdminChangeClockResponses, ClockReadGameClockData, ClockReadGameClockErrors, ClockReadGameClockResponses, EntitiesReadEntitiesData, EntitiesReadEntitiesErrors, EntitiesReadEntitiesResponses, EventsReadEventsData, EventsReadEventsErrors, EventsReadEventsResponses, HealthReadHealthData, HealthReadHealthResponses, TownReadTownData, TownReadTownResponses, WorldReadWorldData, WorldReadWorldResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -17,6 +17,41 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
      */
     meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta;
 };
+
+/**
+ * Change Clock
+ *
+ * Pause, resume or change speed; the engine applies it on its next loop.
+ */
+export const adminChangeClock = <ThrowOnError extends boolean = false>(options: Options<AdminChangeClockData, ThrowOnError>): RequestResult<AdminChangeClockResponses, AdminChangeClockErrors, ThrowOnError> => (options.client ?? client).post<AdminChangeClockResponses, AdminChangeClockErrors, ThrowOnError>({
+    url: '/api/v1/admin/clock',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Read Game Clock
+ *
+ * Game time, speed and pause state of the latest run (or the given one).
+ */
+export const clockReadGameClock = <ThrowOnError extends boolean = false>(options?: Options<ClockReadGameClockData, ThrowOnError>): RequestResult<ClockReadGameClockResponses, ClockReadGameClockErrors, ThrowOnError> => (options?.client ?? client).get<ClockReadGameClockResponses, ClockReadGameClockErrors, ThrowOnError>({ url: '/api/v1/clock', ...options });
+
+/**
+ * Read Entities
+ *
+ * Citizens now or at a past tick: position, cell, current action and coarse state.
+ */
+export const entitiesReadEntities = <ThrowOnError extends boolean = false>(options?: Options<EntitiesReadEntitiesData, ThrowOnError>): RequestResult<EntitiesReadEntitiesResponses, EntitiesReadEntitiesErrors, ThrowOnError> => (options?.client ?? client).get<EntitiesReadEntitiesResponses, EntitiesReadEntitiesErrors, ThrowOnError>({ url: '/api/v1/entities', ...options });
+
+/**
+ * Read Events
+ *
+ * Events in order, filtered by actor, type and tick range; page with `after_seq`.
+ */
+export const eventsReadEvents = <ThrowOnError extends boolean = false>(options?: Options<EventsReadEventsData, ThrowOnError>): RequestResult<EventsReadEventsResponses, EventsReadEventsErrors, ThrowOnError> => (options?.client ?? client).get<EventsReadEventsResponses, EventsReadEventsErrors, ThrowOnError>({ url: '/api/v1/events', ...options });
 
 /**
  * Read Health
