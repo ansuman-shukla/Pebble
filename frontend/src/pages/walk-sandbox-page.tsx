@@ -3,8 +3,13 @@ import { Canvas } from '@react-three/fiber';
 import { memo, Suspense, useCallback, useMemo, useState } from 'react';
 import { Shape, ShapeGeometry, Vector2 } from 'three';
 
-import { Walker } from '@/components/world/player/walker';
+import { Button } from '@/components/ui/button';
+import {
+  CAMERA_MODES,
+  type CameraMode,
+} from '@/components/world/player/camera-mode';
 import type { PlayerMove } from '@/components/world/player/player-state';
+import { Walker } from '@/components/world/player/walker';
 import { assetBaseY, assetUrl } from '@/lib/world/assets';
 import {
   assetIdForKind,
@@ -136,11 +141,15 @@ function PlacementModel({ placement }: { placement: WalkPlacement }) {
 }
 
 type SandboxSceneProps = {
+  cameraMode: CameraMode;
+  onCameraModeChange: (mode: CameraMode) => void;
   onPlayerMove: (move: PlayerMove) => void;
   onReady: () => void;
 };
 
 const SandboxScene = memo(function SandboxScene({
+  cameraMode,
+  onCameraModeChange,
   onPlayerMove,
   onReady,
 }: SandboxSceneProps) {
@@ -163,6 +172,8 @@ const SandboxScene = memo(function SandboxScene({
         placements={PLACEMENTS}
         water={WATER}
         spawn={SPAWN}
+        cameraMode={cameraMode}
+        onCameraModeChange={onCameraModeChange}
         onPlayerMove={onPlayerMove}
         onReady={onReady}
       />
@@ -175,6 +186,7 @@ const round = (value: number) => value.toFixed(2);
 export function WalkSandboxPage() {
   const [player, setPlayer] = useState<PlayerMove | null>(null);
   const [ready, setReady] = useState(false);
+  const [cameraMode, setCameraMode] = useState<CameraMode>('follow');
   const markReady = useCallback(() => setReady(true), []);
 
   return (
@@ -186,9 +198,32 @@ export function WalkSandboxPage() {
       data-player-y={player && round(player.y)}
       data-player-z={player && round(player.z)}
     >
-      <SandboxScene onPlayerMove={setPlayer} onReady={markReady} />
-      <div className="absolute top-3 left-3 rounded-lg bg-white/80 p-2 text-sm shadow">
-        WASD move, Shift run, drag to look, C camera
+      <SandboxScene
+        cameraMode={cameraMode}
+        onCameraModeChange={setCameraMode}
+        onPlayerMove={setPlayer}
+        onReady={markReady}
+      />
+      <div className="absolute top-3 left-3 flex items-center gap-2 rounded-lg bg-white/80 p-2 text-sm shadow">
+        {CAMERA_MODES.map((mode) => (
+          <Button
+            key={mode}
+            size="sm"
+            variant={mode === cameraMode ? 'default' : 'ghost'}
+            aria-pressed={mode === cameraMode}
+            onClick={(event) => {
+              setCameraMode(mode);
+              // hand the keyboard back to the scene (key presses on buttons are ignored)
+              event.currentTarget.blur();
+            }}
+          >
+            {mode}
+          </Button>
+        ))}
+        <span>
+          WASD move, Shift run, drag to look, C camera
+          {cameraMode === 'fly' && ', Q/E down/up'}
+        </span>
       </div>
     </div>
   );
