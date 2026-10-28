@@ -1,4 +1,6 @@
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Page, test, type WebSocketRoute } from '@playwright/test';
+
+import { tickLabel } from '../../src/lib/spectator/time';
 
 /*
  * The spectator pages against the real backend and its running simulation: people, a citizen's life, the
@@ -34,6 +36,11 @@ test('people lists everyone with a portrait and what they are doing', async ({
   const errors = watchErrors(page);
   const { citizens } = await api<{ citizens: CitizenRow[] }>('/citizens');
   await page.goto('/people');
+  // the engine's real feed keeps the page current (through the dev server's proxy)
+  await expect(page.getByTestId('people-page')).toHaveAttribute(
+    'data-live-feed',
+    'live',
+  );
   const people = page.getByTestId('person');
   await expect(people).toHaveCount(citizens.length);
   for (const citizen of citizens)
@@ -239,5 +246,71 @@ test('the menu reaches every spectator page', async ({ page }) => {
     await page.getByRole('navigation').getByRole('link', { name }).click();
     await expect(page.getByTestId(testId)).toBeVisible();
   }
+  expect(errors).toEqual([]);
+});
+
+test('pages refresh within 2 s of a live tick and poll only while the feed is down', async ({
+  page,
+}) => {
+  const errors = watchErrors(page);
+  // the test plays the engine's feed: the page's socket is answered here, not by the backend
+  const sockets: WebSocketRoute[] = [];
+  let refuse = false;
+  await page.routeWebSocket(/\/api\/v1\/live$/, (socket) => {
+    if (refuse) socket.close({ code: 1011 });
+    else sockets.push(socket);
+  });
+  const isCitizens = (url: string) =>
+    new URL(url).pathname === '/api/v1/citizens';
+  let asked = 0;
+  page.on('request', (request) => {
+    if (isCitizens(request.url())) asked += 1;
+  });
+  await page.goto('/people');
+  const main = page.getByTestId('people-page');
+  await expect(main).toHaveAttribute('data-live-feed', 'live');
+  await expect(page.getByTestId('person').first()).toBeVisible();
+
+  // a quiet feed: nothing is polled
+  const quiet = asked;
+  await page.waitForTimeout(3_000);
+  expect(asked).toBe(quiet);
+
+  // a tick: the page asks again and shows the new answer
+  const clock = await api<{
+    run_id: string;
+    tick: number;
+    day: number;
+    time: string;
+    speed: number;
+    paused: boolean;
+  }>('/clock');
+  const refetched = page.waitForResponse(
+    (response) => isCitizens(response.url()),
+    { timeout: 2_000 },
+  );
+  sockets.at(-1)!.send(
+    JSON.stringify({
+      type: 'tick',
+      run_id: clock.run_id,
+      tick: clock.tick,
+      day: clock.day,
+      time: clock.time,
+      speed: clock.speed,
+      paused: clock.paused,
+      citizens: [],
+    }),
+  );
+  const answer = (await (await refetched).json()) as { tick: number };
+  await expect(main.locator('header p')).toContainText(tickLabel(answer.tick), {
+    timeout: 1_000,
+  });
+
+  // the feed drops (and stays down): the page falls back to polling
+  refuse = true;
+  sockets.at(-1)!.close({ code: 1011 });
+  await expect(main).toHaveAttribute('data-live-feed', 'down');
+  const polled = asked;
+  await expect.poll(() => asked, { timeout: 5_000 }).toBeGreaterThan(polled);
   expect(errors).toEqual([]);
 });
