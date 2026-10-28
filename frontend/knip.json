@@ -1,0 +1,13 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["index.html", "tests/**/*.ts"],
+  "project": ["src/**/*.{ts,tsx}", "tests/**/*.ts"],
+  "ignore": ["src/lib/client/**", "src/components/ui/**"],
+  "ignoreBinaries": ["make"],
+  "ignoreDependencies": [
+    "tailwindcss",
+    "tw-animate-css",
+    "shadcn",
+    "@fontsource-variable/geist"
+  ]
+}
