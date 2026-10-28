@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 
+import { useLiveUpdates } from '@/hooks/use-live-updates';
 import { useReplayTick } from '@/hooks/use-replay-tick';
 import { tickLabel } from '@/lib/spectator/time';
 
@@ -21,9 +22,14 @@ export function PageShell({
   testId,
 }: PageShellProps) {
   const at = useReplayTick();
+  const link = useLiveUpdates();
   const { pathname } = useLocation();
   return (
-    <main className="h-full overflow-y-auto" data-testid={testId}>
+    <main
+      className="h-full overflow-y-auto"
+      data-testid={testId}
+      data-live-feed={link}
+    >
       <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4">
         {at !== null && (
           <div
