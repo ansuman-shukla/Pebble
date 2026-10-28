@@ -2,7 +2,7 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { type Group, Vector3 } from 'three';
 
-import type { LabelStore } from '@/lib/world/label-store';
+import type { LabelEntry, LabelStore } from '@/lib/world/label-store';
 
 /*
  * Name labels over 3D objects: anchors live in the scene, the text lives in one DOM overlay, and a projector
@@ -15,14 +15,15 @@ type LabelProps = {
   id: string;
   text: string;
   height: number;
+  kind?: LabelEntry['kind'];
 };
 
 /** An anchor inside the scene; place it as a child of the object it names. */
-export function Label({ store, id, text, height }: LabelProps) {
+export function Label({ store, id, text, height, kind }: LabelProps) {
   const anchor = useRef<Group>(null);
   useEffect(
-    () => store.add({ id, text, anchor: anchor.current! }),
-    [store, id, text],
+    () => store.add({ id, text, anchor: anchor.current!, kind }),
+    [store, id, text, kind],
   );
   return <group ref={anchor} position={[0, height, 0]} />;
 }
@@ -64,10 +65,11 @@ export function LabelOverlay({ store }: { store: LabelStore }) {
   const entries = useSyncExternalStore(store.subscribe, store.getSnapshot);
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      {entries.map(({ id, text }) => (
+      {entries.map(({ id, text, kind = 'name' }) => (
         <span
           key={id}
           data-label={id}
+          data-label-kind={kind}
           ref={(element) => {
             if (!element) return;
             store.elements.set(id, element);
@@ -75,7 +77,11 @@ export function LabelOverlay({ store }: { store: LabelStore }) {
               store.elements.delete(id);
             };
           }}
-          className="absolute top-0 left-0 rounded bg-black/60 px-1.5 py-0.5 text-[11px] whitespace-nowrap text-white"
+          className={
+            kind === 'speech'
+              ? 'absolute top-0 left-0 w-max max-w-56 rounded-lg bg-white/95 px-2 py-1 text-xs text-black shadow'
+              : 'absolute top-0 left-0 rounded bg-black/60 px-1.5 py-0.5 text-[11px] whitespace-nowrap text-white'
+          }
         >
           {text}
         </span>
