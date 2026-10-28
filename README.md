@@ -35,12 +35,14 @@ town's main gate.
 
 | Control | What |
 |---|---|
-| WASD, Shift | walk, run |
-| T (or the `travel` button) | travel at 25 m/s (around the planet's land loop in ~10 min) |
+| WASD, Shift | walk (1.4 m/s), run (3.5 m/s); slower up and down steep slopes, no climbing slopes over 45° |
+| T (or the `travel` button) | travel at 25 m/s (around the planet's land loop in ~10 min); walks through scattered trees and up any slope, walls and water still stop it |
 | C (or the buttons) | camera: follow (third person), orbit (whole planet; zoom onto the player to walk again), fly (Q/E down/up) |
 | drag, wheel | look, zoom |
+| `drop` (the pegman) | click it, then click a spot on the planet (Esc cancels), or drag it onto the planet: the player lands there and the camera flies down behind them; water is refused |
+| `go to` | jump to the castle town, a camp or a landmark |
 | `time ×60` | run the clock at one game hour per second |
-| `?at=lat,lon[,bearing]` | start anywhere, e.g. `/?at=12.4,100,180` (band A camp); `?time=HH:MM` sets the town time |
+| `?at=lat,lon[,bearing]` | start anywhere, e.g. `/?at=12.4,100,180` (band A camp); a drop or go to rewrites it so the spot can be shared; `?time=HH:MM` sets the town time |
 
 `/town` shows the flat town alone; `/?mock=1` uses the small test world instead of the backend's.
 
