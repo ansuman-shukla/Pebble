@@ -74,8 +74,6 @@ const WILD_RECENTER = 35;
 /** Look-ahead and spacing of the terrain gradient samples, metres. */
 const SLOPE_AHEAD = 0.3;
 const SLOPE_SAMPLE = 0.5;
-/** Camera keeps this far above the ground. */
-const CAMERA_FLOOR = 0.3;
 const CAMERA_GROUND_SAMPLES = 12;
 /** Drop spots are searched on rings around the picked point out to this many metres. */
 const DROP_SEARCH = 12;
@@ -108,11 +106,14 @@ export interface GlobeWalk {
   isDry(direction: Vector3): boolean;
   /** A free spot at or near (within DROP_SEARCH m) a picked direction, or null if it is water. */
   dropSpot(direction: Vector3): Vector3 | null;
-  /** How much (0..1) of the segment from the player's eye to the camera is clear of blockers and ground. */
-  cameraReach(eye: Vector3, camera: Vector3): number;
-  /** Whether the segment from the player's eye to the camera stays above the ground. */
-  aboveGround(eye: Vector3, camera: Vector3): boolean;
-  /** Moves a camera position out of nearby blockers and above the ground (in place). */
+  /**
+   * How much (0..1) of the segment from the player's eye to the camera is clear of blockers and stays
+   * `clearance` above the ground (or water).
+   */
+  cameraReach(eye: Vector3, camera: Vector3, clearance: number): number;
+  /** Whether the segment from the player's eye to the camera stays `clearance` above the ground (or water). */
+  aboveGround(eye: Vector3, camera: Vector3, clearance: number): boolean;
+  /** Moves a camera position out of blockers within `radius` of it (in place). */
   clearCamera(camera: Vector3, radius: number): Vector3;
 }
 
@@ -351,17 +352,22 @@ export function createGlobeWalk(
   };
 
   /** How far (0..limit) along the segment the ground stays below it (hills behind the player, a ledge). */
-  function groundReach(eye: Vector3, camera: Vector3, limit: number) {
+  function groundReach(
+    eye: Vector3,
+    camera: Vector3,
+    limit: number,
+    clearance: number,
+  ) {
     for (let k = 1; k <= CAMERA_GROUND_SAMPLES; k++) {
       const t = (k / CAMERA_GROUND_SAMPLES) * limit;
       sample.lerpVectors(eye, camera, t);
-      if (sample.length() < radius + floorAt(sample) + CAMERA_FLOOR)
+      if (sample.length() < radius + floorAt(sample) + clearance)
         return ((k - 1) / CAMERA_GROUND_SAMPLES) * limit;
     }
     return limit;
   }
 
-  function cameraReach(eye: Vector3, camera: Vector3) {
+  function cameraReach(eye: Vector3, camera: Vector3, clearance: number) {
     const { chart } = chartAt(eye);
     const reach = raycastBlockers(
       chart.world,
@@ -369,7 +375,7 @@ export function createGlobeWalk(
       toLocalPoint(chart, camera),
       chart.dynamic?.() ?? NO_SHAPES,
     );
-    return groundReach(eye, camera, reach);
+    return groundReach(eye, camera, reach, clearance);
   }
 
   function clearCamera(camera: Vector3, clearance: number) {
@@ -383,8 +389,6 @@ export function createGlobeWalk(
       chart.dynamic?.() ?? NO_SHAPES,
     );
     if (x !== at[0] || z !== at[1]) chart.mapping.toWorld(x, height, z, camera);
-    const floor = radius + floorAt(camera) + CAMERA_FLOOR;
-    if (camera.length() < floor) camera.setLength(floor);
     return camera;
   }
 
@@ -400,7 +404,8 @@ export function createGlobeWalk(
     isDry,
     dropSpot,
     cameraReach,
-    aboveGround: (eye, camera) => groundReach(eye, camera, 1) === 1,
+    aboveGround: (eye, camera, clearance) =>
+      groundReach(eye, camera, 1, clearance) === 1,
     clearCamera,
   };
 }

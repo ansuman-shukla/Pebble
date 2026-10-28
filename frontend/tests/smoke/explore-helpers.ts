@@ -37,8 +37,9 @@ import {
  * and colliders files the page builds (town surfaces are flat here: no bridge raycasts).
  */
 
-export const WORLD_URL = 'http://localhost:8100/api/v1/world';
-export const TOWN_URL = 'http://localhost:8100/api/v1/town';
+export { WORLD_URL } from './globe-helpers';
+/** The town from the same backend as the world (PLAYWRIGHT_API_URL). */
+export const TOWN_URL = `${process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:8100'}/api/v1/town`;
 /** The page's prop clearings around the town and the other sites. */
 const TOWN_CLEARING = 300;
 const SITE_CLEARING = 45;

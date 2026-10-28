@@ -2,7 +2,7 @@
 
 What the planet client at `/` does, how it maps the town onto the sphere, what it costs to draw and what is still
 rough. Built against the globe contract with a deterministic mock world, then switched to the real generated world
-(`GET /api/v1/world`, seed 20261028, generator `m3.1`).
+(`GET /api/v1/world`, seed 20261028, generator `m3.1`; the refined terrain below came with `m3.2`).
 
 ## Pages and controls
 
@@ -29,11 +29,12 @@ Useful `?at=` spots on the real world: band A camp `12.4,100,180`, standing ston
 | Module | Role |
 |---|---|
 | `hooks/use-world.ts` | `/api/v1/world` through the generated client (types from `lib/client/types.gen`), or the mock with `?mock=1` |
-| `lib/world/globe.ts` | decode the base64 arrays, lat/lon, tangent frame, gnomonic `siteMapping`, terrain lookup (`buildTerrain`: nearest cell by greedy walk over neighbours, height = ray hit on the rendered triangle) |
+| `lib/world/globe.ts` | decode the base64 arrays, lat/lon, tangent frame, gnomonic `siteMapping`, terrain lookup (`buildTerrain`: nearest cell by greedy walk over neighbours, height = ray hit on the refined face that is drawn) |
+| `lib/world/terrain-surface.ts` | the refined surface: 4×4 faces per grid triangle on a quadratic patch through the cell heights and one bent height per edge middle |
 | `lib/world/local-mapping.ts` | `LocalMapping` (local metres to world); `FLAT_MAPPING` for `/town` |
 | `lib/world/globe-walk.ts` | a step on the sphere: town collisions in local metres inside the town, water biomes block outside |
 | `lib/world/scatter.ts` + `biome-props.ts` | props per cell from `hash(seed, cell)`; `perCell` counts are for frequency 60 and scale with cell area; no props on slopes over 40° |
-| `lib/world/globe-mesh.ts` | terrain (flat faces coloured by biome, sand on shores, lakes as water) and river ribbons |
+| `lib/world/globe-mesh.ts` | terrain (the refined surface, indexed; biome colours blended across cells, sand fading in at shores, lakes as water) and river ribbons |
 | `lib/world/assets.ts` `kindScale` | per-kind render scale (`giant_tree` ×3.5, `ice_block` ×3), applied to site placements and scatter |
 | `lib/world/game-clock.ts` | the clock and the sun (no axial tilt) |
 | `lib/world/mock-world.ts` | DEV/TEST ONLY mock in the contract's format |
@@ -43,9 +44,9 @@ Useful `?at=` spots on the real world: band A camp `12.4,100,180`, standing ston
 
 - Placements, ground areas, water and townspeople go through `anchorMapping(site.anchor, R)`: model matrices get
   the basis (east', up', south') at their spot, flat shapes are split into ≤ 8 m triangles before mapping.
-- The town lays its own ground disc (radius 225 m, inside the 230 m plateau) at exactly R + h0, with a 4 m skirt;
-  the terrain shader discards fragments inside that cone, so moat and stream water (0.4 m below the grass) are
-  never covered by terrain triangles (whose chords sag below the sphere). On the real world the disc meets the
+- The town lays its own ground disc (radius 225 m, inside the 270 m plateau) at exactly R + h0, with a 4 m skirt;
+  the terrain shader discards fragments inside that cone (stopping 0.2 m short of the disc's polygon edge), so moat
+  and stream water (0.4 m below the grass) are never covered by terrain faces. On the real world the disc meets the
   plateau without a visible seam; walking out of the main gate south, the ground goes 8 m → terrain smoothly.
 - Camps and landmarks have no ground of their own: each placement stands on the rendered terrain under it
   (`lift`), so a slightly uneven plateau never leaves props floating.
@@ -57,7 +58,7 @@ Useful `?at=` spots on the real world: band A camp `12.4,100,180`, standing ston
   tiers are re-filtered every 20 m of focus movement, the cell set every 100 m.
 - Full density to 600 m (the first draft) was 5.0 M triangles at a forest edge; the tiers bring the densest
   broadleaf view down to 1.6 M.
-- Real terrain has steep faces (10 % of land edges over 40°, 5 % over 48°): props skip slopes over 40°.
+- Props skip slopes over 40° (m3.1 had 10 % of land edges over 40°; m3.2 0.8 %).
 
 ## Lakes
 
@@ -65,6 +66,26 @@ The real world has 60 lakes whose surfaces lie above sea level (e.g. the great f
 arrays carry them as flat lake cells at their surface height, so the client draws a face whose corners are all lake
 in the sea's near-shore colour; lake shores get a light sand tint (sea beaches a strong one). Before this the lakes
 showed as sand (the face colouring only knew sea level).
+
+## Terrain surface (m3.2)
+
+- Each of the 72,000 grid triangles is split 4×4: 1,152,000 faces, 576,002 shared vertices (indexed), built in
+  ~0.2 s. Face corners lie on a quadratic patch through the three cell heights and a height per grid edge middle
+  (bent by (a + b − c − d)/8 towards the curvature of the two cells facing the edge, clamped to a quarter of the edge's
+  rise, so flats stay flat and an edge never dips past its ends). Neighbouring patches share their edges: no cracks.
+- `heightAt` finds the grid triangle by its cone, then the refined face from the barycentric weights, and hits that
+  flat face: it matches the mesh to 0.1 mm (test: 5000 random points on drawn faces).
+- Shading uses the grid's cell normals blended like the colours (the mesh's own normals showed the patch seams as
+  hatching from orbit), mixed with 35 % of the face normal within 250 m of the camera, fading out by 1200 m.
+- Colours: each land cell's colour is softened towards its land neighbours' (own weight 3), then blended linearly
+  across the triangle; under the sea the floor fades sand → shallows → deep by height; sand fades in below 2.5 m.
+
+## Follow camera under the ground (bug, fixed)
+
+The follow camera sat at a fixed boom behind the player with no regard for the ground: on any rise behind the player
+(7.6 % of land spots × headings at the default 6 m boom, 28 % zoomed out to 40 m on m3.1) it ended inside the hill.
+From below, the hill's faces are back-facing and culled, so the player seemed to hang in the air and far terrain
+showed as thin slanted slivers against the sky. The camera now stays 1 m above the ground (or the water) under it.
 
 ## Performance (real world)
 
@@ -81,6 +102,9 @@ showed as sand (the face colouring only knew sea level).
 | fly near the volcano | 259 | 2.3 M | 60 |
 | travelling at 25 m/s through forest | 54 | 1.8 M | 60, no frame over 17 ms in 8 s |
 
+With the refined terrain (m3.2) every view draws ~1.1 M more triangles and the same draw calls: town spawn 191 calls /
+3.1 M, orbit 263 / 3.0 M, densest forest 49 / 2.8 M; 60 fps, no frame over 17 ms idle or travelling; ready ~4.6 s.
+
 - `/api/v1/world`: 0.85 MB gzip (2.0 MB JSON), ~0.2 s from the stored row; generating a new row (spec change) ~1 s.
 - Ready (world decoded, town placements and walker loaded) in ~4-4.7 s from a cold page in headless Chrome.
 
@@ -92,8 +116,8 @@ showed as sand (the face colouring only knew sea level).
 | Camera flight | every switch into follow (a drop, go to, C, the orbit zoom handover) flies from the current view in 1.5 s: around the planet's centre along the great circle, altitude interpolated in log space and lifted over long hops so it never cuts through the planet; the view turns to the player in the first 40 %. |
 | Go to | the town: its spawn by the main gate; camps and landmarks: the first free spot on rings 6..30 m around the anchor (south first), facing the anchor. |
 | `?at=` | rewritten with `history.replaceState` after every drop / go to (`lat,lon,bearing`, other params kept). |
-| Solid objects | `globe-walk.ts` resolves each step in a chart (D42): the town's walls and townspeople, each camp's and landmark's placements, and a wild chart of the scattered props around the player, all from Polyfork colliders; ground cover (grass, flowers, ferns, reeds, cattails, pebbles) never blocks. |
-| Spring arm | the segment from the eye (1.4 m) to the wanted camera is clipped against the same collider volumes and sampled against the ground (D43); slopes behind the player tilt the camera up instead of pulling it in. |
+| Solid objects | `globe-walk.ts` resolves each step in a chart (D43): the town's walls and townspeople, each camp's and landmark's placements, and a wild chart of the scattered props around the player, all from Polyfork colliders; ground cover (grass, flowers, ferns, reeds, cattails, pebbles) never blocks. |
+| Spring arm | the segment from the eye (1.4 m) to the wanted camera is clipped against the same collider volumes and must stay 1 m above the ground and water (D44); slopes behind the player tilt the camera up instead of pulling it in, and the camera itself never ends closer than 1 m to the ground. |
 | Walking | pace eases in and out (~0.3 s), slows to 40 % up and 75 % down a 45° slope, and the feet follow the terrain exactly (only real steps onto paving or a bridge are eased); the camera's eye height is smoothed so the terrain's facets don't bob the view. |
 
 Costs, measured headless with the Metal GPU: a step resolves in ~0.02 ms, the camera's reach in ~0.007 ms; the wild
@@ -111,8 +135,8 @@ Notes:
 
 - No fire light or lantern glow at night yet; no seasons (no axial tilt, so the poles sit in permanent twilight).
 - The town is drawn at full detail even from orbit (no LOD); fine at 60 fps but it is most of the orbit draw calls.
-- The real terrain is rugged at 40 m cells (steep faces up to ~60°): slopes over 45° stop the walker, so some
-  mountain flanks can only be crossed in travel mode.
+- Slopes over 45° stop the walker (the steepest faces left are the great falls cliff and the volcano, ~56°); travel
+  mode climbs anything.
 - Small plateaus (elder tree, camps: radius 40-50 m) are only one or two cells, so the ground around them still slopes.
 - The great falls outflow leaves its lake as a flat land strip at lake level (the authored channel cells are not
   lake), which reads as a causeway across the lake's south end.

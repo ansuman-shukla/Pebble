@@ -21,7 +21,7 @@ import {
 import { useDrag } from '@/components/world/player/use-drag';
 import { MAX_FRAME, smoothing } from '@/components/world/player/motion';
 import { PLAYER_EYE_HEIGHT } from '@/components/world/player/player-state';
-import { type GlobeTerrain, tangent } from '@/lib/world/globe';
+import { type GlobeTerrain, tangent, WATER_SURFACE } from '@/lib/world/globe';
 import type { GlobeWalk } from '@/lib/world/globe-walk';
 
 /*
@@ -57,6 +57,8 @@ const turnTo = new Quaternion();
 const looking = new Matrix4();
 
 const FOLLOW_DRAG = 0.005;
+/** The follow camera never dips closer than this to the ground or the water under it. */
+const FOLLOW_CLEARANCE = 1;
 const FOLLOW_PITCH: [number, number] = [0.05, 1.45];
 const FOLLOW_DISTANCE: [number, number] = [3, 40];
 /** The spring arm stops this far short of what it hits... */
@@ -77,19 +79,20 @@ const EYE_SMOOTHING = 12;
 /** ...but jumps when the player is moved (a drop). */
 const EYE_JUMP = 3;
 export function GlobeFollowCamera({
+  terrain,
   playerRef,
   rigRef,
   walkRef,
   focusRef,
-  radius,
 }: {
+  terrain: GlobeTerrain;
   playerRef: RefObject<GlobePlayerState>;
   rigRef: RefObject<GlobeRig>;
   /** The walk's collisions for the spring arm (null until it is built). */
   walkRef: RefObject<GlobeWalk | null>;
   focusRef: RefObject<Vector3>;
-  radius: number;
 }) {
+  const radius = terrain.globe.radius;
   const camera = useThree((state) => state.camera);
   const eyeHeight = useRef<number | null>(null);
 
@@ -128,6 +131,14 @@ export function GlobeFollowCamera({
     const { position, facing } = playerRef.current;
     const rig = rigRef.current;
     const walk = walkRef.current;
+    /** Never closer than FOLLOW_CLEARANCE to the ground or the water under it (also while the walk loads). */
+    const keepAbove = (point: Vector3) => {
+      const ground = walk
+        ? walk.floorAt(point)
+        : Math.max(terrain.heightAt(point), WATER_SURFACE);
+      const floor = radius + ground + FOLLOW_CLEARANCE;
+      return point.length() < floor ? point.setLength(floor) : point;
+    };
     up.copy(position).normalize();
     tangent(rig.heading, up, facing);
     const eyeTarget = position.length() + PLAYER_EYE_HEIGHT;
@@ -151,6 +162,7 @@ export function GlobeFollowCamera({
       !walk.aboveGround(
         eye,
         wanted.copy(eye).addScaledVector(aim(pitch), rig.distance),
+        FOLLOW_CLEARANCE,
       )
     )
       pitch += LIFT_STEP;
@@ -161,7 +173,7 @@ export function GlobeFollowCamera({
       (rig.settled ? smoothing(lifted ? LIFT_RISE : LIFT_FALL, delta) : 1);
     aim(rig.pitch + rig.lift);
     wanted.copy(eye).addScaledVector(offset, rig.distance);
-    const reach = walk ? walk.cameraReach(eye, wanted) : 1;
+    const reach = walk ? walk.cameraReach(eye, wanted, FOLLOW_CLEARANCE) : 1;
     const clear =
       reach >= 1
         ? rig.distance
@@ -179,10 +191,7 @@ export function GlobeFollowCamera({
       flight.elapsed += delta;
       const t = easeInOut(Math.min(flight.elapsed / FLIGHT_SECONDS, 1));
       flightPoint(flight.from, wanted, t, radius, camera.position);
-      if (walk) {
-        const floor = radius + walk.floorAt(camera.position) + 1;
-        if (camera.position.length() < floor) camera.position.setLength(floor);
-      }
+      keepAbove(camera.position);
       camera.up.copy(camera.position).normalize();
       looking.lookAt(camera.position, eye, camera.up);
       turnTo.setFromRotationMatrix(looking);
@@ -191,7 +200,7 @@ export function GlobeFollowCamera({
         .slerp(turnTo, Math.min(t / 0.4, 1));
       if (flight.elapsed >= FLIGHT_SECONDS) rig.flight = null;
     } else {
-      camera.position.copy(wanted);
+      camera.position.copy(keepAbove(wanted));
       camera.up.copy(up);
       camera.lookAt(eye);
     }

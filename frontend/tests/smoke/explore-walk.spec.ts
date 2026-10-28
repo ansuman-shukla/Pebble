@@ -336,7 +336,7 @@ test('the spring arm stops at the townhouses beside the main street and clears t
     const eye = mapping.toWorld(0, 1.4, z, new Vector3());
     // looking east: the camera sits west, inside the west townhouse row (x -7.9..-4.1)
     const behind = mapping.toWorld(-5.6, 3.4, z, new Vector3());
-    const reach = walk.cameraReach(eye, behind);
+    const reach = walk.cameraReach(eye, behind, 1);
     expect(reach).toBeLessThan(0.8);
     const camera = eye.clone().lerp(behind, reach);
     walk.clearCamera(camera, 0.25);
@@ -353,7 +353,7 @@ test('the spring arm stops at the townhouses beside the main street and clears t
     ).toBe(1);
     // along the street nothing is in the way
     const along = mapping.toWorld(0, 3.4, z + 5.6, new Vector3());
-    expect(walk.cameraReach(eye, along)).toBe(1);
+    expect(walk.cameraReach(eye, along, 1)).toBe(1);
   }
 });
 
