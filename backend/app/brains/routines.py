@@ -13,6 +13,7 @@ from pydantic import JsonValue
 
 from app.brains.profile import BrainProfile, Routine
 from app.brains.senses import (
+    DISTANCE,
     Needs,
     Phase,
     Resource,
@@ -318,8 +319,11 @@ def _hunt(ctx: Context) -> list[Option]:
     """Hunters hunt by day: game in view is stalked (hunters setting out together go for the same herd); else they
     search around camp a few times; meat goes home to the fire."""
     p, api = ctx.perception, ctx.api
-    if "hunting" not in ctx.profile.skills or not _daytime(ctx) or ctx.done_today("hunt"):
+    if "hunting" not in ctx.profile.skills or not _daytime(ctx):
         return []
+    sharing = _share_meat(ctx)
+    if sharing or ctx.done_today("hunt"):
+        return sharing
     if carried_food(p.you).get("meat"):
         ctx.mark_done("hunt")
         return [] if at_home(p) else [Option(WORK + 5, "bring the meat home", lambda: api.walk_to_place("home"))]
@@ -337,6 +341,29 @@ def _hunt(ctx: Context) -> list[Option]:
         search = _then(lambda: ctx.mark_done("game-search"), lambda: api.walk_towards(direction, distance))
         return [Option(WORK + 4, "look for game", search)]
     return []
+
+
+def _share_meat(ctx: Context) -> list[Option]:
+    """Back at camp with meat, a hunter hands half of it to the nearest one close by (walking up to them first), once
+    a day."""
+    p, api = ctx.perception, ctx.api
+    if ctx.done_today("shared meat") or carried_food(p.you).get("meat", 0) < 2:
+        return []
+    if not (at_home(p) or at(p, ctx.profile.home_area)):
+        return []
+    close = [person for person in p.people if DISTANCE[person.nearness] in ("here", "near", "close")]
+    if not close:
+        return []
+    who = close[0].label
+    if not beside(close[0]):
+        return [Option(WORK + 5, f"take meat to {who}", partial(api.walk_to_person, who))]
+
+    def share() -> ActionHandle:
+        ctx.mark_done("shared meat")
+        api.give("half the meat", who)
+        return api.rest(20)
+
+    return [Option(WORK + 5, "share the meat", share)]
 
 
 def _count_today(ctx: Context, chore: str) -> int:

@@ -113,3 +113,17 @@ def test_a_spear_carrier_drives_off_a_wolf_that_comes_close(new_sim: Callable[..
     _brain(sim, unarmed.id).decide()
     assert _started(sim, unarmed.id) == "flee"
 
+
+def test_a_hunter_back_at_camp_shares_half_the_meat(new_sim: Callable[..., Simulation]) -> None:
+    sim = without_animals(new_sim())
+    camp = {"site": "band_a_camp", "home": None, "region": "band_a"}
+    hunter = sim.add_citizen(make_spec("tek", at=(0.0, 30.0), skills=["hunting"], inventory={"meat": 4}, **camp))
+    other = sim.add_citizen(make_spec("suna", at=(1.0, 30.0), **camp))
+    skip_to(sim, hunter.position, night=False)
+    brain = _brain(sim, hunter.id)
+    brain.decide()
+    assert other.inventory.get("meat") == 2 and hunter.inventory["meat"] == 2
+    assert _started(sim, hunter.id) == "rest"
+    sim.run(21)  # the rest is over
+    brain.decide()
+    assert other.inventory["meat"] == 2  # once a day
