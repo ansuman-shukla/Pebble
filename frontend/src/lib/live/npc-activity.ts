@@ -22,6 +22,26 @@ export type NpcClip =
 /** Every NPC loads these up front; activity clips are fetched (once per page) when first needed. */
 export const BASE_CLIPS: readonly NpcClip[] = ['Idle', 'Walk'];
 
+/** Every clip but the gait is a standing one (the type keeps the list complete). */
+const STANDING: Record<Exclude<NpcClip, 'Walk'>, true> = {
+  Idle: true,
+  Sitting: true,
+  Eating: true,
+  Drinking: true,
+  Talking: true,
+  Harvesting: true,
+  Planting: true,
+  'Pick up': true,
+  'Chopping wood': true,
+  'Arms folded': true,
+  Fixing: true,
+};
+
+/** The standing clips play on planted feet; the gait plays on the spot. */
+export const PLANTED_CLIPS: ReadonlySet<string> = new Set(
+  Object.keys(STANDING),
+);
+
 type NpcPose = 'standing' | 'sitting' | 'lying';
 
 export interface NpcLook {
