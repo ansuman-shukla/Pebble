@@ -1,11 +1,21 @@
 import { expect, test } from '@playwright/test';
 
+import { Vector3 } from 'three';
+
 import type { WorldView } from '../../src/lib/client/types.gen';
 import { assetSize, kindScale, PROPS } from '../../src/lib/world/assets';
+import { BIOME_PROPS } from '../../src/lib/world/biome-props';
+import {
+  buildTerrain,
+  cellDirection,
+  decodeWorld,
+} from '../../src/lib/world/globe';
+import { createScatter, MAX_PROP_SLOPE_DEG } from '../../src/lib/world/scatter';
 
 /*
- * The real generated world (GET /api/v1/world on the backend) only names kinds the frontend can draw, and the
- * backend footprints of its camps and landmarks match the drawn size (asset size x kindScale).
+ * The real generated world (GET /api/v1/world on the backend) only names kinds the frontend can draw, the
+ * backend footprints of its camps and landmarks match the drawn size (asset size x kindScale), and its biome
+ * props keep off cliffs.
  */
 
 const WORLD_URL = 'http://localhost:8100/api/v1/world';
@@ -54,4 +64,36 @@ test('site footprints match the drawn size of their kind', async ({
       FOOTPRINT_TOLERANCE,
     );
   }
+});
+
+test('biome props of the real world never stand on cliffs', async ({
+  request,
+}) => {
+  const world = await fetchWorld(request);
+  const terrain = buildTerrain(decodeWorld(world));
+  const scatter = createScatter({
+    terrain,
+    seed: world.seed,
+    frequency: world.frequency,
+    biomeNames: world.biome_names,
+    table: BIOME_PROPS,
+    clearings: [],
+    rivers: world.rivers.map((river) => river.cells),
+  });
+  const maxTilt = 1 - Math.cos((MAX_PROP_SLOPE_DEG * Math.PI) / 180);
+  let steepCells = 0;
+  let instances = 0;
+  for (let cell = 0; cell < world.cell_count; cell += 11) {
+    const grown = scatter.cell(cell);
+    instances += grown.length;
+    const centre = cellDirection(terrain.globe, cell, new Vector3());
+    if (terrain.locate(centre, cell).tilt > maxTilt) steepCells += 1;
+    for (const instance of grown)
+      expect(
+        terrain.locate(instance.position.clone().normalize(), cell).tilt,
+      ).toBeLessThanOrEqual(maxTilt);
+  }
+  // the real terrain has cliffs, so the rule is exercised
+  expect(steepCells).toBeGreaterThan(20);
+  expect(instances).toBeGreaterThan(10_000);
 });

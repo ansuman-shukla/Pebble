@@ -41,6 +41,9 @@ export interface ScatterOptions {
 
 /** How far props keep from a river's centre line, metres. */
 const RIVER_CLEARANCE = 6;
+/** Nothing grows on terrain steeper than this (cliffs): props would float on their downhill side. */
+export const MAX_PROP_SLOPE_DEG = 40;
+const MAX_TILT = 1 - Math.cos((MAX_PROP_SLOPE_DEG * Math.PI) / 180);
 const REFERENCE_FREQUENCY = 60;
 
 /** mulberry32: a small fast seeded generator, [0, 1). */
@@ -145,6 +148,7 @@ export function createScatter({
         )
           continue;
         const hit = terrain.locate(direction, index);
+        if (hit.tilt > MAX_TILT) continue;
         const position = direction.multiplyScalar(
           radius + hit.height - 0.1 - hit.tilt * 2,
         );
