@@ -36,15 +36,15 @@ from app.brains.senses import (
 )
 from app.core.rng import Rng
 from app.world_api.facade import ActionHandle, WorldApi
-from app.world_api.models import Nearness, Perception, Volume
+from app.world_api.models import Nearness, Perception
 
 STOREHOUSES = "the storehouses"
 WELL = "the well"
 FIRE = "the fire pit"
 GREET_CHANCE = 0.5
-# how loud to speak to someone in view so they hear it (03: normal speech carries ~30 m, a shout ~150 m); nobody
-# farther than "close by" (under 50 m) is greeted
-VOICE: dict[Nearness, Volume] = {"right beside you": "normal", "a few paces": "normal", "close by": "shout"}
+# who surely hears a normal greeting (03: speech carries ~30 m, while "close by" reaches 50 m); brains don't shout
+# greetings, as a shout carries 150 m and stops everyone's work and sleep there
+EARSHOT: frozenset[Nearness] = frozenset({"right beside you", "a few paces"})
 EAT_ORDER = ("berries", "nuts", "roots", "rice", "dried meat")  # what spoils first goes first; dried meat keeps
 RAW = ("meat", "fish")  # roasted by a fire, else eaten raw only when there's nothing else (it can make you sick)
 
@@ -228,28 +228,28 @@ class UtilityBrain:
     # --- greetings ---
 
     def socialise(self, p: Perception) -> bool:
-        """Reply to someone who greeted you by name, or greet a known person close by (once a day each), loud enough
-        for them to hear."""
+        """Reply to someone who greeted you by name, or greet a known person close by (once a day each), when they're
+        near enough to hear it."""
         greeted = self.api.notes.setdefault("greeted", [])
         if not isinstance(greeted, list):
             raise TypeError("greeted must be a list")
         name = self.profile.name
-        voices = {person.label: VOICE[person.nearness] for person in p.people if person.nearness in VOICE}
+        within_earshot = {person.label for person in p.people if person.nearness in EARSHOT}
         for heard in p.heard:
             if is_name(heard.who) and name.lower() in heard.words.lower() and heard.who not in greeted:
-                if heard.who not in voices:
+                if heard.who not in within_earshot:
                     continue  # they've walked out of earshot
                 greeted.append(heard.who)
-                self.api.say(self.reply(heard.who, p), voices[heard.who])
+                self.api.say(self.reply(heard.who, p))
                 return True
         for person in p.people:
             label = person.label
-            if is_name(label) and label not in greeted and label in voices:
+            if is_name(label) and label not in greeted and label in within_earshot:
                 if person.doing == "asleep":
                     continue
                 greeted.append(label)
                 if self.chance(GREET_CHANCE):
-                    self.api.say(self.greeting(label, p), voices[label])
+                    self.api.say(self.greeting(label, p))
                     return True
         return False
 
