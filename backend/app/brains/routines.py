@@ -6,27 +6,36 @@ places (fields, storehouse, market, gates, castle, loom); bands forage around ca
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from typing import get_args
 
 from pydantic import JsonValue
 
 from app.brains.profile import BrainProfile, Routine
 from app.brains.senses import (
+    FIRE_BURNING,
+    FIRE_COLD,
+    FIRE_LOW,
     Needs,
     Phase,
     Resource,
     afternoon,
     at,
     at_home,
+    carried_count,
     carried_food,
     carries,
+    fire_here,
     food_value,
+    game,
     near,
     resources_in_view,
     sees_thing,
+    water_here,
+    wood_at_hand,
 )
 from app.world_api.facade import ActionHandle, WorldApi
-from app.world_api.models import Compass, Perception
+from app.world_api.models import Compass, Perception, RoughDistance
 
 WORK = 30.0  # the score of an ordinary day's routine
 FIELDS = "the rice fields"
@@ -39,6 +48,10 @@ POSTS = ("the main gate", "the west gate", "the castle", "the training ground") 
 FOODS = ("roots", "nuts", "berries")  # wild food, most filling first
 OUTING_FOOD = 150.0  # bands head back to camp carrying about this much (a day and a half of food)
 COMPASS: tuple[Compass, ...] = get_args(Compass)
+HUNT_TRIES = 3  # hunts (and as many searches for game) a hunter tries a day
+FISH_CHANCE = 0.3  # a forager standing at a river or lake fishes instead of gathering this often
+BASKETS = "the main gate"  # where the guard lights the fire baskets at dusk
+BASKET_WOOD = 20  # wood the guard fetches first: two baskets burn about a dozen pieces each a night
 
 
 @dataclass(frozen=True)
@@ -150,7 +163,9 @@ def merchant(ctx: Context) -> list[Option]:
 
 
 def samurai(ctx: Context) -> list[Option]:
-    """Rounds of the gates, the castle and the training ground, keeping watch at each."""
+    """Rounds of the gates, the castle and the training ground, keeping watch at each; fire baskets lit at dusk."""
+    if ctx.phase == "dusk":
+        return _light_baskets(ctx)
     if not _daytime(ctx):
         return []
     post = ctx.counter("post") % len(POSTS)
@@ -161,6 +176,36 @@ def samurai(ctx: Context) -> list[Option]:
         note = lambda: _set(ctx, "post", following)  # noqa: E731  # a tiny closure reads best inline
         return [Option(WORK, f"go to {POSTS[following]}", _then(note, _go(ctx, POSTS[following]).start))]
     return [Option(WORK, "guard", _then(lambda: _set(ctx, "watched", post), lambda: ctx.api.work("guard")))]
+
+
+def _light_baskets(ctx: Context) -> list[Option]:
+    """At dusk the guard fetches wood from the storehouse and lights the fire baskets at the main gate."""
+    p, api = ctx.perception, ctx.api
+    if "fire" not in ctx.profile.skills or ctx.done_today("baskets"):
+        return []
+    score = 45.0  # before going home for the night
+    if carried_count(p, "wood") < BASKET_WOOD and not ctx.done_today("fetched wood"):
+        if at(p, STOREHOUSES):
+            fetch = _then(lambda: ctx.mark_done("fetched wood"), lambda: _pick_up_then_go(ctx, "wood", BASKETS))
+            return [Option(score, "fetch wood", fetch)]
+        return [_go(ctx, STOREHOUSES, score)]
+    if not at(p, BASKETS):
+        return [_go(ctx, BASKETS, score)]
+    here = [t for t in p.things if t.where.startswith(("right beside you", "a few paces"))]  # the gate's pair
+    cold = [t for t in here if t.label == "a cold fire basket"]
+    low = [t for t in here if t.label in ("a fire basket burning low", "a fire basket glowing")]
+    for things, action, name in ((cold, api.make_fire, "light a basket"), (low, api.feed_fire, "feed a basket")):
+        if things and things[0].where.startswith("right beside you"):
+            return [Option(score, name, action)]
+        if things:
+            return [Option(score, f"go to {things[0].label}", partial(api.walk_to_thing, things[0].label))]
+    ctx.mark_done("baskets")
+    return []
+
+
+def _pick_up_then_go(ctx: Context, item: str, place: str) -> ActionHandle:
+    ctx.api.pick_up(item)
+    return ctx.api.walk_to_place(place)
 
 
 def lord(ctx: Context) -> list[Option]:
@@ -217,9 +262,9 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
     food = carried_food(p)
     hungry_empty = ctx.needs.hunger >= 2 and not food
     if ctx.phase == "dusk":
-        return _evening_chores(ctx)
+        return _evening_chores(ctx) + _keep_fire(ctx, 48.0)
     if not _daytime(ctx) and not hungry_empty:
-        return []
+        return _keep_fire(ctx, 72.0, only_failing=True)
     score = 90.0 if hungry_empty else WORK
     gathers = ctx.counter("outing")
     if (at_home(p) or at(p, home_area)) and ctx.notes.get("returning") and not hungry_empty:
@@ -236,6 +281,12 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
     wanted = [] if fresh >= OUTING_FOOD else list(FOODS)  # enough food: only chores, a look around, a rest
     if style.chore is not None and not ctx.done_today(style.chore) and food:
         wanted.insert(0, style.chore)
+    if not hungry_empty:
+        hunting = _hunt(ctx)
+        if hunting:
+            return hunting
+    if wanted and water_here(p) and ctx.chance(FISH_CHANCE):
+        return [Option(score, "fish", api.fish)]
     if not wanted:
         if near(p, home_area) and ctx.chance(0.6):
             direction = COMPASS[ctx.pick(len(COMPASS))]
@@ -264,6 +315,54 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
     return [Option(score, "go home", lambda: api.walk_to_place("home"))]
 
 
+def _hunt(ctx: Context) -> list[Option]:
+    """Hunters hunt by day: game in view is stalked (hunters setting out together go for the same herd); else they
+    search around camp a few times; meat goes home to the fire."""
+    p, api = ctx.perception, ctx.api
+    if "hunting" not in ctx.profile.skills or not _daytime(ctx) or ctx.done_today("hunt"):
+        return []
+    if carried_food(p).get("meat"):
+        ctx.mark_done("hunt")
+        return [] if at_home(p) else [Option(WORK + 5, "bring the meat home", lambda: api.walk_to_place("home"))]
+    tries = _count_today(ctx, "hunt-try")
+    if tries >= HUNT_TRIES:
+        return []
+    seen = game(p)
+    if seen:
+        name = seen[0][0]
+        return [Option(WORK + 5, f"hunt {name}", _then(lambda: ctx.mark_done("hunt-try"), lambda: api.hunt(name)))]
+    searches = _count_today(ctx, "game-search")
+    if near(p, ctx.profile.home_area) and searches < HUNT_TRIES:
+        direction = COMPASS[ctx.pick(len(COMPASS))]
+        distance: RoughDistance = "a short walk" if searches == 0 else "a long walk"
+        search = _then(lambda: ctx.mark_done("game-search"), lambda: api.walk_towards(direction, distance))
+        return [Option(WORK + 4, "look for game", search)]
+    return []
+
+
+def _count_today(ctx: Context, chore: str) -> int:
+    chores = ctx.notes.get("chores", [])
+    return chores.count(chore) if isinstance(chores, list) else 0
+
+
+def _keep_fire(ctx: Context, score: float, only_failing: bool = False) -> list[Option]:
+    """Bands keep the camp fire going through the night: everyone feeds it once at dusk (so it burns till morning),
+    and anyone awake at night tends a fire burning low; only those with the skill make one that went out."""
+    p, api = ctx.perception, ctx.api
+    state = fire_here(p)
+    if state is None or (state == "burning" and (only_failing or ctx.done_today("fed fire"))):
+        return []
+    if not wood_at_hand(p):
+        return []
+    hearths = FIRE_BURNING | FIRE_LOW | FIRE_COLD | {FIRE}
+    beside = any(t.where.startswith("right beside you") and t.label in hearths for t in p.things)
+    if not beside:
+        return [Option(score, "go to the fire", lambda: api.walk_to_thing(FIRE))]
+    if state == "out":
+        return [Option(score, "make a fire", api.make_fire)] if "fire" in ctx.profile.skills else []
+    return [Option(score, "feed the fire", _then(lambda: ctx.mark_done("fed fire"), api.feed_fire))]
+
+
 def _reach(resource: Resource) -> int:
     return ("here", "near", "close", "off", "far").index(resource.distance)
 
@@ -288,7 +387,7 @@ FORAGERS: dict[Routine, Forager] = {
     "band_leader": Forager(outing=4, chore="wood", rests=30),
     "hunter": Forager(outing=5, chore="wood", rests=20),
     "healer": Forager(outing=3, chore="wood", rests=40),
-    "gatherer": Forager(outing=5, chore="reeds", rests=30),
+    "gatherer": Forager(outing=5, chore="wood", rests=30),  # the camp fire burns about a dozen pieces a night
     "band_child": Forager(outing=2, chore=None, rests=45),
 }
 

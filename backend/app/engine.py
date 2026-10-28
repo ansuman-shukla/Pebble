@@ -68,6 +68,7 @@ def citizen_brains(sim: Simulation, seed: int) -> CitizenBrains:
                     role=citizen.role,
                     region=citizen.region,
                     home_area=places[HOME_AREAS[citizen.region]].name,
+                    skills=citizen.skills,
                 ),
             )
             for citizen in sim.core.citizens()

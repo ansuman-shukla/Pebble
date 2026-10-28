@@ -21,6 +21,8 @@ from app.brains.senses import (
     at,
     at_home,
     carried_food,
+    danger,
+    fire_here,
     is_name,
     phase,
     sees_thing,
@@ -37,6 +39,7 @@ FIRE = "the fire pit"
 GREET_CHANCE = 0.5
 GREET_REACH = ("right beside you", "a few paces", "close by")
 EAT_ORDER = ("berries", "nuts", "roots", "rice", "dried meat")  # what spoils first goes first; dried meat keeps
+RAW = ("meat", "fish")  # roasted by a fire, else eaten raw only when there's nothing else (it can make you sick)
 
 
 class UtilityBrain:
@@ -111,7 +114,8 @@ class UtilityBrain:
         now = phase(p)
         ctx = Context(self.api, self.profile, p, needs, now, self.chance, self.pick)
         options = [Option(1, "idle", lambda: self.api.wait(15))]
-        if p.animals:  # M6 brings animals; until then nothing to flee from
+        behind_walls = self.profile.region == "town" and at(p, self.profile.home_area)  # walls keep animals out
+        if danger(p) is not None and not behind_walls and fire_here(p) not in ("burning", "low"):  # fire too
             options.append(Option(200, "flee", self.api.flee))
         thirst = self.thirst_option(p, needs, now)
         if thirst is not None:
@@ -143,8 +147,12 @@ class UtilityBrain:
             return None
         score = {1: 45.0, 2: 85.0, 3: 105.0}[needs.hunger]
         food = carried_food(p)
-        if food:
-            item = next(name for name in EAT_ORDER if name in food)
+        raw = [name for name in RAW if name in food]
+        if raw and fire_here(p) in ("burning", "low"):
+            return Option(score + 1, "eat by the fire", lambda: self.api.eat(raw[0]))
+        cooked = [name for name in EAT_ORDER if name in food]
+        if cooked or (raw and needs.hunger >= 2):
+            item = cooked[0] if cooked else raw[0]
             return Option(score, "eat", lambda: self.api.eat(item))
         if self.profile.region == "town":
             if at(p, STOREHOUSES):

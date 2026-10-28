@@ -25,10 +25,20 @@ PHASES: dict[str, Phase] = {
 }
 AFTERNOON = frozenset({"early afternoon", "late afternoon"})
 # How filling a piece of each food is, as a person knows from eating it (names as the world says them).
-FOOD_VALUE: dict[str, float] = {"rice": 10.0, "dried meat": 8.0, "roots": 6.0, "nuts": 3.0, "berries": 2.0}
-FOOD_ONE: dict[str, str] = {
+FOOD_VALUE: dict[str, float] = {
+    "rice": 10.0,
+    "dried meat": 8.0,
+    "meat": 10.0,
+    "fish": 6.0,
+    "roots": 6.0,
+    "nuts": 3.0,
+    "berries": 2.0,
+}
+FOOD_ONE: dict[str, str] = {  # "dried meat" before "meat": the longer name wins
     "rice": "measure of rice",
     "dried meat": "strip of dried meat",
+    "meat": "piece of meat",
+    "fish": "a fish",
     "roots": "a root",
     "nuts": "a nut",
     "berries": "a berry",
@@ -78,6 +88,25 @@ class Needs:
         )
 
 
+DANGER_WORDS = ("wolf", "wolves", "bear", "lion", "shark")  # animals everyone knows can kill
+THREAT_DOING = frozenset({"coming at you", "watching you"})
+GAME_WORDS: tuple[tuple[str, str], ...] = (  # (word in what is seen, what a hunter calls it)
+    ("deer", "deer"),
+    ("elk", "elk"),
+    ("antelope", "antelope"),
+    ("boar", "boar"),
+    ("goat", "goat"),
+    ("rabbit", "rabbit"),
+    ("hare", "hare"),
+    ("duck", "duck"),
+)
+FIRE_BURNING = frozenset({"a campfire burning", "a fire basket burning"})
+FIRE_LOW = frozenset({"a campfire burning low", "embers glowing", "a fire basket burning low", "a fire basket glowing"})
+FIRE_COLD = frozenset({"a cold campfire", "a cold fire basket"})
+BESIDE = ("right beside you", "a few paces")
+FireState = Literal["burning", "low", "out"]
+
+
 @dataclass(frozen=True)
 class Resource:
     kind: str  # berries, roots, nuts, reeds, wood
@@ -107,6 +136,14 @@ def carried_food(perception: Perception) -> dict[str, int]:
                 food[name] = food.get(name, 0) + count
                 break
     return food
+
+
+def carried_count(perception: Perception, item: str) -> int:
+    """About how many of an item they carry ("plenty of wood" -> 25, "a piece of wood" -> 1)."""
+    for line in perception.you.carrying:
+        if line.endswith(f" {item}"):
+            return next((amount for words, amount in AMOUNT if line.startswith(words)), 1)
+    return 0
 
 
 def carries(perception: Perception, item: str) -> bool:
@@ -142,6 +179,50 @@ def water_here(perception: Perception) -> bool:
 
 def water_in_view(perception: Perception) -> bool:
     return any(thing.label in ("a river", "a lake") for thing in perception.things)
+
+
+def danger(perception: Perception) -> Seen | None:
+    """A dangerous animal coming at you or watching you (asleep or far off it's no reason to run)."""
+    return next(
+        (
+            animal
+            for animal in perception.animals
+            if animal.doing in THREAT_DOING and any(word in animal.label for word in DANGER_WORDS)
+        ),
+        None,
+    )
+
+
+def game(perception: Perception) -> list[tuple[str, Seen]]:
+    """Animals worth hunting in view, nearest first: (what to call it, how it is seen)."""
+    found: list[tuple[str, Seen]] = []
+    for animal in perception.animals:
+        if animal.label.startswith("the remains"):
+            continue
+        name = next((call for word, call in GAME_WORDS if word in animal.label), None)
+        if name is not None:
+            found.append((name, animal))
+    return found
+
+
+def fire_here(perception: Perception) -> FireState | None:
+    """The state of a fire within a few paces (a cold fire pit counts as out), or None if there's none here."""
+    beside = [thing.label for thing in perception.things if thing.where.startswith(BESIDE)]
+    if any(label in FIRE_BURNING for label in beside):
+        return "burning"
+    if any(label in FIRE_LOW for label in beside):
+        return "low"
+    if any(label in FIRE_COLD or label == "the fire pit" for label in beside):
+        return "out"
+    return None
+
+
+def wood_at_hand(perception: Perception) -> bool:
+    """Carrying wood, or wood lies on the ground right here."""
+    return carries(perception, "wood") or any(
+        thing.label.endswith("wood on the ground") and thing.where.startswith("right beside you")
+        for thing in perception.things
+    )
 
 
 def is_name(label: str) -> bool:
