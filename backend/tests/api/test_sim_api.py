@@ -80,7 +80,9 @@ def test_admin_clock_queues_a_command_the_engine_applies(
     assert client.get(f"{API}/clock").json()["paused"] is True
     assert client.get(f"{API}/clock").json()["speed"] == 20
     assert client.post(f"{API}/admin/clock", json={}).status_code == 422
-    assert client.post(f"{API}/admin/clock", json={"speed": 61}).status_code == 422
+    assert client.post(f"{API}/admin/clock", json={"speed": 601}).status_code == 422
+    assert client.post(f"{API}/admin/clock", json={"speed": 0}).status_code == 422
+    assert client.post(f"{API}/admin/clock", json={"speed": 600}).status_code == 202  # ×600 time-lapse is the top
 
 
 def test_entities_now_match_the_simulation(client: TestClient, loop: EngineLoop) -> None:

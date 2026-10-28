@@ -51,7 +51,7 @@ class LiveState(BaseModel):
     tick: int
     day: int
     time: str  # town time "HH:MM"
-    speed: float  # ticks (game minutes) per real second
+    speed: float  # game seconds per real second (1 = real time)
     paused: bool
     citizens: list[CitizenEntity]
 
