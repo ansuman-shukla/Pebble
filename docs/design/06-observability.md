@@ -22,7 +22,9 @@ One append-only `events` table in Postgres. Every state change and every mind ou
 
 Event types (v0): `tick_summary`, `perceived`, `action_started`, `action_finished`, `action_interrupted`, `said`,
 `thought` (turn text), `need_changed` (on threshold crossings only), `injured`, `died`, `item_moved`,
-`resource_changed`, `animal_spawned`, `fire_changed`, `intervention`, `snapshot`.
+`resource_changed`, `knowledge_changed` (places/people learned), `citizen_spawned`, `animal_spawned`,
+`fire_changed`, `intervention`, `snapshot`. Continuous change (walkers' positions, needs drifting) is the tick's
+single `tick_summary` (D43).
 Phase B adds: `mind_turn` (latency, tool calls), `mind_unavailable`, `memory_written`, `belief_updated`,
 `relationship_changed`, `self_disclosure`.
 
