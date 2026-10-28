@@ -62,6 +62,7 @@ town's main gate, with the engine's citizens living on it (`GET /api/v1/entities
 | clock (bottom right) | engine day and time; `pause`, `×1`, `×10`, `×60` set the engine's speed (`POST /api/v1/admin/clock`); the sun follows engine time |
 | `time ×60` | without a feed (`/?mock=1`): run the client clock at one game hour per second |
 | `?at=lat,lon[,bearing]` | start anywhere, e.g. `/?at=12.4,100,180` (band A camp); a drop or go to rewrites it so the spot can be shared; `?time=HH:MM` sets the town time |
+| `?tick=N`, `?follow=id` | replay: the citizens as they were at tick N (from `GET /api/v1/entities?at=N`; the feed is off and the clock stopped, `back to live` returns); follow a citizen as soon as they are drawn (the spectator pages link here) |
 
 `/town` shows the flat town alone; `/?mock=1` uses the small test world instead of the backend's (without citizens);
 `?mockLive=1` adds a deterministic mock feed of the 15 citizens (dev and tests). Citizens within 400 m are drawn,
