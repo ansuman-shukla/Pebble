@@ -10,16 +10,20 @@ from typing import Literal
 
 import numpy as np
 
+from app.sim import fire as fires
 from app.sim.bodies import body_words
 from app.sim.clock import local_minute, time_words
-from app.sim.core import SimCore
-from app.sim.items import ITEMS, RESOURCE_INDEX, amount_words
-from app.sim.state import ActionState, Citizen
+from app.sim.core import FOREST_BIOMES, SimCore
+from app.sim.fauna import DANGEROUS, SPECIES
+from app.sim.items import GATHERED, ITEMS, RESOURCE_INDEX, amount_words
+from app.sim.state import ActionState, Animal, Citizen
 from app.sim.vec import Vec3, bearing_deg, lat_lon_deg
 from app.world_api.models import HeardWords, Perception, Seen, SelfView
 
 COMPASS = ("north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west")
 MAX_THINGS = 12
+MAX_ANIMALS = 8
+WATCHING_M = 60.0  # an awake predator this close is "watching you"
 _CELL_MARGIN_M = 25.0  # cells whose centre is this much beyond sight still count (cells are ~40 m across)
 _ARTICLES = frozenset({"the", "a", "an", "some", "any", "my", "your"})
 
@@ -47,6 +51,18 @@ DOING: dict[str, str] = {
     "wait": "standing about",
     "flee": "running",
     "work": "working",
+    "hunt": "hunting",
+    "fish": "fishing",
+    "make_fire": "making a fire",
+    "feed_fire": "tending a fire",
+    "attack": "fighting",
+}
+ANIMAL_DOING: dict[str, str] = {
+    "grazing": "grazing",
+    "walking": "on the move",
+    "running": "running",
+    "hunting": "hunting",
+    "sleeping": "asleep",
 }
 RESOURCE_KEYWORDS: dict[str, frozenset[str]] = {
     "berries": frozenset({"berries", "berry", "bush", "bushes"}),
@@ -99,7 +115,7 @@ class Thing:
     goal: Vec3  # where to walk to reach it
     distance_m: float
     bearing: float
-    kind: Literal["structure", "ground", "resource", "water"]
+    kind: Literal["structure", "ground", "resource", "water", "fire"]
     ref: str
     water: Literal["fresh", "salt"] | None = None
 
@@ -164,7 +180,7 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
         label: str,
         keywords: frozenset[str],
         goal: Vec3,
-        kind: Literal["structure", "ground", "resource", "water"],
+        kind: Literal["structure", "ground", "resource", "water", "fire"],
         ref: str,
         water: Literal["fresh", "salt"] | None = None,
         at: Vec3 | None = None,
@@ -204,6 +220,14 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
         structure = world.structures[structure_id]
         add(structure.label, STRUCTURE_KEYWORDS[kind], structure.door, "structure", structure.id, at=structure.centre)
 
+    for fire in sorted(state.fires.values(), key=lambda f: f.id):
+        if fire.kind == "pit" and not fire.lit:
+            continue  # a cold fire pit is just the fire pit
+        if core.distance_m(position, fire.position) <= sight:
+            hearth = world.hearths.get(fire.id)
+            goal = hearth.stand if hearth is not None else fire.position
+            add(fires.label(fire), fires.KEYWORDS, goal, "fire", fire.id, at=fire.position)
+
     for stack in sorted(state.ground.values(), key=lambda s: s.id):
         if core.distance_m(position, stack.position) <= sight:
             item = ITEMS[stack.item]
@@ -221,6 +245,8 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
         unit = world.unit(cell)
         biome = world.biome(cell)
         for resource, column in RESOURCE_INDEX.items():
+            if resource not in GATHERED:
+                continue  # fish are seen as shoals (animals), caught with fish()
             count = int(resources[cell, column])
             if count > 0 and resource not in found_resource:
                 found_resource.add(resource)
@@ -295,10 +321,94 @@ def match_thing(core: SimCore, citizen: Citizen, what: str) -> Thing | None:
     if "water" in words:
         fresh = [thing for thing in matches if thing.water == "fresh"]
         matches = fresh or matches
+    exact = [thing for thing in matches if normalize(thing.label) == query]  # "the fire pit", not any fire
+    matches = exact or matches
     return min(matches, key=lambda thing: (thing.distance_m, thing.ref)) if matches else None
 
 
 HOME_RADIUS_M = 6.0
+
+
+def animal_sightings(core: SimCore, citizens: list[Citizen]) -> dict[str, list[tuple[Animal, float]]]:
+    """For each citizen: the animals (living, and remains) within sight, nearest first."""
+    animals = [core.state.animals[aid] for aid in sorted(core.state.animals)]
+    if not animals or not citizens:
+        return {citizen.id: [] for citizen in citizens}
+    where = np.array([animal.position for animal in animals])
+    eyes = np.array([citizen.position for citizen in citizens])
+    distances = np.arccos(np.clip(where @ eyes.T, -1.0, 1.0)) * core.world.radius_m
+    sightings: dict[str, list[tuple[Animal, float]]] = {}
+    for column, citizen in enumerate(citizens):
+        rows = np.flatnonzero(distances[:, column] <= core.sight_range(citizen)).tolist()
+        seen = sorted((float(distances[row, column]), animals[row].id, animals[row]) for row in rows)
+        sightings[citizen.id] = [(animal, distance) for distance, _, animal in seen]
+    return sightings
+
+
+def visible_animals(core: SimCore, citizen: Citizen) -> list[tuple[Animal, float]]:
+    return animal_sightings(core, [citizen])[citizen.id]
+
+
+def animal_names(kind: str) -> set[str]:
+    species = SPECIES[kind]
+    return {kind.replace("_", " "), species.many, normalize(species.one), "animal", "animals"}
+
+
+def match_animal(core: SimCore, citizen: Citizen, words: str) -> Animal | None:
+    """The nearest living animal in view the words name ("the deer", "a wolf", "wolves", "that herd of elk")."""
+    query = normalize(words)
+    if not query:
+        return None
+    for animal, _ in visible_animals(core, citizen):
+        if not animal.alive:
+            continue
+        names = animal_names(animal.kind)
+        if query in names or any(name in query.split() or query.endswith(name) for name in names - {"animal"}):
+            return animal
+    return None
+
+
+def nearest_danger(core: SimCore, citizen: Citizen) -> tuple[Animal, float] | None:
+    """The nearest living animal in view that attacks people."""
+    return next(
+        ((animal, distance) for animal, distance in visible_animals(core, citizen)
+         if animal.alive and animal.kind in DANGEROUS),
+        None,
+    )  # fmt: skip
+
+
+def animal_doing(citizen: Citizen, animal: Animal, distance_m: float) -> str | None:
+    if animal.target == citizen.id:
+        return "coming at you"
+    if animal.kind in DANGEROUS and animal.activity not in ("sleeping", "dead") and distance_m <= WATCHING_M:
+        return "watching you"
+    return ANIMAL_DOING.get(animal.activity)
+
+
+def from_where(core: SimCore, citizen: Citizen, distance_m: float, bearing: float) -> str:
+    where = where_words(distance_m, bearing)
+    return f"from the trees, {where}" if core.world.biome(citizen.cell) in FOREST_BIOMES else where
+
+
+def seen_animals(citizen: Citizen, sightings: list[tuple[Animal, float]]) -> list[Seen]:
+    """Animals in view as a person would name them: each group once (nearest member), remains one by one."""
+    groups: dict[str, list[tuple[Animal, float]]] = {}
+    remains: list[Seen] = []
+    for animal, distance in sightings:
+        if animal.alive:
+            groups.setdefault(animal.group, []).append((animal, distance))
+        else:
+            where = where_words(distance, bearing_deg(citizen.position, animal.position))
+            remains.append(Seen(label=f"the remains of {SPECIES[animal.kind].one}", where=where))
+    seen: list[tuple[float, Seen]] = []
+    for members in groups.values():
+        nearest, distance = members[0]
+        species = SPECIES[nearest.kind]
+        where = where_words(distance, bearing_deg(citizen.position, nearest.position))
+        label = species.count_words(len(members))
+        seen.append((distance, Seen(label=label, where=where, doing=animal_doing(citizen, nearest, distance))))
+    seen.sort(key=lambda entry: (entry[0], entry[1].label))
+    return ([entry[1] for entry in seen] + remains)[:MAX_ANIMALS]
 
 
 def place_words(core: SimCore, citizen: Citizen) -> str:
@@ -386,7 +496,7 @@ def perceive(core: SimCore, citizen: Citizen) -> Perception:
         place=place_words(core, citizen),
         time=time,
         people=people,
-        animals=[],
+        animals=seen_animals(citizen, visible_animals(core, citizen)),
         things=things[:MAX_THINGS],
         heard=heard,
     )
