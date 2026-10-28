@@ -382,6 +382,49 @@ test('go to drops the player next to a citizen, who is labelled and solid', asyn
   expect(errors).toEqual([]);
 });
 
+test('the labels of citizens standing close together do not cover each other', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  const world = await openLive(page, errors);
+  // a fresh run, held: Tak stands about by the camp 2 m from Ana mending the drying rack
+  await page.evaluate(() => {
+    const mock = (globalThis as unknown as MockLiveWindow).__pebbleMockLive;
+    mock.restartRun();
+    mock.setClock({ paused: true });
+  });
+  await expect(world).toHaveAttribute('data-live-connects', '2');
+  await page.getByRole('button', { name: 'people', exact: true }).click();
+  await page
+    .locator('[data-person="tak"]')
+    .getByRole('button', { name: 'go to' })
+    .click();
+  await landed(world);
+  const tags = page.locator('[data-label^="npc-"]:visible');
+  await expect(page.locator('[data-label="npc-ana"]')).toBeVisible();
+  const boxes = await tags.evaluateAll((nodes) =>
+    nodes.map((node) => {
+      const { left, right, top, bottom } = node.getBoundingClientRect();
+      return { id: node.dataset.label!, left, right, top, bottom };
+    }),
+  );
+  const covered = boxes.flatMap((a, i) =>
+    boxes
+      .slice(i + 1)
+      .filter(
+        (b) =>
+          a.left < b.right &&
+          b.left < a.right &&
+          a.top < b.bottom &&
+          b.top < a.bottom,
+      )
+      .map((b) => `${a.id} / ${b.id}`),
+  );
+  expect(boxes.length).toBeGreaterThanOrEqual(2);
+  expect(covered).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
 test('the clock follows the feed, its speed buttons drive it, and a dropped feed reconnects', async ({
   page,
 }) => {
