@@ -5,25 +5,24 @@ weighs (how hungry, what time of day, what food is around and how far). Nothing 
 from dataclasses import dataclass
 from typing import Literal
 
-from app.world_api.models import Perception, Seen
+from app.world_api.models import Perception, Seen, TimeOfDay
 
 Phase = Literal["night", "morning", "day", "dusk"]
 Distance = Literal["here", "near", "close", "off", "far"]
 
-PHASES: dict[str, Phase] = {
-    "the middle of the night": "night",
-    "the dark before dawn": "night",
+PHASES: dict[TimeOfDay, Phase] = {
+    "pre-dawn": "night",
     "night": "night",
-    "dawn; the sun is rising": "morning",
+    "dawn": "morning",
     "early morning": "morning",
     "mid-morning": "day",
-    "around midday; the sun is high": "day",
+    "midday": "day",
     "early afternoon": "day",
     "late afternoon": "day",
-    "the sun is about to set": "dusk",
+    "sunset": "dusk",
     "dusk": "dusk",
 }
-AFTERNOON = frozenset({"early afternoon", "late afternoon"})
+AFTERNOON: frozenset[TimeOfDay] = frozenset({"early afternoon", "late afternoon"})
 # How filling a piece of each food is, as a person knows from eating it (names as the world says them).
 FOOD_VALUE: dict[str, float] = {"rice": 10.0, "dried meat": 8.0, "roots": 6.0, "nuts": 3.0, "berries": 2.0}
 FOOD_ONE: dict[str, str] = {
@@ -86,11 +85,11 @@ class Resource:
 
 
 def phase(perception: Perception) -> Phase:
-    return PHASES[perception.time]
+    return PHASES[perception.time_of_day]
 
 
 def afternoon(perception: Perception) -> bool:
-    return perception.time in AFTERNOON
+    return perception.time_of_day in AFTERNOON
 
 
 def distance(where: str) -> Distance:

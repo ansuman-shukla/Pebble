@@ -1,7 +1,7 @@
 """A scripted utility brain for one citizen (02-simulation, "Scripted brains").
 
 At each decision point (the last action ended or was interrupted) it looks around, scores its options from needs,
-danger, time of day (the local sun, as perception words it) and role, and starts the best one. It acts only through
+danger, time of day (the local sun, as perception reports it) and role, and starts the best one. It acts only through
 `WorldApi`, exactly as an agent mind will; its working memory lives in `api.notes` so a resumed run continues the
 same way.
 

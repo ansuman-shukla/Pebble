@@ -11,7 +11,7 @@ from typing import Literal
 import numpy as np
 
 from app.sim.bodies import body_words
-from app.sim.clock import local_minute, time_words
+from app.sim.clock import local_minute, time_of_day
 from app.sim.core import SimCore
 from app.sim.items import ITEMS, RESOURCE_INDEX, amount_words
 from app.sim.state import ActionState, Citizen
@@ -362,9 +362,11 @@ def perceive(core: SimCore, citizen: Citizen) -> Perception:
     """Everything the citizen senses now; heard speech is reported once."""
     you = self_view(core, citizen)
     _, lon = lat_lon_deg(citizen.position)
-    time = time_words(local_minute(core.state.tick, core.world.town_lon_deg, lon))
+    when, time = time_of_day(local_minute(core.state.tick, core.world.town_lon_deg, lon))
     if citizen.body.asleep:
-        return Perception(you=you, place="asleep", time=time, people=[], animals=[], things=[], heard=[])
+        return Perception(
+            you=you, place="asleep", time=time, time_of_day=when, people=[], animals=[], things=[], heard=[]
+        )
     people = [
         Seen(
             label=person_label(citizen, other)
@@ -385,6 +387,7 @@ def perceive(core: SimCore, citizen: Citizen) -> Perception:
         you=you,
         place=place_words(core, citizen),
         time=time,
+        time_of_day=when,
         people=people,
         animals=[],
         things=things[:MAX_THINGS],

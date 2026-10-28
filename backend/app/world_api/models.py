@@ -11,6 +11,19 @@ from pydantic import BaseModel, ConfigDict, Field
 Volume = Literal["whisper", "normal", "shout"]
 Compass = Literal["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"]
 RoughDistance = Literal["a few steps", "a short walk", "a long walk", "very far"]
+# the local sun, coarsely; `Perception.time` says the same in a sentence
+TimeOfDay = Literal[
+    "pre-dawn",
+    "dawn",
+    "early morning",
+    "mid-morning",
+    "midday",
+    "early afternoon",
+    "late afternoon",
+    "sunset",
+    "dusk",
+    "night",
+]
 ActionName = Literal[
     "look_around",
     "check_self",
@@ -249,14 +262,15 @@ class HeardWords(_Model):
 class Perception(_Model):
     you: SelfView
     place: str
-    time: str
+    time: str  # a sentence from the sun ("It is late afternoon.", "The sun is about to set.")
+    time_of_day: TimeOfDay
     people: list[Seen]
     animals: list[Seen]
     things: list[Seen]
     heard: list[HeardWords]
 
     def text(self) -> str:
-        lines = [f"You are {self.place}. It is {self.time}.", self.you.text()]
+        lines = [f"You are {self.place}. {self.time}", self.you.text()]
         if self.people:
             lines.append("You see " + _join([_seen(s) for s in self.people]) + ".")
         if self.animals:
