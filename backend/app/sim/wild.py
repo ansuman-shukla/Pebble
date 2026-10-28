@@ -16,7 +16,7 @@ import math
 
 from app.observability.events import ItemLocation, ResourceChanged
 from app.sim import animals, fire
-from app.sim.acting import begin, capital, settled, stack_in_reach
+from app.sim.acting import begin, capital, settled
 from app.sim.core import REACH_M, SimCore
 from app.sim.ecology import schedule_regrowth
 from app.sim.fauna import SPECIES
@@ -40,6 +40,7 @@ FIGHT_BACK = 0.5  # chance an attacked predator bites back
 FISH_MINUTES = 30
 FISH_CHANCE = 0.35  # by hand
 FISH_CATCH = (1, 3)
+WOODPILE_M = 5.0  # wood on the ground this close to a fire is its woodpile
 MAKE_FIRE_MINUTES = 10
 FEED_FIRE_MINUTES = 2
 FISHING_WATERS = frozenset({"shallow_ocean", "lake"})
@@ -293,10 +294,24 @@ def _finish_fish(core: SimCore, citizen: Citizen, action: ActionState) -> None:
 # --- fire ---
 
 
-def _wood_at_hand(core: SimCore, citizen: Citizen) -> int:
-    carried = citizen.inventory.get("wood", 0)
-    stack_id = stack_in_reach(core, citizen, "wood")
-    return carried + (core.state.ground[stack_id].count if stack_id is not None else 0)
+def _woodpiles(core: SimCore, citizen: Citizen, hearth: Fire | None) -> list[str]:
+    """Wood on the ground to burn: stacks beside the fire (its woodpile), or within the citizen's reach."""
+    return sorted(
+        stack.id
+        for stack in core.state.ground.values()
+        if stack.item == "wood"
+        and stack.count > 0
+        and (
+            core.distance_m(stack.position, hearth.position) <= WOODPILE_M
+            if hearth is not None
+            else core.distance_m(stack.position, citizen.position) <= REACH_M
+        )
+    )
+
+
+def _wood_at_hand(core: SimCore, citizen: Citizen, hearth: Fire | None) -> int:
+    piles = sum(core.state.ground[stack_id].count for stack_id in _woodpiles(core, citizen, hearth))
+    return citizen.inventory.get("wood", 0) + piles
 
 
 def _hearth_in_reach(core: SimCore, citizen: Citizen) -> Fire | None:
@@ -311,7 +326,7 @@ def start_make_fire(core: SimCore, citizen: Citizen) -> int:
         return settled(core, citizen, "make_fire", "done", "The fire is already burning.")
     if hearth is None and core.world.town_point(citizen.position) is not None:
         return settled(core, citizen, "make_fire", "failed", "You can't light a fire here.")
-    if _wood_at_hand(core, citizen) == 0:
+    if _wood_at_hand(core, citizen, hearth) == 0:
         return settled(core, citizen, "make_fire", "failed", "You have no wood to burn.")
     where = "a fire" if hearth is None else _hearth_words(hearth)
     make = begin(core, citizen, "make_fire", where, {})
@@ -327,7 +342,7 @@ def start_feed_fire(core: SimCore, citizen: Citizen) -> int:
         return settled(core, citizen, "feed_fire", "failed", "The fire is out; it has to be made again.")
     if hearth.fuel > fire.MAX_FUEL - fire.WOOD_MINUTES:
         return settled(core, citizen, "feed_fire", "done", "The fire is burning well; it needs no more wood.")
-    if _wood_at_hand(core, citizen) == 0:
+    if _wood_at_hand(core, citizen, hearth) == 0:
         return settled(core, citizen, "feed_fire", "failed", "You have no wood to burn.")
     feed = begin(core, citizen, "feed_fire", _hearth_words(hearth), {})
     feed.target_id, feed.until_tick = hearth.id, core.state.tick + FEED_FIRE_MINUTES
@@ -401,9 +416,8 @@ def _burn_wood(core: SimCore, citizen: Citizen, hearth: Fire, most: int) -> tupl
             del citizen.inventory["wood"]
         seq = core.item_moved(citizen, "wood", carried, ItemLocation(kind="inventory", id=citizen.id), destination)
         burned += carried
-    while burned < most:
-        stack_id = stack_in_reach(core, citizen, "wood")
-        if stack_id is None:
+    for stack_id in _woodpiles(core, citizen, hearth):
+        if burned >= most:
             break
         stack = core.state.ground[stack_id]
         count = min(most - burned, stack.count)

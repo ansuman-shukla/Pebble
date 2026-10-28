@@ -218,10 +218,9 @@ def fire_here(perception: Perception) -> FireState | None:
 
 
 def wood_at_hand(perception: Perception) -> bool:
-    """Carrying wood, or wood lies on the ground right here."""
+    """Carrying wood, or wood lies on the ground close at hand (a fire's woodpile)."""
     return carries(perception, "wood") or any(
-        thing.label.endswith("wood on the ground") and thing.where.startswith("right beside you")
-        for thing in perception.things
+        thing.label.endswith("wood on the ground") and thing.where.startswith(BESIDE) for thing in perception.things
     )
 
 

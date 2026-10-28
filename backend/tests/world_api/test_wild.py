@@ -235,11 +235,12 @@ def test_a_fire_burns_down_level_by_level_and_goes_out(new_sim: Callable[..., Si
 
 def test_fire_feeds_off_the_woodpile_beside_it(new_sim: Callable[..., Simulation]) -> None:
     sim = without_animals(new_sim())
-    keeper = sim.add_citizen(make_spec("keeper", site="band_a_camp", at=(0.0, 1.5), home=None, skills=["fire"]))
+    keeper = sim.add_citizen(make_spec("keeper", site="band_a_camp", at=(-1.5, 0.0), home=None, skills=["fire"]))
     pit = sim.state.fires["band_a_camp:fire-pit"]
-    pile = next(s for s in sim.state.ground.values() if sim.world.distance_m(s.position, pit.position) < 3)
+    pile = next(s for s in sim.state.ground.values() if sim.world.distance_m(s.position, pit.position) < 5)
     pit.fuel, pit.level = 100, fires.fuel_level(100)
-    assert sim.world.distance_m(keeper.position, pile.position) <= 3.0
+    assert sim.world.distance_m(keeper.position, pile.position) > 3.0  # out of reach, but the fire's woodpile
+    assert sim.world.distance_m(pit.position, pile.position) <= wild.WOODPILE_M
     result = run_until_done(sim, WorldApi(sim, keeper.id).feed_fire(), 3)
     assert result.text == "You feed the fire; it burns brightly."
     assert pile.count < 12 or pile.id not in sim.state.ground

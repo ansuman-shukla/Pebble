@@ -50,7 +50,8 @@ from app.world_api.models import (
 
 INITIAL_RESOURCE_SHARE = 0.5  # cells start between half and fully stocked
 WOODPILE = 12  # pieces of wood by each camp's fire pit at the start
-WOODPILE_OFFSET_M = 2.0
+WOODPILE_OFFSET_M = 3.2  # beyond the seats round the pit (2 m), between two of them
+WOODPILE_BEARING = 112.5
 
 
 def initial_state(world: SimWorld, seed: int) -> WorldState:
@@ -69,7 +70,7 @@ def initial_state(world: SimWorld, seed: int) -> WorldState:
     ground: dict[str, GroundStack] = {}
     for fire_id in sorted(fires):  # each camp keeps a woodpile by its fire pit
         if fires[fire_id].kind == "pit":
-            spot = step_towards(fires[fire_id].position, 90.0, WOODPILE_OFFSET_M, world.radius_m)
+            spot = step_towards(fires[fire_id].position, WOODPILE_BEARING, WOODPILE_OFFSET_M, world.radius_m)
             stack_id = f"stack-{len(ground) + 1}"
             ground[stack_id] = GroundStack(stack_id, "wood", WOODPILE, spot, world.nearest_cell(spot))
     return WorldState(
