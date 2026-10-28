@@ -11,7 +11,7 @@ help:
 	@echo "lint            ruff check, ruff format --check, mypy"
 	@echo "test            start Postgres and run pytest"
 	@echo "pre-commit      lint + test (run before every commit)"
-	@echo "dev             start Postgres and the API on :8100 with reload"
+	@echo "dev             start Postgres, migrate, and run the API on :8100 with reload"
 	@echo "db-up / db-down start / stop local Postgres (:5544, data in .runtime/postgres)"
 	@echo "migrate         alembic upgrade head"
 	@echo "export-openapi  write ../frontend/openapi.json"
@@ -33,7 +33,7 @@ test: db-up
 
 pre-commit: lint test
 
-dev: db-up
+dev: migrate
 	$(UV) run uvicorn app.main:app --reload --port 8100
 
 db-up:

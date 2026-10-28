@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { HealthReadHealthData, HealthReadHealthResponses, TownReadTownData, TownReadTownResponses } from './types.gen';
+import type { HealthReadHealthData, HealthReadHealthResponses, TownReadTownData, TownReadTownResponses, WorldReadWorldData, WorldReadWorldResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -27,3 +27,10 @@ export const healthReadHealth = <ThrowOnError extends boolean = false>(options?:
  * Read Town
  */
 export const townReadTown = <ThrowOnError extends boolean = false>(options?: Options<TownReadTownData, ThrowOnError>): RequestResult<TownReadTownResponses, unknown, ThrowOnError> => (options?.client ?? client).get<TownReadTownResponses, unknown, ThrowOnError>({ url: '/api/v1/town', ...options });
+
+/**
+ * Read World
+ *
+ * The planet: grid, heights, biomes, rivers, land loop and sites (stored JSON, generated on first request).
+ */
+export const worldReadWorld = <ThrowOnError extends boolean = false>(options?: Options<WorldReadWorldData, ThrowOnError>): RequestResult<WorldReadWorldResponses, unknown, ThrowOnError> => (options?.client ?? client).get<WorldReadWorldResponses, unknown, ThrowOnError>({ url: '/api/v1/world', ...options });
