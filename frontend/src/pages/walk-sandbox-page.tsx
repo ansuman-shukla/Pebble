@@ -83,6 +83,13 @@ const MOAT: Point[] = [
   [-30, -16],
 ];
 const WATER: WalkWater[] = [{ polygon: MOAT }];
+// the water surface reaches under the banks so the sky never shows through the ground's edge
+const MOAT_SURFACE: Point[] = [
+  [-31, -23],
+  [31, -23],
+  [31, -15],
+  [-31, -15],
+];
 const SPAWN: WalkSpawn = { x: 0, z: 8, heading_deg: 180 };
 const GROUND_HALF = 40;
 const WATER_Y = -0.4;
@@ -110,7 +117,7 @@ function Ground() {
       ),
     [],
   );
-  const water = useMemo(() => groundShape(MOAT), []);
+  const water = useMemo(() => groundShape(MOAT_SURFACE), []);
   return (
     <>
       <mesh geometry={ground} rotation-x={-Math.PI / 2}>
