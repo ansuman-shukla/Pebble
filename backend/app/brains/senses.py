@@ -5,25 +5,24 @@ weighs (how hungry, what time of day, what food is around and how far). Nothing 
 from dataclasses import dataclass
 from typing import Literal
 
-from app.world_api.models import Perception, Seen
+from app.world_api.models import Nearness, Perception, ResourceName, Seen, TimeOfDay
 
 Phase = Literal["night", "morning", "day", "dusk"]
 Distance = Literal["here", "near", "close", "off", "far"]
 
-PHASES: dict[str, Phase] = {
-    "the middle of the night": "night",
-    "the dark before dawn": "night",
+PHASES: dict[TimeOfDay, Phase] = {
+    "pre-dawn": "night",
     "night": "night",
-    "dawn; the sun is rising": "morning",
+    "dawn": "morning",
     "early morning": "morning",
     "mid-morning": "day",
-    "around midday; the sun is high": "day",
+    "midday": "day",
     "early afternoon": "day",
     "late afternoon": "day",
-    "the sun is about to set": "dusk",
+    "sunset": "dusk",
     "dusk": "dusk",
 }
-AFTERNOON = frozenset({"early afternoon", "late afternoon"})
+AFTERNOON: frozenset[TimeOfDay] = frozenset({"early afternoon", "late afternoon"})
 # How filling a piece of each food is, as a person knows from eating it (names as the world says them).
 FOOD_VALUE: dict[str, float] = {
     "rice": 10.0,
@@ -51,19 +50,14 @@ AMOUNT: tuple[tuple[str, int], ...] = (
     ("a few", 2),
     ("a little", 2),
 )
-RESOURCE_WORDS: tuple[tuple[str, str], ...] = (
-    ("berr", "berries"),
-    ("root", "roots"),
-    ("nut", "nuts"),
-    ("reed", "reeds"),
-    ("wood", "wood"),
-)
-NEAR: tuple[tuple[str, Distance], ...] = (
-    ("right beside you", "here"),
-    ("a few paces", "near"),
-    ("close by", "close"),
-    ("some way off", "off"),
-)
+DISTANCE: dict[Nearness, Distance] = {
+    "right beside you": "here",
+    "a few paces": "near",
+    "close by": "close",
+    "some way off": "off",
+    "in the distance": "far",
+    "far away": "far",
+}
 
 
 @dataclass(frozen=True)
@@ -100,30 +94,33 @@ GAME_WORDS: tuple[tuple[str, str], ...] = (  # (word in what is seen, what a hun
     ("hare", "hare"),
     ("duck", "duck"),
 )
-FIRE_BURNING = frozenset({"a campfire burning", "a fire basket burning"})
-FIRE_LOW = frozenset({"a campfire burning low", "embers glowing", "a fire basket burning low", "a fire basket glowing"})
-FIRE_COLD = frozenset({"a cold campfire", "a cold fire basket"})
-BESIDE = ("right beside you", "a few paces")
+FIRE_STATES: dict[str, "FireState"] = {  # how a fire is told burning (its `doing`)
+    "burning": "burning",
+    "burning low": "low",
+    "glowing embers": "low",
+    "cold": "out",
+}
 FireState = Literal["burning", "low", "out"]
 
 
 @dataclass(frozen=True)
 class Resource:
-    kind: str  # berries, roots, nuts, reeds, wood
+    kind: ResourceName
     distance: Distance
     plenty: bool
 
 
 def phase(perception: Perception) -> Phase:
-    return PHASES[perception.time]
+    return PHASES[perception.time_of_day]
 
 
 def afternoon(perception: Perception) -> bool:
-    return perception.time in AFTERNOON
+    return perception.time_of_day in AFTERNOON
 
 
-def distance(where: str) -> Distance:
-    return next((rank for prefix, rank in NEAR if where.startswith(prefix)), "far")
+def beside(seen: Seen) -> bool:
+    """Right beside you or a few paces off: close enough to sit by or put something down at."""
+    return DISTANCE[seen.nearness] in ("here", "near")
 
 
 def carried_food(perception: Perception) -> dict[str, int]:
@@ -147,30 +144,24 @@ def food_value(food: dict[str, int]) -> float:
 
 
 def resources_in_view(perception: Perception) -> list[Resource]:
-    found: list[Resource] = []
-    for thing in perception.things:
-        if thing.label.endswith("on the ground"):
-            continue
-        kind = next((name for stem, name in RESOURCE_WORDS if stem in thing.label), None)
-        if kind is not None:
-            plenty = not thing.label.startswith(("a few", "a little"))
-            found.append(Resource(kind, distance(thing.where), plenty))
-    return found
+    """Wild plants in view (a plant's words say whether there's plenty: "a few nuts on the trees" is not)."""
+    return [
+        Resource(thing.resource, DISTANCE[thing.nearness], not thing.label.startswith(("a few", "a little")))
+        for thing in perception.things
+        if thing.resource is not None
+    ]
 
 
-def sees_thing(perception: Perception, label: str) -> Seen | None:
-    return next((thing for thing in perception.things if thing.label == label), None)
+def fire_in_view(perception: Perception) -> Seen | None:
+    return next((thing for thing in perception.things if thing.kind == "fire"), None)
 
 
 def water_here(perception: Perception) -> bool:
-    return any(
-        thing.label in ("a river", "a lake", "the well") and distance(thing.where) == "here"
-        for thing in perception.things
-    )
+    return any(thing.kind == "water" and DISTANCE[thing.nearness] == "here" for thing in perception.things)
 
 
 def water_in_view(perception: Perception) -> bool:
-    return any(thing.label in ("a river", "a lake") for thing in perception.things)
+    return any(thing.kind == "water" for thing in perception.things)
 
 
 def danger(perception: Perception) -> Seen | None:
@@ -198,21 +189,22 @@ def game(perception: Perception) -> list[tuple[str, Seen]]:
 
 
 def fire_here(perception: Perception) -> FireState | None:
-    """The state of a fire within a few paces (a cold fire pit counts as out), or None if there's none here."""
-    beside = [thing.label for thing in perception.things if thing.where.startswith(BESIDE)]
-    if any(label in FIRE_BURNING for label in beside):
-        return "burning"
-    if any(label in FIRE_LOW for label in beside):
-        return "low"
-    if any(label in FIRE_COLD or label == "the fire pit" for label in beside):
-        return "out"
+    """How the best fire within a few paces burns ("out" for a cold one), or None if there's no fire here."""
+    states = [
+        FIRE_STATES.get(thing.doing or "cold", "out")
+        for thing in perception.things
+        if thing.kind == "fire" and beside(thing)
+    ]
+    for state in ("burning", "low", "out"):
+        if state in states:
+            return state
     return None
 
 
 def wood_at_hand(perception: Perception) -> bool:
     """Carrying wood, or wood lies on the ground close at hand (a fire's woodpile)."""
     return carries(perception, "wood") or any(
-        thing.label.endswith("wood on the ground") and thing.where.startswith(BESIDE) for thing in perception.things
+        thing.label.endswith("wood on the ground") and beside(thing) for thing in perception.things
     )
 
 

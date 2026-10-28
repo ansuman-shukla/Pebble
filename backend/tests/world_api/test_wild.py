@@ -258,7 +258,7 @@ def test_a_fire_lights_the_night_and_cooks_meat(
     fires.add_fuel(camp, 300)
     sim.state.fires[camp.id] = camp
     assert sim.core.sight_range(hunter) == pytest.approx(SIGHT_FIRE_M)
-    assert any(t.label == "a campfire burning" for t in api.look_around().things)
+    assert any((t.label, t.doing, t.kind) == ("a campfire", "burning", "fire") for t in api.look_around().things)
 
     monkeypatch.setattr(actions, "RAW_SICK_CHANCE", 1.0)
     hunter.inventory["meat"] = 3

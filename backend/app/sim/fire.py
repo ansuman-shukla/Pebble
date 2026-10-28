@@ -106,12 +106,13 @@ def burn(core: SimCore) -> None:
 
 
 def label(fire: Fire) -> str:
-    """How a fire looks to someone nearby."""
-    if fire.kind == "basket":
-        return ("a cold fire basket", "a fire basket glowing", "a fire basket burning low", "a fire basket burning")[
-            fire.level
-        ]
-    return ("a cold campfire", "embers glowing", "a campfire burning low", "a campfire burning")[fire.level]
+    """What a fire is to someone nearby (a pit's fire is told as the fire pit itself)."""
+    return {"pit": "the fire pit", "basket": "a fire basket", "campfire": "a campfire"}[fire.kind]
+
+
+def state_words(fire: Fire) -> str:
+    """How it burns, told as what it is doing ("the fire pit … (burning low)")."""
+    return ("cold", "glowing embers", "burning low", "burning")[fire.level]
 
 
 KEYWORDS = frozenset({"fire", "campfire", "embers", "basket", "flames", "hearth"})

@@ -1,11 +1,13 @@
 """Where everyone (citizens and animals) is and what they're doing, and which fires burn, now or at any past tick
 (nearest snapshot + events)."""
 
+from dataclasses import dataclass
 from typing import Literal
 
 from pydantic import BaseModel
 from sqlmodel import Session
 
+from app.db.models import Run
 from app.observability.replay import ReplayAnimal, ReplayCitizen, ReplayEvent, ReplayFire, ReplayState, replay
 from app.observability.store import events_after, latest_snapshot
 from app.services.clock import run_or_latest
@@ -175,8 +177,16 @@ def wild_entities(state: ReplayState) -> tuple[list[AnimalEntity], list[FireEnti
     return animals, fires
 
 
-def entities_at(session: Session, run_id: str | None = None, at: int | None = None) -> EntitiesView | None:
-    """None when there is no run; raises TickNotReached for a tick the run hasn't simulated yet."""
+@dataclass(frozen=True)
+class WorldAt:
+    run: Run
+    tick: int
+    state: ReplayState
+
+
+def world_at(session: Session, run_id: str | None = None, at: int | None = None) -> WorldAt | None:
+    """The replayed world of a run (the latest by default) now or at a past tick: the nearest snapshot plus the
+    events after it. None when there is no run; raises TickNotReached for a tick the run hasn't simulated yet."""
     run = run_or_latest(session, run_id)
     if run is None:
         return None
@@ -190,8 +200,17 @@ def entities_at(session: Session, run_id: str | None = None, at: int | None = No
         ReplayEvent(tick=e.tick, type=e.type, actor_id=e.actor_id, payload=e.payload)
         for e in events_after(session, run.id, snapshot_row.last_seq, until_tick=tick)
     ]
-    state = replay(SimSnapshot.model_validate(snapshot_row.state), events)
-    day, time = town_clock(tick)
-    citizens = [citizen_entity(citizen, tick) for _, citizen in sorted(state.citizens.items())]
-    animals, fires = wild_entities(state)
-    return EntitiesView(run_id=run.id, tick=tick, day=day, time=time, citizens=citizens, animals=animals, fires=fires)
+    return WorldAt(run=run, tick=tick, state=replay(SimSnapshot.model_validate(snapshot_row.state), events))
+
+
+def entities_at(session: Session, run_id: str | None = None, at: int | None = None) -> EntitiesView | None:
+    """None when there is no run; raises TickNotReached for a tick the run hasn't simulated yet."""
+    world = world_at(session, run_id, at)
+    if world is None:
+        return None
+    day, time = town_clock(world.tick)
+    citizens = [citizen_entity(citizen, world.tick) for _, citizen in sorted(world.state.citizens.items())]
+    animals, fires = wild_entities(world.state)
+    return EntitiesView(
+        run_id=world.run.id, tick=world.tick, day=day, time=time, citizens=citizens, animals=animals, fires=fires
+    )

@@ -1,6 +1,6 @@
-"""Replay: rebuild what spectators see (positions, bodies, actions, items, resources, animals, fires) from the
-nearest snapshot plus the events after it. The same reducer backs `GET /entities?at=tick` and the "every change has
-an event" test.
+"""Replay: rebuild what spectators see (positions, bodies, actions, items, resources, knowledge, animals, fires) from
+the nearest snapshot plus the events after it. The same reducer backs `GET /entities?at=tick`, the citizen pages and
+the "every change has an event" test.
 """
 
 import base64
@@ -21,6 +21,7 @@ from app.observability.events import (
     FireChanged,
     ItemLocation,
     ItemMoved,
+    KnowledgeChanged,
     ResourceChanged,
     TickSummary,
 )
@@ -54,6 +55,9 @@ class ReplayCitizen:
     action_number: int | None = None
     action_label: str = ""
     inventory: dict[str, int] = field(default_factory=dict)
+    skills: tuple[str, ...] = ()
+    places: dict[str, str] = field(default_factory=dict)  # place id -> visited | rough
+    people: set[str] = field(default_factory=set)  # citizens they know
     said_tick: int | None = field(default=None, compare=False)  # last spoke (not in snapshots: a moment's flavour)
 
 
@@ -144,6 +148,9 @@ def from_snapshot(snapshot: SimSnapshot) -> ReplayState:
             action_number=c.action.number if c.action is not None else None,
             action_label=c.action.label if c.action is not None else "",
             inventory={item: count for item, count in c.inventory.items() if count},
+            skills=tuple(c.skills),
+            places={place_id: known.level for place_id, known in c.places.items()},
+            people=set(c.people),
         )
     resources = np.frombuffer(base64.b64decode(snapshot.resources), dtype=np.uint8)
     animals = {
@@ -204,6 +211,9 @@ def apply_event(state: ReplayState, event: ReplayEvent) -> None:
             region=spawned.region,
             heading_deg=spawned.heading_deg,
             inventory={item: count for item, count in spawned.inventory.items() if count},
+            skills=tuple(spawned.skills),
+            places=dict(spawned.places),
+            people=set(spawned.people),
         )
     elif kind == "action_started":
         started = ActionStarted.model_validate(event.payload)
@@ -254,6 +264,13 @@ def apply_event(state: ReplayState, event: ReplayEvent) -> None:
     elif kind == "resource_changed":
         changed = ResourceChanged.model_validate(event.payload)
         state.resources[changed.cell, RESOURCE_INDEX[changed.resource]] = changed.after
+    elif kind == "knowledge_changed":
+        learned = KnowledgeChanged.model_validate(event.payload)
+        citizen = state.citizens[_actor(event)]
+        if learned.about == "place":
+            citizen.places[learned.ref] = learned.level
+        else:
+            citizen.people.add(learned.ref)
 
 
 def _actor(event: ReplayEvent) -> str:

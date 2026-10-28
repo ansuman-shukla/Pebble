@@ -114,6 +114,7 @@ class EngineLoop:
     stopping: bool = False
     catch_up_to: int = 0  # ticks below this were committed before a reload; they are re-simulated without waiting
     retry_sleep: Callable[[float], None] = time.sleep
+    idle_sleep: Callable[[float], None] = time.sleep  # waiting for the next tick or while paused
 
     @property
     def run(self) -> Run:
@@ -129,7 +130,7 @@ class EngineLoop:
         self.store.commit(self.sim.tick, self.clock.speed, self.clock.paused)
 
     def apply_commands(self) -> None:
-        commands = pending_commands(self.store.session, self.run.id)
+        commands = pending_commands(self.store.session, self.store.run_id)
         for command in commands:
             if command.kind != "clock":
                 raise ValueError(f"unknown engine command {command.kind!r}")
@@ -157,17 +158,22 @@ class EngineLoop:
                 next_at = time.monotonic()
 
     def _advance(self, next_at: float, headless: bool) -> float:
-        """One pass of the loop: apply commands, then tick, wait or heartbeat. Returns when the next tick is due."""
+        """One pass of the loop: apply commands, then tick, wait or heartbeat. Returns when the next tick is due.
+
+        No transaction stays open while the loop waits: the connection goes back to the pool, which pre-pings it
+        before the next poll (a waiting engine used to sit `idle in transaction` on the poll's read).
+        """
         self.apply_commands()
         realtime = not headless and self.sim.tick >= self.catch_up_to
         if self.clock.paused and realtime:
             self.store.commit(self.sim.tick, self.clock.speed, self.clock.paused)  # heartbeat
-            time.sleep(PAUSED_POLL_S)
+            self.idle_sleep(PAUSED_POLL_S)
             return time.monotonic()
         if realtime:
             delay = next_at - time.monotonic()
             if delay > 0:
-                time.sleep(min(delay, PAUSED_POLL_S))
+                self.store.session.commit()  # ends the poll's read
+                self.idle_sleep(min(delay, PAUSED_POLL_S))
                 return next_at
             next_at += 1.0 / self.clock.speed
         started = time.perf_counter()
@@ -205,9 +211,9 @@ class EngineLoop:
         """
         session = self.store.session
         session.close()  # drops the broken transaction and its connection; the pool pre-pings the next one
-        run = session.get(Run, self.run.id)
+        run = session.get(Run, self.store.run_id)
         if run is None:
-            raise ValueError(f"run {self.run.id} vanished from the database")
+            raise ValueError(f"run {self.store.run_id} vanished from the database")
         committed_tick = run.tick
         fresh = resume_run(
             session, self.sim.world, run, self.store.ids, self.clock, planner=self.sim.core.planner, brains=False

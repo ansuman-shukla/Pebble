@@ -41,6 +41,7 @@ class Life:
     started: Counter[tuple[str, int, str]] = field(default_factory=Counter)  # (citizen, day, action or task)
     night: dict[str, list[tuple[bool, float]]] = field(default_factory=lambda: defaultdict(list))  # (asleep, m home)
     rice: list[int] = field(default_factory=list)  # in the storehouse at the end of each day
+    lowest_health: dict[str, float] = field(default_factory=dict)
     said: int = 0
     attacks: list[tuple[str, float, int, bool, bool]] = field(default_factory=list)  # who, sun, near, fire, town
     populations: list[Counter[str]] = field(default_factory=list)  # living animals by kind at the end of each day
@@ -94,6 +95,7 @@ def life(sim_world: SimWorld, planner: Planner) -> Life:
                 kind = str(payload["args"].get("task", payload["action"]))
                 out.started[(event.actor_id, day, kind)] += 1
         for citizen in sim.state.citizens.values():
+            out.lowest_health[citizen.id] = min(out.lowest_health.get(citizen.id, 100.0), citizen.body.health)
             if not citizen.body.alive:
                 continue
             moved = sim_world.distance_m(before[citizen.id], citizen.position)
@@ -124,6 +126,9 @@ def life(sim_world: SimWorld, planner: Planner) -> Life:
 def test_nobody_dies_in_ten_days(life: Life) -> None:
     assert life.deaths == []
     assert all(c.body.alive and c.body.health > 50 for c in life.sim.state.citizens.values())
+    # nobody goes long without water or food: a night parched (thirsty to bed) costs dozens of health points
+    worst = min(life.lowest_health.items(), key=lambda item: item[1])
+    assert worst[1] >= 90, f"{worst[0]} fell to health {worst[1]:.0f}"
 
 
 def test_everyone_keeps_doing_things_and_moving(life: Life) -> None:

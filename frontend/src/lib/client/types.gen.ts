@@ -133,6 +133,200 @@ export type CitizenEntity = {
 };
 
 /**
+ * CitizenProfile
+ */
+export type CitizenProfile = {
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Tick
+     */
+    tick: number;
+    /**
+     * Day
+     */
+    day: number;
+    /**
+     * Time
+     */
+    time: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Look
+     */
+    look: string;
+    /**
+     * Appearance
+     */
+    appearance: string;
+    /**
+     * Age
+     */
+    age: number;
+    /**
+     * Age Group
+     */
+    age_group: string;
+    /**
+     * Sex
+     */
+    sex: string | null;
+    /**
+     * Role
+     */
+    role: string;
+    /**
+     * Region
+     */
+    region: 'town' | 'band_a' | 'band_b';
+    /**
+     * Skills
+     */
+    skills: Array<string>;
+    /**
+     * Personality
+     */
+    personality: string;
+    home: PlaceRef | null;
+    /**
+     * Alive
+     */
+    alive: boolean;
+    /**
+     * Asleep
+     */
+    asleep: boolean;
+    /**
+     * Cause Of Death
+     */
+    cause_of_death: string | null;
+    /**
+     * Activity
+     */
+    activity: 'idle' | 'walking' | 'running' | 'sleeping' | 'resting' | 'gathering' | 'eating' | 'drinking' | 'working' | 'hunting' | 'fishing' | 'tending_fire' | 'talking' | 'dead';
+    /**
+     * Action
+     */
+    action: string | null;
+    /**
+     * Action Label
+     */
+    action_label: string;
+    position: Position;
+    place: PlaceRef | null;
+    /**
+     * Needs
+     */
+    needs: Array<NeedReading>;
+    /**
+     * State
+     */
+    state: Array<string>;
+    /**
+     * Inventory
+     */
+    inventory: Array<Holding>;
+    /**
+     * Known Places
+     */
+    known_places: Array<KnownPlace>;
+    /**
+     * Known People
+     */
+    known_people: Array<PersonRef>;
+    /**
+     * Recent
+     */
+    recent: Array<TimelineEntry>;
+};
+
+/**
+ * CitizenSummary
+ */
+export type CitizenSummary = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Look
+     */
+    look: string;
+    /**
+     * Role
+     */
+    role: string;
+    /**
+     * Region
+     */
+    region: 'town' | 'band_a' | 'band_b';
+    /**
+     * Age
+     */
+    age: number;
+    /**
+     * Alive
+     */
+    alive: boolean;
+    /**
+     * Activity
+     */
+    activity: 'idle' | 'walking' | 'running' | 'sleeping' | 'resting' | 'gathering' | 'eating' | 'drinking' | 'working' | 'hunting' | 'fishing' | 'tending_fire' | 'talking' | 'dead';
+    /**
+     * Action Label
+     */
+    action_label: string;
+    /**
+     * State
+     */
+    state: Array<string>;
+    place: PlaceRef | null;
+    /**
+     * Cause Of Death
+     */
+    cause_of_death: string | null;
+};
+
+/**
+ * CitizensView
+ */
+export type CitizensView = {
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Tick
+     */
+    tick: number;
+    /**
+     * Day
+     */
+    day: number;
+    /**
+     * Time
+     */
+    time: string;
+    /**
+     * Citizens
+     */
+    citizens: Array<CitizenSummary>;
+};
+
+/**
  * ClockChange
  *
  * Payload of a `clock` engine command (also the admin request body).
@@ -202,6 +396,77 @@ export type ClockView = {
      * Paused
      */
     paused: boolean;
+};
+
+/**
+ * ConversationsPage
+ */
+export type ConversationsPage = {
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * From Tick
+     */
+    from_tick: number;
+    /**
+     * To Tick
+     */
+    to_tick: number;
+    /**
+     * Threads
+     */
+    threads: Array<Thread>;
+};
+
+/**
+ * DayCount
+ */
+export type DayCount = {
+    /**
+     * Day
+     */
+    day: number;
+    /**
+     * Events
+     */
+    events: number;
+    /**
+     * Said
+     */
+    said: number;
+    /**
+     * Actions
+     */
+    actions: number;
+    /**
+     * Deaths
+     */
+    deaths: number;
+};
+
+/**
+ * Death
+ */
+export type Death = {
+    citizen: PersonRef;
+    /**
+     * Cause
+     */
+    cause: string;
+    /**
+     * Tick
+     */
+    tick: number;
+    /**
+     * Day
+     */
+    day: number;
+    /**
+     * Time
+     */
+    time: string;
 };
 
 /**
@@ -372,6 +637,34 @@ export type FireEntity = {
 };
 
 /**
+ * FoodStock
+ */
+export type FoodStock = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Kind
+     */
+    kind: 'storehouse' | 'field' | 'carried';
+    /**
+     * Items
+     */
+    items: {
+        [key: string]: number;
+    };
+    /**
+     * Hunger
+     */
+    hunger: number;
+};
+
+/**
  * Footprint
  *
  * Axis-aligned size after rotation.
@@ -409,6 +702,77 @@ export type HealthStatus = {
      * Database
      */
     database: 'up' | 'down';
+};
+
+/**
+ * Holding
+ */
+export type Holding = {
+    /**
+     * Item
+     */
+    item: string;
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Words
+     */
+    words: string;
+};
+
+/**
+ * KnownPlace
+ */
+export type KnownPlace = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Level
+     */
+    level: string;
+};
+
+/**
+ * Line
+ */
+export type Line = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Seq
+     */
+    seq: number;
+    /**
+     * Tick
+     */
+    tick: number;
+    /**
+     * Time
+     */
+    time: string;
+    speaker: PersonRef;
+    /**
+     * Words
+     */
+    words: string;
+    /**
+     * Volume
+     */
+    volume: 'whisper' | 'normal' | 'shout';
+    /**
+     * Heard By
+     */
+    heard_by: Array<PersonRef>;
 };
 
 /**
@@ -505,6 +869,126 @@ export type LiveState = {
 };
 
 /**
+ * NeedPoint
+ */
+export type NeedPoint = {
+    /**
+     * Tick
+     */
+    tick: number;
+    /**
+     * Hunger
+     */
+    hunger: number;
+    /**
+     * Thirst
+     */
+    thirst: number;
+    /**
+     * Energy
+     */
+    energy: number;
+    /**
+     * Health
+     */
+    health: number;
+};
+
+/**
+ * NeedReading
+ */
+export type NeedReading = {
+    /**
+     * Need
+     */
+    need: 'hunger' | 'thirst' | 'energy' | 'health';
+    /**
+     * Value
+     */
+    value: number;
+    /**
+     * Word
+     */
+    word: string;
+};
+
+/**
+ * NeedsSeries
+ */
+export type NeedsSeries = {
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Citizen Id
+     */
+    citizen_id: string;
+    /**
+     * From Tick
+     */
+    from_tick: number;
+    /**
+     * To Tick
+     */
+    to_tick: number;
+    /**
+     * Step
+     */
+    step: number;
+    /**
+     * Points
+     */
+    points: Array<NeedPoint>;
+};
+
+/**
+ * PersonRef
+ */
+export type PersonRef = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Role
+     */
+    role: string;
+};
+
+/**
+ * PlaceRef
+ */
+export type PlaceRef = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * Population
+ */
+export type Population = {
+    /**
+     * Alive
+     */
+    alive: number;
+    /**
+     * Dead
+     */
+    dead: number;
+};
+
+/**
  * Position
  */
 export type Position = {
@@ -528,6 +1012,28 @@ export type Position = {
      * Lon
      */
     lon: number;
+};
+
+/**
+ * ResourceStock
+ */
+export type ResourceStock = {
+    /**
+     * Resource
+     */
+    resource: string;
+    /**
+     * Now
+     */
+    now: number;
+    /**
+     * Start
+     */
+    start: number;
+    /**
+     * Emptied Cells
+     */
+    emptied_cells: number;
 };
 
 /**
@@ -591,6 +1097,159 @@ export type Spawn = {
      * Heading Deg
      */
     heading_deg: number;
+};
+
+/**
+ * StatsView
+ */
+export type StatsView = {
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Tick
+     */
+    tick: number;
+    /**
+     * Day
+     */
+    day: number;
+    /**
+     * Time
+     */
+    time: string;
+    population: Population;
+    /**
+     * Deaths By Cause
+     */
+    deaths_by_cause: {
+        [key: string]: number;
+    };
+    /**
+     * Deaths
+     */
+    deaths: Array<Death>;
+    /**
+     * Food
+     */
+    food: Array<FoodStock>;
+    /**
+     * Resources
+     */
+    resources: Array<ResourceStock>;
+    /**
+     * Days
+     */
+    days: Array<DayCount>;
+};
+
+/**
+ * Thread
+ */
+export type Thread = {
+    /**
+     * Id
+     */
+    id: string;
+    place: PlaceRef | null;
+    area: PlaceRef | null;
+    /**
+     * Start Tick
+     */
+    start_tick: number;
+    /**
+     * End Tick
+     */
+    end_tick: number;
+    /**
+     * Day
+     */
+    day: number;
+    /**
+     * Time
+     */
+    time: string;
+    /**
+     * Speakers
+     */
+    speakers: Array<PersonRef>;
+    /**
+     * Listeners
+     */
+    listeners: Array<PersonRef>;
+    /**
+     * Lines
+     */
+    lines: Array<Line>;
+};
+
+/**
+ * TimelineEntry
+ */
+export type TimelineEntry = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Seq
+     */
+    seq: number;
+    /**
+     * Tick
+     */
+    tick: number;
+    /**
+     * Day
+     */
+    day: number;
+    /**
+     * Time
+     */
+    time: string;
+    /**
+     * Type
+     */
+    type: 'tick_summary' | 'citizen_spawned' | 'perceived' | 'action_started' | 'action_finished' | 'action_interrupted' | 'said' | 'thought' | 'need_changed' | 'injured' | 'died' | 'item_moved' | 'resource_changed' | 'knowledge_changed' | 'animal_spawned' | 'fire_changed' | 'intervention' | 'snapshot';
+    /**
+     * Visibility
+     */
+    visibility: 'public' | 'private';
+    /**
+     * Summary
+     */
+    summary: string;
+    /**
+     * Detail
+     */
+    detail: string | null;
+    /**
+     * Related
+     */
+    related: Array<string>;
+};
+
+/**
+ * TimelinePage
+ */
+export type TimelinePage = {
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Citizen Id
+     */
+    citizen_id: string;
+    /**
+     * Entries
+     */
+    entries: Array<TimelineEntry>;
+    /**
+     * Next Cursor
+     */
+    next_cursor: number | null;
 };
 
 /**
@@ -846,6 +1505,195 @@ export type AdminChangeClockResponses = {
 
 export type AdminChangeClockResponse = AdminChangeClockResponses[keyof AdminChangeClockResponses];
 
+export type CitizensReadCitizensData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Run Id
+         */
+        run_id?: string | null;
+        /**
+         * At
+         *
+         * replay this tick instead of now
+         */
+        at?: number | null;
+    };
+    url: '/api/v1/citizens';
+};
+
+export type CitizensReadCitizensErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CitizensReadCitizensError = CitizensReadCitizensErrors[keyof CitizensReadCitizensErrors];
+
+export type CitizensReadCitizensResponses = {
+    /**
+     * Successful Response
+     */
+    200: CitizensView;
+};
+
+export type CitizensReadCitizensResponse = CitizensReadCitizensResponses[keyof CitizensReadCitizensResponses];
+
+export type CitizensReadCitizenData = {
+    body?: never;
+    path: {
+        /**
+         * Citizen Id
+         */
+        citizen_id: string;
+    };
+    query?: {
+        /**
+         * Run Id
+         */
+        run_id?: string | null;
+        /**
+         * At
+         *
+         * replay this tick instead of now
+         */
+        at?: number | null;
+    };
+    url: '/api/v1/citizens/{citizen_id}';
+};
+
+export type CitizensReadCitizenErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CitizensReadCitizenError = CitizensReadCitizenErrors[keyof CitizensReadCitizenErrors];
+
+export type CitizensReadCitizenResponses = {
+    /**
+     * Successful Response
+     */
+    200: CitizenProfile;
+};
+
+export type CitizensReadCitizenResponse = CitizensReadCitizenResponses[keyof CitizensReadCitizenResponses];
+
+export type CitizensReadCitizenTimelineData = {
+    body?: never;
+    path: {
+        /**
+         * Citizen Id
+         */
+        citizen_id: string;
+    };
+    query?: {
+        /**
+         * Run Id
+         */
+        run_id?: string | null;
+        /**
+         * From Tick
+         */
+        from_tick?: number | null;
+        /**
+         * To Tick
+         */
+        to_tick?: number | null;
+        /**
+         * Type
+         *
+         * default: everything but tick summaries and looking around
+         */
+        type?: Array<'tick_summary' | 'citizen_spawned' | 'perceived' | 'action_started' | 'action_finished' | 'action_interrupted' | 'said' | 'thought' | 'need_changed' | 'injured' | 'died' | 'item_moved' | 'resource_changed' | 'knowledge_changed' | 'animal_spawned' | 'fire_changed' | 'intervention' | 'snapshot'> | null;
+        /**
+         * Order
+         */
+        order?: 'asc' | 'desc';
+        /**
+         * Cursor
+         *
+         * the previous page's next_cursor
+         */
+        cursor?: number | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/citizens/{citizen_id}/timeline';
+};
+
+export type CitizensReadCitizenTimelineErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CitizensReadCitizenTimelineError = CitizensReadCitizenTimelineErrors[keyof CitizensReadCitizenTimelineErrors];
+
+export type CitizensReadCitizenTimelineResponses = {
+    /**
+     * Successful Response
+     */
+    200: TimelinePage;
+};
+
+export type CitizensReadCitizenTimelineResponse = CitizensReadCitizenTimelineResponses[keyof CitizensReadCitizenTimelineResponses];
+
+export type CitizensReadCitizenNeedsData = {
+    body?: never;
+    path: {
+        /**
+         * Citizen Id
+         */
+        citizen_id: string;
+    };
+    query?: {
+        /**
+         * Run Id
+         */
+        run_id?: string | null;
+        /**
+         * From Tick
+         */
+        from_tick?: number | null;
+        /**
+         * To Tick
+         */
+        to_tick?: number | null;
+        /**
+         * Step
+         *
+         * ticks between points (default: ~288 points)
+         */
+        step?: number | null;
+    };
+    url: '/api/v1/citizens/{citizen_id}/needs';
+};
+
+export type CitizensReadCitizenNeedsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CitizensReadCitizenNeedsError = CitizensReadCitizenNeedsErrors[keyof CitizensReadCitizenNeedsErrors];
+
+export type CitizensReadCitizenNeedsResponses = {
+    /**
+     * Successful Response
+     */
+    200: NeedsSeries;
+};
+
+export type CitizensReadCitizenNeedsResponse = CitizensReadCitizenNeedsResponses[keyof CitizensReadCitizenNeedsResponses];
+
 export type ClockReadGameClockData = {
     body?: never;
     path?: never;
@@ -875,6 +1723,54 @@ export type ClockReadGameClockResponses = {
 };
 
 export type ClockReadGameClockResponse = ClockReadGameClockResponses[keyof ClockReadGameClockResponses];
+
+export type ConversationsReadConversationsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Run Id
+         */
+        run_id?: string | null;
+        /**
+         * From Tick
+         */
+        from_tick?: number | null;
+        /**
+         * To Tick
+         */
+        to_tick?: number | null;
+        /**
+         * Place
+         *
+         * only threads at this place or area id
+         */
+        place?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/conversations';
+};
+
+export type ConversationsReadConversationsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConversationsReadConversationsError = ConversationsReadConversationsErrors[keyof ConversationsReadConversationsErrors];
+
+export type ConversationsReadConversationsResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConversationsPage;
+};
+
+export type ConversationsReadConversationsResponse = ConversationsReadConversationsResponses[keyof ConversationsReadConversationsResponses];
 
 export type EntitiesReadEntitiesData = {
     body?: never;
@@ -1017,6 +1913,42 @@ export type LiveLiveSchemaResponses = {
 };
 
 export type LiveLiveSchemaResponse = LiveLiveSchemaResponses[keyof LiveLiveSchemaResponses];
+
+export type StatsReadStatsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Run Id
+         */
+        run_id?: string | null;
+        /**
+         * At
+         *
+         * replay this tick instead of now
+         */
+        at?: number | null;
+    };
+    url: '/api/v1/stats';
+};
+
+export type StatsReadStatsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type StatsReadStatsError = StatsReadStatsErrors[keyof StatsReadStatsErrors];
+
+export type StatsReadStatsResponses = {
+    /**
+     * Successful Response
+     */
+    200: StatsView;
+};
+
+export type StatsReadStatsResponse = StatsReadStatsResponses[keyof StatsReadStatsResponses];
 
 export type TownReadTownData = {
     body?: never;

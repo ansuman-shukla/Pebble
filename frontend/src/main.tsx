@@ -34,6 +34,42 @@ const router = createBrowserRouter([
         }),
       },
       {
+        path: 'people',
+        hydrateFallbackElement: pageLoading,
+        lazy: async () => ({
+          Component: (await import('@/pages/people-page')).PeoplePage,
+        }),
+      },
+      {
+        path: 'people/:id',
+        hydrateFallbackElement: pageLoading,
+        lazy: async () => ({
+          Component: (await import('@/pages/citizen-page')).CitizenPage,
+        }),
+      },
+      {
+        path: 'conversations',
+        hydrateFallbackElement: pageLoading,
+        lazy: async () => ({
+          Component: (await import('@/pages/conversations-page'))
+            .ConversationsPage,
+        }),
+      },
+      {
+        path: 'timeline',
+        hydrateFallbackElement: pageLoading,
+        lazy: async () => ({
+          Component: (await import('@/pages/timeline-page')).TimelinePage,
+        }),
+      },
+      {
+        path: 'stats',
+        hydrateFallbackElement: pageLoading,
+        lazy: async () => ({
+          Component: (await import('@/pages/stats-page')).StatsPage,
+        }),
+      },
+      {
         path: 'gallery',
         hydrateFallbackElement: pageLoading,
         lazy: async () => ({

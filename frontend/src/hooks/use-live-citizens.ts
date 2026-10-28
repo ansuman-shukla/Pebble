@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useState } from 'react';
 
 import { socketUrl } from '@/lib/api/client';
+import { openSocket } from '@/lib/api/live-socket';
 import { adminChangeClock, entitiesReadEntities } from '@/lib/client/sdk.gen';
 import type { WorldView } from '@/lib/client/types.gen';
 import { LIVE_CLOSE, type LiveMessage } from '@/lib/live/live-contract';
@@ -69,23 +70,6 @@ function reduce(state: LiveState, action: Action): LiveState {
     case 'prune':
       return pruneSpeech(state, action.now);
   }
-}
-
-/** A browser WebSocket behind the small interface the mock implements too. */
-function openSocket(url: string): LiveSocket {
-  const ws = new WebSocket(url);
-  const socket: LiveSocket = {
-    onopen: null,
-    onmessage: null,
-    onclose: null,
-    onerror: null,
-    close: () => ws.close(),
-  };
-  ws.onopen = () => socket.onopen?.();
-  ws.onmessage = (event) => socket.onmessage?.({ data: String(event.data) });
-  ws.onclose = (event) => socket.onclose?.({ code: event.code });
-  ws.onerror = () => socket.onerror?.();
-  return socket;
 }
 
 async function fetchEntities(): Promise<EntitiesAnswer> {

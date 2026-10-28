@@ -1,7 +1,9 @@
 """The engine survives its database connection being terminated, and still crashes on every other error.
 
 The reconnect tests really commit (a terminated backend loses its open transaction) in `pebble_test`, and terminate
-only the backends of their own engine, found by a per-test `application_name`.
+only the backends of their own engine, found by a per-test `application_name`. While it waits for the next tick the
+engine holds no transaction (issue #12), so a connection killed then is simply replaced by the pool's pre-ping; the
+reconnect path is for kills inside a tick's transaction.
 """
 
 import logging
@@ -44,6 +46,14 @@ class NamedEngine:
             killed = connection.execute(statement, {"name": self.name}).all()
             connection.commit()
         return len(killed)
+
+    def states(self, admin: Engine) -> list[str]:
+        """The `pg_stat_activity` state of each of this engine's connections ("idle", "idle in transaction", ...)."""
+        statement = text(
+            "SELECT state FROM pg_stat_activity WHERE datname = current_database() AND application_name = :name"
+        )
+        with admin.connect() as connection:
+            return [str(state) for state in connection.execute(statement, {"name": self.name}).scalars()]
 
 
 class KillBefore:
@@ -212,6 +222,54 @@ def test_lost_ticks_are_caught_up_without_real_time_waits(
         assert loop.sim.tick == 72 and loop.catch_up_to == 70
     assert sleeps.delays == [RETRY_FIRST_S]
     assert elapsed < 3.0  # waiting for each re-simulated tick at speed 2 would take over 6 s
+
+
+def test_a_connection_killed_while_the_engine_waits_is_replaced_without_a_reload(
+    named: NamedEngine, committing_engine: Engine, sim_world: SimWorld, caplog: pytest.LogCaptureFixture
+) -> None:
+    sleeps = Sleeps()
+    killed: list[int] = []
+    with Session(named.engine) as session, caplog.at_level(logging.WARNING, logger="pebble.engine"):
+        loop = _open(session, sim_world, sleeps)
+
+        def kill_while_waiting(seconds: float) -> None:
+            if loop.sim.tick in (2, 4) and loop.sim.tick not in killed:  # no transaction is open: nothing is lost
+                assert named.terminate(committing_engine) >= 1
+                killed.append(loop.sim.tick)
+            time.sleep(min(seconds, 0.01))
+
+        loop.idle_sleep = kill_while_waiting
+        loop.clock.speed = 20
+        loop.run_ticks(6, headless=False)
+        final_hash = state_hash(loop.sim.state)
+        assert loop.catch_up_to == 0
+    assert killed == [2, 4]
+    assert sleeps.delays == []  # the pool pre-pinged a fresh connection: no reconnect, no reload
+    assert not any("database connection lost" in message for message in caplog.messages)
+    assert final_hash == _uninterrupted(sim_world, committing_engine, 6)[0]
+
+
+def test_the_engine_holds_no_transaction_open_while_it_waits(
+    named: NamedEngine, committing_engine: Engine, sim_world: SimWorld
+) -> None:
+    """Issue #12: polling `engine_commands` left the engine `idle in transaction` between real-time ticks."""
+    seen: list[list[str]] = []
+    with Session(named.engine) as session:
+        loop = _open(session, sim_world, Sleeps())
+
+        def watch(seconds: float) -> None:
+            seen.append(named.states(committing_engine))
+            loop.stopping = loop.clock.paused  # one look while paused is enough
+            time.sleep(min(seconds, 0.05))
+
+        loop.idle_sleep = watch
+        loop.clock.speed = 5
+        loop.run_ticks(3, headless=False)  # waits between ticks
+        waits = len(seen)
+        loop.clock.paused = True
+        loop.run_ticks(None, headless=False)
+    assert waits >= 2 and len(seen) == waits + 1  # waited between ticks, then once paused
+    assert all(states == ["idle"] for states in seen), seen
 
 
 def test_a_bad_statement_crashes_the_loop(db_session: Session, sim_world: SimWorld) -> None:

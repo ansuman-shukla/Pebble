@@ -13,23 +13,21 @@ from pydantic import JsonValue
 
 from app.brains.profile import BrainProfile, Routine
 from app.brains.senses import (
-    FIRE_BURNING,
-    FIRE_COLD,
-    FIRE_LOW,
     Needs,
     Phase,
     Resource,
     afternoon,
     at,
     at_home,
+    beside,
     carried_food,
     carries,
     fire_here,
+    fire_in_view,
     food_value,
     game,
     near,
     resources_in_view,
-    sees_thing,
     water_here,
     wood_at_hand,
 )
@@ -42,13 +40,13 @@ STOREHOUSES = "the storehouses"
 WELL = "the well"
 MARKET = "the market"
 CASTLE = "the castle"
-FIRE = "the fire pit"
 POSTS = ("the main gate", "the west gate", "the castle", "the training ground")  # the samurai's rounds
 FOODS = ("roots", "nuts", "berries")  # wild food, most filling first
 OUTING_FOOD = 150.0  # bands head back to camp carrying about this much (a day and a half of food)
 COMPASS: tuple[Compass, ...] = get_args(Compass)
 HUNT_TRIES = 3  # hunts (and as many searches for game) a hunter tries a day
 FISH_CHANCE = 0.3  # a forager standing at a river or lake fishes instead of gathering this often
+FIRE = "the fire pit"
 BASKETS = "the main gate"  # where the guard lights the fire baskets at dusk
 
 
@@ -188,14 +186,15 @@ def _light_baskets(ctx: Context) -> list[Option]:
         return [_go(ctx, STOREHOUSES, score)]
     if not at(p, BASKETS):
         return [_go(ctx, BASKETS, score)]
-    here = [t for t in p.things if t.where.startswith(("right beside you", "a few paces"))]  # the gate's pair
-    cold = [t for t in here if t.label == "a cold fire basket"]
-    low = [t for t in here if t.label in ("a fire basket burning low", "a fire basket glowing")]
+    here = [t for t in p.things if beside(t)]  # the gate's pair
+    cold = [t for t in here if t.label == "a fire basket" and t.doing == "cold"]
+    low = [t for t in here if t.label == "a fire basket" and t.doing in ("burning low", "glowing embers")]
     for things, action, name in ((cold, api.make_fire, "light a basket"), (low, api.feed_fire, "feed a basket")):
-        if things and things[0].where.startswith("right beside you"):
+        if things and things[0].nearness == "right beside you":
             return [Option(score, name, action)]
         if things:
-            return [Option(score, f"go to {things[0].label}", partial(api.walk_to_thing, things[0].label))]
+            basket = f"the {things[0].doing} fire basket"  # the cold one, not the one already burning
+            return [Option(score, f"go to {basket}", partial(api.walk_to_thing, basket))]
     ctx.mark_done("baskets")
     return []
 
@@ -354,9 +353,8 @@ def _keep_fire(ctx: Context, score: float, only_failing: bool = False) -> list[O
         return []
     if not wood_at_hand(p):
         return []
-    hearths = FIRE_BURNING | FIRE_LOW | FIRE_COLD | {FIRE}
-    beside = any(t.where.startswith("right beside you") and t.label in hearths for t in p.things)
-    if not beside:
+    at_hearth = any(t.nearness == "right beside you" and t.kind == "fire" for t in p.things)
+    if not at_hearth:
         return [Option(score, "go to the fire", lambda: api.walk_to_thing(FIRE))]
     if state == "out":
         return [Option(score, "make a fire", api.make_fire)] if "fire" in ctx.profile.skills else []
@@ -370,10 +368,10 @@ def _reach(resource: Resource) -> int:
 def _evening_chores(ctx: Context) -> list[Option]:
     """Put the day's wood and reeds down by the fire, then rest there (the rest itself is a common dusk option)."""
     p, api = ctx.perception, ctx.api
-    fire = sees_thing(p, FIRE)
-    beside = fire is not None and fire.where.startswith(("right beside you", "a few paces"))
+    fire = fire_in_view(p)
+    by_fire = fire is not None and beside(fire)
     for item in ("wood", "reeds"):
-        if carries(p, item) and beside:
+        if carries(p, item) and by_fire:
 
             def put_down(item: str = item) -> ActionHandle:
                 api.drop(item)
