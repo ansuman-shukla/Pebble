@@ -18,6 +18,10 @@ make -C backend dev                                   # Postgres :5544 + API htt
 cd frontend && ./scripts/pnpm.sh install && ./scripts/pnpm.sh dev   # http://localhost:5180
 ```
 
+The browser only talks to the frontend's own origin: vite (`dev` and `preview`) proxies `/api` to the backend
+(`PEBBLE_API_TARGET`, default http://localhost:8100), so the world also loads through http://127.0.0.1:5180 or a
+preview proxy. Set `VITE_API_URL` only to call the backend directly (its `FRONTEND_ORIGINS` must allow the origin).
+
 `./scripts/pnpm.sh dev` and `build` first run `fetch-assets`, which downloads the pinned Polyfork files (~24 MB) into
 gitignored folders.
 
