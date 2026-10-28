@@ -80,6 +80,19 @@ def test_a_walk_home_reads_home_to_spectators_and_your_home_to_the_walker(
     assert from_snapshot(take_snapshot(sim.state)).citizens[citizen.id].action_label == "home"
 
 
+def test_a_compass_walk_reads_walking_to_the_north_once(new_sim: Callable[..., Simulation]) -> None:
+    """Regression: the walker read "You are walking to to the north." (issue #20)."""
+    sim = new_sim()
+    citizen = sim.add_citizen(make_spec())
+    api = WorldApi(sim, citizen.id)
+    sim.drain()
+
+    api.walk_towards("north", "a short walk")
+    assert api.check_self().doing == "You are walking to the north."
+    started = [event.payload for event in sim.drain() if isinstance(event.payload, ActionStarted)]
+    assert [payload.label for payload in started] == ["to the north"]
+
+
 def test_walk_home_and_sleep_through_the_night(new_sim: Callable[..., Simulation]) -> None:
     sim = new_sim()
     citizen = sim.add_citizen(make_spec())
