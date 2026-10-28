@@ -173,6 +173,8 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
         distance = core.distance_m(position, target)
         things.append(Thing(label, keywords, goal, distance, bearing_deg(position, target), kind, ref, water))
 
+    # everyone of a band has their own seat round its fire
+    seat = [other.id for other in core.citizens() if other.region == citizen.region].index(citizen.id)
     nearest_of: dict[str, tuple[float, str]] = {}
     for structure in world.structures.values():
         distance = core.distance_m(position, structure.centre)
@@ -192,7 +194,7 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
             add(
                 structure.label,
                 STRUCTURE_KEYWORDS[structure.kind],
-                structure.door,
+                structure.spot(seat),
                 "structure",
                 structure.id,
                 water,
@@ -202,7 +204,14 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
             nearest_of[structure.kind] = (distance, structure.id)
     for kind, (_, structure_id) in sorted(nearest_of.items()):
         structure = world.structures[structure_id]
-        add(structure.label, STRUCTURE_KEYWORDS[kind], structure.door, "structure", structure.id, at=structure.centre)
+        add(
+            structure.label,
+            STRUCTURE_KEYWORDS[kind],
+            structure.spot(seat),
+            "structure",
+            structure.id,
+            at=structure.centre,
+        )
 
     for stack in sorted(state.ground.values(), key=lambda s: s.id):
         if core.distance_m(position, stack.position) <= sight:

@@ -109,3 +109,26 @@ def test_walk_home_and_sleep_through_the_night(new_sim: Callable[..., Simulation
     assert citizen.body.energy > 99.0  # full, less the minute awake since
     assert not citizen.body.asleep
     assert citizen.action is None
+
+
+def test_a_band_rests_round_its_fire_each_on_their_own_seat(new_sim: Callable[..., Simulation]) -> None:
+    sim = new_sim()
+    pit = sim.world.structures["band_a_camp:fire-pit"].centre
+    starts = [(9.0, 1.0), (-8.0, 4.0), (1.0, -9.0), (2.5, 8.0), (-6.0, -7.0)]
+    band = [
+        sim.add_citizen(
+            make_spec(f"band-{k}", site="band_a_camp", at=at, region="band_a", home="band_a_camp:shelter-e")
+        )
+        for k, at in enumerate(starts)
+    ]
+    for citizen in band:
+        api = WorldApi(sim, citizen.id)
+        walk = run_until_done(sim, api.walk_to_thing("the fire pit"), max_ticks=10)
+        assert walk.outcome == "done", walk.text
+        assert run_until_done(sim, api.rest(5), max_ticks=10).outcome == "done"
+
+    seats = [citizen.position for citizen in band]
+    for seat in seats:
+        assert 1.5 <= sim.world.distance_m(seat, pit) <= 2.5
+    gaps = [sim.world.distance_m(a, b) for k, a in enumerate(seats) for b in seats[k + 1 :]]
+    assert min(gaps) > 1.0  # seats 1.5 m apart, one each
