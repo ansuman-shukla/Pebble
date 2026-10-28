@@ -31,7 +31,7 @@ format:
 lint:
 	$(UV) run ruff check
 	$(UV) run ruff format --check
-	$(UV) run mypy app tests scripts/export_openapi.py scripts/bench_sim.py scripts/citizens_run.py
+	$(UV) run mypy app tests scripts/export_openapi.py scripts/bench_sim.py scripts/citizens_run.py scripts/ecology_run.py
 
 test: db-up
 	$(UV) run pytest
