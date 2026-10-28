@@ -187,6 +187,7 @@ test('activities in words', () => {
   expect(words('working')).toBe('working');
   expect(words('walking', 'the well')).toBe('walking to the well');
   expect(words('walking', 'to the north')).toBe('walking to the north');
+  expect(words('walking', 'home')).toBe('walking home');
   expect(words('walking')).toBe('walking');
   expect(words('drinking', 'the well')).toBe('drinking at the well');
   expect(words('sleeping', 'the lean-to')).toBe('asleep');

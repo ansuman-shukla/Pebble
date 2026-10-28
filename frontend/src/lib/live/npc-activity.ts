@@ -97,7 +97,7 @@ export function npcLook(
 
 /**
  * What someone is doing, in words ("tending the rice paddies", "walking to the well"). Work labels are the
- * engine's task phrases already; walk labels are a place ("the well") or a direction ("to the north").
+ * engine's task phrases already; walk labels are a place ("the well"), home or a direction ("to the north").
  */
 export function activityWords(
   citizen: Pick<LiveCitizen, 'activity' | 'action_label' | 'cause_of_death'>,
@@ -109,7 +109,10 @@ export function activityWords(
     case 'idle':
       return 'standing about';
     case 'walking':
-      return with_('walking', label.startsWith('to ') ? ' ' : ' to ');
+      return with_(
+        'walking',
+        label === 'home' || label.startsWith('to ') ? ' ' : ' to ',
+      );
     case 'sleeping':
       return 'asleep';
     case 'resting':
