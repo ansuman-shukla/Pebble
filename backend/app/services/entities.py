@@ -1,4 +1,5 @@
-"""Where everyone is and what they're doing, now or at any past tick (nearest snapshot + events)."""
+"""Where everyone (citizens and animals) is and what they're doing, and which fires burn, now or at any past tick
+(nearest snapshot + events)."""
 
 from dataclasses import dataclass
 from typing import Literal
@@ -8,22 +9,41 @@ from sqlmodel import Session
 
 from app.db.models import Run
 from app.observability.events import RoutePoint
-from app.observability.replay import ReplayCitizen, ReplayEvent, ReplayState, replay
+from app.observability.replay import ReplayAnimal, ReplayCitizen, ReplayEvent, ReplayFire, ReplayState, replay
 from app.observability.store import events_after, latest_snapshot
 from app.services.clock import run_or_latest
 from app.sim.bodies import body_words
 from app.sim.clock import town_clock
+from app.sim.fauna import AnimalKind
 from app.sim.snapshot import SimSnapshot
-from app.sim.state import Body, Region
+from app.sim.state import AnimalActivity, Body, FireKind, Region
 from app.sim.vec import Vec3, lat_lon_deg
 
 Activity = Literal[
-    "idle", "walking", "sleeping", "resting", "gathering", "eating", "drinking", "working", "talking", "dead"
+    "idle",
+    "walking",
+    "running",
+    "sleeping",
+    "resting",
+    "gathering",
+    "eating",
+    "drinking",
+    "working",
+    "hunting",
+    "fishing",
+    "tending_fire",
+    "talking",
+    "dead",
 ]
 ACTIVITIES: dict[str, Activity] = {
     "walk_to": "walking",
     "follow": "walking",
-    "flee": "walking",
+    "flee": "running",
+    "hunt": "hunting",
+    "attack": "hunting",
+    "fish": "fishing",
+    "make_fire": "tending_fire",
+    "feed_fire": "tending_fire",
     "sleep": "sleeping",
     "rest": "resting",
     "gather": "gathering",
@@ -68,12 +88,31 @@ class CitizenEntity(BaseModel):
     cause_of_death: str | None
 
 
+class AnimalEntity(BaseModel):
+    id: str
+    kind: AnimalKind  # the spectator registry's kind (frontend `ANIMALS`)
+    group: str  # herd, pack or shoal
+    position: Position  # height_m: the ground, or the water surface for swimmers
+    heading_deg: float  # yaw in the local tangent frame like citizens' (0 = south, 90 = east, 180 = north)
+    activity: AnimalActivity
+
+
+class FireEntity(BaseModel):
+    id: str
+    kind: FireKind  # a camp's fire pit, a town fire basket, or a campfire made anywhere
+    position: Position
+    lit: bool
+    strength: float  # 0 out, 1/3 embers, 2/3 burning low, 1 burning
+
+
 class EntitiesView(BaseModel):
     run_id: str
     tick: int
     day: int
     time: str
     citizens: list[CitizenEntity]
+    animals: list[AnimalEntity]
+    fires: list[FireEntity]
 
 
 def activity(citizen: ReplayCitizen, tick: int) -> Activity:
@@ -110,6 +149,39 @@ def citizen_entity(citizen: ReplayCitizen, tick: int) -> CitizenEntity:
         state=body_words(Body(hunger=hunger, thirst=thirst, energy=energy, health=health)) if citizen.alive else [],
         cause_of_death=citizen.cause_of_death,
     )
+
+
+def position(unit: Vec3, height_m: float) -> Position:
+    lat, lon = lat_lon_deg(unit)
+    return Position(unit=unit, height_m=height_m, lat=lat, lon=lon)
+
+
+def animal_entity(animal: ReplayAnimal) -> AnimalEntity:
+    return AnimalEntity(
+        id=animal.id,
+        kind=animal.kind,  # a species name: pydantic checks it is an AnimalKind
+        group=animal.group,
+        position=position(animal.position, animal.height_m),
+        heading_deg=animal.heading_deg,
+        activity=animal.activity,
+    )
+
+
+def fire_entity(fire: ReplayFire) -> FireEntity:
+    return FireEntity(
+        id=fire.id,
+        kind=fire.kind,
+        position=position(fire.position, fire.height_m),
+        lit=fire.lit,
+        strength=fire.strength,
+    )
+
+
+def wild_entities(state: ReplayState) -> tuple[list[AnimalEntity], list[FireEntity]]:
+    """Every animal (living, and remains until they're replaced) and every fire, by id."""
+    animals = [animal_entity(animal) for _, animal in sorted(state.animals.items())]
+    fires = [fire_entity(fire) for _, fire in sorted(state.fires.items())]
+    return animals, fires
 
 
 def snapshot_before(tick: int) -> int:
@@ -150,4 +222,7 @@ def entities_at(session: Session, run_id: str | None = None, at: int | None = No
         return None
     day, time = town_clock(world.tick)
     citizens = [citizen_entity(citizen, world.tick) for _, citizen in sorted(world.state.citizens.items())]
-    return EntitiesView(run_id=world.run.id, tick=world.tick, day=day, time=time, citizens=citizens)
+    animals, fires = wild_entities(world.state)
+    return EntitiesView(
+        run_id=world.run.id, tick=world.tick, day=day, time=time, citizens=citizens, animals=animals, fires=fires
+    )

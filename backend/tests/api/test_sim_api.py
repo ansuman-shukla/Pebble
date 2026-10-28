@@ -112,6 +112,20 @@ def test_entities_now_match_the_simulation(client: TestClient, loop: EngineLoop)
     assert (aiko["position"]["lat"], aiko["position"]["lon"]) == pytest.approx((lat, lon))
     assert lat == pytest.approx(38 - 104 / (2000 * math.pi / 180), abs=0.05)  # ~104 m south of the town centre
 
+    animals = {a["id"]: a for a in body["animals"]}
+    assert set(animals) == set(loop.sim.state.animals) and 150 < len(animals) < 400
+    for animal_id, entity in animals.items():
+        animal = loop.sim.state.animals[animal_id]
+        assert (entity["kind"], entity["group"], entity["activity"]) == (animal.kind, animal.group, animal.activity)
+        assert tuple(entity["position"]["unit"]) == pytest.approx(animal.position, abs=1e-12)
+        assert entity["position"]["height_m"] == pytest.approx(animal.height_m)
+        assert entity["heading_deg"] == pytest.approx(animal.heading_deg)
+    fires = {f["id"]: f for f in body["fires"]}
+    assert set(fires) == set(loop.sim.state.fires) >= {"band_a_camp:fire-pit", "main-gate-fire-w"}
+    pit = fires["band_a_camp:fire-pit"]
+    assert (pit["kind"], pit["lit"], pit["strength"]) == ("pit", True, 1.0)  # camps start with their fire burning
+    assert (fires["main-gate-fire-w"]["kind"], fires["main-gate-fire-w"]["lit"]) == ("basket", False)
+
 
 def test_entities_carry_the_walk_ahead_even_at_a_snapshot_tick(
     client: TestClient, api_session: Session, sim_world: SimWorld

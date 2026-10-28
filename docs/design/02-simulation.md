@@ -55,11 +55,16 @@ and no aging over time (ages are fixed); both arrive with v2.
   attacks can kill.
 - **Fish** are stocks in water cells; shallow water fish can be caught by hand or spear, deep water needs a boat (v1).
 - Populations have soft caps per biome and respawn slowly, so hunting pressure matters.
+- v0 numbers (D66-D70): ~270 animals in groups (herds, packs, shoals) whose sizes are the caps; a dead member is
+  replaced after 1-6 game days. Predators hunt below +4° sun when hungry; a person is safe within 15 m of a lit
+  fire, with 2 others within 10 m, or inside the walls. Fish are a per-cell stock (shallow sea, lakes, rivers)
+  that grows back in ~4 days; visible shoals swim near the shores.
 
 ## Fire, food and the town economy (v0)
 
 - **Fire** needs wood and the fire skill (both regions have it). It gives light, warmth, cooks meat (raw meat can make
-  you sick) and keeps animals away. It burns out unless fed.
+  you sick) and keeps animals away. It burns out unless fed. A piece of wood burns an hour, a fire holds twelve; light: night sight
+  ~30 m within 12 m; animals keep 25 m away; warmth arrives with seasons (v1).
 - **Town** fields grow rice and vegetables when tended; harvests go to a shared storehouse open to town members. The
   well never runs dry. Walls keep animals out. (Money, ownership and taxes come in v2.)
 - **Bands** live from gathering, hunting and fishing; food spoils after a few days unless dried (drying racks).

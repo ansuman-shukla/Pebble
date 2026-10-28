@@ -12,7 +12,7 @@ from sqlmodel import Session, col, select
 from app.db.models import Event, Snapshot
 from app.engine import EngineLoop
 from app.sim.clock import DAY_MINUTES
-from app.sim.items import RESOURCES
+from app.sim.items import ITEMS, RESOURCES
 from app.sim.world import SimWorld
 from tests.api.spectator import API, dev_run
 
@@ -37,7 +37,7 @@ def test_stats_count_people_food_resources_and_days(
         for citizen in state.citizens.values():
             if citizen.region == region:
                 for item, count in citizen.inventory.items():
-                    if item not in ("wood", "reeds") and count:
+                    if ITEMS[item].food > 0 and count:  # food only: not wood, reeds, hides or spears
                         carried[item] = carried.get(item, 0) + count
         assert food[region]["kind"] == "carried" and food[region]["items"] == dict(sorted(carried.items()))
     assert food["band_a"]["name"] == "carried by Band A" and food["band_a"]["hunger"] > 0

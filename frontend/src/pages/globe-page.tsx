@@ -26,6 +26,16 @@ import {
   PEGMAN_DRAG,
   DropPin,
 } from '@/components/world/globe/globe-explore-ui';
+import {
+  AnimalHooks,
+  type AnimalViews,
+  GlobeAnimals,
+} from '@/components/world/globe/globe-animals';
+import {
+  FireHooks,
+  type FireViews,
+  GlobeFires,
+} from '@/components/world/globe/globe-fires';
 import { GlobeNpcs, type NpcViews } from '@/components/world/globe/globe-npcs';
 import { GlobeSites, GlobeTown } from '@/components/world/globe/globe-sites';
 import { GlobeSky } from '@/components/world/globe/globe-sky';
@@ -251,6 +261,8 @@ type GlobeSceneProps = {
   live: LiveFeed['state'];
   peopleRef: RefObject<Map<string, Vector3>>;
   npcViews: NpcViews;
+  animalViews: AnimalViews;
+  fireViews: FireViews;
   followId: string | null;
   subjectRef: RefObject<GlobePlayerState>;
   start: Start;
@@ -280,6 +292,8 @@ const GlobeScene = memo(function GlobeScene({
   live,
   peopleRef,
   npcViews,
+  animalViews,
+  fireViews,
   followId,
   subjectRef,
   start,
@@ -368,6 +382,18 @@ const GlobeScene = memo(function GlobeScene({
         views={npcViews}
         followId={followId}
         subjectRef={subjectRef}
+      />
+      <GlobeAnimals
+        animals={live.animals}
+        speed={live.speed}
+        terrain={terrain}
+        views={animalViews}
+      />
+      <GlobeFires
+        fires={live.fires}
+        terrain={terrain}
+        town={walkTown}
+        views={fireViews}
       />
       <GlobeWalker
         terrain={terrain}
@@ -530,6 +556,8 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
     live.runId !== null && (replay !== null || feed.status === 'live');
   const peopleRef = useRef(new Map<string, Vector3>());
   const [npcViews] = useState<NpcViews>(() => new Map());
+  const [animalViews] = useState<AnimalViews>(() => new Map());
+  const [fireViews] = useState<FireViews>(() => new Map());
   const subjectRef = useRef<GlobePlayerState>({
     position: new Vector3(),
     facing: new Vector3(),
@@ -706,6 +734,8 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
         live={live}
         peopleRef={peopleRef}
         npcViews={npcViews}
+        animalViews={animalViews}
+        fireViews={fireViews}
         followId={followId}
         subjectRef={subjectRef}
         start={start}
@@ -727,6 +757,8 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
       />
       <LabelOverlay store={labels} />
       <NpcHooks citizens={live.citizens} views={npcViews} focusRef={focusRef} />
+      <AnimalHooks views={animalViews} />
+      <FireHooks views={fireViews} />
       {!ready && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <span className="rounded-lg bg-white/80 px-3 py-2 text-sm shadow">

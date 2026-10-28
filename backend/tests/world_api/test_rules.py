@@ -11,7 +11,7 @@ from app.sim.simulation import Simulation
 from app.sim.vec import step_towards
 from app.world_api.facade import WorldApi, run_until_done
 from app.world_api.models import ActionResult, Perception
-from tests.sim_helpers import GATE, WELL, make_spec
+from tests.sim_helpers import GATE, WELL, make_spec, without_animals
 
 FAR_IN_TOWN = (70.0, 85.0)  # the storehouses, ~95 m from the well
 LEAK = re.compile(r"\d|dev-|stack-|tester|cell|\bid\b")
@@ -60,6 +60,7 @@ def test_nothing_within_reach_fails_without_changing_the_world(new_sim: Callable
     citizen = sim.add_citizen(make_spec(at=FAR_IN_TOWN))
     api = WorldApi(sim, citizen.id)
     resources_before = sim.state.resources.copy()
+    ground_before = {stack_id: stack.count for stack_id, stack in sim.state.ground.items()}  # the camps' woodpiles
     sim.drain()
     results = [
         run_until_done(sim, api.drink(), 1),
@@ -81,7 +82,8 @@ def test_nothing_within_reach_fails_without_changing_the_world(new_sim: Callable
     ]
     assert all(r.outcome == "failed" for r in results)
     assert (sim.state.resources == resources_before).all()
-    assert citizen.inventory == {} and sim.state.ground == {}
+    assert citizen.inventory == {}
+    assert {stack_id: stack.count for stack_id, stack in sim.state.ground.items()} == ground_before
     assert "item_moved" not in _types(sim.drain())
     _assert_in_world(*(r.text for r in results))
 
@@ -98,7 +100,7 @@ def test_stacks_must_be_within_reach_to_pick_up(new_sim: Callable[..., Simulatio
     assert run_until_done(sim, picker.walk_to_thing("nuts"), 5).outcome == "done"
     assert picker.pick_up("nuts").text == "You pick up a handful of nuts."
     assert sim.citizen("picker").inventory == {"nuts": 5}
-    assert sim.state.ground == {}
+    assert not [stack for stack in sim.state.ground.values() if stack.item == "nuts"]
 
 
 def test_salt_water_is_not_drinkable(new_sim: Callable[..., Simulation]) -> None:
@@ -207,7 +209,7 @@ def test_starvation_kills_a_citizen_with_water_but_nothing_to_eat(new_sim: Calla
     assert 2.5 * 24 * 60 < sim.tick < 4.5 * 24 * 60
     where = citizen.position
     events = sim.drain()
-    deaths = [e for e in events if e.type == "died"]
+    deaths = [e for e in events if e.type == "died" and e.actor_kind == "citizen"]
     assert len(deaths) == 1 and deaths[0].actor_id == citizen.id
     sim.run(30)
     assert citizen.position == where  # the body stays where it fell
@@ -221,10 +223,23 @@ def test_starvation_kills_a_citizen_with_water_but_nothing_to_eat(new_sim: Calla
 def test_not_yet_actions_answer_in_world(new_sim: Callable[..., Simulation]) -> None:
     sim = new_sim()
     api = WorldApi(sim, sim.add_citizen(make_spec(at=GATE)).id)
-    handles = [api.follow("someone"), api.fish(), api.hunt("deer"), api.make_fire(), api.feed_fire()]
-    handles += [api.attack("someone")]
-    results = [handle.result for handle in handles] + [api.recall("yesterday")]
-    assert [(r.outcome, r.text) for r in results if r is not None] == [("failed", "You can't do that yet.")] * 7
+    results = [api.follow("someone").result, api.recall("yesterday")]
+    assert [(r.outcome, r.text) for r in results if r is not None] == [("failed", "You can't do that yet.")] * 2
+
+
+def test_wild_actions_fail_in_world_inside_the_town(new_sim: Callable[..., Simulation]) -> None:
+    sim = new_sim()
+    api = WorldApi(sim, sim.add_citizen(make_spec(at=FAR_IN_TOWN)).id)
+    handles = [api.fish(), api.hunt("unicorns"), api.make_fire(), api.feed_fire(), api.attack("someone")]
+    results = [handle.result for handle in handles]
+    assert [(r.outcome, r.text) for r in results if r is not None] == [
+        ("failed", "There's no water to fish in here."),
+        ("failed", "You don't see any unicorns around here."),
+        ("failed", "You don't know how to make fire."),
+        ("failed", "There's no fire within reach."),
+        ("failed", "You don't see anyone or anything like that."),
+    ]
+    _assert_in_world(*(r.text for r in results if r is not None))
 
 
 def test_giving_needs_reach_and_a_waking_receiver(new_sim: Callable[..., Simulation]) -> None:
@@ -293,7 +308,7 @@ def test_giving_needs_the_receiver_within_reach(new_sim: Callable[..., Simulatio
 
 
 def test_gathering_never_takes_more_than_grows_there(new_sim: Callable[..., Simulation]) -> None:
-    sim = new_sim()
+    sim = without_animals(new_sim())  # nothing comes into view to cut the gathering short
     citizen = sim.add_citizen(make_spec(at=GATE))
     world = sim.world
     cell = next(

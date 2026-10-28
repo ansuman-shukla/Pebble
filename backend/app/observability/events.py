@@ -10,6 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from app.sim.state import AnimalActivity, FireKind
 from app.sim.vec import Vec3
 from app.world_api.models import ActionName, Outcome, Volume
 
@@ -59,9 +60,18 @@ class Moved(Payload):
     speed_mps: float = 0.0  # ground speed on the current leg, game metres per game second (0 when not walking)
 
 
+class AnimalPose(Payload):
+    position: Vec3
+    height_m: float
+    cell: int
+    heading_deg: float
+    activity: AnimalActivity
+
+
 class TickSummary(Payload):
     moved: dict[str, Moved]  # citizens whose position changed this tick
     bodies: dict[str, BodyValues]  # every living citizen's needs after this tick
+    animals: dict[str, AnimalPose] = {}  # animals whose position, facing or activity changed this tick
 
 
 class CitizenSpawned(Payload):
@@ -83,6 +93,31 @@ class CitizenSpawned(Payload):
     skills: list[str] = []
     heading_deg: float = 0.0
     inventory: dict[str, int] = {}  # what they start out carrying
+
+
+class AnimalSpawned(Payload):
+    """A new member of a group: a dead one's replacement (`replaces` = the remains it clears away)."""
+
+    id: str
+    kind: str
+    group: str
+    position: Vec3
+    height_m: float
+    cell: int
+    heading_deg: float
+    replaces: str | None = None
+
+
+class FireChanged(Payload):
+    """A fire was lit, fed, burned down a level or went out (a campfire's first event creates it)."""
+
+    id: str
+    kind: FireKind
+    lit: bool
+    strength: float  # 0 out, 1/3 embers, 2/3 low, 1 burning
+    position: Vec3
+    height_m: float
+    cell: int
 
 
 class Perceived(Payload):
@@ -130,10 +165,11 @@ class Died(Payload):
 
 
 class ItemLocation(Payload):
-    """Where items are. `resource` = a cell's wild plants (changed by `resource_changed`); `world` = made by the world
-    (a tended field's harvest growing, a store's starting stock); `eaten` = gone."""
+    """Where items are. `resource` = a cell's wild plants or fish (changed by `resource_changed`); `world` = made by
+    the world (a tended field's harvest growing, a store's starting stock); `animal` = taken from a hunted animal (id);
+    `eaten` and `fire` (id: the fire it burns in) = gone."""
 
-    kind: Literal["inventory", "ground", "store", "resource", "eaten", "world"]
+    kind: Literal["inventory", "ground", "store", "resource", "eaten", "world", "animal", "fire"]
     id: str | None = None  # citizen, ground stack or store id
     cell: int | None = None
     position: Vec3 | None = None  # for a ground stack
@@ -182,9 +218,11 @@ PAYLOAD_TYPES: dict[EventType, type[Payload]] = {
     "item_moved": ItemMoved,
     "resource_changed": ResourceChanged,
     "knowledge_changed": KnowledgeChanged,
+    "animal_spawned": AnimalSpawned,
+    "fire_changed": FireChanged,
     "snapshot": SnapshotTaken,
     "intervention": Intervention,
-}  # thought, animal_spawned and fire_changed get payloads with the milestones that emit them
+}  # thought gets its payload with phase B
 
 
 @dataclass(frozen=True)

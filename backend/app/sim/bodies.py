@@ -20,7 +20,7 @@ ACTIVE_RATE = 1.25  # hunger and thirst while walking, gathering, fleeing or far
 ASLEEP_RATE = 0.75
 HEAT_THIRST_RATE = 1.5  # savanna and volcanic ground
 HOT_BIOMES = frozenset({"savanna", "volcanic"})
-ACTIVE_ACTIONS = frozenset({"walk_to", "gather", "flee", "farm"})  # actions and work tasks (`body_activity`)
+ACTIVE_ACTIONS = frozenset({"walk_to", "gather", "flee", "farm", "hunt", "fish", "attack"})  # and work tasks
 RESTING_ACTIONS = frozenset({"rest"})
 COLLAPSE_WAKE_ENERGY = 30.0  # a collapsed citizen sleeps at least until this rested
 

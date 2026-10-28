@@ -1173,6 +1173,69 @@
         ],
         "title": "Anchor"
       },
+      "AnimalEntity": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "deer",
+              "elk",
+              "antelope",
+              "rabbit",
+              "hare",
+              "boar",
+              "goat",
+              "duck",
+              "fox",
+              "wolf",
+              "bear",
+              "lion",
+              "polar_bear",
+              "shark",
+              "fish"
+            ],
+            "title": "Kind"
+          },
+          "group": {
+            "type": "string",
+            "title": "Group"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "heading_deg": {
+            "type": "number",
+            "title": "Heading Deg"
+          },
+          "activity": {
+            "type": "string",
+            "enum": [
+              "idle",
+              "grazing",
+              "walking",
+              "running",
+              "hunting",
+              "sleeping",
+              "dead"
+            ],
+            "title": "Activity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "group",
+          "position",
+          "heading_deg",
+          "activity"
+        ],
+        "title": "AnimalEntity"
+      },
       "CitizenEntity": {
         "properties": {
           "id": {
@@ -1227,12 +1290,16 @@
             "enum": [
               "idle",
               "walking",
+              "running",
               "sleeping",
               "resting",
               "gathering",
               "eating",
               "drinking",
               "working",
+              "hunting",
+              "fishing",
+              "tending_fire",
               "talking",
               "dead"
             ],
@@ -1418,12 +1485,16 @@
             "enum": [
               "idle",
               "walking",
+              "running",
               "sleeping",
               "resting",
               "gathering",
               "eating",
               "drinking",
               "working",
+              "hunting",
+              "fishing",
+              "tending_fire",
               "talking",
               "dead"
             ],
@@ -1575,12 +1646,16 @@
             "enum": [
               "idle",
               "walking",
+              "running",
               "sleeping",
               "resting",
               "gathering",
               "eating",
               "drinking",
               "working",
+              "hunting",
+              "fishing",
+              "tending_fire",
               "talking",
               "dead"
             ],
@@ -1895,6 +1970,20 @@
             },
             "type": "array",
             "title": "Citizens"
+          },
+          "animals": {
+            "items": {
+              "$ref": "#/components/schemas/AnimalEntity"
+            },
+            "type": "array",
+            "title": "Animals"
+          },
+          "fires": {
+            "items": {
+              "$ref": "#/components/schemas/FireEntity"
+            },
+            "type": "array",
+            "title": "Fires"
           }
         },
         "type": "object",
@@ -1903,7 +1992,9 @@
           "tick",
           "day",
           "time",
-          "citizens"
+          "citizens",
+          "animals",
+          "fires"
         ],
         "title": "EntitiesView"
       },
@@ -2115,6 +2206,43 @@
           "max_z"
         ],
         "title": "Extent"
+      },
+      "FireEntity": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "pit",
+              "basket",
+              "campfire"
+            ],
+            "title": "Kind"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "lit": {
+            "type": "boolean",
+            "title": "Lit"
+          },
+          "strength": {
+            "type": "number",
+            "title": "Strength"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "position",
+          "lit",
+          "strength"
+        ],
+        "title": "FireEntity"
       },
       "FoodStock": {
         "properties": {
@@ -2418,6 +2546,20 @@
             },
             "type": "array",
             "title": "Citizens"
+          },
+          "animals": {
+            "items": {
+              "$ref": "#/components/schemas/AnimalEntity"
+            },
+            "type": "array",
+            "title": "Animals"
+          },
+          "fires": {
+            "items": {
+              "$ref": "#/components/schemas/FireEntity"
+            },
+            "type": "array",
+            "title": "Fires"
           }
         },
         "type": "object",
@@ -2429,7 +2571,9 @@
           "time",
           "speed",
           "paused",
-          "citizens"
+          "citizens",
+          "animals",
+          "fires"
         ],
         "title": "LiveState",
         "description": "Where everyone is: on connect (`snapshot`) and after every engine tick (`tick`)."

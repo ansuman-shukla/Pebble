@@ -7,42 +7,51 @@ import re
 from dataclasses import dataclass
 
 from app.observability.events import (
-    ActionEnded,
-    ActionStarted,
     ItemLocation,
-    JsonScalar,
     ResourceChanged,
     RoutePoint,
     Said,
 )
+from app.sim import fire, wild
+from app.sim.acting import begin, capital, item_name, refuse, settled, stack_in_reach
 from app.sim.bodies import COLLAPSE_WAKE_ENERGY, Crossing
 from app.sim.clock import NIGHT_ALTITUDE_DEG, SECONDS_PER_TICK, sun_altitude_deg, sun_direction
 from app.sim.core import HEARING_M, KEPT_HEARD, REACH_M, SimCore
 from app.sim.ecology import schedule_regrowth
-from app.sim.items import ITEMS, RESOURCE_INDEX, amount_words
+from app.sim.fauna import DANGEROUS, SPECIES
+from app.sim.items import GATHERED, ITEMS, RESOURCE_INDEX, amount_words
 from app.sim.navigation import walk_along
 from app.sim.perception import (
     HOME_RADIUS_M,
+    WATCHING_M,
     compass,
+    from_where,
+    match_animal,
     match_person,
     match_thing,
+    nearest_danger,
     normalize,
     person_label,
     where_words,
 )
-from app.sim.state import ActionState, Citizen, Heard
+from app.sim.state import ActionState, Animal, Citizen, Heard
 from app.sim.vec import Vec3, bearing_deg, step_towards
 from app.world_api.models import (
     Action,
     ActionName,
     ActionResult,
+    Attack,
     DirectionTarget,
     Drink,
     Drop,
     Eat,
+    FeedFire,
+    Fish,
     Flee,
     Gather,
     Give,
+    Hunt,
+    MakeFire,
     PersonTarget,
     PickUp,
     PlaceTarget,
@@ -91,6 +100,11 @@ VERB: dict[str, str] = {
     "wait": "waiting",
     "flee": "running",
     "work": "working",
+    "hunt": "hunting",
+    "fish": "fishing",
+    "make_fire": "making a fire",
+    "feed_fire": "tending the fire",
+    "attack": "fighting",
 }
 SAY_VERB: dict[Volume, str] = {"whisper": "whisper", "normal": "say", "shout": "shout"}
 SAYS_VERB: dict[Volume, str] = {"whisper": "whispers", "normal": "says", "shout": "shouts"}
@@ -108,6 +122,12 @@ STORE_REACH_M = 6.0  # from a storehouse's door
 FARM_GROWTH = 12  # measures of rice an hour of tending ripens
 FIELD_ID = "rice-fields"  # the town's paddies: a place, and the store their ripe rice waits in
 NOT_YET = "You can't do that yet."
+FLEE_M = 150.0  # flee() runs this far from the danger
+FLEE_PACE = 1.6  # running
+FLEE_TURNS = (0.0, 45.0, -45.0, 90.0, -90.0, 135.0, -135.0)
+COOKED = 1.5  # raw meat or fish eaten beside a fire is roasted: this much more filling
+RAW_SICK_CHANCE = 0.3
+RAW_SICKNESS = (6.0, 14.0)
 
 
 @dataclass(frozen=True)
@@ -193,77 +213,8 @@ def work_task(words: str) -> WorkTask | None:
     return next((task for task in WORK_TASKS if task.words & query), None)
 
 
-_NIGHT_STOPS = frozenset({"walk_to", "gather", "wait", "rest", "work"})
-_NEED_STOPS = frozenset({"walk_to", "gather", "wait", "rest", "flee", "work"})
-_SINGULAR = {"berry": "berries", "root": "roots", "nut": "nuts", "reed": "reeds"}
-
-
-# --- bookkeeping ---
-
-
-def _begin(
-    core: SimCore, citizen: Citizen, kind: ActionName, label: str, args: dict[str, JsonScalar], destination: str = ""
-) -> ActionState:
-    number = citizen.next_action
-    citizen.next_action += 1
-    seq = core.emit("action_started", ActionStarted(number=number, action=kind, args=args, label=label), actor=citizen)
-    action = ActionState(
-        number=number,
-        kind=kind,
-        started_tick=core.state.tick,
-        started_seq=seq,
-        args=args,
-        label=label,
-        destination=destination,
-    )
-    citizen.action = action
-    return action
-
-
-def _settled(core: SimCore, citizen: Citizen, kind: ActionName, outcome: str, text: str) -> int:
-    """A durative action that ends the moment it is asked for (failed, or already done)."""
-    number = citizen.next_action
-    citizen.next_action += 1
-    result = ActionResult(action=kind, outcome="done" if outcome == "done" else "failed", text=text)
-    core.emit(
-        "action_finished",
-        ActionEnded(number=number, action=kind, outcome=result.outcome, text=text),
-        actor=citizen,
-    )
-    core.record_result(citizen, number, result)
-    return number
-
-
-def refuse(core: SimCore, citizen: Citizen, kind: ActionName, text: str) -> ActionResult:
-    result = ActionResult(action=kind, outcome="failed", text=text)
-    core.emit(
-        "action_finished",
-        ActionEnded(number=0, action=kind, outcome="failed", text=text),
-        actor=citizen,
-        visibility="private",
-    )
-    return result
-
-
-def item_name(words: str) -> str | None:
-    """The item the words name: the last word or two-word name that is an item ("some dried meat" -> dried meat)."""
-    query = [_SINGULAR.get(word, word) for word in normalize(words).split()]
-    for end in range(len(query), 0, -1):
-        for start in (end - 2, end - 1):
-            name = " ".join(query[max(start, 0) : end])
-            if start >= 0 and name in ITEMS:
-                return name
-    return None
-
-
-def _stack_in_reach(core: SimCore, citizen: Citizen, item: str) -> str | None:
-    options = [
-        (core.distance_m(citizen.position, stack.position), stack.id)
-        for stack in core.state.ground.values()
-        if stack.item == item and stack.count > 0
-    ]
-    near = [option for option in options if option[0] <= REACH_M]
-    return min(near)[1] if near else None
+_NIGHT_STOPS = frozenset({"walk_to", "gather", "wait", "rest", "work", "hunt", "fish"})
+_NEED_STOPS = frozenset({"walk_to", "gather", "wait", "rest", "flee", "work", "hunt", "fish"})
 
 
 # --- instant actions ---
@@ -298,12 +249,15 @@ def say(core: SimCore, citizen: Citizen, action: Say) -> ActionResult:
 
 def pick_up(core: SimCore, citizen: Citizen, action: PickUp) -> ActionResult:
     item = item_name(action.item)
-    stack_id = _stack_in_reach(core, citizen, item) if item else None
-    if item is None or stack_id is None:
+    stack_id = stack_in_reach(core, citizen, item) if item else None
+    store_id = store_in_reach(core, citizen, item) if item and stack_id is None else None
+    if item is None or (stack_id is None and store_id is None):
         return refuse(core, citizen, "pick_up", f"There's no {action.item} within reach.")
     room = core.room_for(citizen, item)
     if room == 0:
         return refuse(core, citizen, "pick_up", "You can't carry any more.")
+    if stack_id is None:
+        return _take_from_store(core, citizen, item, str(store_id), room)
     stack = core.state.ground[stack_id]
     count = min(room, stack.count)
     stack.count -= count
@@ -318,6 +272,21 @@ def pick_up(core: SimCore, citizen: Citizen, action: PickUp) -> ActionResult:
         ItemLocation(kind="inventory", id=citizen.id),
     )
     return ActionResult(action="pick_up", outcome="done", text=f"You pick up {amount_words(count, ITEMS[item])}.")
+
+
+def _take_from_store(core: SimCore, citizen: Citizen, item: str, store_id: str, room: int) -> ActionResult:
+    """Town folk take what they need from a storehouse within reach (03 pick_up: "within reach")."""
+    store = core.state.stores[store_id]
+    count = min(room, store[item])
+    store[item] -= count
+    if store[item] == 0:
+        del store[item]
+    citizen.inventory[item] = citizen.inventory.get(item, 0) + count
+    core.item_moved(
+        citizen, item, count, ItemLocation(kind="store", id=store_id), ItemLocation(kind="inventory", id=citizen.id)
+    )
+    words = amount_words(count, ITEMS[item])
+    return ActionResult(action="pick_up", outcome="done", text=f"You take {words} from the storehouse.")
 
 
 def drop(core: SimCore, citizen: Citizen, action: Drop) -> ActionResult:
@@ -343,18 +312,18 @@ def give(core: SimCore, citizen: Citizen, action: Give) -> ActionResult:
         return refuse(core, citizen, "give", "You don't see anyone like that.")
     label = person_label(citizen, receiver)
     if core.distance_m(citizen.position, receiver.position) > REACH_M:
-        return refuse(core, citizen, "give", f"{_capital(label)} is too far away to hand anything to.")
+        return refuse(core, citizen, "give", f"{capital(label)} is too far away to hand anything to.")
     item = item_name(action.item)
     count = citizen.inventory.get(item, 0) if item else 0
     if item is None or count == 0:
         return refuse(core, citizen, "give", f"You aren't carrying any {action.item}.")
     if receiver.body.asleep:
-        return refuse(core, citizen, "give", f"{_capital(label)} is asleep.")
+        return refuse(core, citizen, "give", f"{capital(label)} is asleep.")
     count = min(count, core.room_for(receiver, item))
     if count == 0:
-        return refuse(core, citizen, "give", f"{_capital(label)} can't carry any more.")
+        return refuse(core, citizen, "give", f"{capital(label)} can't carry any more.")
     if not core.accepts_gift(citizen, receiver, item, count):
-        return refuse(core, citizen, "give", f"{_capital(label)} doesn't take it.")
+        return refuse(core, citizen, "give", f"{capital(label)} doesn't take it.")
     citizen.inventory[item] -= count
     if citizen.inventory[item] == 0:
         del citizen.inventory[item]
@@ -367,16 +336,12 @@ def give(core: SimCore, citizen: Citizen, action: Give) -> ActionResult:
         ItemLocation(kind="inventory", id=receiver.id),
     )
     return ActionResult(
-        action="give", outcome="done", text=f"{_capital(label)} takes {amount_words(count, ITEMS[item])}."
+        action="give", outcome="done", text=f"{capital(label)} takes {amount_words(count, ITEMS[item])}."
     )
 
 
 def not_yet(core: SimCore, citizen: Citizen, kind: ActionName) -> ActionResult:
     return refuse(core, citizen, kind, NOT_YET)
-
-
-def _capital(text: str) -> str:
-    return text[:1].upper() + text[1:]
 
 
 # --- starting durative actions ---
@@ -386,7 +351,7 @@ def start(core: SimCore, citizen: Citizen, action: Action) -> int:
     """Start a durative action (ending any running one); returns its number. Results arrive via `results`."""
     current = citizen.action
     if current is not None and current.collapsed and citizen.body.energy < COLLAPSE_WAKE_ENERGY:
-        return _settled(core, citizen, action.action, "failed", "You are too exhausted to move.")
+        return settled(core, citizen, action.action, "failed", "You are too exhausted to move.")
     if current is not None:
         _apply_partial(core, citizen, current)
         text = "You get up." if current.kind == "sleep" else f"You stop {VERB[current.kind]} to do something else."
@@ -400,35 +365,45 @@ def start(core: SimCore, citizen: Citizen, action: Action) -> int:
     if isinstance(action, Drink):
         return _start_drink(core, citizen, action)
     if isinstance(action, Rest | Wait):
-        _begin(core, citizen, action.action, "", {"minutes": action.minutes}).until_tick = (
+        begin(core, citizen, action.action, "", {"minutes": action.minutes}).until_tick = (
             core.state.tick + action.minutes
         )
         return citizen.next_action - 1
     if isinstance(action, Sleep):
         if citizen.body.energy > SLEEPY_ENERGY and not core.is_night_at(citizen.position):
-            return _settled(core, citizen, "sleep", "failed", "You aren't tired enough to sleep.")
+            return settled(core, citizen, "sleep", "failed", "You aren't tired enough to sleep.")
         citizen.body.asleep = True
-        _begin(core, citizen, "sleep", "", {})
+        begin(core, citizen, "sleep", "", {})
         return citizen.next_action - 1
     if isinstance(action, Flee):
-        return _settled(core, citizen, "flee", "failed", "You see nothing to run from.")
+        return _start_flee(core, citizen)
     if isinstance(action, Work):
         return _start_work(core, citizen, action)
-    return _settled(core, citizen, action.action, "failed", NOT_YET)
+    if isinstance(action, Hunt):
+        return wild.start_hunt(core, citizen, action)
+    if isinstance(action, Attack):
+        return wild.start_attack(core, citizen, action)
+    if isinstance(action, Fish):
+        return wild.start_fish(core, citizen)
+    if isinstance(action, MakeFire):
+        return wild.start_make_fire(core, citizen)
+    if isinstance(action, FeedFire):
+        return wild.start_feed_fire(core, citizen)
+    return settled(core, citizen, action.action, "failed", NOT_YET)
 
 
 def _start_walk(core: SimCore, citizen: Citizen, target: Target) -> int:
     resolved = _resolve(core, citizen, target)
     if isinstance(resolved, str):
-        return _settled(core, citizen, "walk_to", "failed", resolved)
+        return settled(core, citizen, "walk_to", "failed", resolved)
     if resolved.person_id is None and core.distance_m(citizen.position, resolved.goal) < 1.0:
-        return _settled(core, citizen, "walk_to", "done", "You are already there.")
+        return settled(core, citizen, "walk_to", "done", "You are already there.")
     if resolved.person_id is not None and core.distance_m(citizen.position, resolved.goal) <= ARRIVE_M:
-        return _settled(core, citizen, "walk_to", "done", f"You are already beside {resolved.words}.")
+        return settled(core, citizen, "walk_to", "done", f"You are already beside {resolved.words}.")
     route = core.planner.plan(citizen.position, resolved.goal, citizen.cell)
     if route is None:
-        return _settled(core, citizen, "walk_to", "failed", "You can't find a way there.")
-    walk = _begin(
+        return settled(core, citizen, "walk_to", "failed", "You can't find a way there.")
+    walk = begin(
         core,
         citizen,
         "walk_to",
@@ -438,6 +413,30 @@ def _start_walk(core: SimCore, citizen: Citizen, target: Target) -> int:
     )
     walk.route, walk.goal, walk.target_id = route, resolved.goal, resolved.person_id
     return walk.number
+
+
+def _start_flee(core: SimCore, citizen: Citizen) -> int:
+    """Run away from the nearest danger in view (03 flee), turning aside if water or walls are in the way."""
+    danger = nearest_danger(core, citizen)
+    if danger is None:
+        return settled(core, citizen, "flee", "failed", "You see nothing to run from.")
+    animal, _ = danger
+    away = bearing_deg(animal.position, citizen.position)
+    for turn in FLEE_TURNS:
+        goal = step_towards(citizen.position, (away + turn) % 360.0, FLEE_M, core.world.radius_m)
+        town = core.world.town_point(goal)
+        walkable = (
+            core.world.town.walk.is_walkable(*town)
+            if town is not None
+            else core.planner.outer.allowed[core.world.nearest_cell(goal, citizen.cell)]
+        )
+        route = core.planner.plan(citizen.position, goal, citizen.cell) if walkable else None
+        if route is not None:
+            label = f"away from {SPECIES[animal.kind].one}"
+            flee = begin(core, citizen, "flee", label, {"arrive": "You run until you feel safer."}, destination=label)
+            flee.route, flee.goal = route, goal
+            return flee.number
+    return settled(core, citizen, "flee", "failed", "There's nowhere to run.")
 
 
 @dataclass(frozen=True)
@@ -476,9 +475,13 @@ def _resolve(core: SimCore, citizen: Citizen, target: Target) -> _Destination | 
         return _Destination(person.position, label, person.id, f"You reach {label}.", label)
     if isinstance(target, ThingTarget):
         thing = match_thing(core, citizen, target.what)
-        if thing is None:
-            return f"You don't see any {target.what} around here."
-        return _Destination(thing.goal, thing.label, None, f"You reach {thing.label}.", thing.label)
+        if thing is not None:
+            return _Destination(thing.goal, thing.label, None, f"You reach {thing.label}.", thing.label)
+        animal = match_animal(core, citizen, target.what)
+        if animal is not None:
+            one = SPECIES[animal.kind].one
+            return _Destination(animal.position, one, None, f"You reach where you saw {one}.", one)
+        return f"You don't see any {target.what} around here."
     return _resolve_direction(core, citizen, target)
 
 
@@ -501,13 +504,15 @@ def _resolve_direction(core: SimCore, citizen: Citizen, target: DirectionTarget)
 
 def _start_gather(core: SimCore, citizen: Citizen, action: Gather) -> int:
     resource = item_name(action.resource)
-    if resource is None or resource not in RESOURCE_INDEX:
-        return _settled(core, citizen, "gather", "failed", f"You can't gather {action.resource} here.")
+    if resource == "fish":
+        return settled(core, citizen, "gather", "failed", "Fish have to be caught; try fishing.")
+    if resource is None or resource not in GATHERED:
+        return settled(core, citizen, "gather", "failed", f"You can't gather {action.resource} here.")
     if core.state.resources[citizen.cell, RESOURCE_INDEX[resource]] == 0:
-        return _settled(core, citizen, "gather", "failed", f"There are no {resource} within reach.")
+        return settled(core, citizen, "gather", "failed", f"There are no {resource} within reach.")
     if core.room_for(citizen, resource) == 0:
-        return _settled(core, citizen, "gather", "failed", "You can't carry any more.")
-    gather = _begin(core, citizen, "gather", resource, {"resource": resource})
+        return settled(core, citizen, "gather", "failed", "You can't carry any more.")
+    gather = begin(core, citizen, "gather", resource, {"resource": resource})
     gather.item, gather.until_tick = resource, core.state.tick + GATHER_MINUTES
     return gather.number
 
@@ -515,20 +520,20 @@ def _start_gather(core: SimCore, citizen: Citizen, action: Gather) -> int:
 def _start_eat(core: SimCore, citizen: Citizen, action: Eat) -> int:
     item = item_name(action.item)
     if item is None or ITEMS[item].food <= 0:
-        return _settled(core, citizen, "eat", "failed", "You can't eat that.")
+        return settled(core, citizen, "eat", "failed", "You can't eat that.")
     stack_id = store_id = None
     available = citizen.inventory.get(item, 0)
     if available == 0:
-        stack_id = _stack_in_reach(core, citizen, item)
+        stack_id = stack_in_reach(core, citizen, item)
         store_id = None if stack_id is not None else store_in_reach(core, citizen, item)
         if stack_id is not None:
             available = core.state.ground[stack_id].count
         elif store_id is not None:
             available = core.state.stores[store_id][item]
         else:
-            return _settled(core, citizen, "eat", "failed", f"You have no {item}, and there are none within reach.")
+            return settled(core, citizen, "eat", "failed", f"You have no {item}, and there are none within reach.")
     pieces = max(1, min(available, math.ceil(citizen.body.hunger / ITEMS[item].food)))
-    eat = _begin(core, citizen, "eat", item, {"item": item})
+    eat = begin(core, citizen, "eat", item, {"item": item})
     eat.item, eat.amount, eat.target_id, eat.until_tick = item, pieces, stack_id, core.state.tick + pieces
     eat.store_id = store_id
     return eat.number
@@ -550,23 +555,23 @@ def store_in_reach(core: SimCore, citizen: Citizen, item: str | None = None) -> 
 def _start_work(core: SimCore, citizen: Citizen, action: Work) -> int:
     task = work_task(action.task)
     if task is None or (task.skill is not None and task.skill not in citizen.skills):
-        return _settled(core, citizen, "work", "failed", "You don't know how to do that.")
+        return settled(core, citizen, "work", "failed", "You don't know how to do that.")
     store_id = None
     if task.at == "storehouse":
         store_id = store_in_reach(core, citizen)
         if store_id is None:
-            return _settled(core, citizen, "work", "failed", task.nowhere)
+            return settled(core, citizen, "work", "failed", task.nowhere)
         if not any(ITEMS[item].food > 0 for item in citizen.inventory):
-            return _settled(core, citizen, "work", "failed", "You aren't carrying any food to store.")
+            return settled(core, citizen, "work", "failed", "You aren't carrying any food to store.")
     elif task.at == "home":
         home = core.world.structures.get(citizen.home) if citizen.home is not None else None
         if home is None or core.distance_m(citizen.position, home.door) > HOME_RADIUS_M:
-            return _settled(core, citizen, "work", "failed", task.nowhere)
+            return settled(core, citizen, "work", "failed", task.nowhere)
     else:
         places = [core.world.places[place_id] for place_id in task.places]
         if not any(core.distance_m(citizen.position, place.centre) <= place.radius_m for place in places):
-            return _settled(core, citizen, "work", "failed", task.nowhere)
-    work = _begin(core, citizen, "work", task.label, {"task": task.name})
+            return settled(core, citizen, "work", "failed", task.nowhere)
+    work = begin(core, citizen, "work", task.label, {"task": task.name})
     work.item, work.store_id, work.until_tick = task.name, store_id, core.state.tick + task.minutes
     return work.number
 
@@ -645,11 +650,11 @@ def water_within_reach(core: SimCore, citizen: Citizen) -> tuple[str, str] | Non
 def _start_drink(core: SimCore, citizen: Citizen, action: Drink) -> int:
     water = water_within_reach(core, citizen)
     if water is None:
-        return _settled(core, citizen, action.action, "failed", "There's no water within reach.")
+        return settled(core, citizen, action.action, "failed", "There's no water within reach.")
     kind, source = water
     if kind == "salt":
-        return _settled(core, citizen, action.action, "failed", "The water here is salty; you spit it out.")
-    drink = _begin(core, citizen, "drink", source, {"source": source})
+        return settled(core, citizen, action.action, "failed", "The water here is salty; you spit it out.")
+    drink = begin(core, citizen, "drink", source, {"source": source})
     drink.until_tick = core.state.tick + DRINK_MINUTES
     return drink.number
 
@@ -661,8 +666,10 @@ def advance(core: SimCore, citizen: Citizen) -> None:
     action = citizen.action
     if action is None:
         return
-    if action.kind == "walk_to":
+    if action.kind in ("walk_to", "flee"):
         _advance_walk(core, citizen, action)
+    elif action.kind in ("hunt", "attack"):
+        wild.advance_stalk(core, citizen, action)
     elif action.kind == "sleep":
         _advance_sleep(core, citizen)
     elif action.until_tick is not None and core.state.tick >= action.until_tick:
@@ -711,8 +718,11 @@ def _advance_walk(core: SimCore, citizen: Citizen, walk: ActionState) -> None:
 
 
 def walk_pace(citizen: Citizen) -> float:
-    """Walking cost budget per tick as a share of WALK_M_PER_TICK (age, halved when exhausted)."""
-    return citizen.traits.speed * (EXHAUSTED_PACE if citizen.body.energy <= 10 else 1.0)
+    """Walking cost budget per tick as a share of WALK_M_PER_TICK (age, halved when exhausted, ×1.6 fleeing)."""
+    fleeing = citizen.action is not None and citizen.action.kind == "flee"
+    return (
+        citizen.traits.speed * (EXHAUSTED_PACE if citizen.body.energy <= 10 else 1.0) * (FLEE_PACE if fleeing else 1.0)
+    )
 
 
 def walk_ahead(core: SimCore, citizen: Citizen) -> tuple[list[RoutePoint], float]:
@@ -723,7 +733,7 @@ def walk_ahead(core: SimCore, citizen: Citizen) -> tuple[list[RoutePoint], float
     walkable as the route (in town: grid corners, no corner cutting).
     """
     walk = citizen.action
-    if walk is None or walk.kind != "walk_to" or walk.route is None or walk.leg >= len(walk.route.costs):
+    if walk is None or walk.kind not in ("walk_to", "flee") or walk.route is None or walk.leg >= len(walk.route.costs):
         return [], 0.0
     route, world = walk.route, core.world
     pace = walk_pace(citizen)
@@ -765,6 +775,8 @@ def _complete(core: SimCore, citizen: Citizen, action: ActionState) -> None:
         core.end_action(citizen, "done", "You wait a while.")
     elif action.kind == "work":
         _finish_work(core, citizen, action)
+    elif action.kind in ("fish", "make_fire", "feed_fire"):
+        wild.complete(core, citizen, action)
     else:
         raise ValueError(f"{action.kind} has no timed completion")
 
@@ -833,10 +845,22 @@ def _eat(core: SimCore, citizen: Citizen, action: ActionState, pieces: int) -> s
         if citizen.inventory[item] == 0:
             del citizen.inventory[item]
         source = ItemLocation(kind="inventory", id=citizen.id)
-    citizen.body.hunger = max(0.0, citizen.body.hunger - eaten * ITEMS[item].food)
-    core.item_moved(citizen, item, eaten, source, ItemLocation(kind="eaten", id=citizen.id))
+    kind = ITEMS[item]
+    cooked = kind.raw and fire.near_lit_fire(core, citizen.position, fire.REACH_M)
+    citizen.body.hunger = max(0.0, citizen.body.hunger - eaten * kind.food * (COOKED if cooked else 1.0))
+    eaten_seq = core.item_moved(citizen, item, eaten, source, ItemLocation(kind="eaten", id=citizen.id))
     full = " You feel full." if citizen.body.hunger < 10 else ""
-    return f"You eat {amount_words(eaten, ITEMS[item])}.{full}"
+    words = amount_words(eaten, kind)
+    if cooked:
+        return f"You roast {words} over the fire and eat it.{full}"
+    rng = core.state.rngs["actions"]
+    if kind.raw and rng.random() < RAW_SICK_CHANCE:
+        low, high = RAW_SICKNESS
+        core.injure(
+            citizen, low + (high - low) * rng.random(), "bad food", f"the raw {item} turns your stomach", eaten_seq
+        )
+        return f"You eat {words} raw. Your stomach cramps; it makes you sick.{full}"
+    return f"You eat {words}{' raw' if kind.raw else ''}.{full}"
 
 
 def _drink(citizen: Citizen, share: float) -> None:
@@ -860,7 +884,7 @@ def collapse(core: SimCore, citizen: Citizen) -> None:
         _apply_partial(core, citizen, citizen.action)
         core.end_action(citizen, "interrupted", "Your legs give way; you collapse, exhausted.")
     citizen.body.asleep = True
-    _begin(core, citizen, "sleep", "", {"collapsed": True}).collapsed = True
+    begin(core, citizen, "sleep", "", {"collapsed": True}).collapsed = True
 
 
 def end_for_death(core: SimCore, citizen: Citizen, died_seq: int) -> None:
@@ -871,6 +895,15 @@ def end_for_death(core: SimCore, citizen: Citizen, died_seq: int) -> None:
 # --- interrupts (once per tick, after bodies) ---
 
 
+@dataclass(frozen=True)
+class AnimalNews:
+    """What changed about the animals around a citizen this tick (for interrupts)."""
+
+    hurt: tuple[str, int] | None = None  # what hurt them ("a wolf attacks you") and the injured event
+    threats: tuple[tuple[Animal, float], ...] = ()  # predators that started coming at them
+    groups: tuple[tuple[Animal, float, int], ...] = ()  # groups that came into view: (nearest member, metres, seen)
+
+
 def interrupt(
     core: SimCore,
     citizen: Citizen,
@@ -878,18 +911,24 @@ def interrupt(
     strangers_seen: list[str],
     approaching: list[str],
     night_fell: bool,
+    news: AnimalNews | None = None,
 ) -> None:
     """End the running durative action early when something happens (03, "Interrupts").
 
-    People interrupt when a stranger comes into view or someone known comes up to you; known people merely walking
-    by don't (animals join with M6).
+    Being hurt wakes even sleepers (not the collapsed); a predator coming at you, a stranger or an animal group
+    coming into view, or someone known walking up to you interrupt the awake; known people merely walking by don't.
     """
     action = citizen.action
     if action is None:
         return
+    news = news or AnimalNews()
     verb = VERB[action.kind]
     stop = "You wake" if action.kind == "sleep" else f"You stop {verb}"
     asleep = action.kind == "sleep"
+    if news.hurt is not None and not action.collapsed:
+        words, seq = news.hurt
+        _interrupt(core, citizen, action, f"{stop}: {words}!", seq)
+        return
     for heard in citizen.heard:
         if heard.tick != core.state.tick - 1 or heard.speaker_id == citizen.id:
             continue
@@ -902,20 +941,39 @@ def interrupt(
         if action.kind in _NEED_STOPS or (crossing.need == "health" and action.kind != "eat"):
             _interrupt(core, citizen, action, f"{stop}: you are {NEED_WORDS[crossing.words]}.", None)
             return
-    if not asleep:
-        for person_id in strangers_seen:
-            if person_id == action.target_id:
-                continue
-            other = core.state.citizens[person_id]
-            where = _where(core, citizen, other)
-            _interrupt(core, citizen, action, f"{stop}: {person_label(citizen, other)} comes into view {where}.", None)
-            return
-        for person_id in approaching:
-            if person_id == action.target_id:
-                continue
-            label = person_label(citizen, core.state.citizens[person_id])
-            _interrupt(core, citizen, action, f"{stop}: {label} is coming toward you.", None)
-            return
+    if asleep:
+        return
+    for animal, distance in news.threats:
+        where = from_where(core, citizen, distance, bearing_deg(citizen.position, animal.position))
+        _interrupt(core, citizen, action, f"{stop}: {SPECIES[animal.kind].one} is coming at you {where}.", None)
+        return
+    for person_id in strangers_seen:
+        if person_id == action.target_id:
+            continue
+        other = core.state.citizens[person_id]
+        where = _where(core, citizen, other)
+        _interrupt(core, citizen, action, f"{stop}: {person_label(citizen, other)} comes into view {where}.", None)
+        return
+    hunted = core.state.animals.get(action.target_id or "")
+    for animal, distance, count in news.groups:
+        if action.kind == "flee" or (hunted is not None and hunted.group == animal.group):
+            continue
+        species = SPECIES[animal.kind]
+        label = species.count_words(count)
+        bearing = bearing_deg(citizen.position, animal.position)
+        if animal.kind in DANGEROUS and animal.activity != "sleeping" and distance <= WATCHING_M:
+            verb_phrase = "is" if count == 1 else "are"
+            text = f"{stop}: {label} {verb_phrase} watching you {from_where(core, citizen, distance, bearing)}."
+        else:
+            text = f"{stop}: {label} {'comes' if count == 1 else 'come'} into view {where_words(distance, bearing)}."
+        _interrupt(core, citizen, action, text, None)
+        return
+    for person_id in approaching:
+        if person_id == action.target_id:
+            continue
+        label = person_label(citizen, core.state.citizens[person_id])
+        _interrupt(core, citizen, action, f"{stop}: {label} is coming toward you.", None)
+        return
     if night_fell and action.kind in _NIGHT_STOPS:
         _interrupt(core, citizen, action, f"{stop}: night is falling.", None)
 

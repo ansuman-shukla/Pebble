@@ -9,6 +9,7 @@ import numpy as np
 
 from app.core.rng import Rng
 from app.observability.events import (
+    AnimalPose,
     CitizenSpawned,
     Died,
     EventDraft,
@@ -20,14 +21,17 @@ from app.observability.events import (
     TickSummary,
 )
 from app.sim import actions, ecology
+from app.sim.acting import refuse
 from app.sim.bodies import COLLAPSE_WAKE_ENERGY, HOT_BIOMES, Crossing, update_body
 from app.sim.citizens import CitizenSpec
 from app.sim.core import GiftPolicy, SimCore
+from app.sim.fauna import place_groups
+from app.sim.fire import hearth_fires
 from app.sim.items import ITEMS, RESOURCES
 from app.sim.navigation import Planner
-from app.sim.perception import perceive, self_view
-from app.sim.state import RNG_STREAMS, Citizen, PlaceKnowledge, WorldState, age_group
-from app.sim.vec import Vec3
+from app.sim.perception import animal_sightings, perceive, self_view
+from app.sim.state import RNG_STREAMS, Animal, Citizen, GroundStack, PlaceKnowledge, WorldState, age_group
+from app.sim.vec import Vec3, step_towards
 from app.sim.world import SimWorld, site_unit
 from app.world_api.models import (
     INSTANT_ACTIONS,
@@ -45,6 +49,9 @@ from app.world_api.models import (
 )
 
 INITIAL_RESOURCE_SHARE = 0.5  # cells start between half and fully stocked
+WOODPILE = 12  # pieces of wood by each camp's fire pit at the start
+WOODPILE_OFFSET_M = 3.2  # beyond the seats round the pit (2 m), between two of them
+WOODPILE_BEARING = 112.5
 
 
 def initial_state(world: SimWorld, seed: int) -> WorldState:
@@ -58,8 +65,27 @@ def initial_state(world: SimWorld, seed: int) -> WorldState:
             if cap:
                 share = INITIAL_RESOURCE_SHARE + (1 - INITIAL_RESOURCE_SHARE) * ecology_rng.random()
                 resources[cell, column] = round(cap * share)
+    groups, animals = place_groups(world, rngs["animals"])
+    fires = hearth_fires(world)
+    ground: dict[str, GroundStack] = {}
+    for fire_id in sorted(fires):  # each camp keeps a woodpile by its fire pit
+        if fires[fire_id].kind == "pit":
+            spot = step_towards(fires[fire_id].position, WOODPILE_BEARING, WOODPILE_OFFSET_M, world.radius_m)
+            stack_id = f"stack-{len(ground) + 1}"
+            ground[stack_id] = GroundStack(stack_id, "wood", WOODPILE, spot, world.nearest_cell(spot))
     return WorldState(
-        tick=0, next_seq=1, next_stack=1, citizens={}, ground={}, stores={}, resources=resources, rngs=rngs
+        tick=0,
+        next_seq=1,
+        next_stack=len(ground) + 1,
+        citizens={},
+        ground=ground,
+        stores={},
+        resources=resources,
+        rngs=rngs,
+        animals={animal.id: animal for animal in animals},
+        groups={group.id: group for group in groups},
+        fires=fires,
+        next_animal=len(animals) + 1,
     )
 
 
@@ -164,6 +190,7 @@ class Simulation:
             if citizen.id in seen[other.id]:
                 other.in_view.add(citizen.id)
         citizen.in_view = seen[citizen.id]
+        citizen.animals_in_view = set(_groups(animal_sightings(self.core, [citizen])[citizen.id]))
         self._visit(citizen)
         return citizen
 
@@ -237,7 +264,7 @@ class Simulation:
         if citizen.body.asleep:
             sleep = citizen.action
             if sleep is not None and sleep.collapsed and citizen.body.energy < COLLAPSE_WAKE_ENERGY:
-                return actions.refuse(self.core, citizen, action.action, "You are too exhausted.")
+                return refuse(self.core, citizen, action.action, "You are too exhausted.")
             if sleep is not None:
                 self.core.end_action(citizen, "interrupted", "You get up.")
         if isinstance(action, Say):
@@ -265,7 +292,9 @@ class Simulation:
     def step(self) -> None:
         core = self.core
         core.state.tick += 1
+        core.hurt.clear()
         before = {citizen.id: citizen.position for citizen in core.living()}
+        poses = {a.id: (a.position, a.heading_deg, a.activity) for a in core.state.animals.values() if a.alive}
         headings = {citizen.id: actions.walk_heading(citizen) for citizen in core.living()}
 
         for citizen in core.living():
@@ -279,13 +308,32 @@ class Simulation:
 
         living = core.living()
         seen = self._visibility(living)
+        sightings = animal_sightings(core, living)
+        groups_seen: dict[str, dict[str, tuple[Animal, float, int]]] = {}
+        stalkers: dict[str, set[str]] = {}
         for citizen in living:
+            groups_seen[citizen.id] = _groups(sightings[citizen.id])
+            stalkers[citizen.id] = {a.id for a, _ in sightings[citizen.id] if a.alive and a.target == citizen.id}
             strangers = sorted(other for other in seen[citizen.id] - citizen.in_view if other not in citizen.people)
             coming = actions.approaching(core, citizen, seen[citizen.id], before, headings)
             night = actions.night_fell(core, citizen)
-            actions.interrupt(core, citizen, worse[citizen.id], strangers, coming, night)
+            news = actions.AnimalNews(
+                hurt=core.hurt.get(citizen.id),
+                threats=tuple(
+                    (animal, distance)
+                    for animal, distance in sightings[citizen.id]
+                    if animal.id in stalkers[citizen.id] - citizen.threats
+                ),
+                groups=tuple(
+                    groups_seen[citizen.id][group]
+                    for group in sorted(set(groups_seen[citizen.id]) - citizen.animals_in_view)
+                ),
+            )
+            actions.interrupt(core, citizen, worse[citizen.id], strangers, coming, night, news)
         for citizen in living:
             citizen.in_view = seen[citizen.id]
+            citizen.animals_in_view = set(groups_seen[citizen.id])
+            citizen.threats = stalkers[citizen.id]
             self._visit(citizen)
 
         moved: dict[str, Moved] = {}
@@ -304,7 +352,13 @@ class Simulation:
             citizen.id: (citizen.body.hunger, citizen.body.thirst, citizen.body.energy, citizen.body.health)
             for citizen in core.living()
         }
-        core.emit("tick_summary", TickSummary(moved=moved, bodies=bodies))
+        animal_poses = {
+            animal.id: _pose(animal)
+            for animal in (core.state.animals[animal_id] for animal_id in sorted(core.state.animals))
+            if (animal.alive or animal.id in poses)  # one that died this tick may have moved first
+            and (animal.position, animal.heading_deg, animal.activity) != poses.get(animal.id)
+        }
+        core.emit("tick_summary", TickSummary(moved=moved, bodies=bodies, animals=animal_poses))
 
     def run(self, ticks: int) -> None:
         for _ in range(ticks):
@@ -325,7 +379,7 @@ class Simulation:
         if change.died is not None:
             died = core.emit("died", Died(cause=change.died), actor=citizen)
             actions.end_for_death(core, citizen, died)
-            citizen.in_view = set()
+            citizen.in_view, citizen.animals_in_view, citizen.threats = set(), set(), set()
             return []
         if change.collapsed:
             actions.collapse(core, citizen)
@@ -349,3 +403,24 @@ class Simulation:
             place = self.core.world.places[place_id]
             if self.core.distance_m(citizen.position, place.centre) <= place.radius_m:
                 self.core.learn_place(citizen, place_id, "visited")
+
+
+def _pose(animal: Animal) -> AnimalPose:
+    return AnimalPose(
+        position=animal.position,
+        height_m=animal.height_m,
+        cell=animal.cell,
+        heading_deg=animal.heading_deg,
+        activity=animal.activity,
+    )
+
+
+def _groups(sightings: list[tuple[Animal, float]]) -> dict[str, tuple[Animal, float, int]]:
+    """Living animal groups in view: the nearest member, its distance, and how many members are seen."""
+    groups: dict[str, tuple[Animal, float, int]] = {}
+    for animal, distance in sightings:
+        if not animal.alive:
+            continue
+        found = groups.get(animal.group)
+        groups[animal.group] = (animal, distance, 1) if found is None else (found[0], found[1], found[2] + 1)
+    return groups

@@ -218,14 +218,16 @@ export interface AnimalAsset {
   asset: string;
   idle: string;
   move: string;
+  /** The fast gait: running, or swimming fast. */
+  run: string;
   /** Recolours baked vertex colours (source palette hex -> new hex) to make a related species. */
   recolor?: Record<string, string>;
   /** v0 stand-ins only: a related species at a different size. */
   scale?: number;
 }
 
-const LAND = { idle: 'Idle', move: 'Walk' };
-const WATER = { idle: 'Idle', move: 'Swim' };
+const LAND = { idle: 'Idle', move: 'Walk', run: 'Run' };
+const WATER = { idle: 'Idle', move: 'Swim', run: 'Swim fast' };
 
 export const ANIMALS: Record<AnimalKind, AnimalAsset> = {
   deer: { asset: 'forest-deer-fe648d', ...LAND },

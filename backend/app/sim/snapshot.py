@@ -15,8 +15,11 @@ from app.core.rng import Rng
 from app.sim.state import (
     ActionState,
     AgeGroup,
+    Animal,
+    AnimalGroup,
     Body,
     Citizen,
+    Fire,
     GroundStack,
     Heard,
     PlaceKnowledge,
@@ -26,7 +29,7 @@ from app.sim.state import (
 from app.sim.vec import Vec3
 from app.world_api.models import ActionResult
 
-SNAPSHOT_VERSION = 2  # 2: identities (role, region, skills, heading), regrowth, brain notes, 5 resources
+SNAPSHOT_VERSION = 3  # 3: animals, groups, fires, fish stocks; 2: identities, regrowth, brain notes
 
 
 class _Snap(BaseModel):
@@ -57,6 +60,8 @@ class CitizenSnap(_Snap):
     results: dict[int, ActionResult]
     heard: list[Heard]
     in_view: list[str]
+    animals_in_view: list[str]
+    threats: list[str]
 
 
 class SimSnapshot(_Snap):
@@ -72,6 +77,11 @@ class SimSnapshot(_Snap):
     rngs: dict[str, str]  # stream -> state as a decimal string (64-bit)
     regrow: dict[str, int]
     notes: dict[str, dict[str, JsonValue]]
+    animals: list[Animal]
+    groups: list[AnimalGroup]
+    fires: list[Fire]
+    next_animal: int
+    next_fire: int
 
 
 def take_snapshot(state: WorldState) -> SimSnapshot:
@@ -102,6 +112,8 @@ def take_snapshot(state: WorldState) -> SimSnapshot:
             results=dict(sorted(c.results.items())),
             heard=list(c.heard),
             in_view=sorted(c.in_view),
+            animals_in_view=sorted(c.animals_in_view),
+            threats=sorted(c.threats),
         )
         for _, c in sorted(state_citizens.items())
     ]
@@ -118,6 +130,11 @@ def take_snapshot(state: WorldState) -> SimSnapshot:
         rngs={name: str(rng.state) for name, rng in sorted(state.rngs.items())},
         regrow=dict(sorted(state.regrow.items())),
         notes=copy.deepcopy({cid: dict(sorted(notes.items())) for cid, notes in sorted(state.notes.items())}),
+        animals=[copy.deepcopy(animal) for _, animal in sorted(state.animals.items())],
+        groups=[copy.deepcopy(group) for _, group in sorted(state.groups.items())],
+        fires=[copy.deepcopy(fire) for _, fire in sorted(state.fires.items())],
+        next_animal=state.next_animal,
+        next_fire=state.next_fire,
     )
 
 
@@ -152,6 +169,8 @@ def restore(snapshot: SimSnapshot) -> WorldState:
             results=dict(snap.results),
             heard=list(snap.heard),
             in_view=set(snap.in_view),
+            animals_in_view=set(snap.animals_in_view),
+            threats=set(snap.threats),
         )
         for snap in snapshot.citizens
     }
@@ -166,6 +185,11 @@ def restore(snapshot: SimSnapshot) -> WorldState:
         rngs={name: Rng(int(value)) for name, value in snapshot.rngs.items()},
         regrow=dict(snapshot.regrow),
         notes={cid: dict(notes) for cid, notes in snapshot.notes.items()},
+        animals={animal.id: animal for animal in snapshot.animals},
+        groups={group.id: group for group in snapshot.groups},
+        fires={fire.id: fire for fire in snapshot.fires},
+        next_animal=snapshot.next_animal,
+        next_fire=snapshot.next_fire,
     )
 
 

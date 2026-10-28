@@ -167,3 +167,16 @@ export function siteCharts(
       };
     });
 }
+
+/** Ground height under a direction as it is drawn: the town's own disc, else the terrain. */
+export function groundUnder(
+  terrain: GlobeTerrain,
+  town: WalkTown,
+  direction: Vector3,
+  scratch: Vector3,
+) {
+  town.mapping.toLocal(scratch.copy(direction), scratch);
+  return Math.hypot(scratch.x, scratch.z) < town.groundRadius
+    ? town.height
+    : terrain.heightAt(direction);
+}

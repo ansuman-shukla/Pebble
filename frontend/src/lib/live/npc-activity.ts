@@ -78,6 +78,11 @@ const STANDING_CLIPS: Record<
 > = {
   idle: { clip: 'Idle', pose: 'standing', still: false },
   walking: { clip: 'Walk', pose: 'standing', still: false },
+  // fleeing and stalking move too: the gait paced to the glide (the locomotion blends into a run)
+  running: { clip: 'Walk', pose: 'standing', still: false },
+  hunting: { clip: 'Walk', pose: 'standing', still: false },
+  fishing: { clip: 'Harvesting', pose: 'standing', still: false },
+  tending_fire: { clip: 'Pick up', pose: 'standing', still: false },
   eating: { clip: 'Eating', pose: 'standing', still: false },
   drinking: { clip: 'Drinking', pose: 'standing', still: false },
   talking: { clip: 'Talking', pose: 'standing', still: false },
@@ -113,6 +118,14 @@ export function activityWords(
         'walking',
         label === 'home' || label.startsWith('to ') ? ' ' : ' to ',
       );
+    case 'running':
+      return with_('running');
+    case 'hunting':
+      return with_('hunting');
+    case 'fishing':
+      return 'fishing';
+    case 'tending_fire':
+      return with_('tending', ' ');
     case 'sleeping':
       return 'asleep';
     case 'resting':
