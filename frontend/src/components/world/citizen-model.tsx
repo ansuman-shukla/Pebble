@@ -9,10 +9,17 @@ import { createCharacter } from '@/vendor/polyfork/humanoid.mjs';
 type CitizenModelProps = {
   look: CitizenLook;
   motion: 'Idle' | 'Walk';
+  /** Metres per second: when set, picks and paces the gait to it instead of playing `motion`. */
+  speed?: number;
   onReady?: (id: string) => void;
 };
 
-export function CitizenModel({ look, motion, onReady }: CitizenModelProps) {
+export function CitizenModel({
+  look,
+  motion,
+  speed,
+  onReady,
+}: CitizenModelProps) {
   const character = useMemo(() => createCharacter(look.config), [look]);
   const [animation, setAnimation] = useState<CharacterAnimation | null>(null);
 
@@ -30,8 +37,9 @@ export function CitizenModel({ look, motion, onReady }: CitizenModelProps) {
   }, [character, look.id, onReady]);
 
   useEffect(() => {
-    animation?.play(motion);
-  }, [animation, motion]);
+    if (speed === undefined) animation?.play(motion);
+    else animation?.locomotion(speed);
+  }, [animation, motion, speed]);
 
   useFrame((_, delta) => animation?.update(delta));
 

@@ -1,6 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const FRONTEND_URL = 'http://localhost:5180';
+// PLAYWRIGHT_PORT points the tests at another frontend (e.g. a worktree's own vite) instead of 5180.
+const FRONTEND_PORT = process.env.PLAYWRIGHT_PORT;
+const FRONTEND_URL = `http://localhost:${FRONTEND_PORT ?? 5180}`;
 const BACKEND_HEALTH_URL = 'http://localhost:8100/api/v1/health';
 
 export default defineConfig({
@@ -19,7 +21,16 @@ export default defineConfig({
       name: 'smoke',
       testDir: './tests/smoke',
       testMatch: '**/*.spec.ts',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // headless Chrome renders WebGL in software (~4 fps for the town); on a Mac, use the real GPU
+        launchOptions: {
+          args:
+            process.platform === 'darwin'
+              ? ['--use-angle=metal', '--ignore-gpu-blocklist']
+              : [],
+        },
+      },
     },
   ],
   webServer: [
@@ -30,7 +41,7 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
-      command: 'pnpm dev',
+      command: FRONTEND_PORT ? `pnpm dev --port ${FRONTEND_PORT}` : 'pnpm dev',
       url: FRONTEND_URL,
       reuseExistingServer: !process.env.CI,
     },

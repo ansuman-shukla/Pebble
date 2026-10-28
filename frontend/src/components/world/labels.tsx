@@ -29,14 +29,23 @@ export function Label({ store, id, text, height }: LabelProps) {
 
 const projected = new Vector3();
 
-/** Inside the Canvas: moves every label to its anchor's screen position. */
-export function LabelProjector({ store }: { store: LabelStore }) {
+/** Inside the Canvas: moves every label to its anchor's screen position, hiding those beyond maxDistance. */
+export function LabelProjector({
+  store,
+  maxDistance = Infinity,
+}: {
+  store: LabelStore;
+  maxDistance?: number;
+}) {
   useFrame(({ camera, size }) => {
     for (const { id, anchor } of store.getSnapshot()) {
       const element = store.elements.get(id);
       if (!element) continue;
-      anchor.getWorldPosition(projected).project(camera);
+      anchor.getWorldPosition(projected);
+      const near = projected.distanceTo(camera.position) <= maxDistance;
+      projected.project(camera);
       const onScreen =
+        near &&
         projected.z < 1 &&
         Math.abs(projected.x) < 1.1 &&
         Math.abs(projected.y) < 1.1;

@@ -1,0 +1,248 @@
+# The castle town, authored in local metres.
+#
+# Origin = town centre, +x = east, +z = south (north is -z), ground at y = 0.
+# rotation_deg is a yaw in {0, 90, 180, 270}: 0 faces south (+z), 90 east, 180 north, 270 west.
+#
+# placements: single props          {id, kind, at: [x, z], rotation_deg}
+# runs:       straight axis-aligned  {id, kind, from, to}  segments spaced by the kind's footprint x
+# tiles:      a rectangle filled     {id, kind, rect: [x0, z0, x1, z1]}  by the kind's footprint
+# areas / water: ground polygons for rendering, given as `polygon` or `rect`.
+# Kinds and their footprints live in kinds.yaml.
+
+name: Castle town
+extent: {min_x: -160, max_x: 160, min_z: -160, max_z: 160}
+spawn: {at: [0, 120], heading_deg: 180} # on the approach road, facing the main gate
+
+areas:
+  - {id: castle-courtyard, kind: courtyard, rect: [-27, -27, 27, 27]}
+  - {id: moat-road-n, kind: road, rect: [-43, -43, 43, -37]}
+  - {id: moat-road-s, kind: road, rect: [-43, 37, 43, 43]}
+  - {id: moat-road-w, kind: road, rect: [-43, -37, -37, 37]}
+  - {id: moat-road-e, kind: road, rect: [37, -37, 43, 37]}
+  - {id: main-street-n, kind: street, rect: [-3, 43, 3, 58]}
+  - {id: main-street-s, kind: street, rect: [-3, 64, 3, 100]}
+  - {id: cross-street, kind: street, rect: [-97, 58, 97, 64]}
+  - {id: temple-lane, kind: street, rect: [57, -50, 63, 58]}
+  - {id: approach-road, kind: road, rect: [-3, 100, 3, 160]}
+  - {id: west-gate-lane, kind: road, rect: [-108, 73, -97, 79]}
+  - {id: west-gate-inner-lane, kind: road, rect: [-97, 64, -91, 79]}
+  - {id: market, kind: plaza, rect: [10, 44, 30, 57]}
+  - {id: temple-forecourt, kind: plaza, rect: [48, -68, 92, -50]}
+  - {id: training-ground, kind: courtyard, rect: [-90, -90, -50, -50]}
+  - {id: rice-fields, kind: field, rect: [-150, 18, -108, 98]}
+
+water:
+  - id: moat
+    kind: moat
+    polygon: [[-37, -37], [37, -37], [37, 37], [-37, 37]]
+    holes: [[[-31, -31], [31, -31], [31, 31], [-31, 31]]]
+  - {id: stream, kind: stream, rect: [-160, -160, -152, 160]}
+
+placements:
+  # castle precinct
+  - {id: castle-keep, kind: castle_keep, at: [0, -6]}
+  - {id: castle-gate, kind: castle_gatehouse, at: [0, 28]}
+  - {id: castle-turret-nw, kind: corner_turret, at: [-28, -28]}
+  - {id: castle-turret-ne, kind: corner_turret, at: [28, -28]}
+  - {id: castle-turret-sw, kind: corner_turret, at: [-28, 28]}
+  - {id: castle-turret-se, kind: corner_turret, at: [28, 28]}
+  - {id: castle-store-w, kind: storehouse, at: [-18, -15], rotation_deg: 90}
+  - {id: castle-store-e, kind: storehouse, at: [18, -15], rotation_deg: 270}
+  - {id: castle-pine-sw, kind: sculpted_pine, at: [-10, 18]}
+  - {id: castle-pine-se, kind: sculpted_pine, at: [10, 18]}
+  - {id: castle-pine-w, kind: sculpted_pine, at: [-10, -3]}
+  - {id: castle-pine-e, kind: sculpted_pine, at: [10, -3]}
+  - {id: castle-cherry-w, kind: cherry_tree, at: [-20, 8]}
+  - {id: castle-cherry-e, kind: cherry_tree, at: [20, 8]}
+  - {id: castle-banner-w, kind: banner, at: [-4, 25.5]}
+  - {id: castle-banner-e, kind: banner, at: [4, 25.5]}
+  - {id: castle-fire-w, kind: fire_basket, at: [-4, 30]}
+  - {id: castle-fire-e, kind: fire_basket, at: [4, 30]}
+  - {id: moat-bridge, kind: moat_bridge, at: [0, 35], rotation_deg: 90}
+  - {id: moat-reeds-1, kind: reeds, at: [34, -10]}
+  - {id: moat-reeds-2, kind: reeds, at: [-34, 12]}
+  - {id: moat-reeds-3, kind: reeds, at: [12, -34]}
+  - {id: moat-reeds-4, kind: reeds, at: [-20, 34]}
+
+  # town wall and gates
+  - {id: town-turret-nw, kind: corner_turret, at: [-100, -100]}
+  - {id: town-turret-ne, kind: corner_turret, at: [100, -100]}
+  - {id: town-turret-sw, kind: corner_turret, at: [-100, 100]}
+  - {id: town-turret-se, kind: corner_turret, at: [100, 100]}
+  - {id: main-gate, kind: castle_gatehouse, at: [0, 100]}
+  - {id: west-gate, kind: castle_gatehouse, at: [-100, 76], rotation_deg: 90}
+  - {id: main-gate-fire-w, kind: fire_basket, at: [-4.5, 103.5]}
+  - {id: main-gate-fire-e, kind: fire_basket, at: [4.5, 103.5]}
+  - {id: approach-banner-w, kind: banner, at: [-5, 110]}
+  - {id: approach-banner-e, kind: banner, at: [5, 110]}
+  - {id: approach-pine-w, kind: sculpted_pine, at: [-8, 116]}
+  - {id: approach-pine-e, kind: sculpted_pine, at: [8, 116]}
+  - {id: approach-lantern-1, kind: lantern, at: [-4, 130]}
+  - {id: approach-lantern-2, kind: lantern, at: [4, 130]}
+  - {id: approach-lantern-3, kind: lantern, at: [-4, 145]}
+  - {id: approach-lantern-4, kind: lantern, at: [4, 145]}
+
+  # main street: west side faces east, east side faces west
+  - {id: main-w-1, kind: townhouse, at: [-6, 50], rotation_deg: 90}
+  - {id: main-w-2, kind: townhouse, at: [-6, 69], rotation_deg: 90}
+  - {id: main-w-3, kind: townhouse, at: [-6, 78], rotation_deg: 90}
+  - {id: main-w-4, kind: townhouse, at: [-6, 87], rotation_deg: 90}
+  - {id: main-e-1, kind: townhouse, at: [6, 50], rotation_deg: 270}
+  - {id: main-e-2, kind: townhouse, at: [6, 69], rotation_deg: 270}
+  - {id: main-e-3, kind: townhouse, at: [6, 78], rotation_deg: 270}
+  - {id: main-e-4, kind: townhouse, at: [6, 87], rotation_deg: 270}
+  - {id: main-lantern-1, kind: lantern, at: [-3.5, 44]}
+  - {id: main-lantern-2, kind: lantern, at: [3.5, 44]}
+  - {id: main-lantern-3, kind: lantern, at: [-3.5, 96]}
+  - {id: main-lantern-4, kind: lantern, at: [3.5, 96]}
+
+  # cross street: north side faces south, south side faces north
+  - {id: cross-n-1, kind: townhouse, at: [-92, 55]}
+  - {id: cross-n-2, kind: townhouse, at: [-82, 55]}
+  - {id: cross-n-3, kind: townhouse, at: [-72, 55]}
+  - {id: cross-n-4, kind: townhouse, at: [-62, 55]}
+  - {id: cross-n-5, kind: townhouse, at: [-52, 55]}
+  - {id: cross-n-6, kind: townhouse, at: [-42, 55]}
+  - {id: cross-n-7, kind: townhouse, at: [-32, 55]}
+  - {id: cross-n-8, kind: townhouse, at: [36, 55]}
+  - {id: cross-n-9, kind: townhouse, at: [46, 55]}
+  - {id: cross-n-10, kind: townhouse, at: [70, 55]}
+  - {id: cross-n-11, kind: townhouse, at: [80, 55]}
+  - {id: cross-n-12, kind: townhouse, at: [90, 55]}
+  - {id: cross-s-1, kind: townhouse, at: [-86, 67], rotation_deg: 180}
+  - {id: cross-s-2, kind: townhouse, at: [-76, 67], rotation_deg: 180}
+  - {id: cross-s-3, kind: townhouse, at: [-66, 67], rotation_deg: 180}
+  - {id: cross-s-4, kind: townhouse, at: [-56, 67], rotation_deg: 180}
+  - {id: cross-s-5, kind: townhouse, at: [-46, 67], rotation_deg: 180}
+  - {id: cross-s-6, kind: townhouse, at: [-36, 67], rotation_deg: 180}
+  - {id: cross-s-7, kind: townhouse, at: [-26, 67], rotation_deg: 180}
+  - {id: cross-s-8, kind: townhouse, at: [-16, 67], rotation_deg: 180}
+  - {id: cross-s-9, kind: townhouse, at: [16, 67], rotation_deg: 180}
+  - {id: cross-s-10, kind: townhouse, at: [26, 67], rotation_deg: 180}
+  - {id: cross-s-11, kind: townhouse, at: [36, 67], rotation_deg: 180}
+  - {id: cross-s-12, kind: townhouse, at: [46, 67], rotation_deg: 180}
+  - {id: cross-s-13, kind: townhouse, at: [56, 67], rotation_deg: 180}
+  - {id: cross-s-14, kind: townhouse, at: [66, 67], rotation_deg: 180}
+  - {id: cross-s-15, kind: townhouse, at: [76, 67], rotation_deg: 180}
+  - {id: cross-s-16, kind: townhouse, at: [86, 67], rotation_deg: 180}
+
+  # market by the crossroads
+  - {id: teahouse, kind: teahouse, at: [20, 48]}
+  - {id: market-bench-1, kind: bench, at: [16, 52]}
+  - {id: market-bench-2, kind: bench, at: [24, 52]}
+  - {id: notice-board, kind: notice_board, at: [12, 56]}
+  - {id: market-barrel-1, kind: sake_barrel, at: [27, 47]}
+  - {id: market-barrel-2, kind: sake_barrel, at: [27.6, 47]}
+  - {id: market-barrel-3, kind: sake_barrel, at: [27.3, 47.6]}
+  - {id: market-cart, kind: hand_cart, at: [28, 52]}
+  - {id: market-lantern-1, kind: lantern, at: [10.5, 45]}
+  - {id: market-lantern-2, kind: lantern, at: [29.5, 45]}
+
+  # well plaza (paved by the well-plaza tiles)
+  - {id: well, kind: well, at: [-20, 50]}
+  - {id: well-basin, kind: stone_basin, at: [-15.5, 50]}
+  - {id: well-bucket, kind: bucket, at: [-18.5, 50.2]}
+
+  # temple quarter (north-east); the temple hall stands in for the shrine
+  - {id: temple-hall, kind: temple_hall, at: [70, -75]}
+  - {id: pagoda, kind: pagoda, at: [55, -75]}
+  - {id: bell-tower, kind: bell_tower, at: [85, -75]}
+  - {id: temple-cherry-1, kind: cherry_tree, at: [50, -60]}
+  - {id: temple-cherry-2, kind: cherry_tree, at: [90, -60]}
+  - {id: temple-cherry-3, kind: cherry_tree, at: [60, -88]}
+  - {id: temple-maple-1, kind: maple_tree, at: [80, -88]}
+  - {id: temple-maple-2, kind: maple_tree, at: [48, -45]}
+  - {id: temple-maple-3, kind: maple_tree, at: [92, -45]}
+  - {id: temple-lantern-1, kind: lantern, at: [67, -66]}
+  - {id: temple-lantern-2, kind: lantern, at: [73, -66]}
+  - {id: temple-basin, kind: stone_basin, at: [62, -66]}
+  - {id: temple-bamboo-1, kind: bamboo, at: [93, -85]}
+  - {id: temple-bamboo-2, kind: bamboo, at: [94, -82]}
+  - {id: temple-azalea-1, kind: azalea, at: [63, -69]}
+  - {id: temple-azalea-2, kind: azalea, at: [77, -69]}
+
+  # training ground (north-west)
+  - {id: lookout-tower, kind: lookout_tower, at: [-88, -88]}
+  - {id: war-drum, kind: war_drum, at: [-70, -88]}
+  - {id: training-banner-1, kind: banner, at: [-88, -52]}
+  - {id: training-banner-2, kind: banner, at: [-52, -52]}
+  - {id: training-banner-3, kind: banner, at: [-52, -88]}
+  - {id: tether-rail, kind: tether_rail, at: [-60, -60]}
+
+  # storehouses (south-east) and farmhouses (south-west)
+  - {id: store-1, kind: storehouse, at: [60, 80]}
+  - {id: store-2, kind: storehouse, at: [70, 80]}
+  - {id: store-3, kind: storehouse, at: [80, 80]}
+  - {id: store-4, kind: storehouse, at: [60, 90]}
+  - {id: store-5, kind: storehouse, at: [70, 90]}
+  - {id: farmhouse-1, kind: farmhouse, at: [-85, 88]}
+  - {id: farmhouse-2, kind: farmhouse, at: [-70, 88]}
+  - {id: farm-rack, kind: drying_rack, at: [-62, 88], rotation_deg: 90}
+
+  # greenery around town
+  - {id: bamboo-1, kind: bamboo, at: [-50, 30]}
+  - {id: bamboo-2, kind: bamboo, at: [-52, 32]}
+  - {id: bamboo-3, kind: bamboo, at: [50, 30]}
+  - {id: bamboo-4, kind: bamboo, at: [52, 28]}
+  - {id: azalea-1, kind: azalea, at: [45, 45]}
+  - {id: azalea-2, kind: azalea, at: [-45, 45]}
+  - {id: azalea-3, kind: azalea, at: [-60, -30]}
+  - {id: azalea-4, kind: azalea, at: [60, -30]}
+
+  # fields outside the west gate
+  - {id: field-rack-1, kind: drying_rack, at: [-111, 30], rotation_deg: 90}
+  - {id: field-rack-2, kind: drying_rack, at: [-111, 36], rotation_deg: 90}
+  - {id: field-rack-3, kind: drying_rack, at: [-111, 42], rotation_deg: 90}
+  - {id: field-rack-4, kind: drying_rack, at: [-111, 48], rotation_deg: 90}
+  - {id: ox-cart, kind: ox_cart, at: [-111, 88]}
+  - {id: water-wheel, kind: water_wheel, at: [-152, 40], rotation_deg: 90} # the mill, at the stream's edge
+  - {id: river-boat, kind: river_boat, at: [-156, 0]}
+  - {id: stream-reeds-1, kind: reeds, at: [-155, -40]}
+  - {id: stream-reeds-2, kind: reeds, at: [-157, 60]}
+
+runs:
+  # castle walls stop at the corner turrets; the south wall leaves a gap for the gate
+  - {id: castle-wall-n, kind: stone_wall, from: [-25, -28], to: [25, -28]}
+  - {id: castle-wall-sw, kind: stone_wall, from: [-25, 28], to: [-3, 28]}
+  - {id: castle-wall-se, kind: stone_wall, from: [3, 28], to: [25, 28]}
+  - {id: castle-wall-w, kind: stone_wall, from: [-28, -25], to: [-28, 25]}
+  - {id: castle-wall-e, kind: stone_wall, from: [28, -25], to: [28, 25]}
+  # town walls, gaps for the main (south) and west gates
+  - {id: town-wall-n, kind: plaster_wall, from: [-97, -100], to: [97, -100]}
+  - {id: town-wall-sw, kind: plaster_wall, from: [-97, 100], to: [-3, 100]}
+  - {id: town-wall-se, kind: plaster_wall, from: [3, 100], to: [97, 100]}
+  - {id: town-wall-wn, kind: plaster_wall, from: [-100, -97], to: [-100, 73]}
+  - {id: town-wall-ws, kind: plaster_wall, from: [-100, 79], to: [-100, 97]}
+  - {id: town-wall-e, kind: plaster_wall, from: [100, -97], to: [100, 97]}
+  # bamboo fence around the fields, open toward the west gate (side runs sit half a fence outside the corners)
+  - {id: field-fence-n, kind: bamboo_fence, from: [-150, 18], to: [-108, 18]}
+  - {id: field-fence-s, kind: bamboo_fence, from: [-150, 98], to: [-108, 98]}
+  - {id: field-fence-w, kind: bamboo_fence, from: [-150.15, 18], to: [-150.15, 98]}
+  - {id: field-fence-en, kind: bamboo_fence, from: [-107.85, 18], to: [-107.85, 70]}
+  - {id: field-fence-es, kind: bamboo_fence, from: [-107.85, 82], to: [-107.85, 98]}
+
+tiles:
+  - {id: well-plaza, kind: paving_tile, rect: [-26, 44, -14, 56]}
+  - {id: paddy-1, kind: rice_paddy, rect: [-148, 22, -130, 42]}
+  - {id: paddy-2, kind: rice_paddy, rect: [-148, 46, -130, 66]}
+  - {id: paddy-3, kind: rice_paddy, rect: [-148, 70, -130, 90]}
+  - {id: paddy-4, kind: rice_paddy, rect: [-126, 22, -114, 42]}
+  - {id: paddy-5, kind: rice_paddy, rect: [-126, 46, -114, 66]}
+  - {id: paddy-6, kind: rice_paddy, rect: [-126, 70, -114, 90]}
+
+citizens:
+  - {look: town-lord, at: [0, 3], heading_deg: 0} # in front of the keep, facing the gate
+  - look: town-samurai # patrols inside the castle's south wall
+    at: [-20, 23]
+    heading_deg: 90
+    route: [[-20, 23], [20, 23]]
+  - {look: town-merchant, at: [20, 54], heading_deg: 0} # at the market
+  - look: town-farmer # walks the dikes between the paddies
+    at: [-128, 44]
+    heading_deg: 270
+    route: [[-128, 44], [-139, 44], [-139, 68], [-128, 68]]
+  - {look: town-weaver, at: [-78, 93], heading_deg: 0} # by the farmhouses
+  - look: town-child # loops around the well
+    at: [-23, 47]
+    heading_deg: 90
+    route: [[-23, 47], [-17, 47], [-17, 53], [-23, 53]]
