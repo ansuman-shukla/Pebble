@@ -48,6 +48,7 @@ from app.world_api.models import (
     FeedFire,
     Fish,
     Flee,
+    Follow,
     Gather,
     Give,
     Hunt,
@@ -92,6 +93,7 @@ DISTANCE_PHRASE: dict[str, str] = {
 COMPASS_BEARING = {name: index * 45.0 for index, name in enumerate(compass(b * 45.0) for b in range(8))}
 VERB: dict[str, str] = {
     "walk_to": "walking",
+    "follow": "following",
     "gather": "gathering",
     "eat": "eating",
     "drink": "drinking",
@@ -213,8 +215,8 @@ def work_task(words: str) -> WorkTask | None:
     return next((task for task in WORK_TASKS if task.words & query), None)
 
 
-_NIGHT_STOPS = frozenset({"walk_to", "gather", "wait", "rest", "work", "hunt", "fish"})
-_NEED_STOPS = frozenset({"walk_to", "gather", "wait", "rest", "flee", "work", "hunt", "fish"})
+_NIGHT_STOPS = frozenset({"walk_to", "follow", "gather", "wait", "rest", "work", "hunt", "fish"})
+_NEED_STOPS = frozenset({"walk_to", "follow", "gather", "wait", "rest", "flee", "work", "hunt", "fish"})
 
 
 # --- instant actions ---
@@ -377,6 +379,8 @@ def start(core: SimCore, citizen: Citizen, action: Action) -> int:
         return citizen.next_action - 1
     if isinstance(action, Flee):
         return _start_flee(core, citizen)
+    if isinstance(action, Follow):
+        return _start_follow(core, citizen, action)
     if isinstance(action, Work):
         return _start_work(core, citizen, action)
     if isinstance(action, Hunt):
@@ -413,6 +417,18 @@ def _start_walk(core: SimCore, citizen: Citizen, target: Target) -> int:
     )
     walk.route, walk.goal, walk.target_id = route, resolved.goal, resolved.person_id
     return walk.number
+
+
+def _start_follow(core: SimCore, citizen: Citizen, action: Follow) -> int:
+    """Walk after someone in view until they stop (03 follow); the route is planned as they go."""
+    person = match_person(core, citizen, action.person)
+    if person is None:
+        return settled(core, citizen, "follow", "failed", "You don't see anyone like that.")
+    follow = begin(
+        core, citizen, "follow", person.name, {"target": "person"}, destination=person_label(citizen, person)
+    )
+    follow.target_id = person.id
+    return follow.number
 
 
 def _start_flee(core: SimCore, citizen: Citizen) -> int:
@@ -666,7 +682,7 @@ def advance(core: SimCore, citizen: Citizen) -> None:
     action = citizen.action
     if action is None:
         return
-    if action.kind in ("walk_to", "flee"):
+    if action.kind in ("walk_to", "flee", "follow"):
         _advance_walk(core, citizen, action)
     elif action.kind in ("hunt", "attack"):
         wild.advance_stalk(core, citizen, action)
@@ -681,10 +697,11 @@ def _advance_walk(core: SimCore, citizen: Citizen, walk: ActionState) -> None:
         person = core.state.citizens[walk.target_id]
         distance = core.distance_m(citizen.position, person.position)
         if not person.body.alive or distance > core.sight_range(citizen):
-            core.end_action(citizen, "interrupted", f"You stop walking: you lose sight of {walk.destination}.")
+            text = f"You stop {VERB[walk.kind]}: you lose sight of {walk.destination}."
+            core.end_action(citizen, "interrupted", text)
             return
         if distance <= ARRIVE_M:
-            core.end_action(citizen, "done", f"You reach {walk.destination}.")
+            _beside(core, citizen, walk, person)
             return
         if walk.goal is None or core.distance_m(person.position, walk.goal) > FOLLOW_REPLAN_M:
             route = core.planner.plan(citizen.position, person.position, citizen.cell)
@@ -702,8 +719,9 @@ def _advance_walk(core: SimCore, citizen: Citizen, walk: ActionState) -> None:
     if not progress.arrived:
         return
     if walk.target_id is not None:
-        if core.distance_m(citizen.position, core.state.citizens[walk.target_id].position) <= ARRIVE_M:
-            core.end_action(citizen, "done", f"You reach {walk.destination}.")
+        person = core.state.citizens[walk.target_id]
+        if core.distance_m(citizen.position, person.position) <= ARRIVE_M:
+            _beside(core, citizen, walk, person)
         else:
             walk.goal = None  # they moved on: plan again next tick
         return
@@ -715,6 +733,18 @@ def _advance_walk(core: SimCore, citizen: Citizen, walk: ActionState) -> None:
         else:
             arrive = f"You reach about where {place.name} should be, but you don't find it."
     core.end_action(citizen, "done", arrive)
+
+
+def _beside(core: SimCore, citizen: Citizen, walk: ActionState, person: Citizen) -> None:
+    """Caught up with the person walked to: a walk ends; a follow keeps beside them until they stop moving."""
+    if walk.kind != "follow":
+        core.end_action(citizen, "done", f"You reach {walk.destination}.")
+        return
+    moving = person.action is not None and person.action.kind in ("walk_to", "flee", "follow")
+    if moving:
+        walk.route, walk.goal = None, None  # wait at their side; plan again once they pull ahead
+        return
+    core.end_action(citizen, "done", f"{capital(walk.destination)} stops, and you stop beside them.")
 
 
 def walk_pace(citizen: Citizen) -> float:
@@ -733,7 +763,12 @@ def walk_ahead(core: SimCore, citizen: Citizen) -> tuple[list[RoutePoint], float
     walkable as the route (in town: grid corners, no corner cutting).
     """
     walk = citizen.action
-    if walk is None or walk.kind not in ("walk_to", "flee") or walk.route is None or walk.leg >= len(walk.route.costs):
+    if (
+        walk is None
+        or walk.kind not in ("walk_to", "flee", "follow")
+        or walk.route is None
+        or walk.leg >= len(walk.route.costs)
+    ):
         return [], 0.0
     route, world = walk.route, core.world
     pace = walk_pace(citizen)

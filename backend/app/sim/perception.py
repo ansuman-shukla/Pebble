@@ -82,6 +82,7 @@ BIOME_WORDS: dict[str, str] = {
 }
 DOING: dict[str, str] = {
     "walk_to": "walking",
+    "follow": "walking",
     "gather": "gathering",
     "eat": "eating",
     "drink": "drinking",
@@ -521,6 +522,8 @@ def doing_words(action: ActionState | None, asleep: bool) -> str:
         return "You are standing still."
     if action.kind == "walk_to":
         return f"You are walking to {action.destination}." if action.destination else "You are walking."
+    if action.kind == "follow":
+        return f"You are following {action.destination}."
     return f"You are {DOING.get(action.kind, 'busy')}."
 
 

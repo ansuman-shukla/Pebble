@@ -11,7 +11,7 @@ from app.sim.simulation import Simulation
 from app.sim.vec import step_towards
 from app.world_api.facade import WorldApi, run_until_done
 from app.world_api.models import ActionResult, Perception
-from tests.sim_helpers import GATE, WELL, make_spec, without_animals
+from tests.sim_helpers import GATE, WELL, make_spec, put_in_the_wild, skip_to, wild_cell, without_animals
 
 FAR_IN_TOWN = (70.0, 85.0)  # the storehouses, ~95 m from the well
 LEAK = re.compile(r"\d|dev-|stack-|tester|cell|\bid\b")
@@ -220,11 +220,10 @@ def test_starvation_kills_a_citizen_with_water_but_nothing_to_eat(new_sim: Calla
     assert "the still body of a person in a tester cloak" in [p.label for p in others.people]
 
 
-def test_not_yet_actions_answer_in_world(new_sim: Callable[..., Simulation]) -> None:
+def test_recall_answers_in_world_until_minds_have_memories(new_sim: Callable[..., Simulation]) -> None:
     sim = new_sim()
     api = WorldApi(sim, sim.add_citizen(make_spec(at=GATE)).id)
-    results = [api.follow("someone").result, api.recall("yesterday")]
-    assert [(r.outcome, r.text) for r in results if r is not None] == [("failed", "You can't do that yet.")] * 2
+    assert api.recall("yesterday") == ActionResult(action="recall", outcome="failed", text="You can't do that yet.")
 
 
 def test_wild_actions_fail_in_world_inside_the_town(new_sim: Callable[..., Simulation]) -> None:
@@ -431,3 +430,40 @@ def test_a_known_person_walking_up_to_you_interrupts_once_close(new_sim: Callabl
     again = WorldApi(sim, "watcher").wait(10)  # already close: no second interrupt as he arrives
     assert run_until_done(sim, walk, 5).text == "You reach a person in a watcher cloak."
     assert run_until_done(sim, again, 12).text == "You wait a while."
+
+
+def test_follow_keeps_beside_a_walker_until_they_stop(new_sim: Callable[..., Simulation]) -> None:
+    sim = without_animals(new_sim())
+    leader = sim.add_citizen(make_spec("leader", name="Aiko", home=None))
+    follower = sim.add_citizen(make_spec("follower", home=None, knows_people=["leader"]))
+    put_in_the_wild(sim, leader.id, wild_cell(sim))
+    sim.core.place_at(follower, step_towards(leader.position, 90.0, 4.0, sim.world.radius_m))
+    skip_to(sim, leader.position, night=False)
+    walk = WorldApi(sim, leader.id).walk_towards("north", "a long walk")
+    follow = WorldApi(sim, follower.id).follow("Aiko")
+    started = [e.payload.model_dump() for e in sim.drain() if e.type == "action_started" and e.actor_id == follower.id]
+    assert (started[-1]["action"], started[-1]["label"]) == ("follow", "Aiko")
+    assert WorldApi(sim, follower.id).check_self().doing == "You are following Aiko."
+    gaps = []
+    while walk.result is None:
+        sim.step()
+        gaps.append(sim.world.distance_m(leader.position, follower.position))
+        if walk.result is None:
+            assert follow.result is None  # still following while she walks, even when beside her
+    assert len(gaps) >= 2 and max(gaps) < 6.0  # keeps up with her all the way (they set off 4 m apart)
+    result = run_until_done(sim, follow, 10)
+    assert result == ActionResult(action="follow", outcome="done", text="Aiko stops, and you stop beside them.")
+    assert sim.world.distance_m(leader.position, follower.position) <= 2.0
+
+
+def test_follow_needs_someone_in_view_and_ends_when_they_are_lost(new_sim: Callable[..., Simulation]) -> None:
+    sim = without_animals(new_sim())
+    follower = sim.add_citizen(make_spec("follower", at=WELL))
+    failed = run_until_done(sim, WorldApi(sim, follower.id).follow("a woman in red"), 1)
+    assert failed == ActionResult(action="follow", outcome="failed", text="You don't see anyone like that.")
+    stranger = sim.add_citizen(make_spec("stranger", at=(WELL[0] + 5.0, WELL[1]), appearance="a man with a bow"))
+    follow = WorldApi(sim, follower.id).follow("the man with a bow")
+    sim.core.place_at(stranger, sim.world.town.to_unit(-20.0, -140.0))  # suddenly far out of sight
+    result = run_until_done(sim, follow, 3)
+    assert result.outcome == "interrupted"
+    assert result.text == "You stop following: you lose sight of a man with a bow."
