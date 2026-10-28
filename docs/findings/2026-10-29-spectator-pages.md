@@ -65,8 +65,24 @@ narrows it to the few hundred `said` events). Needs read only `payload->'bodies'
 | `/stats` | alive, dead, meals in stock, game day; food stocks, wild plants now vs at the start, deaths by cause, actions and lines per day |
 
 Every spectator page takes `?at=N` (a banner says so, with **Back to live**); links between them keep it. Without
-`at` they poll every 2-4 s (TanStack Query `refetchInterval`); `src/hooks/use-spectator.ts` notes the swap point for invalidating on
-the live feed's tick messages instead (the feed's hook drives the globe's own state, so the pages don't reuse it).
+`at` they follow the engine's live feed:
+
+```
+ WS /api/v1/live ──▶ LiveUpdates (one socket for all pages, refcounted; closes 1 s after the last page leaves)
+                      │ snapshot / tick / event, at most one refresh a second (the last message always lands)
+                      ▼
+       queryClient.invalidateQueries(meta.live && older than meta.staleMs)   (needs, timeline: 5 s)
+ socket down ──▶ the same queries poll every 2 s (5 s for needs/timeline) until it reconnects (0.5 s → 15 s backoff,
+                 1012 "new run" at once)
+```
+
+`src/lib/live/live-updates.ts` is the framework-free subscriber, `src/hooks/use-live-updates.ts` binds it to TanStack
+Query and React (`useSyncExternalStore`), and the browser socket wrapper is shared with `use-live-citizens`
+(`src/lib/api/live-socket.ts`). The feed's messages carry `CitizenEntity`, not the pages' richer views (places,
+profiles, stats), so the pages invalidate instead of patching. Replayed answers carry no `live` meta and never
+refresh. The page's `<main>` shows the link as `data-live-feed` (`live`/`connecting`/`down`). Tested with
+Playwright's `routeWebSocket` playing the engine: no requests while the feed is quiet, a refetch within 2 s of a
+tick, polling once the socket drops.
 
 Portraits are the citizens' 3D looks rendered once each (first frame of the Idle clip, head and shoulders) by one
 shared offscreen `WebGLRenderer` into PNG data URLs (`src/lib/world/portraits.ts`): fifteen canvases would need
