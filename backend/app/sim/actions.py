@@ -472,7 +472,8 @@ def _resolve(core: SimCore, citizen: Citizen, target: Target) -> _Destination | 
         if person is None:
             return "You don't see anyone like that."
         label = person_label(citizen, person)
-        return _Destination(person.position, label, person.id, f"You reach {label}.", label)
+        # spectators see who it really is; the walker only knows a stranger by their looks
+        return _Destination(person.position, label, person.id, f"You reach {label}.", shown=person.name)
     if isinstance(target, ThingTarget):
         thing = match_thing(core, citizen, target.what)
         if thing is not None:

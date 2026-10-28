@@ -421,6 +421,9 @@ def test_a_known_person_walking_up_to_you_interrupts_once_close(new_sim: Callabl
     assert wait.result is None  # ...without stopping the watcher
 
     walk = WorldApi(sim, "friend").walk_to_person("a person in a watcher cloak")
+    started = [e.payload.model_dump() for e in sim.drain() if e.type == "action_started" and e.actor_id == "friend"]
+    assert started[-1]["label"] == "Watcher"  # spectators see who he walks to; Kenji only knows her looks
+    assert "You are walking to a person in a watcher cloak." in WorldApi(sim, "friend").check_self().doing
     result = run_until_done(sim, wait, 10)
     assert result.text == "You stop waiting: Kenji is coming toward you."
     assert 3.0 < sim.world.distance_m(watcher.position, sim.citizen("friend").position) <= 10.0
