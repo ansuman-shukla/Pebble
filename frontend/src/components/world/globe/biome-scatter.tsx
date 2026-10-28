@@ -1,12 +1,16 @@
 import { useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { type RefObject, useEffect, useMemo, useRef } from 'react';
-import { InstancedMesh, Matrix4, Quaternion, Vector3 } from 'three';
+import { InstancedMesh, Matrix4, type Vector3 } from 'three';
 
 import { kindParts } from '@/components/world/kind-parts';
-import { assetUrl, kindScale, PROPS, type PropKind } from '@/lib/world/assets';
+import { assetUrl, PROPS, type PropKind } from '@/lib/world/assets';
 import { BIOME_PROPS, GROUND_COVER } from '@/lib/world/biome-props';
-import type { Scatter, ScatterInstance } from '@/lib/world/scatter';
+import {
+  type Scatter,
+  type ScatterInstance,
+  scatterMatrix,
+} from '@/lib/world/scatter';
 
 /*
  * Biome props around the focus, in two distance tiers: ground cover (grass, flowers, ferns, pebbles, reeds)
@@ -34,23 +38,7 @@ const KINDS = [
   ),
 ];
 
-const Y_AXIS = new Vector3(0, 1, 0);
-const upright = new Quaternion();
-const yawTurn = new Quaternion();
-const scaled = new Vector3();
 const part = new Matrix4();
-
-function modelMatrix(instance: ScatterInstance) {
-  const up = instance.position.clone().normalize();
-  upright
-    .setFromUnitVectors(Y_AXIS, up)
-    .multiply(yawTurn.setFromAxisAngle(Y_AXIS, instance.yaw));
-  return new Matrix4().compose(
-    instance.position,
-    upright,
-    scaled.setScalar(instance.scale * kindScale(instance.kind)),
-  );
-}
 
 interface KindSet {
   kind: PropKind;
@@ -152,7 +140,7 @@ export function BiomeScatter({
         for (const instance of grown)
           current.instances
             .get(instance.kind)!
-            .push({ instance, model: modelMatrix(instance) });
+            .push({ instance, model: scatterMatrix(instance) });
       }
     }
     if (!current.splitAt || current.splitAt.distanceTo(focus) > RESPLIT) {

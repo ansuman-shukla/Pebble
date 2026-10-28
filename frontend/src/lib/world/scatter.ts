@@ -2,9 +2,9 @@
  * Deterministic biome props: every cell seeds its own random stream from (world seed, cell index), so a cell
  * always grows the same instances no matter when or from where it is scattered.
  */
-import { Vector3 } from 'three';
+import { Matrix4, Quaternion, Vector3 } from 'three';
 
-import type { PropKind } from './assets';
+import { kindScale, type PropKind } from './assets';
 import type { BIOME_PROPS } from './biome-props';
 import {
   cellDirection,
@@ -20,6 +20,28 @@ export interface ScatterInstance {
   /** Radians about the local up. */
   yaw: number;
   scale: number;
+}
+
+const Y_AXIS = new Vector3(0, 1, 0);
+const upright = new Quaternion();
+const yawTurn = new Quaternion();
+const scaled = new Vector3();
+const up = new Vector3();
+
+/** The model matrix of an instance: standing on the local normal, yawed about it, at its drawn size. */
+export function scatterMatrix(
+  instance: ScatterInstance,
+  target = new Matrix4(),
+) {
+  up.copy(instance.position).normalize();
+  upright
+    .setFromUnitVectors(Y_AXIS, up)
+    .multiply(yawTurn.setFromAxisAngle(Y_AXIS, instance.yaw));
+  return target.compose(
+    instance.position,
+    upright,
+    scaled.setScalar(instance.scale * kindScale(instance.kind)),
+  );
 }
 
 /** A disc of the surface kept free of props (a site), as a direction and a radius in metres. */
