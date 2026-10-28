@@ -63,11 +63,25 @@ town's main gate, with the engine's citizens living on it (`GET /api/v1/entities
 | clock (bottom right) | engine day, time and speed ("real time", "×60", "paused"); `pause`, `×1` (real time: citizens walk at your pace, a tick a real minute), `×10`, `×60` (a game hour per real minute), `×600` (time-lapse) set the engine's speed (`POST /api/v1/admin/clock`); the sun follows engine time |
 | `time ×60` | without a feed (`/?mock=1`): run the client clock at one game hour per second |
 | `?at=lat,lon[,bearing]` | start anywhere, e.g. `/?at=12.4,100,180` (band A camp); a drop or go to rewrites it so the spot can be shared; `?time=HH:MM` sets the town time |
+| `?tick=N`, `?follow=id` | replay: the citizens as they were at tick N (from `GET /api/v1/entities?at=N`; the feed is off and the clock stopped, `back to live` returns); follow a citizen as soon as they are drawn (the spectator pages link here) |
 
 `/town` shows the flat town alone; `/?mock=1` uses the small test world instead of the backend's (without citizens);
 `?mockLive=1` adds a deterministic mock feed of the 15 citizens (dev and tests). Citizens within 400 m are drawn,
 labelled within 40 m; what they say shows as a bubble for a few seconds. See
 [the live citizens findings](docs/findings/2026-10-29-live-citizens-client.md).
 
-Status: phase A, M7 scripted citizens (15 citizens with utility brains, town economy, plant regrowth) and the first
-slice of M8 (live feed).
+The spectator pages read the archive (all take `?at=tick` to replay a past moment):
+
+| Page | What |
+|---|---|
+| `/people` | everyone by region: portrait, role, age, what they are doing and where |
+| `/people/:id` | one citizen: profile, needs now and over the last day, what they carry and know, their whole life as a timeline (scroll for more); `Show on map` |
+| `/conversations` | threads of speech by place and time (`?day=N`, `?place=`), with who heard what |
+| `/timeline` | a scrubber over game time: who was where, what was said, the stocks then; opens the World at that moment |
+| `/stats` | population, deaths by cause, food stocks, wild plants, actions and speech per day |
+
+Their api: `GET /api/v1/citizens`, `/citizens/{id}`, `/citizens/{id}/timeline`, `/citizens/{id}/needs`,
+`/conversations` and `/stats` (see [the spectator findings](docs/findings/2026-10-29-spectator-pages.md)).
+
+Status: phase A, M7 scripted citizens (15 citizens with utility brains, town economy, plant regrowth) and M8 in
+progress (live feed, spectator pages).

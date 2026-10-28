@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AdminChangeClockData, AdminChangeClockErrors, AdminChangeClockResponses, ClockReadGameClockData, ClockReadGameClockErrors, ClockReadGameClockResponses, EntitiesReadEntitiesData, EntitiesReadEntitiesErrors, EntitiesReadEntitiesResponses, EventsReadEventsData, EventsReadEventsErrors, EventsReadEventsResponses, HealthReadHealthData, HealthReadHealthResponses, LiveLiveSchemaData, LiveLiveSchemaErrors, LiveLiveSchemaResponses, TownReadTownData, TownReadTownResponses, WorldReadWorldData, WorldReadWorldResponses } from './types.gen';
+import type { AdminChangeClockData, AdminChangeClockErrors, AdminChangeClockResponses, CitizensReadCitizenData, CitizensReadCitizenErrors, CitizensReadCitizenNeedsData, CitizensReadCitizenNeedsErrors, CitizensReadCitizenNeedsResponses, CitizensReadCitizenResponses, CitizensReadCitizensData, CitizensReadCitizensErrors, CitizensReadCitizensResponses, CitizensReadCitizenTimelineData, CitizensReadCitizenTimelineErrors, CitizensReadCitizenTimelineResponses, ClockReadGameClockData, ClockReadGameClockErrors, ClockReadGameClockResponses, ConversationsReadConversationsData, ConversationsReadConversationsErrors, ConversationsReadConversationsResponses, EntitiesReadEntitiesData, EntitiesReadEntitiesErrors, EntitiesReadEntitiesResponses, EventsReadEventsData, EventsReadEventsErrors, EventsReadEventsResponses, HealthReadHealthData, HealthReadHealthResponses, LiveLiveSchemaData, LiveLiveSchemaErrors, LiveLiveSchemaResponses, StatsReadStatsData, StatsReadStatsErrors, StatsReadStatsResponses, TownReadTownData, TownReadTownResponses, WorldReadWorldData, WorldReadWorldResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -33,11 +33,47 @@ export const adminChangeClock = <ThrowOnError extends boolean = false>(options: 
 });
 
 /**
+ * Read Citizens
+ *
+ * Everyone at a glance, now or at a past tick: role, region, age, look, alive, what they are doing and where.
+ */
+export const citizensReadCitizens = <ThrowOnError extends boolean = false>(options?: Options<CitizensReadCitizensData, ThrowOnError>): RequestResult<CitizensReadCitizensResponses, CitizensReadCitizensErrors, ThrowOnError> => (options?.client ?? client).get<CitizensReadCitizensResponses, CitizensReadCitizensErrors, ThrowOnError>({ url: '/api/v1/citizens', ...options });
+
+/**
+ * Read Citizen
+ *
+ * One citizen now or at a past tick: who they are, their body in words and numbers, what they carry and know,
+ * and their latest doings.
+ */
+export const citizensReadCitizen = <ThrowOnError extends boolean = false>(options: Options<CitizensReadCitizenData, ThrowOnError>): RequestResult<CitizensReadCitizenResponses, CitizensReadCitizenErrors, ThrowOnError> => (options.client ?? client).get<CitizensReadCitizenResponses, CitizensReadCitizenErrors, ThrowOnError>({ url: '/api/v1/citizens/{citizen_id}', ...options });
+
+/**
+ * Read Citizen Timeline
+ *
+ * The citizen's life in order: their actions, speech (said and heard), needs, knowledge, items: one line each.
+ */
+export const citizensReadCitizenTimeline = <ThrowOnError extends boolean = false>(options: Options<CitizensReadCitizenTimelineData, ThrowOnError>): RequestResult<CitizensReadCitizenTimelineResponses, CitizensReadCitizenTimelineErrors, ThrowOnError> => (options.client ?? client).get<CitizensReadCitizenTimelineResponses, CitizensReadCitizenTimelineErrors, ThrowOnError>({ url: '/api/v1/citizens/{citizen_id}/timeline', ...options });
+
+/**
+ * Read Citizen Needs
+ *
+ * Hunger, thirst, energy and health over time (the last game day by default).
+ */
+export const citizensReadCitizenNeeds = <ThrowOnError extends boolean = false>(options: Options<CitizensReadCitizenNeedsData, ThrowOnError>): RequestResult<CitizensReadCitizenNeedsResponses, CitizensReadCitizenNeedsErrors, ThrowOnError> => (options.client ?? client).get<CitizensReadCitizenNeedsResponses, CitizensReadCitizenNeedsErrors, ThrowOnError>({ url: '/api/v1/citizens/{citizen_id}/needs', ...options });
+
+/**
  * Read Game Clock
  *
  * Game time, speed and pause state of the latest run (or the given one).
  */
 export const clockReadGameClock = <ThrowOnError extends boolean = false>(options?: Options<ClockReadGameClockData, ThrowOnError>): RequestResult<ClockReadGameClockResponses, ClockReadGameClockErrors, ThrowOnError> => (options?.client ?? client).get<ClockReadGameClockResponses, ClockReadGameClockErrors, ThrowOnError>({ url: '/api/v1/clock', ...options });
+
+/**
+ * Read Conversations
+ *
+ * Threads of speech by place and time (the last game day by default), newest first, with who heard them.
+ */
+export const conversationsReadConversations = <ThrowOnError extends boolean = false>(options?: Options<ConversationsReadConversationsData, ThrowOnError>): RequestResult<ConversationsReadConversationsResponses, ConversationsReadConversationsErrors, ThrowOnError> => (options?.client ?? client).get<ConversationsReadConversationsResponses, ConversationsReadConversationsErrors, ThrowOnError>({ url: '/api/v1/conversations', ...options });
 
 /**
  * Read Entities
@@ -64,6 +100,13 @@ export const healthReadHealth = <ThrowOnError extends boolean = false>(options?:
  * The live feed's message types for clients (this answers with the current `snapshot` message).
  */
 export const liveLiveSchema = <ThrowOnError extends boolean = false>(options?: Options<LiveLiveSchemaData, ThrowOnError>): RequestResult<LiveLiveSchemaResponses, LiveLiveSchemaErrors, ThrowOnError> => (options?.client ?? client).get<LiveLiveSchemaResponses, LiveLiveSchemaErrors, ThrowOnError>({ url: '/api/v1/live/schema', ...options });
+
+/**
+ * Read Stats
+ *
+ * Population, deaths by cause, food stocks, wild resources and events per game day, now or at a past tick.
+ */
+export const statsReadStats = <ThrowOnError extends boolean = false>(options?: Options<StatsReadStatsData, ThrowOnError>): RequestResult<StatsReadStatsResponses, StatsReadStatsErrors, ThrowOnError> => (options?.client ?? client).get<StatsReadStatsResponses, StatsReadStatsErrors, ThrowOnError>({ url: '/api/v1/stats', ...options });
 
 /**
  * Read Town

@@ -1,10 +1,14 @@
 import { NavLink, Outlet } from 'react-router';
 
+// the town walk stays at /town, off the menu
 const LINKS = [
-  { to: '/', label: 'World' },
-  { to: '/town', label: 'Town' },
-  { to: '/gallery', label: 'Gallery' },
-  { to: '/status', label: 'Status' },
+  { to: '/', label: 'World', end: true },
+  { to: '/people', label: 'People', end: false },
+  { to: '/conversations', label: 'Conversations', end: true },
+  { to: '/timeline', label: 'Timeline', end: true },
+  { to: '/stats', label: 'Stats', end: true },
+  { to: '/gallery', label: 'Gallery', end: true },
+  { to: '/status', label: 'Status', end: true },
 ];
 
 export function AppLayout() {
@@ -17,7 +21,7 @@ export function AppLayout() {
             <NavLink
               key={link.to}
               to={link.to}
-              end
+              end={link.end}
               className={({ isActive }) =>
                 isActive ? 'text-foreground' : 'text-muted-foreground'
               }

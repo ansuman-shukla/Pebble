@@ -65,6 +65,444 @@
         }
       }
     },
+    "/api/v1/citizens": {
+      "get": {
+        "tags": [
+          "citizens"
+        ],
+        "summary": "Read Citizens",
+        "description": "Everyone at a glance, now or at a past tick: role, region, age, look, alive, what they are doing and where.",
+        "operationId": "citizens-read_citizens",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "at",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "replay this tick instead of now",
+              "title": "At"
+            },
+            "description": "replay this tick instead of now"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CitizensView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/citizens/{citizen_id}": {
+      "get": {
+        "tags": [
+          "citizens"
+        ],
+        "summary": "Read Citizen",
+        "description": "One citizen now or at a past tick: who they are, their body in words and numbers, what they carry and know,\nand their latest doings.",
+        "operationId": "citizens-read_citizen",
+        "parameters": [
+          {
+            "name": "citizen_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Citizen Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "at",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "replay this tick instead of now",
+              "title": "At"
+            },
+            "description": "replay this tick instead of now"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CitizenProfile"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/citizens/{citizen_id}/timeline": {
+      "get": {
+        "tags": [
+          "citizens"
+        ],
+        "summary": "Read Citizen Timeline",
+        "description": "The citizen's life in order: their actions, speech (said and heard), needs, knowledge, items: one line each.",
+        "operationId": "citizens-read_citizen_timeline",
+        "parameters": [
+          {
+            "name": "citizen_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Citizen Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "from_tick",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From Tick"
+            }
+          },
+          {
+            "name": "to_tick",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To Tick"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "tick_summary",
+                      "citizen_spawned",
+                      "perceived",
+                      "action_started",
+                      "action_finished",
+                      "action_interrupted",
+                      "said",
+                      "thought",
+                      "need_changed",
+                      "injured",
+                      "died",
+                      "item_moved",
+                      "resource_changed",
+                      "knowledge_changed",
+                      "animal_spawned",
+                      "fire_changed",
+                      "intervention",
+                      "snapshot"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "default: everything but tick summaries and looking around",
+              "title": "Type"
+            },
+            "description": "default: everything but tick summaries and looking around"
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string",
+              "default": "asc",
+              "title": "Order"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "the previous page's next_cursor",
+              "title": "Cursor"
+            },
+            "description": "the previous page's next_cursor"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelinePage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/citizens/{citizen_id}/needs": {
+      "get": {
+        "tags": [
+          "citizens"
+        ],
+        "summary": "Read Citizen Needs",
+        "description": "Hunger, thirst, energy and health over time (the last game day by default).",
+        "operationId": "citizens-read_citizen_needs",
+        "parameters": [
+          {
+            "name": "citizen_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Citizen Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "from_tick",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From Tick"
+            }
+          },
+          {
+            "name": "to_tick",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To Tick"
+            }
+          },
+          {
+            "name": "step",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ticks between points (default: ~288 points)",
+              "title": "Step"
+            },
+            "description": "ticks between points (default: ~288 points)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NeedsSeries"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/clock": {
       "get": {
         "tags": [
@@ -98,6 +536,120 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ClockView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/conversations": {
+      "get": {
+        "tags": [
+          "conversations"
+        ],
+        "summary": "Read Conversations",
+        "description": "Threads of speech by place and time (the last game day by default), newest first, with who heard them.",
+        "operationId": "conversations-read_conversations",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "from_tick",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From Tick"
+            }
+          },
+          {
+            "name": "to_tick",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To Tick"
+            }
+          },
+          {
+            "name": "place",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "only threads at this place or area id",
+              "title": "Place"
+            },
+            "description": "only threads at this place or area id"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationsPage"
                 }
               }
             }
@@ -439,6 +991,75 @@
         }
       }
     },
+    "/api/v1/stats": {
+      "get": {
+        "tags": [
+          "stats"
+        ],
+        "summary": "Read Stats",
+        "description": "Population, deaths by cause, food stocks, wild resources and events per game day, now or at a past tick.",
+        "operationId": "stats-read_stats",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "at",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "replay this tick instead of now",
+              "title": "At"
+            },
+            "description": "replay this tick instead of now"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/town": {
       "get": {
         "tags": [
@@ -686,6 +1307,371 @@
         ],
         "title": "CitizenEntity"
       },
+      "CitizenProfile": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "day": {
+            "type": "integer",
+            "title": "Day"
+          },
+          "time": {
+            "type": "string",
+            "title": "Time"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "look": {
+            "type": "string",
+            "title": "Look"
+          },
+          "appearance": {
+            "type": "string",
+            "title": "Appearance"
+          },
+          "age": {
+            "type": "integer",
+            "title": "Age"
+          },
+          "age_group": {
+            "type": "string",
+            "title": "Age Group"
+          },
+          "sex": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sex"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "region": {
+            "type": "string",
+            "enum": [
+              "town",
+              "band_a",
+              "band_b"
+            ],
+            "title": "Region"
+          },
+          "skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skills"
+          },
+          "personality": {
+            "type": "string",
+            "title": "Personality"
+          },
+          "home": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlaceRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "alive": {
+            "type": "boolean",
+            "title": "Alive"
+          },
+          "asleep": {
+            "type": "boolean",
+            "title": "Asleep"
+          },
+          "cause_of_death": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Of Death"
+          },
+          "activity": {
+            "type": "string",
+            "enum": [
+              "idle",
+              "walking",
+              "sleeping",
+              "resting",
+              "gathering",
+              "eating",
+              "drinking",
+              "working",
+              "talking",
+              "dead"
+            ],
+            "title": "Activity"
+          },
+          "action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "action_label": {
+            "type": "string",
+            "title": "Action Label"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "place": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlaceRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "needs": {
+            "items": {
+              "$ref": "#/components/schemas/NeedReading"
+            },
+            "type": "array",
+            "title": "Needs"
+          },
+          "state": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "State"
+          },
+          "inventory": {
+            "items": {
+              "$ref": "#/components/schemas/Holding"
+            },
+            "type": "array",
+            "title": "Inventory"
+          },
+          "known_places": {
+            "items": {
+              "$ref": "#/components/schemas/KnownPlace"
+            },
+            "type": "array",
+            "title": "Known Places"
+          },
+          "known_people": {
+            "items": {
+              "$ref": "#/components/schemas/PersonRef"
+            },
+            "type": "array",
+            "title": "Known People"
+          },
+          "recent": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineEntry"
+            },
+            "type": "array",
+            "title": "Recent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "tick",
+          "day",
+          "time",
+          "id",
+          "name",
+          "look",
+          "appearance",
+          "age",
+          "age_group",
+          "sex",
+          "role",
+          "region",
+          "skills",
+          "personality",
+          "home",
+          "alive",
+          "asleep",
+          "cause_of_death",
+          "activity",
+          "action",
+          "action_label",
+          "position",
+          "place",
+          "needs",
+          "state",
+          "inventory",
+          "known_places",
+          "known_people",
+          "recent"
+        ],
+        "title": "CitizenProfile"
+      },
+      "CitizenSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "look": {
+            "type": "string",
+            "title": "Look"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "region": {
+            "type": "string",
+            "enum": [
+              "town",
+              "band_a",
+              "band_b"
+            ],
+            "title": "Region"
+          },
+          "age": {
+            "type": "integer",
+            "title": "Age"
+          },
+          "alive": {
+            "type": "boolean",
+            "title": "Alive"
+          },
+          "activity": {
+            "type": "string",
+            "enum": [
+              "idle",
+              "walking",
+              "sleeping",
+              "resting",
+              "gathering",
+              "eating",
+              "drinking",
+              "working",
+              "talking",
+              "dead"
+            ],
+            "title": "Activity"
+          },
+          "action_label": {
+            "type": "string",
+            "title": "Action Label"
+          },
+          "state": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "State"
+          },
+          "place": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlaceRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cause_of_death": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Of Death"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "look",
+          "role",
+          "region",
+          "age",
+          "alive",
+          "activity",
+          "action_label",
+          "state",
+          "place",
+          "cause_of_death"
+        ],
+        "title": "CitizenSummary"
+      },
+      "CitizensView": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "day": {
+            "type": "integer",
+            "title": "Day"
+          },
+          "time": {
+            "type": "string",
+            "title": "Time"
+          },
+          "citizens": {
+            "items": {
+              "$ref": "#/components/schemas/CitizenSummary"
+            },
+            "type": "array",
+            "title": "Citizens"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "tick",
+          "day",
+          "time",
+          "citizens"
+        ],
+        "title": "CitizensView"
+      },
       "ClockChange": {
         "properties": {
           "speed": {
@@ -788,6 +1774,102 @@
           "paused"
         ],
         "title": "ClockView"
+      },
+      "ConversationsPage": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "from_tick": {
+            "type": "integer",
+            "title": "From Tick"
+          },
+          "to_tick": {
+            "type": "integer",
+            "title": "To Tick"
+          },
+          "threads": {
+            "items": {
+              "$ref": "#/components/schemas/Thread"
+            },
+            "type": "array",
+            "title": "Threads"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "from_tick",
+          "to_tick",
+          "threads"
+        ],
+        "title": "ConversationsPage"
+      },
+      "DayCount": {
+        "properties": {
+          "day": {
+            "type": "integer",
+            "title": "Day"
+          },
+          "events": {
+            "type": "integer",
+            "title": "Events"
+          },
+          "said": {
+            "type": "integer",
+            "title": "Said"
+          },
+          "actions": {
+            "type": "integer",
+            "title": "Actions"
+          },
+          "deaths": {
+            "type": "integer",
+            "title": "Deaths"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day",
+          "events",
+          "said",
+          "actions",
+          "deaths"
+        ],
+        "title": "DayCount"
+      },
+      "Death": {
+        "properties": {
+          "citizen": {
+            "$ref": "#/components/schemas/PersonRef"
+          },
+          "cause": {
+            "type": "string",
+            "title": "Cause"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "day": {
+            "type": "integer",
+            "title": "Day"
+          },
+          "time": {
+            "type": "string",
+            "title": "Time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "citizen",
+          "cause",
+          "tick",
+          "day",
+          "time"
+        ],
+        "title": "Death"
       },
       "EntitiesView": {
         "properties": {
@@ -1034,6 +2116,47 @@
         ],
         "title": "Extent"
       },
+      "FoodStock": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "storehouse",
+              "field",
+              "carried"
+            ],
+            "title": "Kind"
+          },
+          "items": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Items"
+          },
+          "hunger": {
+            "type": "number",
+            "title": "Hunger"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "items",
+          "hunger"
+        ],
+        "title": "FoodStock"
+      },
       "Footprint": {
         "properties": {
           "x": {
@@ -1088,6 +2211,107 @@
           "database"
         ],
         "title": "HealthStatus"
+      },
+      "Holding": {
+        "properties": {
+          "item": {
+            "type": "string",
+            "title": "Item"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "words": {
+            "type": "string",
+            "title": "Words"
+          }
+        },
+        "type": "object",
+        "required": [
+          "item",
+          "count",
+          "words"
+        ],
+        "title": "Holding"
+      },
+      "KnownPlace": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "level": {
+            "type": "string",
+            "title": "Level"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "level"
+        ],
+        "title": "KnownPlace"
+      },
+      "Line": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "time": {
+            "type": "string",
+            "title": "Time"
+          },
+          "speaker": {
+            "$ref": "#/components/schemas/PersonRef"
+          },
+          "words": {
+            "type": "string",
+            "title": "Words"
+          },
+          "volume": {
+            "type": "string",
+            "enum": [
+              "whisper",
+              "normal",
+              "shout"
+            ],
+            "title": "Volume"
+          },
+          "heard_by": {
+            "items": {
+              "$ref": "#/components/schemas/PersonRef"
+            },
+            "type": "array",
+            "title": "Heard By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "tick",
+          "time",
+          "speaker",
+          "words",
+          "volume",
+          "heard_by"
+        ],
+        "title": "Line"
       },
       "LiveEvent": {
         "properties": {
@@ -1210,6 +2434,168 @@
         "title": "LiveState",
         "description": "Where everyone is: on connect (`snapshot`) and after every engine tick (`tick`)."
       },
+      "NeedPoint": {
+        "properties": {
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "hunger": {
+            "type": "number",
+            "title": "Hunger"
+          },
+          "thirst": {
+            "type": "number",
+            "title": "Thirst"
+          },
+          "energy": {
+            "type": "number",
+            "title": "Energy"
+          },
+          "health": {
+            "type": "number",
+            "title": "Health"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tick",
+          "hunger",
+          "thirst",
+          "energy",
+          "health"
+        ],
+        "title": "NeedPoint"
+      },
+      "NeedReading": {
+        "properties": {
+          "need": {
+            "type": "string",
+            "enum": [
+              "hunger",
+              "thirst",
+              "energy",
+              "health"
+            ],
+            "title": "Need"
+          },
+          "value": {
+            "type": "number",
+            "title": "Value"
+          },
+          "word": {
+            "type": "string",
+            "title": "Word"
+          }
+        },
+        "type": "object",
+        "required": [
+          "need",
+          "value",
+          "word"
+        ],
+        "title": "NeedReading"
+      },
+      "NeedsSeries": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "citizen_id": {
+            "type": "string",
+            "title": "Citizen Id"
+          },
+          "from_tick": {
+            "type": "integer",
+            "title": "From Tick"
+          },
+          "to_tick": {
+            "type": "integer",
+            "title": "To Tick"
+          },
+          "step": {
+            "type": "integer",
+            "title": "Step"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/NeedPoint"
+            },
+            "type": "array",
+            "title": "Points"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "citizen_id",
+          "from_tick",
+          "to_tick",
+          "step",
+          "points"
+        ],
+        "title": "NeedsSeries"
+      },
+      "PersonRef": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "role"
+        ],
+        "title": "PersonRef"
+      },
+      "PlaceRef": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "PlaceRef"
+      },
+      "Population": {
+        "properties": {
+          "alive": {
+            "type": "integer",
+            "title": "Alive"
+          },
+          "dead": {
+            "type": "integer",
+            "title": "Dead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "alive",
+          "dead"
+        ],
+        "title": "Population"
+      },
       "Position": {
         "properties": {
           "unit": {
@@ -1250,6 +2636,34 @@
           "lon"
         ],
         "title": "Position"
+      },
+      "ResourceStock": {
+        "properties": {
+          "resource": {
+            "type": "string",
+            "title": "Resource"
+          },
+          "now": {
+            "type": "integer",
+            "title": "Now"
+          },
+          "start": {
+            "type": "integer",
+            "title": "Start"
+          },
+          "emptied_cells": {
+            "type": "integer",
+            "title": "Emptied Cells"
+          }
+        },
+        "type": "object",
+        "required": [
+          "resource",
+          "now",
+          "start",
+          "emptied_cells"
+        ],
+        "title": "ResourceStock"
       },
       "River": {
         "properties": {
@@ -1382,6 +2796,287 @@
           "heading_deg"
         ],
         "title": "Spawn"
+      },
+      "StatsView": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "day": {
+            "type": "integer",
+            "title": "Day"
+          },
+          "time": {
+            "type": "string",
+            "title": "Time"
+          },
+          "population": {
+            "$ref": "#/components/schemas/Population"
+          },
+          "deaths_by_cause": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Deaths By Cause"
+          },
+          "deaths": {
+            "items": {
+              "$ref": "#/components/schemas/Death"
+            },
+            "type": "array",
+            "title": "Deaths"
+          },
+          "food": {
+            "items": {
+              "$ref": "#/components/schemas/FoodStock"
+            },
+            "type": "array",
+            "title": "Food"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/ResourceStock"
+            },
+            "type": "array",
+            "title": "Resources"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/DayCount"
+            },
+            "type": "array",
+            "title": "Days"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "tick",
+          "day",
+          "time",
+          "population",
+          "deaths_by_cause",
+          "deaths",
+          "food",
+          "resources",
+          "days"
+        ],
+        "title": "StatsView"
+      },
+      "Thread": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "place": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlaceRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "area": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlaceRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "start_tick": {
+            "type": "integer",
+            "title": "Start Tick"
+          },
+          "end_tick": {
+            "type": "integer",
+            "title": "End Tick"
+          },
+          "day": {
+            "type": "integer",
+            "title": "Day"
+          },
+          "time": {
+            "type": "string",
+            "title": "Time"
+          },
+          "speakers": {
+            "items": {
+              "$ref": "#/components/schemas/PersonRef"
+            },
+            "type": "array",
+            "title": "Speakers"
+          },
+          "listeners": {
+            "items": {
+              "$ref": "#/components/schemas/PersonRef"
+            },
+            "type": "array",
+            "title": "Listeners"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/Line"
+            },
+            "type": "array",
+            "title": "Lines"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "place",
+          "area",
+          "start_tick",
+          "end_tick",
+          "day",
+          "time",
+          "speakers",
+          "listeners",
+          "lines"
+        ],
+        "title": "Thread"
+      },
+      "TimelineEntry": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "day": {
+            "type": "integer",
+            "title": "Day"
+          },
+          "time": {
+            "type": "string",
+            "title": "Time"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "tick_summary",
+              "citizen_spawned",
+              "perceived",
+              "action_started",
+              "action_finished",
+              "action_interrupted",
+              "said",
+              "thought",
+              "need_changed",
+              "injured",
+              "died",
+              "item_moved",
+              "resource_changed",
+              "knowledge_changed",
+              "animal_spawned",
+              "fire_changed",
+              "intervention",
+              "snapshot"
+            ],
+            "title": "Type"
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "public",
+              "private"
+            ],
+            "title": "Visibility"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "related": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Related"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "tick",
+          "day",
+          "time",
+          "type",
+          "visibility",
+          "summary",
+          "detail",
+          "related"
+        ],
+        "title": "TimelineEntry"
+      },
+      "TimelinePage": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "citizen_id": {
+            "type": "string",
+            "title": "Citizen Id"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineEntry"
+            },
+            "type": "array",
+            "title": "Entries"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "citizen_id",
+          "entries",
+          "next_cursor"
+        ],
+        "title": "TimelinePage"
       },
       "TownArea": {
         "properties": {

@@ -38,6 +38,7 @@ import type {
   GlobePlayerState,
 } from '@/components/world/globe/globe-player';
 import { GlobeWalker } from '@/components/world/globe/globe-walker';
+import { ReplayBadge } from '@/components/world/globe/replay-badge';
 import {
   LiveClock,
   NpcHooks,
@@ -57,6 +58,10 @@ import {
 } from '@/components/world/render-stats';
 import { useLabelStore } from '@/hooks/use-label-store';
 import { type LiveFeed, useLiveCitizens } from '@/hooks/use-live-citizens';
+import {
+  parseReplayTick,
+  useReplayCitizens,
+} from '@/hooks/use-replay-citizens';
 import { useTown } from '@/hooks/use-town';
 import { useWorld } from '@/hooks/use-world';
 import type { TownView, WorldView } from '@/lib/client/types.gen';
@@ -97,7 +102,8 @@ import type { WalkTown } from '@/lib/world/walk-charts';
  * The planet at /: terrain, ocean, rivers, sites and the castle town, a sun on the game clock, and the player
  * walking out of the town into the wild, among the live citizens. `?mock=1` uses the dev/test mock world,
  * `?mockLive=1` the dev/test mock feed; `?at=lat,lon[,bearing]` starts the player somewhere else (bearing in
- * degrees clockwise from north); `?time=HH:MM` sets the starting town time (while no feed is live).
+ * degrees clockwise from north); `?time=HH:MM` sets the starting town time (while no feed is live); `?tick=N`
+ * shows the citizens as they were at tick N (feed off, clock stopped); `?follow=id` follows a citizen on load.
  */
 
 /** The town's own ground disc (local metres): inside the 230 m plateau, around the ±160 m town. */
@@ -505,16 +511,23 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
     () => parseTime(params.get('time')) ?? START_MINUTES,
   );
   const clockRef = useRef(createClock(startTime));
+  // `?tick=N` replays a past moment (the feed stays off); `?follow=id` follows a citizen once they are drawn
+  const replayTick = parseReplayTick(params.get('tick'));
+  const replay = useReplayCitizens(replayTick);
   // the engine's citizens live on the real world; the mock world has only the mock feed
   const feed = useLiveCitizens(view, {
-    source: params.has('mockLive')
-      ? 'mock'
-      : params.has('mock')
+    source:
+      replayTick !== null
         ? 'off'
-        : 'backend',
+        : params.has('mockLive')
+          ? 'mock'
+          : params.has('mock')
+            ? 'off'
+            : 'backend',
   });
-  const live = feed.state;
-  const feedLive = feed.status === 'live' && live.runId !== null;
+  const live = replay ?? feed.state;
+  const feedLive =
+    live.runId !== null && (replay !== null || feed.status === 'live');
   const peopleRef = useRef(new Map<string, Vector3>());
   const [npcViews] = useState<NpcViews>(() => new Map());
   const subjectRef = useRef<GlobePlayerState>({
@@ -523,6 +536,9 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
     ground: 0,
   });
   const [followId, setFollowId] = useState<string | null>(null);
+  const [pendingFollow, setPendingFollow] = useState(() =>
+    params.get('follow'),
+  );
   const [peopleOpen, setPeopleOpen] = useState(false);
   const followed = live.citizens.find((citizen) => citizen.id === followId);
   const focusRef = useRef(start.position.clone());
@@ -562,6 +578,14 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
     setFollowId(id);
     setCameraMode('follow');
   }, []);
+  if (
+    pendingFollow !== null &&
+    ready &&
+    live.citizens.some((citizen) => citizen.id === pendingFollow)
+  ) {
+    setPendingFollow(null);
+    follow(pendingFollow);
+  }
   const goToCitizen = useCallback(
     (id: string) => {
       const view = npcViews.get(id);
@@ -602,6 +626,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
       data-live-status={feed.status}
       data-live-connects={feed.connects}
       data-live-tick={live.tick}
+      data-replay-tick={replayTick ?? undefined}
       data-player-x={player && round(player.x)}
       data-player-y={player && round(player.y)}
       data-player-z={player && round(player.z)}
@@ -757,7 +782,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
           }}
         />
         <GoToMenu sites={goTo} onPick={goToSite} />
-        {feed.status !== 'off' && (
+        {(feed.status !== 'off' || replay) && (
           <Button
             size="sm"
             variant={peopleOpen ? 'default' : 'outline'}
@@ -778,6 +803,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
         </span>
       </div>
       <div className="absolute right-3 bottom-3 flex flex-col items-end gap-2">
+        {replay && <ReplayBadge state={replay} />}
         {feed.status !== 'off' && (
           <LiveClock
             state={live}
