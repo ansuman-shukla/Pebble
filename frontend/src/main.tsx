@@ -23,7 +23,14 @@ const router = createBrowserRouter([
         index: true,
         hydrateFallbackElement: pageLoading,
         lazy: async () => ({
-          Component: (await import('@/pages/world-page')).WorldPage,
+          Component: (await import('@/pages/globe-page')).GlobePage,
+        }),
+      },
+      {
+        path: 'town',
+        hydrateFallbackElement: pageLoading,
+        lazy: async () => ({
+          Component: (await import('@/pages/town-page')).TownPage,
         }),
       },
       {

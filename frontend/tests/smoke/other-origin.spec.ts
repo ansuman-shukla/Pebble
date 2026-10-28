@@ -14,6 +14,8 @@ test('the world loads and walks when opened from another origin', async ({
   const otherOrigin = new URL(baseURL ?? '');
   expect(otherOrigin.hostname).toBe('localhost');
   otherOrigin.hostname = '127.0.0.1';
+  // the flat town page: its data comes from the backend through vite's /api proxy
+  otherOrigin.pathname = '/town';
 
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));

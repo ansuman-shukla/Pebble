@@ -1,7 +1,7 @@
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
 /*
- * The town at / (backend /api/v1/town): spawn (0, 120) facing north on the approach road; the plaster town wall
+ * The flat town at /town (backend /api/v1/town): spawn (0, 120) facing north on the approach road; the plaster town wall
  * runs along z = 100 with the main gatehouse at x = 0; the main street leads north to the moat (z 31..37), crossed
  * by the bridge at x = 0, then the castle gatehouse at z = 28 opens into the courtyard.
  */
@@ -35,7 +35,7 @@ async function openWorld(page: Page, errors: string[]) {
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(message.text());
   });
-  await page.goto('/');
+  await page.goto('/town');
   const world = page.getByTestId('world');
   await expect(world).toHaveAttribute('data-world-ready', 'true', {
     timeout: 60_000,
