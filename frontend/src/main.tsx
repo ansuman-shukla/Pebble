@@ -56,6 +56,13 @@ const router = createBrowserRouter([
         }),
       },
       {
+        path: 'timeline',
+        hydrateFallbackElement: pageLoading,
+        lazy: async () => ({
+          Component: (await import('@/pages/timeline-page')).TimelinePage,
+        }),
+      },
+      {
         path: 'gallery',
         hydrateFallbackElement: pageLoading,
         lazy: async () => ({
