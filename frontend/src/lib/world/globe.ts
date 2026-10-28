@@ -229,6 +229,8 @@ interface TerrainHit {
   triangle: number;
   /** The cell nearest to the direction. */
   cell: number;
+  /** 1 − cos(slope) of the triangle: 0 on level ground. */
+  tilt: number;
 }
 
 export interface GlobeTerrain {
@@ -346,8 +348,9 @@ export function buildTerrain(globe: Globe): GlobeTerrain {
     for (const owner of candidates) {
       for (const t of row(triangleRows, owner)) {
         const distance = hitTriangle(dir, t);
-        if (distance !== null)
-          return { height: distance - radius, triangle: t, cell };
+        if (distance === null) continue;
+        const tilt = 1 - p.crossVectors(e1, e2).normalize().dot(dir);
+        return { height: distance - radius, triangle: t, cell, tilt };
       }
     }
     throw new Error('no terrain triangle under the direction');
