@@ -7,6 +7,7 @@ import {
   buildTerrain,
   cellDirection,
   decodeWorld,
+  directionFromLatLon,
   type GlobeTerrain,
   tangentFrame,
   WATER_BIOMES,
@@ -20,16 +21,19 @@ import {
   streamChannels,
 } from '../../src/lib/world/river-courses';
 import {
+  fallPath,
+  fallSheetGeometry,
   riverGeometry,
   stillWaterGeometry,
 } from '../../src/lib/world/water-mesh';
 import { TOWN_GROUND_RADIUS, TOWN_URL } from './explore-helpers';
-import { WORLD_URL } from './globe-helpers';
+import { DRAW_CALL_BUDGET, openGlobe, WORLD_URL } from './globe-helpers';
 
 /*
  * The planet's water on the real world (GET /api/v1/world): rivers follow smooth curves that widen downstream,
  * start thin at their springs and never lie over open water; the Mill river runs through the town's stream;
- * the sea and the lakes carry the depth of the water under them.
+ * the great falls drops as a sheet clear of its cliff into its lake; the sea and the lakes carry the depth of
+ * the water under them. In the browser the falls are in the scene and the water animates.
  */
 
 /** Sharpest turn (degrees) allowed between two ribbon steps of at least a metre, and the 99th percentile. */
@@ -195,6 +199,47 @@ test('the Mill river runs through the town stream instead of stopping at the tow
   expect(intruders).toEqual([]);
 });
 
+test('the great falls drops from its lip as a sheet clear of the cliff into the lake', () => {
+  const R = view.radius_m;
+  const site = view.sites.find((candidate) => candidate.id === 'great_falls')!;
+  const anchor = new Vector3(...site.anchor.position);
+  const [falls] = layout.falls.filter(
+    (fall) => fall.lip.angleTo(anchor) * R < 100,
+  );
+  expect(falls).toBeDefined();
+  expect(falls.lipHeight).toBeGreaterThan(site.anchor.height_m - 3);
+  expect(falls.lipHeight).toBeLessThan(site.anchor.height_m + 3);
+  expect(falls.intoWater).toBe(true);
+  expect(falls.footHeight).toBeCloseTo(30, 0);
+  // the river ribbon stops at the lip instead of running down the cliff face
+  for (const { points } of layout.runs)
+    for (const point of points) {
+      if (point.direction.angleTo(falls.lip) * R > 60) continue;
+      expect(point.height).toBeGreaterThan(falls.lipHeight - 3);
+    }
+  // the sheet keeps off the cliff all the way down and lands on the lake
+  const { up, out } = { up: falls.lip, out: falls.foot.clone().sub(falls.lip) };
+  out.addScaledVector(up, -out.dot(up)).normalize();
+  const path = fallPath(terrain, falls);
+  path.slice(1, -1).forEach(({ x, height }) => {
+    const below = up
+      .clone()
+      .addScaledVector(out, x / R)
+      .normalize();
+    expect(height).toBeGreaterThan(terrain.heightAt(below) + 1);
+  });
+  expect(path[0].height).toBe(falls.lipHeight);
+  expect(path[path.length - 1].height).toBe(falls.footHeight);
+  const sheet = fallSheetGeometry(terrain, falls);
+  const position = sheet.getAttribute('position');
+  const heights = Array.from(
+    { length: position.count },
+    (_, i) => new Vector3().fromBufferAttribute(position, i).length() - R,
+  );
+  expect(Math.max(...heights)).toBeGreaterThan(falls.lipHeight);
+  expect(Math.min(...heights)).toBeLessThan(falls.footHeight + 1);
+});
+
 test('the sea and the lakes carry the depth of the water under them', () => {
   const still = stillWaterGeometry(terrain);
   expect(still.index!.count / 3).toBeLessThan(STILL_WATER_BUDGET);
@@ -243,4 +288,45 @@ test('the sea and the lakes carry the depth of the water under them', () => {
     ),
   );
   expect(deepest).toBeGreaterThan(5);
+});
+
+test.describe('in the browser', () => {
+  test.describe.configure({ timeout: 120_000 });
+
+  test('the great falls is in the scene and the water animates', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    const R = view.radius_m;
+    const site = view.sites.find(
+      (candidate) => candidate.id === 'great_falls',
+    )!;
+    const anchor = new Vector3(...site.anchor.position);
+    // on the lake shore, looking at the falls
+    const world = await openGlobe(page, errors, '?at=1.9622,13.2856,30');
+    await expect(world).toHaveAttribute('data-waterfalls', /\d/, {
+      timeout: 30_000,
+    });
+    const lips = (await world.getAttribute('data-waterfalls'))!
+      .split(';')
+      .map((spot) => spot.split(',').map(Number));
+    expect(
+      lips.some(
+        ([lat, lon]) => directionFromLatLon(lat, lon).angleTo(anchor) * R < 100,
+      ),
+    ).toBe(true);
+    await expect(world).toHaveAttribute('data-water-time', /\d/, {
+      timeout: 30_000,
+    });
+    const first = Number(await world.getAttribute('data-water-time'));
+    await expect
+      .poll(async () => Number(await world.getAttribute('data-water-time')), {
+        timeout: 10_000,
+      })
+      .toBeGreaterThan(first + 0.5);
+    const calls = Number(await world.getAttribute('data-draw-calls'));
+    expect(calls).toBeGreaterThan(0);
+    expect(calls).toBeLessThan(DRAW_CALL_BUDGET);
+    expect(errors).toEqual([]);
+  });
 });

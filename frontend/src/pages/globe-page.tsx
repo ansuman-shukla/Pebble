@@ -35,6 +35,7 @@ import {
 import type { GlobeMove } from '@/components/world/globe/globe-player';
 import { GlobeWalker } from '@/components/world/globe/globe-walker';
 import { VolcanoSmoke } from '@/components/world/globe/volcano-smoke';
+import { Waterfalls } from '@/components/world/globe/waterfalls';
 import { LabelOverlay, LabelProjector } from '@/components/world/labels';
 import {
   CAMERA_MODES,
@@ -247,6 +248,7 @@ type GlobeSceneProps = {
   onPlacementsReady: () => void;
   onCitizenReady: (id: string) => void;
   onStats: (stats: ModeStats) => void;
+  onWaterfalls: () => void;
 };
 
 type ModeStats = RenderStats & { mode: CameraMode };
@@ -272,6 +274,7 @@ const GlobeScene = memo(function GlobeScene({
   onPlacementsReady,
   onCitizenReady,
   onStats,
+  onWaterfalls,
 }: GlobeSceneProps) {
   const { view, terrain } = planet;
   const sampleStats = useCallback(
@@ -302,6 +305,11 @@ const GlobeScene = memo(function GlobeScene({
         biomeNames={view.biome_names}
         rivers={planet.rivers}
         hole={planet.hole}
+      />
+      <Waterfalls
+        terrain={terrain}
+        falls={planet.rivers.falls}
+        onMounted={onWaterfalls}
       />
       {planet.volcano && (
         <VolcanoSmoke
@@ -482,6 +490,8 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   );
   const [cameraMode, setCameraMode] = useState<CameraMode>('follow');
   const [stats, setStats] = useState<ModeStats | null>(null);
+  const [waterfallsShown, setWaterfallsShown] = useState(false);
+  const markWaterfalls = useCallback(() => setWaterfallsShown(true), []);
   const markWalkReady = useCallback(() => setWalkReady(true), []);
   const markPlacementsReady = useCallback(() => setPlacementsReady(true), []);
   const markCitizenReady = useCallback(
@@ -539,6 +549,17 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
       data-draw-calls={stats?.calls}
       data-draw-calls-mode={stats?.mode}
       data-triangles={stats?.triangles}
+      data-water-time={stats?.waterTime.toFixed(2)}
+      data-waterfalls={
+        waterfallsShown
+          ? planet.rivers.falls
+              .map((fall) => {
+                const { lat, lon } = latLonFromDirection(fall.lip);
+                return `${lat.toFixed(4)},${lon.toFixed(4)}`;
+              })
+              .join(';')
+          : undefined
+      }
       style={dropping && hover ? { cursor: 'none' } : undefined}
       onPointerMove={(event) => {
         if (dropping && event.target instanceof HTMLCanvasElement)
@@ -597,6 +618,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
         onPlacementsReady={markPlacementsReady}
         onCitizenReady={markCitizenReady}
         onStats={setStats}
+        onWaterfalls={markWaterfalls}
       />
       <LabelOverlay store={labels} />
       {!ready && (

@@ -1,7 +1,7 @@
 /*
  * Geometry for the planet's water, each carrying the `water` attribute the water shader reads
- * (water-material.ts): the sea and the lakes (one surface, with the depth under it per vertex) and the river
- * ribbons (across / downstream / speed / fade).
+ * (water-material.ts): the sea and the lakes (one surface, with the depth under it per vertex), the river
+ * ribbons (across / downstream / speed / fade), falling sheets at waterfalls and the ring of foam at their foot.
  */
 import {
   BufferAttribute,
@@ -11,7 +11,7 @@ import {
 } from 'three';
 
 import { type GlobeTerrain, WATER_BIOMES, WATER_SURFACE } from './globe';
-import type { RiverLayout } from './river-courses';
+import type { RiverLayout, Waterfall } from './river-courses';
 import { BANK_EDGE } from './water-material';
 
 /** Collects vertices (position, up normal, water data) and triangles. */
@@ -232,5 +232,154 @@ export function riverGeometry(terrain: GlobeTerrain, layout: RiverLayout) {
       previous = row;
     });
   }
+  return out.build();
+}
+
+// --- waterfalls ---
+
+/** Rows down a falling sheet and columns across it. */
+const SHEET_ROWS = 18;
+const SHEET_COLUMNS = 6;
+/** The sheet keeps this far (metres) off the cliff, and lands this far out from the foot of the slope. */
+const SHEET_CLEARANCE = 1.2;
+const SHEET_REACH = 3;
+/** The sheet widens by this much of its width on the way down, and bows out by SHEET_BOW metres in the middle. */
+const SHEET_SPREAD = 0.4;
+/** A falling sheet is this much wider than the river at its lip (the water spreads as it leaves the edge). */
+const SHEET_WIDEN = 1.5;
+const SHEET_BOW = 0.8;
+const GRAVITY = 9.81;
+
+/** The tangent frame of a fall: up at the lip, out over the drop, and across. */
+export function fallFrame(fall: Waterfall) {
+  const up = fall.lip.clone();
+  const out = fall.foot.clone().sub(fall.lip);
+  out.addScaledVector(up, -out.dot(up)).normalize();
+  const across = new Vector3().crossVectors(out, up);
+  return { up, out, across };
+}
+
+/**
+ * Where the falling water passes at fraction s ∈ [0, 1] of the drop: it leaves the lip level and curves down
+ * (x grows with √s, a thrown jet), pushed further out wherever it would touch the cliff.
+ */
+export function fallPath(terrain: GlobeTerrain, fall: Waterfall) {
+  const { radius } = terrain.globe;
+  const { up, out } = fallFrame(fall);
+  const drop = fall.lipHeight - fall.footHeight;
+  const reach = fall.lip.angleTo(fall.foot) * radius + SHEET_REACH;
+  const direction = new Vector3();
+  const path: { x: number; height: number }[] = [];
+  let pushed = 0;
+  for (let k = 0; k <= SHEET_ROWS; k++) {
+    const s = k / SHEET_ROWS;
+    const height = fall.lipHeight - drop * s;
+    let x = Math.max(reach * Math.sqrt(s), pushed);
+    for (let tries = 0; tries < 40 && k > 0 && k < SHEET_ROWS; tries++) {
+      direction
+        .copy(up)
+        .addScaledVector(out, x / radius)
+        .normalize();
+      if (height >= terrain.heightAt(direction) + SHEET_CLEARANCE) break;
+      x += 1;
+    }
+    pushed = x;
+    path.push({ x, height });
+  }
+  return path;
+}
+
+/** The falling sheet of a waterfall: curved down from the lip, widening, a little bowed. */
+export function fallSheetGeometry(terrain: GlobeTerrain, fall: Waterfall) {
+  const { radius } = terrain.globe;
+  const { up, out: outward, across } = fallFrame(fall);
+  const path = fallPath(terrain, fall);
+  const out = builder();
+  const spot = new Vector3();
+  let length = 0;
+  let previous: number[] | null = null;
+  path.forEach(({ x, height }, k) => {
+    const s = k / SHEET_ROWS;
+    if (k > 0)
+      length += Math.hypot(x - path[k - 1].x, height - path[k - 1].height);
+    const half = ((fall.width * SHEET_WIDEN) / 2) * (1 + SHEET_SPREAD * s);
+    const fallen = fall.lipHeight - height;
+    const speed = 1.5 + Math.sqrt(2 * GRAVITY * fallen);
+    const row: number[] = [];
+    for (let c = 0; c <= SHEET_COLUMNS; c++) {
+      const a = (c / SHEET_COLUMNS) * 2 - 1;
+      const bow =
+        SHEET_BOW * (1 - a * a) * Math.sin(Math.PI * Math.min(s * 1.5, 1));
+      spot
+        .copy(up)
+        .addScaledVector(outward, (x + bow) / radius)
+        .addScaledVector(across, (a * half) / radius)
+        .normalize()
+        .multiplyScalar(radius + height + RIVER_LIFT);
+      row.push(out.vertex(spot, [a, length, speed, s]));
+    }
+    if (previous)
+      for (let c = 0; c < SHEET_COLUMNS; c++) {
+        out.triangle(previous[c], row[c], previous[c + 1]);
+        out.triangle(previous[c + 1], row[c], row[c + 1]);
+      }
+    previous = row;
+  });
+  const geometry = out.build();
+  // a sheet faces out over the drop, not up
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+/** Where the falling water lands: the foot of the sheet's path, on the pool's surface. */
+export function fallLanding(terrain: GlobeTerrain, fall: Waterfall) {
+  const { radius } = terrain.globe;
+  const { up, out } = fallFrame(fall);
+  const path = fallPath(terrain, fall);
+  const { x } = path[path.length - 1];
+  return up
+    .clone()
+    .addScaledVector(out, x / radius)
+    .normalize();
+}
+
+/** Rings of foam radii (metres) around the landing point, and segments around. */
+const FOAM_RADII = [0, 2, 5, 9, 14, 18];
+const FOAM_SEGMENTS = 36;
+const FOAM_LIFT = 0.12;
+
+/** A disc of churned foam on the pool where a fall lands (water: distance, local east/north metres). */
+export function fallFoamGeometry(terrain: GlobeTerrain, fall: Waterfall) {
+  const { radius } = terrain.globe;
+  const { out: outward, across } = fallFrame(fall);
+  const centre = fallLanding(terrain, fall);
+  const out = builder();
+  const spot = new Vector3();
+  const rings = FOAM_RADII.map((r, ring) => {
+    const count = ring === 0 ? 1 : FOAM_SEGMENTS;
+    return Array.from({ length: count }, (_, k) => {
+      const angle = (k / FOAM_SEGMENTS) * Math.PI * 2;
+      const [x, y] = [Math.cos(angle) * r, Math.sin(angle) * r];
+      spot
+        .copy(centre)
+        .addScaledVector(outward, x / radius)
+        .addScaledVector(across, y / radius)
+        .normalize()
+        .multiplyScalar(radius + fall.footHeight + LAKE_LIFT + FOAM_LIFT);
+      return out.vertex(spot, [r, x, y, 0]);
+    });
+  });
+  for (let ring = 1; ring < rings.length; ring++)
+    for (let k = 0; k < FOAM_SEGMENTS; k++) {
+      const next = (k + 1) % FOAM_SEGMENTS;
+      const inner = rings[ring - 1];
+      const outer = rings[ring];
+      // angles run clockwise seen from above (from `out` towards `across`)
+      if (ring === 1) out.triangle(inner[0], outer[next], outer[k]);
+      else {
+        out.triangle(inner[k], outer[next], outer[k]);
+        out.triangle(inner[k], inner[next], outer[next]);
+      }
+    }
   return out.build();
 }

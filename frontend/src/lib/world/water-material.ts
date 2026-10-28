@@ -36,6 +36,9 @@ const shared = {
   waterBank: { value: new Color(BANK) },
 };
 
+/** The clock every water material animates with (exposed for the render stats). */
+export const waterClock = () => shared.waterTime.value;
+
 const LOADED_AT = performance.now();
 
 function refresh(scene: Scene) {

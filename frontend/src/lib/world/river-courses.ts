@@ -84,7 +84,7 @@ interface RiverRun {
 }
 
 /** Where a river drops off a cliff. */
-interface Waterfall {
+export interface Waterfall {
   river: number;
   /** Unit direction of the lip and the water height there. */
   lip: Vector3;
