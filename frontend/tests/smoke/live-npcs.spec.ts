@@ -402,10 +402,12 @@ test('the labels of citizens standing close together do not cover each other', a
   await landed(world);
   const tags = page.locator('[data-label^="npc-"]:visible');
   await expect(page.locator('[data-label="npc-ana"]')).toBeVisible();
-  const boxes = await tags.evaluateAll((nodes) =>
-    nodes.map((node) => {
-      const { left, right, top, bottom } = node.getBoundingClientRect();
-      return { id: node.dataset.label!, left, right, top, bottom };
+  // the clock is held and the camera has landed: the labels stand still while they are read
+  const boxes = await Promise.all(
+    (await tags.all()).map(async (tag) => {
+      const { x, y, width, height } = (await tag.boundingBox())!;
+      const id = await tag.getAttribute('data-label');
+      return { id, left: x, right: x + width, top: y, bottom: y + height };
     }),
   );
   const covered = boxes.flatMap((a, i) =>
