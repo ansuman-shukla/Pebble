@@ -7,6 +7,7 @@ import { expect, test } from '@playwright/test';
 import manifest from '../../src/lib/world/asset-manifest.json' with { type: 'json' };
 import { ANIMALS, PROPS } from '../../src/lib/world/assets';
 import { CITIZEN_LOOKS } from '../../src/lib/world/citizen-looks';
+import { VISITOR_LOOK } from '../../src/lib/world/visitor-look';
 import { createCharacter } from '../../src/vendor/polyfork/humanoid.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
@@ -75,4 +76,18 @@ test('every citizen look builds a rigged humanoid', () => {
       expect(bones.has(bone), `${look.id}: ${bone}`).toBe(true);
     }
   }
+});
+
+test('the visitor look builds a humanoid wearing every garment it names', () => {
+  const meshes: string[] = [];
+  createCharacter(VISITOR_LOOK).traverse((object) => {
+    if ((object as { isMesh?: boolean }).isMesh) meshes.push(object.name);
+  });
+  const slots = Object.keys(VISITOR_LOOK.wear);
+  expect(slots).toEqual(
+    expect.arrayContaining(['hat', 'top', 'bottom', 'feet']),
+  );
+  expect(meshes.sort()).toEqual(
+    ['body', ...slots.map((slot) => `attach-${slot}-mesh`)].sort(),
+  );
 });
