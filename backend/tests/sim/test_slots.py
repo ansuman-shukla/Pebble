@@ -25,15 +25,17 @@ from app.sim.slots import (
     layout,
     legs,
     load_slots_spec,
+    reserve_owner,
     ring_bearings,
     ring_spot,
     settle,
     step_to,
+    take_seat,
     walkable,
 )
 from app.sim.snapshot import restore, state_hash, take_snapshot
 from app.sim.state import Citizen
-from app.sim.vec import bearing_deg
+from app.sim.vec import bearing_deg, step_towards
 from app.sim.work import WORK_BY_NAME
 from app.sim.world import SimWorld
 from app.world.town import load_town
@@ -462,11 +464,13 @@ def test_nobody_stays_standing_on_a_sitters_legs(new_sim: Callable[..., Simulati
     seat = _slot(sim, sitter)
     feet = legs(sim.world, seat.position, seat.heading_deg)
     assert sim.world.distance_m(feet, seat.position) == pytest.approx(LEGS_M, abs=0.01)
-    x, z = sim.world.town_point(feet) or (0.0, 0.0)
-    comer = sim.add_citizen(make_spec("comer", at=(x, z)))  # 0.7 m in front of the sitter: on their legs
-    assert sim.world.distance_m(comer.position, sitter.position) < PERSONAL_M + 0.01
+    ahead = step_towards(seat.position, (180.0 - seat.heading_deg) % 360.0, 1.0, sim.world.radius_m)
+    x, z = sim.world.town_point(ahead) or (0.0, 0.0)
+    comer = sim.add_citizen(make_spec("comer", at=(x, z)))  # a metre before the sitter: clear of them, on their legs
+    assert sim.world.distance_m(comer.position, sitter.position) > PERSONAL_M
+    start = comer.position
     sim.step()
-    assert sim.world.distance_m(comer.position, feet) >= PERSONAL_M  # stepped off them
+    assert comer.position != start and sim.world.distance_m(comer.position, feet) >= PERSONAL_M  # stepped off them
     assert sitter.position == seat.position
     assert ring_spot(sim.core, comer, sitter.position, with_centre=False) is not None
     spot = ring_spot(sim.core, comer, sitter.position, with_centre=False)
@@ -511,3 +515,117 @@ def test_a_step_aside_after_a_walk_keeps_to_the_tick_and_the_walkers_speed(new_s
     walked = sim.core.strides[walker.id].walked
     metres = sum(sim.world.distance_m(a[0], b[0]) for a, b in zip(walked, walked[1:], strict=False))
     assert metres <= budget * 1.001 and walked[-1][1] == 60.0  # cut the corner: no faster than they walk
+
+
+def _on_slot(sim: Simulation, citizen_id: str, slot_id: str, waits_for: str | None = None) -> Citizen:
+    """Someone standing on a slot they hold (in a queue: waiting for the owner's stands)."""
+    slot = layout(sim.core).slots[slot_id]
+    citizen = sim.add_citizen(make_spec(citizen_id, at=GATE))
+    sim.core.place_at(citizen, slot.position)
+    claim(sim.core, citizen, slot, slot.position, waits_for=waits_for)
+    return citizen
+
+
+def test_a_queue_is_first_come_first_served_from_the_ring_to_the_stands(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    for k in (1, 2, 3):
+        _on_slot(sim, f"s{k}", f"well#stand-{k}")
+    second = _on_slot(sim, "second", "well#queue-2", waits_for="well")  # the first in line has just left
+    late = sim.add_citizen(make_spec("late", at=(0.0, 150.0)))  # a few minutes' walk off
+    late_walk = WorldApi(sim, late.id).walk_to_place("the well")
+    assert _slot(sim, late).id == "well#queue-3"  # behind the one queueing, not the free place before them
+    first = _on_slot(sim, "first", "well#queue-1", waits_for="well")
+    ringer = sim.add_citizen(make_spec("ringer", at=GATE))
+    well = sim.world.structures["well"].centre
+    assert reserve_owner(sim.core, ringer, "well", well, well) != layout(sim.core).slots["well#queue-3"].position
+    ring_claim = claim_of(sim.core, ringer)
+    assert ring_claim is not None and ring_claim.slot is None and ring_claim.waits_for == "well"  # round about
+    sim.core.place_at(ringer, ring_claim.position)  # already there, waiting
+    WorldApi(sim, "s1").walk_to_place("the main gate")  # a stand frees while the late one is still on the way
+    sim.step()
+    assert _slot(sim, first).id == "well#stand-1" and _slot(sim, second).id == "well#queue-1"
+    assert claim_of(sim.core, ringer) == ring_claim  # can't pass the late one, still walking to queue-3
+    assert late.action is not None and late.action.kind == "walk_to"
+    assert run_until_done(sim, late_walk, 40).text == "You arrive at the well."
+    sim.step()
+    assert _slot(sim, late).id == "well#queue-2" and _slot(sim, ringer).id == "well#queue-3"  # in their order
+    assert crowded(sim.core) == []
+
+
+def test_only_those_waiting_their_turn_hold_the_line(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    for k in (1, 2, 3):
+        _on_slot(sim, f"s{k}", f"well#stand-{k}")
+    sitter = _on_slot(sim, "sitter", "well#queue-1", waits_for="well")
+    WorldApi(sim, sitter.id).rest(30)  # sits down in the queue: out of the line, stays put
+    leaver = _on_slot(sim, "leaver", "well#queue-2", waits_for="well")
+    sim.add_citizen(make_spec("friend", at=(-40.0, 61.0)))
+    WorldApi(sim, leaver.id).follow("a person in a friend cloak")  # off after someone: out of the line too
+    WorldApi(sim, "friend").walk_towards("west", "a long walk")
+    WorldApi(sim, "s1").walk_to_place("the main gate")
+    newcomer = sim.add_citizen(make_spec("newcomer", at=GATE))
+    WorldApi(sim, newcomer.id).walk_to_place("the well")
+    assert _slot(sim, newcomer).id == "well#stand-1"  # nobody waits for it
+    spot = sitter.position
+    sim.step()
+    assert sitter.position == spot and sitter.id not in sim.core.strides  # not moved up while resting
+
+
+def test_a_crowd_waits_by_a_seat_taken_or_a_sitter_on_the_ground(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    taker = sim.add_citizen(make_spec("taker", at=(14.0, 53.5)))
+    assert take_seat(sim.core, taker) is not None  # taken, not sat on yet: its legs are kept clear already
+    seat = _slot(sim, taker)
+    other = sim.add_citizen(make_spec("other", at=(-40.0, 61.0)))
+    feet = legs(sim.world, seat.position, seat.heading_deg)
+    before = step_towards(seat.position, (180.0 - seat.heading_deg) % 360.0, 1.0, sim.world.radius_m)
+    spot = ring_spot(sim.core, other, before, with_centre=True)  # a metre before the seat: on the legs, not there
+    assert spot is not None and spot != before and sim.world.distance_m(spot, feet) >= PERSONAL_M
+    lone = sim.add_citizen(make_spec("lone", at=(-40.0, 61.0)))
+    WorldApi(sim, lone.id).rest(30)  # no seat near: on the ground, legs out before them
+    sim.step()
+    assert claim_of(sim.core, lone) is None  # sitting on the ground holds no slot: only the body keeps its legs clear
+    ground_feet = legs(sim.world, lone.position, lone.heading_deg)
+    before = step_towards(lone.position, (180.0 - lone.heading_deg) % 360.0, 1.0, sim.world.radius_m)
+    spot = ring_spot(sim.core, other, before, with_centre=True)
+    assert spot is not None and spot != before and sim.world.distance_m(spot, ground_feet) >= PERSONAL_M
+    centre = ring_spot(sim.core, other, sim.world.town.to_unit(-30.0, 61.0), with_centre=True)
+    assert centre == sim.world.town.to_unit(-30.0, 61.0)  # a free point itself first, when asked
+    aside = ring_spot(sim.core, other, sim.world.town.to_unit(-30.0, 61.0), with_centre=False)
+    assert aside is not None and round(sim.world.distance_m(aside, centre), 2) == 1.2
+
+
+def test_work_far_across_its_place_is_walked_to_but_beds_beyond_a_few_steps_arent(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    sim = _sim(new_sim)
+    fields = ["town", "rice-fields"]
+    farmer = sim.add_citizen(make_spec("farmer", at=(-110.0, 36.0), skills=["farming"], knows_places=fields))
+    work = WorldApi(sim, farmer.id).work("farm")
+    slot = _slot(sim, farmer)
+    assert sim.world.distance_m(farmer.position, slot.position) > STEP_MAX_M  # across the fields
+    sim.step()
+    assert work.result is None and sim.world.distance_m(farmer.position, slot.position) < 0.01
+    home = sim.world.structures["band_a_camp:shelter-n"]
+    x, z = home.door_xz
+    stray = sim.add_citizen(
+        make_spec("stray", site="band_a_camp", at=(x, z - 14.0), region="band_a", home="band_a_camp:shelter-n")
+    )
+    skip_to(sim, stray.position, night=True)
+    WorldApi(sim, stray.id).sleep()
+    started = [e.payload.model_dump()["args"] for e in sim.drain() if e.type == "action_started"]
+    assert started[-1] == {"slot": None, "where": "on the ground"}  # every mat too far: lies down where they are
+
+
+def test_the_first_in_line_still_on_the_way_keeps_the_freed_stand(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    for k in (1, 2, 3):
+        _on_slot(sim, f"s{k}", f"well#stand-{k}")
+    walker = sim.add_citizen(make_spec("walker", at=(0.0, 150.0)))
+    WorldApi(sim, walker.id).walk_to_place("the well")
+    assert _slot(sim, walker).id == "well#queue-1"
+    idle = _on_slot(sim, "idle", "well#queue-2", waits_for="well")
+    WorldApi(sim, "s1").walk_to_place("the main gate")
+    sim.step()
+    assert walker.action is not None and walker.action.kind == "walk_to"  # still on the way...
+    assert _slot(sim, idle).id == "well#queue-2"  # ...so the one behind them doesn't take the stand

@@ -660,24 +660,27 @@ def _come_out(core: SimCore, citizen: Citizen, home: Structure) -> None:
 
 
 def _move_queues(core: SimCore) -> None:
-    """Lines move up in order: the first waiting their turn, standing in line, steps to a freed stand of the owner,
-    the next ones each to the free queue slot nearest the front ahead of them."""
+    """Lines move up in order: the first in line steps to a freed stand of the owner, the others each to the free
+    queue slot nearest the front that is ahead of them and behind everyone before them (busy or still on the way)."""
     state = slot_state(core)
     for owner in sorted({claimed.waits_for for claimed in state.claims.values() if claimed.waits_for is not None}):
         queue = _queue(core, owner)
         stands = [slot for slot in layout(core).owners.get(owner, ()) if slot.kind == "stand"]
+        floor, first = 0, True
         for rank, citizen_id in _line(core, owner, but=""):
             citizen = core.state.citizens[citizen_id]
-            if is_moving(citizen) or citizen.id in core.strides:  # not there yet, or only just arrived
-                continue
-            spots = _taken(core, citizen_id)
-            ahead = [slot for slot in queue[:rank] if _clear(core, slot.position, spots)]
-            stand = nearest_free(core, citizen, stands, STEP_MAX_M)
-            target = stand if stand is not None else (ahead[0] if ahead else None)
-            if target is None or not step_to(core, citizen, target.position):
-                continue
-            claim(core, citizen, target, target.position, waits_for=None if target is stand else owner)
-            citizen.heading_deg = target.heading_deg
+            if not is_moving(citizen):  # there, not still on the way
+                spots = _taken(core, citizen_id)
+                stand = nearest_free(core, citizen, stands, STEP_MAX_M) if first else None
+                ahead = [slot for slot in queue[floor:rank] if _clear(core, slot.position, spots)]
+                target = stand if stand is not None else (ahead[0] if ahead else None)
+                if target is not None and step_to(core, citizen, target.position):
+                    claim(core, citizen, target, target.position, waits_for=None if target is stand else owner)
+                    citizen.heading_deg = target.heading_deg
+                    if target is stand:
+                        continue  # out of the line: the next one is first now
+            first = False
+            floor = _rank(queue, state.claims[citizen_id]) + 1
 
 
 def _still_held(core: SimCore, citizen: Citizen, claimed: Claim, slot: Slot | None) -> bool:
