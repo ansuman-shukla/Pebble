@@ -440,12 +440,13 @@ thief.
    nothing jumps, slides or cuts a corner. What a body walks is fact; the plan ahead is drawn only when a tick comes
    late. A body first seen (a snapshot) is drawn the same way, from where its tick began; a page opened mid-tick
    draws its first tick late, so its walkers walk the rest of that path before the next and stay up to one more tick
-   behind until they next stand still. Trade-offs (D100): labels, speech and events lead the body by up to a tick;
-   Phase B players will meet NPCs where the sim placed them a tick ago, so player-NPC contact must be judged on the
-   sim's positions, not the drawn ones. (Audit F1: the route was computed only after the tick's step, so 46 % of
-   moves were never drawn as walking and ~500 teleports a day of 30-83 m happened. The fix-now PR `walker-motion`
-   (D100) does this for citizens, 1-tick walks and stalks, paces legs from the drawn speed and caps playback; World
-   v1 extends it to animals (which already glide one tick behind) and `gait`, and to the time-lapse rules below.)
+   behind until they next stand still. Trade-offs (D100): speech bubbles, events and the People panel lead the body
+   by up to a tick (its label and pose keep the held activity, item 5); Phase B players will meet NPCs where the
+   sim placed them a tick ago, so player-NPC contact must be judged on the sim's positions, not the drawn ones.
+   (Audit F1: the route was computed only after the tick's step, so 46 % of moves were never drawn as walking and
+   ~500 teleports a day of 30-83 m happened. The fix-now PR `walker-motion` (D100) does this for citizens, 1-tick
+   walks and stalks, paces legs from the drawn speed and caps playback; World v1 extends it to animals (which
+   already glide one tick behind) and `gait`, and to the time-lapse rules below.)
 2. **Time-lapse rule:** every clip and procedural motion (gaits, work, transitions, prop clips, smoke, doors, tree
    fall) plays at natural speed × `visualRate = min(rate, 10)`. Gait choice comes from game speed, never drawn
    speed, so ×1 and ×10 are stride-locked (no skating). Wind sway uses `min(rate, 3)`.
