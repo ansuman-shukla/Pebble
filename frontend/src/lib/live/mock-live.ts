@@ -23,6 +23,7 @@ import {
   tickMs,
 } from './live-contract';
 import { MockWild } from './mock-wild';
+import type { FedBody } from './motion';
 import type { RoutePoint, Site, WorldView } from '@/lib/client/types.gen';
 import { CITIZEN_LOOKS } from '@/lib/world/citizen-looks';
 import {
@@ -494,6 +495,8 @@ export class MockLiveServer {
   private pending: LiveEventMessage[] = [];
   /** Body words a test gave someone (`feel`); everyone else feels fine. */
   private feelings = new Map<string, string[]>();
+  /** What a test made someone do (`perform`), over their plan. */
+  private performing = new Map<string, Partial<LiveCitizen> & FedBody>();
   /** Connections so far (tests read it to see a reconnect). */
   connects = 0;
   /** Like a backend without a run (tests): every connection is accepted, then closed with 4404. */
@@ -575,6 +578,26 @@ export class MockLiveServer {
     for (const socket of this.sockets) socket.deliver(frame);
   }
 
+  /**
+   * Someone does `doing` (tests and close-ups: any activity, motion, posture, seat heading; `null` lets them go back
+   * to their plan): standing where they are, or, doing something on the move (walking, running, hunting), walking on
+   * along their plan drawn that way. A snapshot carries it at once.
+   */
+  perform(actor: string, doing: (Partial<LiveCitizen> & FedBody) | null) {
+    if (doing) this.performing.set(actor, doing);
+    else this.performing.delete(actor);
+    const frame = this.frame('snapshot');
+    for (const socket of this.sockets) socket.deliver(frame);
+  }
+
+  /** An event of any type goes out right now (tests: a gesture, a blow), with anything queued. */
+  sendNow(type: string, actor: string, payload: Record<string, unknown>) {
+    this.queueEvent(type, actor, payload);
+    const events = this.pending.splice(0);
+    for (const socket of this.sockets)
+      events.forEach((event) => socket.deliver(event));
+  }
+
   /** Queues an event of any type for the next tick, like the engine's own (tests: a death, a sale); `extra` adds
    * fields of the line registry (`line`, `importance`, `position`). */
   queueEvent(
@@ -623,6 +646,7 @@ export class MockLiveServer {
     this.states = this.freshStates();
     this.wild = new MockWild(this.world);
     this.feelings.clear();
+    this.performing.clear();
     this.dropConnections(LIVE_CLOSE.resync);
   }
 
@@ -657,7 +681,8 @@ export class MockLiveServer {
   }
 
   private advance(state: PersonState, night: boolean) {
-    if (night) return;
+    const performed = this.performing.get(state.person.id)?.activity;
+    if (night || (performed && !MOVING.has(performed))) return;
     const { plan } = state.person;
     const step = plan[state.step];
     if ('walk' in step) {
@@ -782,6 +807,7 @@ export class MockLiveServer {
         activity,
         role: look.role,
         region: look.region,
+        ...this.performing.get(person.id),
       };
     });
   }
@@ -810,6 +836,13 @@ export class MockLiveServer {
     }));
   }
 }
+
+/** Doings on the move: someone performing one walks on along their plan. */
+const MOVING: ReadonlySet<Activity> = new Set([
+  'walking',
+  'running',
+  'hunting',
+]);
 
 const stepTicks = (step: Step) => ('walk' in step ? 0 : step.ticks);
 
