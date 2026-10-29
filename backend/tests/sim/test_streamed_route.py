@@ -136,6 +136,43 @@ def test_a_walker_who_collapses_mid_walk_is_streamed_only_up_to_where_they_fell(
     assert _seconds(moved.route)[-1] == pytest.approx(SECONDS_PER_TICK)  # nothing of the walk's plan beyond
 
 
+def test_a_hair_of_a_move_is_one_spot(new_sim: Callable[..., Simulation]) -> None:
+    """A walk that stopped a few nanometres short of a corner (float rounding) goes on from there: no leg of a few
+    nanometres (drawn as a sprint for a frame), and a walk that ends with such a hair is drawn standing."""
+    sim = without_animals(new_sim())
+    citizen = sim.add_citizen(make_spec(home=None))
+    put_in_the_wild(sim, citizen.id, wild_cell(sim))
+    radius = sim.world.radius_m
+    WorldApi(sim, citizen.id).walk_towards("north", "a long walk")
+    walk = citizen.action
+    assert walk is not None
+    corner = step_towards(citizen.position, 0.0, 30.0, radius)
+    end = step_towards(corner, 90.0, 200.0, radius)
+    walk.route, walk.leg, walk.along_m = Route(points=(citizen.position, corner, end), costs=(1.0, 1.0)), 0, 0.0
+    walk.along_m = sim.world.distance_m(citizen.position, corner) - 1e-9
+    sim.core.place_at(citizen, step_towards(corner, 180.0, 1e-9, radius))
+    before = citizen.position
+    sim.drain()
+    sim.step()
+    moved = _moved(sim, citizen.id)
+    assert moved is not None
+    _starts_where_they_stood(sim, moved, before)
+    assert all(
+        sim.world.distance_m(a.unit, b.unit) >= 0.001 for a, b in zip(moved.route, moved.route[1:], strict=False)
+    )
+    assert _speeds(sim, moved.route) == pytest.approx([FLAT_WALK_MPS] * (len(moved.route) - 1))
+    assert moved.speed_mps == pytest.approx(FLAT_WALK_MPS)
+    # the last hair of a walk
+    walk.route, walk.leg = Route(points=(citizen.position, corner), costs=(1.0,)), 0
+    walk.along_m = sim.world.distance_m(citizen.position, corner) - 1e-9
+    sim.core.place_at(citizen, step_towards(corner, 180.0, 1e-9, radius))
+    sim.drain()
+    sim.step()
+    moved = _moved(sim, citizen.id)
+    assert citizen.action is None and citizen.position == corner
+    assert moved is not None and moved.route == [] and moved.speed_mps == 0.0
+
+
 def test_nobody_standing_still_is_streamed(new_sim: Callable[..., Simulation]) -> None:
     sim = new_sim()
     citizen = sim.add_citizen(make_spec())

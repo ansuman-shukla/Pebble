@@ -153,8 +153,9 @@ def _draw(
     for citizen in sim.state.citizens.values():
         gaps = [sim.world.distance_m(drawn[citizen.id], before[citizen.id])]
         moved = summary.moved.get(citizen.id)
-        if moved is None:
+        if moved is None or not moved.route:  # (a move of less than a millimetre is drawn standing)
             drawn[citizen.id] = citizen.position
+            gaps.append(sim.world.distance_m(before[citizen.id], citizen.position))
         else:
             out.moves[moving[citizen.id]] += 1
             gaps.append(sim.world.distance_m(moved.route[0].unit, before[citizen.id]))

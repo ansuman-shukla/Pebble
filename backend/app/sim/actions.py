@@ -70,6 +70,7 @@ from app.world_api.models import (
 WALK_M_PER_TICK = 5000 / 60  # 5 km/h on flat ground
 EXHAUSTED_PACE = 0.5
 ARRIVE_M = 2.0  # close enough to a person
+SAME_SPOT_M = 0.001  # spots on a streamed route closer than this are one spot
 FOLLOW_REPLAN_M = 3.0
 GATHER_MINUTES = 20
 GATHER_YIELD = (3, 6)
@@ -771,14 +772,16 @@ def _walk_stride(core: SimCore, citizen: Citizen, walk: ActionState, step: WalkP
     on = walk_along(walk.route, step.leg, step.along_m, WALK_AHEAD_TICKS * budget, core.world.radius_m)
     ahead = [(unit, SECONDS_PER_TICK + cost * seconds) for unit, cost in on.corners]
     ahead.append((on.position, SECONDS_PER_TICK + on.cost_spent * seconds))
-    return Stride(walk.number, _distinct(walked), _distinct(ahead, after=step.position))
+    return Stride(walk.number, _distinct(core, walked), _distinct(core, ahead, after=step.position))
 
 
-def _distinct(points: list[TimedPoint], after: Vec3 | None = None) -> tuple[TimedPoint, ...]:
-    """The points without repeats of the spot just before (every leg drawn has a direction)."""
+def _distinct(core: SimCore, points: list[TimedPoint], after: Vec3 | None = None) -> tuple[TimedPoint, ...]:
+    """The points without repeats of the spot just before (every leg drawn has a direction): a walk that stopped a
+    hair short of a corner (float rounding) goes on from there, not on a leg of a few nanometres."""
     kept: list[TimedPoint] = []
     for point in points:
-        if point[0] != (kept[-1][0] if kept else after):
+        last = kept[-1][0] if kept else after
+        if last is None or core.distance_m(point[0], last) >= SAME_SPOT_M:
             kept.append(point)
     return tuple(kept)
 
@@ -790,6 +793,8 @@ def streamed_route(core: SimCore, citizen: Citizen) -> tuple[list[RoutePoint], f
     stride = core.strides.get(citizen.id)
     if stride is None:
         raise ValueError(f"{citizen.id} moved without a stride")
+    if len(stride.walked) < 2:  # moved less than a millimetre: drawn standing
+        return [], 0.0
     going_on = citizen.action is not None and citizen.action.number == stride.action
     world, cell = core.world, citizen.cell
     points: list[RoutePoint] = []
