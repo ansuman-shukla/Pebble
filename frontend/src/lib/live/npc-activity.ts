@@ -19,16 +19,6 @@ export type NpcClip =
   | 'Arms folded'
   | 'Fixing';
 
-/** Clips play sped up with the clock up to this: beyond it a walk cycle would last only a few frames. */
-const LAPSE_MAX = 10;
-
-/**
- * How fast clips play for the clock (game seconds per real second, 0 paused): like a film sped up, so a walk at ×10
- * covers ten times the ground with ten times the steps (feet stay planted); beyond ×LAPSE_MAX legs keep that cadence.
- */
-export const clipLapse = (rate: number) =>
-  Math.min(Math.max(rate, 0), LAPSE_MAX);
-
 /** Every NPC loads these up front; activity clips are fetched (once per page) when first needed. */
 export const BASE_CLIPS: readonly NpcClip[] = ['Idle', 'Walk'];
 

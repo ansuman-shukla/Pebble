@@ -33,7 +33,6 @@ import type { ShownDoings } from '@/lib/live/shown-doings';
 import { groundSpeed, headingAt, walking } from '@/lib/live/walk-path';
 import {
   BASE_CLIPS,
-  clipLapse,
   type NpcClip,
   type NpcLook,
   npcLook,
@@ -50,6 +49,7 @@ import {
   restOf,
   shapeOf,
 } from '@/lib/world/rest-posture';
+import { clockRate, visualRate } from '@/lib/world/visual-rate';
 import { groundUnder, type WalkTown } from '@/lib/world/walk-charts';
 import type { CharacterAnimation } from '@/vendor/polyfork/clips.mjs';
 import { createCharacter } from '@/vendor/polyfork/humanoid.mjs';
@@ -63,7 +63,7 @@ import { createCharacter } from '@/vendor/polyfork/humanoid.mjs';
  * one faces the way it walks (its heading when standing), turns smoothly to its heading and stands on the rendered
  * ground (the town's plateau on its disc, else the terrain); sitters and sleepers rest on it, tilted to the ground
  * under them (`rest-posture.ts`). The gait is paced to the drawn ground speed and every clip plays sped up with the
- * clock (a fast-forwarded film, `clipLapse`), up to ×10: past that legs would blur, so they keep that cadence and
+ * clock (a fast-forwarded film, `visualRate`), up to ×10: past that legs would blur, so they keep that cadence and
  * the body glides. Models load only within NEAR metres of the camera (and hide again past it); clips load per
  * activity as first needed.
  */
@@ -236,7 +236,7 @@ function NpcModel({
       groundSpeed(track.path),
       viewRef.current,
     );
-    animation.update(Math.min(delta, MAX_FRAME) * clipLapse(rate));
+    animation.update(Math.min(delta, MAX_FRAME) * visualRate(rate));
     layToRest(resting.current, shapeOf(pose.pose, playing.current, actions), {
       character,
       rest,
@@ -512,7 +512,7 @@ export function GlobeNpcs({
           town={town}
           labels={labels}
           doings={doings}
-          rate={paused ? 0 : speed}
+          rate={clockRate(speed, paused)}
           replay={replay}
           peopleRef={peopleRef}
           views={views}
