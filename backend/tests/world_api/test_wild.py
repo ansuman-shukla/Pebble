@@ -83,6 +83,8 @@ def test_a_missed_animal_bolts_and_a_boar_can_turn_on_you(
     assert boar.alive and boar.activity == "running"
     hurt = 100.0 - sim.citizen("hunter").body.health
     assert SPECIES["boar"].hurts[0] <= hurt <= SPECIES["boar"].hurts[1]
+    injured = [e for e in sim.drain() if e.type == "injured"]
+    assert [(e.actor_id, e.payload.model_dump()["attacker"]) for e in injured] == [("hunter", boar.id)]
 
 
 def test_hunting_odds_follow_skill_tool_strength_and_company(new_sim: Callable[..., Simulation]) -> None:
@@ -136,6 +138,20 @@ def test_attacking_a_wolf_drives_it_off_and_attacking_a_person_hurts_them(
     assert other.body.health < 100.0
     hurt = [e.payload.model_dump() for e in sim.drain() if e.type == "injured"]
     assert [(h["cause"], h["attacker"]) for h in hurt] == [("violence", "hunter")]
+
+
+def test_a_struck_wolf_can_bite_back(new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch) -> None:
+    sim, api = _hunter(new_sim)
+    wolf = add_animal(sim, "wolf", _beside(sim, 2.0), target="hunter")
+    monkeypatch.setattr(wild, "FIGHT_BACK", 1.0)
+    result = run_until_done(sim, api.attack("the wolf"), 5)
+    assert result.text == "You strike a wolf; it bites back and runs off."
+    bitten = [e for e in sim.drain() if e.type == "injured" and e.actor_id == "hunter"]
+    assert [(e.payload.model_dump()["cause"], e.payload.model_dump()["attacker"]) for e in bitten] == [
+        ("animal attack", wolf.id)
+    ]
+    low, high = SPECIES["wolf"].bite
+    assert low <= 100.0 - sim.citizen("hunter").body.health <= high
 
 
 # --- fleeing ---
