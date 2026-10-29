@@ -16,7 +16,7 @@ import {
   SPEECH_MS,
   speedWords,
 } from '../../src/lib/live/live-state';
-import { MockLiveServer } from '../../src/lib/live/mock-live';
+import { MockLiveServer, mockMotion } from '../../src/lib/live/mock-live';
 import { activityWords, npcLook } from '../../src/lib/live/npc-activity';
 import { advance, citizenPath, pointAt } from '../../src/lib/live/walk-path';
 import { CITIZEN_LOOKS } from '../../src/lib/world/citizen-looks';
@@ -403,4 +403,20 @@ test('the mock feed carries the spectator fields: motion, why, needs, purse, ran
     expect(['grazing', 'wandering', 'prowling']).toContain(animal.goal); // what it does once there
   }
   expect(animals.every((animal) => animal.gait === 'walk')).toBe(true);
+});
+
+test('in the mock feed, the dead and sleepers lie like the backend says, whatever their step is about', () => {
+  expect(mockMotion('dead', 'tending the rice paddies', false)).toBe('lie');
+  expect(mockMotion('sleeping', 'weaving at the loom', false)).toBe('lie');
+  expect(mockMotion('working', 'tending the rice paddies', false)).toBe('farm');
+  expect(mockMotion('dead', '', true)).toBe('lie');
+  expect(mockMotion('working', '', true)).toBe('walk');
+  const server = new MockLiveServer(createMockWorld());
+  server.skip(14 * 60 + 5); // 22:05: everyone is asleep
+  for (const citizen of server.entities().citizens)
+    expect([citizen.activity, citizen.motion, citizen.posture]).toEqual([
+      'sleeping',
+      'lie',
+      'lying',
+    ]);
 });

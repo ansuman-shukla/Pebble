@@ -78,7 +78,8 @@ type Motion = CitizenEntity['motion'];
 type Posture = CitizenEntity['posture'];
 
 /** The backend's motion table (`app/sim/motion.py`) for the mock's doings; work and gathering go by their label. */
-const MOTIONS: Record<Exclude<Activity, 'walking' | 'dead'>, Motion> = {
+const MOTIONS: Record<Exclude<Activity, 'walking'>, Motion> = {
+  dead: 'lie',
   idle: 'idle',
   running: 'run',
   sleeping: 'lie',
@@ -884,11 +885,7 @@ export class MockLiveServer {
     | 'titles'
   > {
     const step = state.person.plan[state.step];
-    const motion: Motion = moved
-      ? 'walk'
-      : activity === 'walking' || activity === 'dead'
-        ? 'idle'
-        : (LABEL_MOTIONS[labelOf(step)] ?? MOTIONS[activity]);
+    const motion = mockMotion(activity, labelOf(step), moved);
     const [goal, driver] = GOALS[activity] ?? ['', null];
     const target =
       'walk' in step && activity === 'walking'
@@ -945,6 +942,18 @@ export class MockLiveServer {
 const stepTicks = (step: Step) => ('walk' in step ? 0 : step.ticks);
 
 const labelOf = (step: Step) => ('label' in step && step.label) || '';
+
+/** Like the backend: the dead and sleepers lie whatever their step is about; a mover walks; else by label or doing. */
+export function mockMotion(
+  activity: Activity,
+  label: string,
+  moved: boolean,
+): Motion {
+  if (activity !== 'walking' && MOTIONS[activity] === 'lie') return 'lie';
+  if (moved) return 'walk';
+  if (activity === 'walking') return 'idle';
+  return LABEL_MOTIONS[label] ?? MOTIONS[activity];
+}
 
 /** Where someone stands, as the feed says it. */
 function placeOf(state: PersonState): Position {
