@@ -3336,6 +3336,17 @@
           "height_m": {
             "type": "number",
             "title": "Height M"
+          },
+          "t_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "T S"
           }
         },
         "additionalProperties": false,

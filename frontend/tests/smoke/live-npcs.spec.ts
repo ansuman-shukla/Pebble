@@ -530,13 +530,14 @@ test('in real time a walker walks its streamed route at its own pace, facing the
   const errors: string[] = [];
   const world = await openLive(page, errors);
   const tick = async () => Number(await world.getAttribute('data-live-tick'));
-  // a fresh run at ×60 until Kenji sets off for the gate (82 m), then real time: a tick a real minute
+  // a fresh run at ×60 until the tick Kenji walks to the gate (82 m: there within the tick), then real time: a tick
+  // a real minute, his walk drawn over it
   const kenji = await page.evaluate(async () => {
     const mock = (globalThis as unknown as MockLiveWindow).__pebbleMockLive;
     mock.restartRun();
     const find = () =>
       mock.entities().citizens.find((citizen) => citizen.id === 'kenji')!;
-    while (find().activity !== 'walking')
+    while (find().route.length < 2)
       await new Promise((done) => setTimeout(done, 10));
     mock.setClock({ speed: 1 });
     return { tick: mock.entities().tick, ...find() };
