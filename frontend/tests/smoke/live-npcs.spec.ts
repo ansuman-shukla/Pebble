@@ -60,6 +60,8 @@ interface Npc {
   feet: Vector3[];
   /** The way the body faces (a unit vector). */
   facing: Vector3;
+  /** Seconds of clip time its animation has played. */
+  clipClock: number;
   /** How the body is posed: standing, sitting or lying. */
   posture: string;
 }
@@ -103,6 +105,7 @@ async function npcs(page: Page): Promise<Npc[]> {
     loaded: data.npcLoaded === 'true',
     feet: data.npcFeet ? footPair(data.npcFeet) : [],
     facing: new Vector3(...(data.npcFacing ?? '0,0,0').split(',').map(Number)),
+    clipClock: Number(data.npcClipClock),
     posture: data.npcPosture ?? '',
   }));
 }
@@ -515,6 +518,56 @@ test('a walk that ends in a rest within the tick is drawn walking all the way th
   ).toEqual(onTheWay.map(() => 'walking standing'));
   const last = samples.at(-1)!;
   expect([last.activity, last.posture]).toEqual(['resting', 'sitting']);
+  expect(errors).toEqual([]);
+});
+
+test('clips play sped up with the clock like a film, up to ×10, and freeze when paused', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  await openLive(page, errors, '?mockLive=1', 1);
+  await expect
+    .poll(async () => (await npcs(page)).filter((npc) => npc.loaded).length, {
+      timeout: 30_000,
+    })
+    .toBeGreaterThanOrEqual(6);
+  const setClock = (change: { speed?: number; paused?: boolean }) =>
+    page.evaluate(
+      (clock) =>
+        (globalThis as unknown as MockLiveWindow).__pebbleMockLive.setClock(
+          clock,
+        ),
+      change,
+    );
+  /** Clip seconds played per real second (the median over the loaded citizens). */
+  const lapse = async () => {
+    const clocks = async () =>
+      new Map(
+        (await npcs(page))
+          .filter((npc) => npc.loaded && npc.clip)
+          .map((npc) => [npc.id, npc.clipClock]),
+      );
+    await page.waitForTimeout(300); // the new clock reaches the page
+    const before = await clocks();
+    const started = Date.now();
+    await page.waitForTimeout(2_000);
+    const after = await clocks();
+    const seconds = (Date.now() - started) / 1000;
+    const rates = [...after]
+      .filter(([id]) => before.has(id))
+      .map(([id, clock]) => (clock - before.get(id)!) / seconds)
+      .sort((a, b) => a - b);
+    return rates[Math.floor(rates.length / 2)];
+  };
+  expect(await lapse()).toBeCloseTo(1, 0);
+  await setClock({ speed: 10 });
+  expect(await lapse()).toBeGreaterThan(8);
+  await setClock({ speed: 60 });
+  const capped = await lapse();
+  expect(capped).toBeGreaterThan(8);
+  expect(capped).toBeLessThan(11);
+  await setClock({ paused: true });
+  expect(await lapse()).toBe(0);
   expect(errors).toEqual([]);
 });
 

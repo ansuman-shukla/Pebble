@@ -106,6 +106,8 @@ interface NpcView {
   near: boolean;
   /** Left then right foot in the model's own frame (x, y, z each), while it is animated. */
   feet: number[];
+  /** Seconds of clip time its animation has played (clips run sped up with the clock). */
+  clipClock: number;
 }
 
 export type NpcViews = Map<string, NpcView>;
@@ -245,6 +247,7 @@ function NpcModel({
       posed: posed.current,
       ground,
     });
+    viewRef.current.clipClock = animation.mixer.time;
     viewRef.current.feet = feet.flatMap((bone) =>
       character.worldToLocal(bone.getWorldPosition(foot)).toArray(),
     );
@@ -324,6 +327,7 @@ function newView(citizen: LiveCitizen): NpcView {
     loaded: false,
     near: false,
     feet: [],
+    clipClock: 0,
   };
 }
 
