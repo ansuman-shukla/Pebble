@@ -85,7 +85,7 @@ vec4 groundLook(int layer, vec3 p, vec3 tint, float fw, vec4 g) {
     float tufts = gFine(p + 11.0, 1.7, fw);
     float blades = smoothstep(0.25, 0.75, gFine(p, 23.0, fw));
     c *= 0.72 + 0.36 * tufts + 0.24 * blades;
-    relief = tufts * 0.5 + blades * 0.5;
+    relief = tufts * 0.8 + blades * 0.2;
   } else if (layer == 1) {
     // forest floor: leaf litter over dark soil, moss in patches, twigs and needles near by
     c = mix(forest_floor_litter, forest_floor_moss, smoothstep(0.55, 0.7, g.y * 0.7 + g.z * 0.3));
