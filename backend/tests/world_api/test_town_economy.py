@@ -4,10 +4,10 @@ eat from it, role tasks need the skill and the place, and every change replays f
 from collections.abc import Callable
 
 from app.observability.replay import ReplayEvent, from_snapshot, replay
-from app.sim.actions import FARM_GROWTH, FIELD_ID
 from app.sim.bodies import ACTIVE_RATE, HUNGER_PER_HOUR
 from app.sim.simulation import Simulation
 from app.sim.snapshot import take_snapshot
+from app.sim.work import FARM_GROWTH, FIELD_ID
 from app.world_api.facade import WorldApi, run_until_done
 from tests.sim_helpers import make_spec
 

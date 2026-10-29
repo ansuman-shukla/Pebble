@@ -20,7 +20,7 @@ from app.observability.events import (
     Perceived,
     TickSummary,
 )
-from app.sim import actions, ecology
+from app.sim import actions, ecology, movement, resting
 from app.sim.acting import refuse
 from app.sim.bodies import COLLAPSE_WAKE_ENERGY, HOT_BIOMES, Crossing, update_body
 from app.sim.citizens import CitizenSpec
@@ -39,12 +39,8 @@ from app.world_api.models import (
     Action,
     ActionResult,
     CheckSelf,
-    Drop,
-    Give,
     LookAround,
     Perception,
-    PickUp,
-    Say,
     SelfView,
 )
 
@@ -267,15 +263,7 @@ class Simulation:
                 return refuse(self.core, citizen, action.action, "You are too exhausted.")
             if sleep is not None:
                 self.core.end_action(citizen, "interrupted", "You get up.")
-        if isinstance(action, Say):
-            return actions.say(self.core, citizen, action)
-        if isinstance(action, PickUp):
-            return actions.pick_up(self.core, citizen, action)
-        if isinstance(action, Drop):
-            return actions.drop(self.core, citizen, action)
-        if isinstance(action, Give):
-            return actions.give(self.core, citizen, action)
-        raise ValueError(f"no instant handler for {action.action}")
+        return actions.instant(self.core, citizen, action)
 
     def start(self, citizen_id: str, action: Action) -> int:
         """Start a durative action; returns its number for `result()`."""
@@ -341,7 +329,7 @@ class Simulation:
         moved: dict[str, Moved] = {}
         for citizen in core.citizens():
             if citizen.id in before and citizen.position != before[citizen.id]:
-                route, speed_mps = actions.streamed_route(core, citizen)
+                route, speed_mps = movement.streamed_route(core, citizen)
                 moved[citizen.id] = Moved(
                     position=citizen.position,
                     height_m=citizen.height_m,
@@ -384,7 +372,7 @@ class Simulation:
             citizen.in_view, citizen.animals_in_view, citizen.threats = set(), set(), set()
             return []
         if change.collapsed:
-            actions.collapse(core, citizen)
+            resting.collapse(core, citizen)
         return [crossing for crossing in change.crossings if crossing.worse]
 
     def _visibility(self, living: list[Citizen]) -> dict[str, set[str]]:
