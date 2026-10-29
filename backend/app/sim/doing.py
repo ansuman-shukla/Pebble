@@ -97,7 +97,7 @@ def finish_gather(core: SimCore, citizen: Citizen, action: ActionState) -> None:
     cell = citizen.cell
     before = int(core.state.resources[cell, column])
     room = core.room_for(citizen, resource)
-    count = min(core.state.rngs["actions"].randint(*GATHER_YIELD), before, room)
+    count = min(core.state.rng("doing.gather").randint(*GATHER_YIELD), before, room)
     if count == 0:
         core.end_action(
             citizen, "failed", "You can't carry any more." if before else "You find nothing left to gather."
@@ -171,7 +171,7 @@ def _eat(core: SimCore, citizen: Citizen, action: ActionState, pieces: int) -> s
     words = amount_words(eaten, kind)
     if cooked:
         return f"You roast {words} over the fire and eat it.{full}"
-    rng = core.state.rngs["actions"]
+    rng = core.state.rng("doing.raw_food")
     if kind.raw and rng.random() < RAW_SICK_CHANCE:
         low, high = RAW_SICKNESS
         core.injure(

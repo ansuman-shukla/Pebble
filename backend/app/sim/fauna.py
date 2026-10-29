@@ -13,7 +13,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from app.core.rng import Rng
-from app.sim.state import Animal, AnimalGroup
+from app.sim.state import Animal, AnimalGroup, WorldState
 from app.sim.vec import Vec3, step_towards
 from app.sim.world import SimWorld
 from app.world.biomes import BIOME_IDS
@@ -227,6 +227,14 @@ def _cells_between(world: SimWorld, cells: IntArray, centre: Vec3, low_m: float,
     distances = np.arccos(np.clip(world.grid.positions[cells] @ np.array(centre), -1, 1)) * world.radius_m
     kept: IntArray = cells[(distances >= low_m) & (distances <= high_m)]
     return kept
+
+
+def populate(world: SimWorld, state: WorldState) -> None:
+    """A new run's animals (see `place_groups`)."""
+    groups, animals = place_groups(world, state.rng("fauna.place"))
+    state.groups = {group.id: group for group in groups}
+    state.animals = {animal.id: animal for animal in animals}
+    state.next_animal = len(animals) + 1
 
 
 def place_groups(world: SimWorld, rng: Rng) -> tuple[list[AnimalGroup], list[Animal]]:

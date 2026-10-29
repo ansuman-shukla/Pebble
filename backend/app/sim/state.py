@@ -22,7 +22,6 @@ AgeGroup = Literal["child", "teen", "young_adult", "middle_aged", "elder"]
 KnowledgeLevel = Literal["visited", "rough"]
 Region = Literal["town", "band_a", "band_b"]
 JsonScalar = str | int | float | bool | None
-RNG_STREAMS = ("ecology", "actions", "animals")
 AnimalActivity = Literal["idle", "grazing", "walking", "running", "hunting", "sleeping", "dead"]
 FireKind = Literal["pit", "basket", "campfire"]
 
@@ -205,7 +204,7 @@ class WorldState:
     ground: dict[str, GroundStack]
     stores: dict[str, dict[str, int]]  # storehouse or field id -> items
     resources: NDArray[np.uint8]  # (cells, len(RESOURCES)) wild plant counters
-    rngs: dict[str, Rng]
+    rngs: dict[str, Rng]  # the random streams drawn from so far, by name (see `rng`)
     regrow: dict[str, int] = field(default_factory=dict)  # "cell:resource" -> tick it grows one more
     notes: dict[str, dict[str, JsonValue]] = field(default_factory=dict)  # scripted brains' working memory
     animals: dict[str, Animal] = field(default_factory=dict)
@@ -214,6 +213,14 @@ class WorldState:
     next_animal: int = 1
     next_fire: int = 1
     systems: dict[str, object] = field(default_factory=dict)  # each registered system's state, by system name
+
+    def rng(self, stream: str) -> Rng:
+        """The random stream `<system>.<purpose>` (10-world-v1 §6.5): every roll draws from its own stream, so a new
+        roll never shifts the numbers another one draws. Seeded from the run's seed and the name on first use."""
+        found = self.rngs.get(stream)
+        if found is None:
+            found = self.rngs[stream] = Rng.for_subsystem(self.seed, stream)
+        return found
 
 
 @dataclass(frozen=True)

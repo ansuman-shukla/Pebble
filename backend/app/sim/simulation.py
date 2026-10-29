@@ -8,7 +8,6 @@ and inputs give the same state.
 
 import numpy as np
 
-from app.core.rng import Rng
 from app.observability.events import (
     CitizenSpawned,
     Died,
@@ -24,12 +23,12 @@ from app.sim.acting import refuse
 from app.sim.bodies import COLLAPSE_WAKE_ENERGY, HOT_BIOMES, Crossing, update_body
 from app.sim.citizens import CitizenSpec
 from app.sim.core import GiftPolicy, SimCore
-from app.sim.fauna import place_groups
+from app.sim.fauna import populate
 from app.sim.fire import hearth_fires
-from app.sim.items import ITEMS, RESOURCES
+from app.sim.items import ITEMS
 from app.sim.navigation import Planner
 from app.sim.perception import animal_sightings, perceive, self_view
-from app.sim.state import RNG_STREAMS, Animal, Citizen, GroundStack, PlaceKnowledge, WorldState, age_group
+from app.sim.state import Animal, Citizen, GroundStack, PlaceKnowledge, WorldState, age_group
 from app.sim.vec import Vec3, step_towards
 from app.sim.world import SimWorld, site_unit
 from app.world_api.models import (
@@ -43,47 +42,34 @@ from app.world_api.models import (
     SelfView,
 )
 
-INITIAL_RESOURCE_SHARE = 0.5  # cells start between half and fully stocked
 WOODPILE = 12  # pieces of wood by each camp's fire pit at the start
 WOODPILE_OFFSET_M = 3.2  # beyond the seats round the pit (2 m), between two of them
 WOODPILE_BEARING = 112.5
 
 
 def initial_state(world: SimWorld, seed: int, registry: systems.Registry = systems.REGISTRY) -> WorldState:
-    rngs = {name: Rng.for_subsystem(seed, name) for name in RNG_STREAMS}
-    resources = np.zeros_like(world.resource_caps)
-    stocked = np.flatnonzero(world.resource_caps.any(axis=1))
-    ecology_rng = rngs["ecology"]
-    for cell in stocked.tolist():
-        for column in range(len(RESOURCES)):
-            cap = int(world.resource_caps[cell, column])
-            if cap:
-                share = INITIAL_RESOURCE_SHARE + (1 - INITIAL_RESOURCE_SHARE) * ecology_rng.random()
-                resources[cell, column] = round(cap * share)
-    groups, animals = place_groups(world, rngs["animals"])
-    fires = hearth_fires(world)
-    ground: dict[str, GroundStack] = {}
-    for fire_id in sorted(fires):  # each camp keeps a woodpile by its fire pit
-        if fires[fire_id].kind == "pit":
-            spot = step_towards(fires[fire_id].position, WOODPILE_BEARING, WOODPILE_OFFSET_M, world.radius_m)
-            stack_id = f"stack-{len(ground) + 1}"
-            ground[stack_id] = GroundStack(stack_id, "wood", WOODPILE, spot, world.nearest_cell(spot))
-    return WorldState(
+    state = WorldState(
         tick=0,
         seed=seed,
         next_seq=1,
-        next_stack=len(ground) + 1,
+        next_stack=1,
         citizens={},
-        ground=ground,
+        ground={},
         stores={},
-        resources=resources,
-        rngs=rngs,
-        animals={animal.id: animal for animal in animals},
-        groups={group.id: group for group in groups},
-        fires=fires,
-        next_animal=len(animals) + 1,
+        resources=np.zeros_like(world.resource_caps),
+        rngs={},
+        fires=hearth_fires(world),
         systems={system.name: system.new(world) for system in registry.systems},
     )
+    ecology.stock_resources(world, state)
+    populate(world, state)
+    for fire_id in sorted(state.fires):  # each camp keeps a woodpile by its fire pit
+        if state.fires[fire_id].kind == "pit":
+            spot = step_towards(state.fires[fire_id].position, WOODPILE_BEARING, WOODPILE_OFFSET_M, world.radius_m)
+            stack_id = f"stack-{state.next_stack}"
+            state.ground[stack_id] = GroundStack(stack_id, "wood", WOODPILE, spot, world.nearest_cell(spot))
+            state.next_stack += 1
+    return state
 
 
 class Simulation:

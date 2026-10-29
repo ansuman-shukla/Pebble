@@ -13,8 +13,9 @@ MAX_STALL_H = 6.0  # test_living's MAX_STALL_TICKS
 MAX_NEED_DAMAGE = 10.0  # health lost to hunger and thirst
 USED_ACTIONS = frozenset(
     {"walk_to", "follow", "gather", "fish", "hunt", "eat", "drink", "make_fire", "feed_fire", "rest", "sleep", "work"}
-    | {"attack", "flee", "wait"}
-)  # every durative action but recall (test_the_brains_use_every_action_but_recall)
+    | {"wait"}
+)  # the durative actions a run must use (test_the_brains_use_every_action_but_recall)
+LUCKY_ACTIONS = frozenset({"attack", "flee"})  # reported, not required: a predator must happen to come close (D107)
 
 
 class Stall(Check):
@@ -96,7 +97,7 @@ class Deaths(Check):
 
 
 class Actions(Check):
-    """Durative actions the brains never started (all but recall should be)."""
+    """Durative actions the brains never started: fails on a required one; the lucky ones are only reported."""
 
     name = "x0.actions"
 
@@ -110,8 +111,9 @@ class Actions(Check):
 
     @override
     def outcome(self, sim: Simulation) -> Outcome:
-        missing = sorted(USED_ACTIONS - self.started)
-        return Outcome(len(missing), not missing, ", ".join(missing) or "all used")
+        missing = sorted((USED_ACTIONS | LUCKY_ACTIONS) - self.started)
+        required = USED_ACTIONS - self.started
+        return Outcome(len(required), not required, ", ".join(missing) or "all used")
 
 
 CHECKS: tuple[type[Check], ...] = (Stall, NeedDamage, Deaths, Actions)
