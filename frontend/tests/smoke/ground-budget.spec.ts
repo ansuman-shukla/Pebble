@@ -21,6 +21,13 @@ const FRAME_TIME = `new Promise((resolve) => {
   requestAnimationFrame(step);
 })`;
 
+/** The WebGL renderer's name (browser code as a string: the test TypeScript has no DOM types). */
+const RENDERER = `(() => {
+  const gl = document.createElement('canvas').getContext('webgl2');
+  const info = gl.getExtension('WEBGL_debug_renderer_info');
+  return info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+})()`;
+
 // uncapped frames, so the shader's cost shows in the frame time instead of hiding under vsync
 test.use({
   viewport: { width: 1920, height: 1080 },
@@ -39,6 +46,12 @@ test('the detailed ground costs at most 1.5 ms a frame more than the flat one', 
   page,
 }) => {
   test.setTimeout(240_000);
+  // a software renderer (headless Chrome off macOS) draws every frame on the CPU: its frame times say nothing
+  const renderer = await page.evaluate<string>(RENDERER);
+  test.skip(
+    /swiftshader|llvmpipe|software/i.test(renderer),
+    `no GPU (${renderer})`,
+  );
   const errors: string[] = [];
   const frameTime = () => page.evaluate<number>(FRAME_TIME);
   // alternate the two looks and keep each one's best run: other work on the machine only ever slows a run down
