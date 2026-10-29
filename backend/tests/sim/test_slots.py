@@ -6,11 +6,14 @@ from collections.abc import Callable
 
 from app.observability.events import TickSummary
 from app.sim.core import Stride
+from app.sim.doing import water_within_reach
 from app.sim.simulation import Simulation
 from app.sim.slots import (
     PERSONAL_M,
+    SLOTS,
     Slot,
     build_layout,
+    claim_of,
     crowded,
     held_slot,
     layout,
@@ -20,7 +23,9 @@ from app.sim.slots import (
     step_to,
     walkable,
 )
+from app.sim.snapshot import restore, state_hash, take_snapshot
 from app.sim.state import Citizen
+from app.sim.vec import bearing_deg
 from app.sim.work import WORK_BY_NAME
 from app.sim.world import SimWorld
 from app.world.town import load_town
@@ -75,6 +80,33 @@ def test_the_layout_keeps_personal_space_and_stands_on_walkable_ground(sim_world
     assert [slot.id for slot in lay.places["storehouses"]][:2] == ["store-2#door-1", "store-2#door-2"]  # granary
 
 
+def test_walkers_to_one_place_take_separate_stands_then_a_queue_in_reach(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    people = [sim.add_citizen(make_spec(f"p{k}", at=GATE)) for k in range(5)]
+    walks = [WorldApi(sim, p.id).walk_to_place("the well") for p in people]
+    for walk in walks:
+        assert run_until_done(sim, walk, 30).text == "You arrive at the well."
+    sim.step()
+    well = sim.world.structures["well"].centre
+    reach = sorted(round(sim.world.distance_m(p.position, well), 1) for p in people)
+    assert reach == [WELL_STAND_M] * 3 + [WELL_QUEUE_M] * 2
+    assert _apart(sim, people) >= PERSONAL_M
+    assert all(water_within_reach(sim.core, p) == ("fresh", "the well") for p in people)
+    assert crowded(sim.core) == []
+
+    stander = next(p for p in people if round(sim.world.distance_m(p.position, well), 1) == WELL_STAND_M)
+    queued = [p for p in people if round(sim.world.distance_m(p.position, well), 1) == WELL_QUEUE_M]
+    waiting = [WorldApi(sim, p.id).wait(30) for p in queued]
+    freed = held_slot(sim.core, stander)
+    WorldApi(sim, stander.id).walk_to_place("the main gate")
+    sim.step()
+    assert freed is not None and sum(held_slot(sim.core, p) == freed for p in queued) == 1  # one moves up...
+    mover = next(p for p in queued if held_slot(sim.core, p) == freed)
+    assert sim.world.distance_m(mover.position, freed.position) < 0.01
+    assert _summary(sim).moved[mover.id].route  # ...drawn walking there
+    assert all(w.result is None for w in waiting)  # still waiting, now at the well itself
+
+
 def test_rest_takes_a_free_bench_seat_nearby_else_the_ground(new_sim: Callable[..., Simulation]) -> None:
     sim = _sim(new_sim)
     people = [sim.add_citizen(make_spec(f"r{k}", at=(16.0, 53.5))) for k in range(3)]
@@ -89,6 +121,36 @@ def test_rest_takes_a_free_bench_seat_nearby_else_the_ground(new_sim: Callable[.
     texts = sorted(run_until_done(sim, rest, 10).text for rest in rests)
     assert texts == ["You rest a while on the bench."] * 2 + ["You rest a while on the ground."]
     assert occupancy_words(sim.core, "market-bench-1", "seat") == "both taken"
+
+
+def test_a_family_sleeps_inside_and_steps_out_apart_in_the_morning(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    door = sim.world.structures["farmhouse-1"].door_xz
+    family = [sim.add_citizen(make_spec(f"k{k}", at=door, home="farmhouse-1")) for k in range(3)]
+    skip_to(sim, family[0].position, night=True)
+    sleeps = [WorldApi(sim, member.id).sleep() for member in family]
+    started = [e.payload.model_dump()["args"] for e in sim.drain() if e.type == "action_started"]
+    assert started == [{"slot": "farmhouse-1#inside", "where": "inside", "inside": True}] * 3
+    sim.step()
+    assert all(claim_of(sim.core, m) is not None for m in family) and crowded(sim.core) == []  # inside, out of sight
+    middle = sim.world.structures["farmhouse-1"].centre
+    assert all(sim.world.distance_m(m.position, middle) < 0.01 for m in family)  # in through the door, out of sight
+    assert _summary(sim).moved["k0"].route  # drawn walking in
+    late = sim.add_citizen(make_spec("late", at=(-80.0, 80.0), home="farmhouse-1"))
+    run_until_done(sim, WorldApi(sim, late.id).walk_to_place("home"), 10)
+    assert _slot(sim, late).id == "farmhouse-1#door"  # those inside are out of the doorway
+    late_sleep = WorldApi(sim, late.id).sleep()
+    far = sim.add_citizen(make_spec("far", at=(-40.0, 61.0), home="farmhouse-1"))
+    WorldApi(sim, far.id).sleep()
+    started = [e.payload.model_dump()["args"] for e in sim.drain() if e.type == "action_started"]
+    assert started[-1] == {"slot": None, "where": "on the ground"}  # away from home: lies down in the street
+    sleeps.append(late_sleep)
+    for sleep in sleeps:
+        assert run_until_done(sim, sleep, 18 * 60).text == "You wake up; it is morning."
+    sim.step()
+    assert _apart(sim, [*family, late]) >= PERSONAL_M and crowded(sim.core) == []  # out of the door, side by side
+    assert all(walkable(sim.core, m.position) for m in family)
+    assert all(sim.world.distance_m(m.position, sim.world.structures["farmhouse-1"].door) < 6.0 for m in family)
 
 
 def test_band_sleepers_take_their_lean_tos_mats_then_the_fires_by_their_door(
@@ -119,6 +181,44 @@ def test_band_sleepers_take_their_lean_tos_mats_then_the_fires_by_their_door(
     assert _apart(sim, band) >= PERSONAL_M and crowded(sim.core) == []
 
 
+def test_claims_let_go_when_a_walk_is_cut_short_or_the_walker_dies(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    sim.add_citizen(make_spec("caller", name="Caller", at=(0.0, 96.0)))
+    walker = sim.add_citizen(make_spec("walker", age=70, at=(0.0, 150.0), knows_people=["caller"]))
+    walk = WorldApi(sim, "walker").walk_to_place("the well")
+    sim.step()
+    claimed = held_slot(sim.core, walker)
+    assert claimed is not None and claimed.owner == "well"
+    WorldApi(sim, "caller").say("Wait for me!")
+    assert run_until_done(sim, walk, 5).outcome == "interrupted"
+    assert claim_of(sim.core, walker) is None  # the stand is free for others again
+
+    sitter = sim.add_citizen(make_spec("sitter", at=(16.0, 53.5)))
+    WorldApi(sim, sitter.id).rest(30)
+    sim.step()
+    assert held_slot(sim.core, sitter) is not None
+    sim.core.injure(sitter, 200.0, "violence", "a blow fells you")
+    sim.step()
+    assert claim_of(sim.core, sitter) is None
+
+    idler = sim.add_citizen(make_spec("idler", at=(-40.0, 61.0)))
+    WorldApi(sim, idler.id).walk_to_place("the well")
+    WorldApi(sim, idler.id).wait(10)  # changed their mind before setting off
+    spot = idler.position
+    sim.step()
+    assert claim_of(sim.core, idler) is None and idler.position == spot
+
+    rester = sim.add_citizen(make_spec("rester", at=(24.0, 53.5), knows_people=["idler"]))
+    WorldApi(sim, rester.id).rest(30)
+    sim.step()
+    assert occupancy_words(sim.core, "market-bench-2", "seat") == "one free"
+    WorldApi(sim, idler.id).walk_towards("west", "a long walk")
+    WorldApi(sim, rester.id).follow("idler")  # gets up and goes after them: the seat is free again
+    sim.step()
+    assert rester.action is not None and rester.action.kind == "follow"
+    assert claim_of(sim.core, rester) is None
+
+
 def test_bodies_on_one_spot_step_apart_the_later_comer_drawn_walking(new_sim: Callable[..., Simulation]) -> None:
     sim = _sim(new_sim)
     first = sim.add_citizen(make_spec("ana", at=(-40.0, 61.0)))
@@ -131,6 +231,22 @@ def test_bodies_on_one_spot_step_apart_the_later_comer_drawn_walking(new_sim: Ca
     route = _summary(sim).moved["bo"].route
     assert route[0].unit == spot and route[-1].unit == second.position
     assert walkable(sim.core, second.position)
+
+
+def test_the_claims_round_trip_through_a_snapshot_and_runs_repeat(new_sim: Callable[..., Simulation]) -> None:
+    def run() -> Simulation:
+        sim = _sim(new_sim)
+        for k in range(4):
+            sim.add_citizen(make_spec(f"s{k}", at=GATE))
+            WorldApi(sim, f"s{k}").walk_to_place("the well")
+        sim.run(3)
+        return sim
+
+    sim, again = run(), run()
+    assert len(SLOTS.of(sim.state).claims) == 4
+    assert state_hash(sim.state) == state_hash(again.state)
+    restored = restore(take_snapshot(sim.state))
+    assert SLOTS.of(restored) == SLOTS.of(sim.state) and SLOTS.of(restored) is not SLOTS.of(sim.state)
 
 
 def test_occupancy_words_tell_how_full_a_thing_is(new_sim: Callable[..., Simulation]) -> None:
@@ -148,6 +264,36 @@ def test_bodies_closer_than_personal_space_step_apart(new_sim: Callable[..., Sim
     second = sim.add_citizen(make_spec("bo", at=(-40.0, 61.6)))  # 0.6 m apart: too close
     sim.step()
     assert sim.world.distance_m(first.position, second.position) >= 0.8
+
+
+def test_a_walk_ends_on_a_slot_beside_the_walker_without_walking(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    stand = layout(sim.core).slots["well#stand-2"]
+    x, z = sim.world.town_point(stand.position) or (0.0, 0.0)
+    near = sim.add_citizen(make_spec("near", at=(x, z + 0.5)))
+    walk = WorldApi(sim, near.id).walk_to_place("the well")
+    assert run_until_done(sim, walk, 1).text == "You are already there."
+    sim.step()
+    assert sim.world.distance_m(near.position, stand.position) < 0.01  # stepped onto the stand
+
+
+def test_a_walker_passing_a_stand_doesnt_take_it_and_things_are_walked_up_to(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    sim = _sim(new_sim)
+    stand = layout(sim.core).slots["well#stand-2"]
+    passer = sim.add_citizen(make_spec("passer", at=GATE))
+    sim.core.place_at(passer, stand.position)
+    WorldApi(sim, passer.id).walk_to_place("the main gate")  # on the stand, but walking on
+    visitor = sim.add_citizen(make_spec("visitor", at=(-20.0, 58.0)))
+    WorldApi(sim, visitor.id).walk_to_thing("the well")
+    assert _slot(sim, visitor) == stand  # the nearest stand, though someone walks across it
+    caller = sim.add_citizen(make_spec("caller", at=(-30.0, 61.0)))
+    walker = sim.add_citizen(make_spec("walker", at=(-45.0, 61.0)))
+    run_until_done(sim, WorldApi(sim, walker.id).walk_to_person("a person in a caller cloak"), 5)
+    to_caller = (180.0 - bearing_deg(walker.position, caller.position)) % 360.0
+    assert abs((walker.heading_deg - to_caller + 180) % 360 - 180) < 1.0  # facing whom they walked up to
+    assert 1.1 < sim.world.distance_m(walker.position, caller.position) < 1.3  # a pace off, not inside them
 
 
 def test_ring_spots_are_walkable_and_clear_of_camp_props(new_sim: Callable[..., Simulation]) -> None:

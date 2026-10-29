@@ -27,7 +27,8 @@ def test_gate_to_well_and_drink(new_sim: Callable[..., Simulation]) -> None:
     walk = run_until_done(sim, api.walk_to_place("the well"), max_ticks=30)
     assert walk.outcome == "done"
     assert walk.text == "You arrive at the well."
-    assert sim.world.distance_m(citizen.position, sim.world.places["well"].stand) < 0.5
+    well = sim.world.structures["well"].centre
+    assert 2.0 < sim.world.distance_m(citizen.position, well) < 2.6  # at one of the well's stands, not inside it
     assert api.look_around().place.startswith("at the well")
 
     drink = run_until_done(sim, api.drink(), max_ticks=10)

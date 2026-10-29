@@ -9,6 +9,7 @@ import pytest
 from app.observability.events import EventDraft, TickSummary
 from app.sim.clock import SECONDS_PER_TICK
 from app.sim.simulation import Simulation
+from app.sim.slots import PERSONAL_M
 from app.sim.vec import step_towards
 from app.world_api.facade import WorldApi, run_until_done
 from app.world_api.models import ActionResult, Perception
@@ -499,7 +500,7 @@ def test_someone_coming_to_the_same_place_doesnt_stop_your_work(new_sim: Callabl
     either; only walking up to you does."""
     sim = new_sim()
     fields = ["town", "rice-fields"]
-    sim.add_citizen(make_spec("helper", name="Aiko", at=(-60.0, 61.0), knows_places=fields))
+    sim.add_citizen(make_spec("helper", name="Aiko", at=(-60.0, 61.0), knows_places=fields, skills=["farming"]))
     sim.add_citizen(make_spec("friend", name="Kenji", at=(-80.0, 61.0)))
     sim.add_citizen(make_spec("sister", name="Mio", at=(-76.0, 61.0), knows_people=["helper"]))
     known = ["helper", "friend", "sister"]
@@ -511,12 +512,13 @@ def test_someone_coming_to_the_same_place_doesnt_stop_your_work(new_sim: Callabl
     work = me.work("farm")
     helper = WorldApi(sim, "helper").walk_to_place("the rice fields")
     assert run_until_done(sim, helper, 30).text == "You arrive at the rice fields."
-    assert sim.world.distance_m(farmer.position, sim.citizen("helper").position) < 3.0  # right where he works
+    # her own row of the paddies, a few steps from his: well within the 10 m that counts as walking up to someone
+    assert PERSONAL_M <= sim.world.distance_m(farmer.position, sim.citizen("helper").position) < 7.0
     assert work.result is None
 
     to_aiko = WorldApi(sim, "sister").walk_to_person("Aiko")
     assert run_until_done(sim, to_aiko, 30).text == "You reach Aiko."
-    assert sim.world.distance_m(farmer.position, sim.citizen("sister").position) < 6.0  # beside both of them
+    assert sim.world.distance_m(farmer.position, sim.citizen("sister").position) < 9.0  # beside both of them
     assert work.result is None
 
     WorldApi(sim, "friend").walk_to_person("Farmer")  # walking up to him still does
