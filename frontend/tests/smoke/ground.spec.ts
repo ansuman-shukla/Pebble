@@ -291,10 +291,13 @@ const groundPixels = (page: Page) => page.evaluate<GroundPixels>(GROUND_PIXELS);
 
 // South of the town, outside its walls and ground disc: open grassland at street level, facing the town.
 const OUTSIDE_THE_WALLS = '?at=31.2,12,0&time=12:00';
+// The spawn at the south gate: the town's own grass.
+const TOWN_GATE = '?time=12:00';
 
 test.describe('ground at street level', () => {
   for (const [name, query, minGreen] of [
     ['outside the walls', OUTSIDE_THE_WALLS, 0.3],
+    ['at the town gate', TOWN_GATE, 0.1],
   ] as const)
     test(`the grass breaks into bare patches ${name}, unlike the flat ground`, async ({
       page,
