@@ -589,6 +589,10 @@ export type EntitiesView = {
      */
     time: string;
     /**
+     * Tick Elapsed S
+     */
+    tick_elapsed_s: number;
+    /**
      * Citizens
      */
     citizens: Array<CitizenEntity>;
@@ -1128,6 +1132,10 @@ export type LiveState = {
      * Paused
      */
     paused: boolean;
+    /**
+     * Tick Elapsed S
+     */
+    tick_elapsed_s: number;
     /**
      * Citizens
      */

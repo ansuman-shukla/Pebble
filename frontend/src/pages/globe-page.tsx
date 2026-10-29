@@ -457,6 +457,7 @@ const GlobeScene = memo(function GlobeScene({
         citizens={live.citizens}
         speed={live.speed}
         paused={live.paused}
+        tickClock={live.tickClock}
         replay={replay}
         terrain={terrain}
         town={walkTown}

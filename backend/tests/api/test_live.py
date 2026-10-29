@@ -6,7 +6,9 @@ database afterwards).
 
 import queue
 import threading
+import time
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -17,8 +19,9 @@ from starlette.testclient import WebSocketTestSession
 from starlette.websockets import WebSocketDisconnect
 
 from app.core.config import settings
-from app.engine import Clock, EngineLoop, open_loop
-from app.observability.events import GoalSet, Stole, Traded
+from app.engine import Clock, EngineLoop, open_loop, resume_run
+from app.lib.ulid import UlidFactory
+from app.observability.events import GoalSet, NodeChanged, Stole, Traded
 from app.observability.store import queue_command
 from app.services.live import LIVE_EVENT_TYPES, LiveEvent, LiveState
 from app.sim.citizens import CITIZENS
@@ -171,6 +174,8 @@ def test_the_feed_sends_public_events_worth_telling_and_names_animals_and_househ
         core.emit("sold", Traded.model_validate(sale), actor=genzo, visibility="private")
         core.emit("stole", Stole(owner="farmhouse-1", store="rack-1", item="rice", count=5), actor=kaz)
         core.injure(genzo, 5.0, "animal attack", "a wolf attacks you", attacker=wolf.id)
+        picked = NodeChanged(node="node-1", kind="berry_bush", item="berries", before=12, after=7, stage="half")
+        core.emit("node_changed", picked, actor=kaz)  # importance 0, but the client draws node stages from it
         loop.run_ticks(1, headless=True)
         messages = _until_tick(ws, 1)
     told = {e.type: e for e in (LiveEvent.model_validate(m).event for m in messages if m["type"] == "event")}
@@ -180,3 +185,58 @@ def test_the_feed_sends_public_events_worth_telling_and_names_animals_and_househ
     assert bought.position is not None and bought.position.unit == genzo.position
     assert (told["stole"].line, told["stole"].importance) == ("Kaz steals 5 rice from Genzo's house", 2)
     assert (told["injured"].line, told["injured"].importance) == ("A wolf attacks Genzo", 3)
+    picked_up = told["node_changed"]
+    assert (picked_up.line, picked_up.importance, picked_up.payload["stage"]) == (
+        "Kaz gathers berries from a berry bush",
+        0,
+        "half",
+    )
+
+
+def test_a_page_opened_mid_tick_learns_how_far_into_the_tick_the_world_is(
+    client: TestClient, committed_run: EngineLoop
+) -> None:
+    loop = committed_run
+    loop.store.clock = lambda: datetime.now(UTC) - timedelta(seconds=20)  # tick 1 was written 20 s ago (at ×1)
+    loop.run_ticks(1, headless=True)
+    with client.websocket_connect(f"{API}/live?run_id={loop.run.id}") as ws:
+        snapshot = LiveState.model_validate(_receive(ws))
+        assert snapshot.tick == 1 and 19.0 < snapshot.tick_elapsed_s < 30.0
+        loop.store.clock = lambda: datetime.now(UTC)
+        loop.run_ticks(1, headless=True)
+        tick = LiveState.model_validate(_until_tick(ws, 2)[-1])
+    assert tick.tick == 2 and tick.tick_elapsed_s < 5.0  # a tick as it happens: just begun
+
+
+def test_a_clock_change_keeps_what_passed_of_the_tick_at_the_old_speed(
+    client: TestClient, committed_run: EngineLoop
+) -> None:
+    loop = committed_run
+    loop.store.clock = lambda: datetime.now(UTC) - timedelta(seconds=20)  # tick 1 was written 20 s ago (at ×1)
+    loop.run_ticks(1, headless=True)
+    with client.websocket_connect(f"{API}/live?run_id={loop.run.id}") as ws:
+        assert 19.0 < LiveState.model_validate(_receive(ws)).tick_elapsed_s < 30.0
+        queue_command(loop.store.session, loop.run.id, "clock", {"speed": 6})
+        loop.apply_commands()
+        changed = LiveState.model_validate(_receive(ws))
+    assert (changed.tick, changed.speed) == (1, 6.0)
+    assert 19.0 < changed.tick_elapsed_s < 30.0  # 20 s passed at ×1, not 20 s at ×6 (past the tick's end)
+
+
+def test_a_resumed_engine_counts_its_first_tick_from_the_resume(
+    client: TestClient, committed_run: EngineLoop, sim_world: SimWorld
+) -> None:
+    loop = committed_run
+    loop.store.clock = lambda: datetime.now(UTC) - timedelta(seconds=30)  # tick 1 was written 30 s ago (at ×1)
+    loop.run_ticks(1, headless=True)
+    with client.websocket_connect(f"{API}/live?run_id={loop.run.id}") as ws:
+        assert 29.0 < LiveState.model_validate(_receive(ws)).tick_elapsed_s < 40.0
+        loop.shut_down()
+        stopped = LiveState.model_validate(_receive(ws))  # the feed notices the engine stopped
+        time.sleep(2.0)
+        with client.websocket_connect(f"{API}/live?run_id={loop.run.id}") as late:  # a stopped engine counts nothing
+            assert LiveState.model_validate(_receive(late)).tick_elapsed_s == pytest.approx(stopped.tick_elapsed_s)
+        resume_run(loop.store.session, sim_world, loop.run, UlidFactory(), Clock(), brains=False)
+        resumed = LiveState.model_validate(_receive(ws))
+    assert stopped.tick == resumed.tick == 1 and stopped.tick_elapsed_s > 29.0
+    assert resumed.tick_elapsed_s < 5.0  # the engine waits a whole tick after a resume, not 30 s less
