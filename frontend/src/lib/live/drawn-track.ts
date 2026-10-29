@@ -130,6 +130,19 @@ const onPath = (track: Track, out: Vector3) =>
   pointAt(track.path, out).add(track.offset).normalize();
 
 /**
+ * A walk cut short leaves less path than the lane needs to close over: the part of the lane the new path has no room
+ * for goes into the catch-up offset, so the body eases onto the route instead of jumping there.
+ */
+function closeLane(track: Track, radius: number) {
+  const room = Math.min(track.lane, metresLeft(track.path) / LANE_OUT_M);
+  track.offset.addScaledVector(
+    track.side,
+    (LANE_M * (track.lane - room)) / radius,
+  );
+  track.lane = room;
+}
+
+/**
  * Puts a new frame's path under the citizen, joined where it is drawn now (no jump, no step back); far off, a
  * resync starts. `rate` is the clock (game seconds per real second).
  */
@@ -150,6 +163,7 @@ export function follow(
   const carried = carriedOn(track.path, next, radius);
   if (carried) {
     track.path = carried; // the offset carries on easing
+    closeLane(track, radius);
     return;
   }
   const drawn = onPath(track, new Vector3());
@@ -158,6 +172,7 @@ export function follow(
   track.path = next;
   if (off <= limit) {
     track.offset.subVectors(drawn, pointAt(next, new Vector3()));
+    closeLane(track, radius);
     return;
   }
   track.offset.set(0, 0, 0);
