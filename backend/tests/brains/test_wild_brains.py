@@ -152,11 +152,11 @@ def _gathers(sim: Simulation, brain: UtilityBrain, minutes: int) -> list[str]:
 
 
 @pytest.mark.parametrize(
-    ("role", "age", "meat"),
-    [("child", 9, 10), ("gatherer", 30, 50)],  # 5 and 25 kg: all they can carry (a gatherer also has a wood chore)
+    ("role", "age", "meat", "first"),  # 5 and 25 kg: all they can carry; a gatherer's day starts with its wood chore
+    [("child", 9, 10, "gather roots"), ("gatherer", 30, 50, "gather wood")],
 )
 def test_a_forager_with_a_full_load_stops_gathering_until_it_carries_less(
-    new_sim: Callable[..., Simulation], role: str, age: int, meat: int
+    new_sim: Callable[..., Simulation], role: str, age: int, meat: int, first: str
 ) -> None:
     sim = without_animals(new_sim())
     forager = sim.add_citizen(
@@ -174,7 +174,7 @@ def test_a_forager_with_a_full_load_stops_gathering_until_it_carries_less(
     put_in_the_wild(sim, forager.id, bushes)  # back by the bushes
     brain.api.notes["asleep"] = True  # a new day (just woken): it tries once more
     brain.decide()
-    assert str(brain.api.notes["last"]).startswith("gather")
+    assert brain.api.notes["last"] == first  # the child's gather shows the reset; the wood chore comes either way
 
     forager.inventory["meat"] = 3  # carrying less now ("a little meat", say some was eaten): room to gather again
     lighter = _gathers(sim, brain, 3 * 60)
