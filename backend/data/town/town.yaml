@@ -192,7 +192,7 @@ placements:
   - {id: store-5, kind: storehouse, at: [70, 90]}
   - {id: farmhouse-1, kind: farmhouse, at: [-85, 88]}
   - {id: farmhouse-1-chest, kind: chest, at: [-90, 92.2]}
-  - {id: farmhouse-1-loom, kind: loom, at: [-87.5, 92.5]} # the weaver's loom on the veranda
+  - {id: farmhouse-1-loom, kind: loom, at: [-87, 91.4]} # the weaver's loom at the foot of the veranda, by the door
   - {id: farmhouse-2, kind: farmhouse, at: [-70, 88]}
   - {id: farmhouse-2-chest, kind: chest, at: [-65.5, 92]}
   - {id: farm-rack, kind: drying_rack, at: [-62, 88], rotation_deg: 90}

@@ -15,7 +15,8 @@ from app.sim.citizens import AMBITION_ARGS, CITIZENS, KIN_INVERSE, CitizenSpec, 
 from app.sim.simulation import Simulation
 from app.sim.state import age_group
 from app.sim.world import load_town_places
-from app.world.town import load_town, load_town_spec
+from app.world.town import load_kinds, load_town, load_town_spec
+from app.world.walkability import town_walk_grid
 
 LOOKS = REPO_ROOT / "frontend" / "src" / "lib" / "world" / "citizen-looks.ts"
 FIGURE_SEX = {"masculine": "male", "feminine": "female"}
@@ -211,6 +212,17 @@ def test_the_town_has_its_v1_furniture() -> None:
     assert kinds["drying_rack"] == 3  # the two field racks by the paddies and the farmyard rack
     assert kinds["field_barricade"] == 5  # the gaol pen
     assert {"gaol", "bell-tower", "forge"} <= {p.id for p in load_town_places().places}
+
+
+def test_the_loom_stands_by_the_weaver_s_door_with_open_ground_in_front() -> None:
+    town = load_town()
+    placements = {p.id: p for p in town.placements}
+    loom, house = placements["farmhouse-1-loom"], placements["farmhouse-1"]
+    door = house.front(0.75)
+    walk = town_walk_grid(town, load_kinds())
+    assert abs((loom.z - loom.footprint.z / 2) - (house.z + house.footprint.z / 2)) <= 0.1  # backed onto the veranda
+    assert abs(loom.x - house.x) + loom.footprint.x / 2 <= 3  # beside the door, not off past the corner
+    assert walk.is_walkable(*loom.front(0.4)) and walk.is_walkable(*door)  # the weaver's seat; the way in
 
 
 def test_the_rice_fields_stand_lies_inside_a_paddy() -> None:
