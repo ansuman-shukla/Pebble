@@ -68,13 +68,14 @@ test('animals near the camera are drawn on the ground playing their clips', asyn
     .toBe(5);
   for (const animal of await nearAnimals(page)) {
     expect(animal.id).not.toMatch(/^wolf/);
-    expect(animal.clip).toBe(
+    // a gait clip while the body moves, Idle once it stands (a walker that got there plays no walk on the spot)
+    expect(
       animal.activity === 'walking'
-        ? 'Walk'
+        ? ['Walk', 'Idle']
         : animal.activity === 'running'
-          ? 'Run'
-          : 'Idle',
-    );
+          ? ['Run', 'Idle']
+          : ['Idle'],
+    ).toContain(animal.clip);
   }
   const positions = (await data(page, 'animals', 'near-positions'))
     .split(' ')

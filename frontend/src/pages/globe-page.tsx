@@ -479,6 +479,8 @@ const GlobeScene = memo(function GlobeScene({
       <GlobeAnimals
         animals={live.animals}
         speed={live.speed}
+        paused={live.paused}
+        replay={replay}
         terrain={terrain}
         views={animalViews}
       />
