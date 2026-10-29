@@ -1,4 +1,5 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
+import { Vector3 } from 'three';
 
 import type { LiveEventMessage } from '../../src/lib/live/live-contract';
 import {
@@ -9,7 +10,7 @@ import {
   type FeedSubjects,
   shows,
 } from '../../src/lib/live/event-feed';
-import { type MockLiveWindow, openHeld } from './ui-helpers';
+import { cameraOf, landed, type MockLiveWindow, openHeld } from './ui-helpers';
 
 /* The event feed: lines and importance, merged repeats, filters (no browser); a mock death in the page. */
 
@@ -206,5 +207,121 @@ test('a mock death shows in the feed with the tick it happened; the filters and 
   await expect(feed).toHaveCount(0);
   await page.keyboard.press('KeyL');
   await expect(feed.locator('[data-event-type="died"]')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
+type QueueWindow = MockLiveWindow & {
+  __pebbleMockLive: {
+    queueEvent(
+      type: string,
+      actor: string | null,
+      payload: Record<string, unknown>,
+      extra?: Record<string, unknown>,
+    ): void;
+  };
+};
+
+const queue = (
+  page: Page,
+  type: string,
+  actor: string | null,
+  payload: Record<string, unknown>,
+  extra: Record<string, unknown> = {},
+) =>
+  page.evaluate(
+    ({ type, actor, payload, extra }) =>
+      (globalThis as unknown as QueueWindow).__pebbleMockLive.queueEvent(
+        type,
+        actor,
+        payload,
+        extra,
+      ),
+    { type, actor, payload, extra },
+  );
+
+test('▶ lets go of a followed citizen; an animal’s entry flies to the animal as drawn', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  const world = await openHeld(page, errors);
+  const feed = page.getByTestId('event-feed');
+  // the animal farthest from the first citizen (whom Tab selects), and that citizen's spot for a placed event
+  const { animal, spot } = await page.evaluate(() => {
+    const { citizens, animals } = (
+      globalThis as unknown as MockLiveWindow
+    ).__pebbleMockLive.entities();
+    const [x, y, z] = citizens[0].position.unit;
+    const near = ({ unit: [a, b, c] }: { unit: number[] }) =>
+      a * x + b * y + c * z;
+    const far = [...animals].sort(
+      (a, b) => near(a.position) - near(b.position),
+    )[0];
+    return { animal: far, spot: citizens[0].position.unit };
+  });
+  expect(
+    new Vector3(...animal.position.unit).angleTo(new Vector3(...spot)),
+  ).toBeGreaterThan(300 / 2000);
+  // a citizen is followed
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('KeyF');
+  await expect(world).toHaveAttribute('data-follow');
+  await landed(world);
+
+  await queue(
+    page,
+    'tree_felled',
+    null,
+    {},
+    {
+      line: 'A tree fell',
+      importance: 2,
+      position: { unit: spot },
+    },
+  );
+  await queue(page, 'died', animal.id, { cause: 'hunted' });
+  await queue(page, 'died', 'nobody:1', {});
+  await page.evaluate(() =>
+    (globalThis as unknown as MockLiveWindow).__pebbleMockLive.setClock({
+      speed: 60,
+      paused: false,
+    }),
+  );
+  const felled = feed.locator('[data-event-type="tree_felled"]');
+  const hunted = feed
+    .locator('[data-event-type="died"]')
+    .filter({ hasText: 'was hunted' });
+  await expect(felled).toHaveCount(1, { timeout: 3_000 });
+  await expect(hunted).toHaveAttribute('data-importance', '2');
+  await expect(hunted).toContainText(
+    `${/^[aeiou]/.test(animal.kind) ? 'An' : 'A'} ${animal.kind.replaceAll('_', ' ')} was hunted`,
+  );
+  // nowhere to go for an actor that is not drawn: no ▶
+  const nobody = feed
+    .locator('[data-event-type="died"]')
+    .filter({ hasText: 'Someone died' });
+  await expect(nobody).toHaveCount(1);
+  await expect(nobody.getByRole('button', { name: /fly to/ })).toHaveCount(0);
+
+  await felled.getByRole('button', { name: /fly to/ }).click();
+  await expect(world).not.toHaveAttribute('data-follow');
+  await landed(world);
+
+  await page.keyboard.press('KeyF');
+  await expect(world).toHaveAttribute('data-follow');
+  await landed(world);
+  await hunted.getByRole('button', { name: /fly to/ }).click();
+  await expect(world).not.toHaveAttribute('data-follow');
+  await landed(world);
+  const at = await page.evaluate(
+    (id) =>
+      (globalThis as unknown as MockLiveWindow).__pebbleMockLive
+        .entities()
+        .animals.find((one) => one.id === id)!.position.unit,
+    animal.id,
+  );
+  // landed within ~60 m (the planet's radius is 2000 m) of where the animal is
+  expect(
+    new Vector3(...at).angleTo((await cameraOf(world)).normalize()),
+  ).toBeLessThan(60 / 2000);
   expect(errors).toEqual([]);
 });

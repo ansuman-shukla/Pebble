@@ -28,6 +28,7 @@ export function EventFeed({
   subjects,
   open,
   onToggle,
+  canFly,
   onFly,
 }: {
   listen: LiveFeed['listen'];
@@ -35,6 +36,8 @@ export function EventFeed({
   subjects: FeedSubjects;
   open: boolean;
   onToggle: () => void;
+  /** Whether there is somewhere to fly for an entry (its place, or its actor drawn). */
+  canFly: (entry: FeedEntry) => boolean;
   /** Fly to where an entry happened (or to its actor). */
   onFly: (entry: FeedEntry) => void;
 }) {
@@ -107,7 +110,7 @@ export function EventFeed({
                 {entry.line}
                 {entry.count > 1 && ` ×${entry.count}`}
               </span>
-              {(entry.position || entry.actorId) && (
+              {canFly(entry) && (
                 <Button
                   size="xs"
                   variant="ghost"

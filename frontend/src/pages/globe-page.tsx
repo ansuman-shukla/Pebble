@@ -743,19 +743,22 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
     },
     [settle],
   );
+  /** Lets go of whoever is followed and flies to near a unit direction. */
+  const goNear = useCallback(
+    (direction: Vector3) => {
+      const api = dropRef.current;
+      setFollowId(null);
+      settle(api ? api.goNear(direction) : { ok: false, reason: 'loading' });
+    },
+    [settle],
+  );
   const goToCitizen = useCallback(
     (id: string) => {
       const view = npcViews.get(id);
-      const api = dropRef.current;
-      setFollowId(null);
-      if (!view) return;
-      settle(
-        api
-          ? api.goNear(view.pose.position.clone().normalize())
-          : { ok: false, reason: 'loading' },
-      );
+      if (view) goNear(view.pose.position.clone().normalize());
+      else setFollowId(null);
     },
-    [npcViews, settle],
+    [npcViews, goNear],
   );
 
   // the spectator keys (10-world-v1 §5.4): Tab cycles the selection, F follows it, G goes to it, Space pauses,
@@ -813,19 +816,22 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
     }),
     [citizens, animals],
   );
+  // an entry flies to where it happened, else to its actor as drawn: a citizen or an animal
+  const canFly = useCallback(
+    (entry: FeedEntry) =>
+      entry.position !== null ||
+      (entry.actorId !== null &&
+        (npcViews.has(entry.actorId) || animalViews.has(entry.actorId))),
+    [npcViews, animalViews],
+  );
   const flyTo = useCallback(
     (entry: FeedEntry) => {
-      if (entry.position) {
-        const api = dropRef.current;
-        setFollowId(null);
-        settle(
-          api
-            ? api.goNear(new Vector3(...entry.position))
-            : { ok: false, reason: 'loading' },
-        );
-      } else if (entry.actorId) goToCitizen(entry.actorId);
+      const animal = entry.actorId ? animalViews.get(entry.actorId) : null;
+      if (entry.position) goNear(new Vector3(...entry.position));
+      else if (animal) goNear(animal.position.clone().normalize());
+      else if (entry.actorId) goToCitizen(entry.actorId);
     },
-    [settle, goToCitizen],
+    [animalViews, goNear, goToCitizen],
   );
 
   // the footer and the clock describe where the camera looks, not where the hidden avatar stands (F19, F20)
@@ -1110,6 +1116,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
         <EventFeed
           listen={feed.listen}
           subjects={feedSubjects}
+          canFly={canFly}
           open={feedOpen}
           onToggle={() => setFeedOpen((open) => !open)}
           onFly={flyTo}
