@@ -270,7 +270,7 @@ witnesses}` (witnesses = citizens who had the thief in view that tick). The owne
 | Treasury | dues 20 (Fumiko, Tetsu, Daisuke, Goro) + field dues 36 (Genzo, Tokuji) + granary rice 19.5 (stall) = **75.5** | Goro 25, Tetsu 30, cloth 6 and gold 18 (stall) = **79** | −3.5 |
 | Stall (Fumiko) | rice 70 (Goro 20, Tetsu 20, Daisuke 16, band A 6, band B 8), iron sand 10, wood 2, hides 7.5, cloth 6, gold 18, sickles 5, obsidian 3 = **121.5** | rice 67.5 (Genzo 27, Tokuji 21, treasury 19.5), iron sand 7.5, wood 1.9, gold 13.5, cloth 4.5, hides 7.3 (band A 5.5, band B 1.8), tools 3.7, obsidian 2.7, dried meat 4, dues 5 = **117.6** | +3.9 |
 | Genzo's household | rice 27, cloth 4.5 = **31.5** | field dues 24, hides 7.5 (packs), sickle 5 = **36.5** | −5 |
-| Tokuji | rice 21 | field dues 12 | +9 |
+| Tokuji | rice 21 | field dues 12 | +9 (savings; one lost harvest, 40 measures = 60 mon, wipes a week's) |
 | Goro | wage 25 | rice 20, dues 5 | 0 |
 | Tetsu | orders 30, tools to the stall 3.7 = **33.7** | rice 20, iron sand 10, wood 2, dues 5 = **37** | −3.3 |
 | Daisuke | iron sand 7.5, wood 1.9, gold 9 = **18.4** | rice 16, dues 5 = **21** | −2.6 |
@@ -301,7 +301,7 @@ Traits H honesty, G generosity, B boldness, T temper (0-1) drive scripted choice
 | 5 | Genzo 28 m | town · farmer 2 · farmhouse-1 | tends/harvests paddies, racks rice, pays tax at dusk | household chest ≥ 200 rice and no tax owed | husband of Aiko, father of Hana; Tokuji +30 | .8 .5 .4 .4 |
 | 6 | Aiko 26 f | town · weaver 2 · farmhouse-1 | weaves mornings, fields afternoons, sells cloth | sell 10 cloth | wife of Genzo; Fumiko +30 | .7 .6 .4 .3 |
 | 7 | Hana 9 f | town · child 1 · farmhouse-1 | plays, errands, watches traders | knows band A's camp | daughter of Genzo and Aiko; Kenji +30 | .7 .7 .9 .3 |
-| 8 | ★Tokuji 58 m | town · elder farmer 3 · farmhouse-2 | farms slowly (×0.6), always behind on tax | tax owed 0 for 7 days | uncle of Goro; Genzo +30, Masanori −10 | .6 .3 .3 .8 |
+| 8 | ★Tokuji 58 m | town · elder farmer 3 · farmhouse-2 | farms 2 paddies slowly (90-min tending), saves for a sickle; a hurt day or a raided rack puts him behind on his dues | tax owed 0 for 7 days | uncle of Goro; Genzo +30, Masanori −10 | .6 .3 .3 .8 |
 | 9 | ★Tetsu 45 m | town · smith 3 · townhouse + forge | forges sickles/axes/spears 9-16, sells to the stall, lord's orders | forge an iron spear and give it to the lord | Daisuke +20, Fumiko +20 | .8 .4 .5 .6 |
 | 10 | ★Daisuke 31 m | town · digger 2 · townhouse | iron sand at the bar 7-11; fells a North-woods tree every 2nd afternoon; pans gold week days 2 and 6 | own 100 mon | Tetsu +20, Barro −10 | .5 .4 .7 .6 |
 | 11 | ★Ennen 50 m | town · monk 4 · temple | rings the bell dawn/noon/dusk, tends the hurt, noon alms (granary rice) at the main gate | tend 10 different people | everyone +10, Masanori +30 | .95 .9 .4 .1 |
