@@ -6,16 +6,24 @@ import {
   FEED_KEEP,
   type FeedEntry,
   feedEntry,
+  type FeedSubjects,
   shows,
 } from '../../src/lib/live/event-feed';
-import { openHeld, type MockLiveWindow } from './ui-helpers';
+import { type MockLiveWindow, openHeld } from './ui-helpers';
 
 /* The event feed: lines and importance, merged repeats, filters (no browser); a mock death in the page. */
 
-const NAMES = new Map([
-  ['tek', 'Tek'],
-  ['pip', 'Pip'],
-]);
+const SUBJECTS: FeedSubjects = {
+  names: new Map([
+    ['tek', 'Tek'],
+    ['pip', 'Pip'],
+  ]),
+  animals: new Map([
+    ['boar:35', 'boar'],
+    ['elk:2', 'elk'],
+    ['polar_bear:1', 'polar_bear'],
+  ]),
+};
 
 let serial = 0;
 const event = (
@@ -31,7 +39,7 @@ const event = (
   event: { id: `e${(serial += 1)}`, type, actor_id: actor, payload, ...extra },
 });
 
-const entry = (message: LiveEventMessage) => feedEntry(message, NAMES)!;
+const entry = (message: LiveEventMessage) => feedEntry(message, SUBJECTS)!;
 
 test('today’s events get a plain line and importance: a death 3, speech 1, actions hidden', () => {
   expect(entry(event('died', 'pip', { cause: 'thirst' }))).toMatchObject({
@@ -48,11 +56,36 @@ test('today’s events get a plain line and importance: a death 3, speech 1, act
     line: 'Tek: “Fish!”',
     importance: 1,
   });
-  expect(feedEntry(event('action_started', 'tek'), NAMES)).toBeNull();
-  expect(feedEntry(event('action_finished', 'tek'), NAMES)).toBeNull();
+  expect(feedEntry(event('action_started', 'tek'), SUBJECTS)).toBeNull();
+  expect(feedEntry(event('action_finished', 'tek'), SUBJECTS)).toBeNull();
   expect(entry(event('said', 'stranger', { words: 'Hm.' })).line).toBe(
     'Someone: “Hm.”',
   );
+});
+
+test('an animal’s death names its kind, is importance 2 and no danger to people (only citizens are 3)', () => {
+  const hunted = entry(event('died', 'boar:35', { cause: 'hunted' }));
+  expect(hunted).toMatchObject({
+    line: 'A boar was hunted',
+    importance: 2,
+    animal: true,
+  });
+  expect(entry(event('died', 'elk:2', { cause: 'old age' })).line).toBe(
+    'An elk died (old age)',
+  );
+  expect(entry(event('died', 'polar_bear:1')).line).toBe('A polar bear died');
+  const filters = (one: FeedEntry) =>
+    (['all', 'people', 'danger', 'economy'] as const).filter((filter) =>
+      shows(one, filter),
+    );
+  expect(filters(hunted)).toEqual(['all']);
+  const citizen = entry(event('died', 'pip', { cause: 'hunted' }));
+  expect(citizen).toMatchObject({
+    line: 'Pip died (hunted)',
+    importance: 3,
+    animal: false,
+  });
+  expect(filters(citizen)).toEqual(['all', 'danger']);
 });
 
 test('an event’s own line, importance and position win (the backend line registry)', () => {
@@ -74,7 +107,7 @@ test('an event’s own line, importance and position win (the backend line regis
     position: [0, 0, 1],
   });
   expect(
-    feedEntry(event('node_changed', null, {}, { importance: 0 }), NAMES),
+    feedEntry(event('node_changed', null, {}, { importance: 0 }), SUBJECTS),
   ).toBeNull();
 });
 

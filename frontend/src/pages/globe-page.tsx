@@ -805,9 +805,13 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
     return () => window.removeEventListener('keydown', claim);
   }, [citizens, npcViews]);
 
-  const names = useMemo(
-    () => new Map(citizens.map((citizen) => [citizen.id, citizen.name])),
-    [citizens],
+  const { animals } = live;
+  const feedSubjects = useMemo(
+    () => ({
+      names: new Map(citizens.map((citizen) => [citizen.id, citizen.name])),
+      animals: new Map(animals.map((animal) => [animal.id, animal.kind])),
+    }),
+    [citizens, animals],
   );
   const flyTo = useCallback(
     (entry: FeedEntry) => {
@@ -1105,7 +1109,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
       {feed.status !== 'off' && (
         <EventFeed
           listen={feed.listen}
-          names={names}
+          subjects={feedSubjects}
           open={feedOpen}
           onToggle={() => setFeedOpen((open) => !open)}
           onFly={flyTo}

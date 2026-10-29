@@ -4,7 +4,7 @@
  * position come from the backend's line registry (F1's `line`/`importance`/`position`); until an event carries
  * them, the few types the feed delivers today get a plain line here.
  */
-import type { LiveEventMessage } from './live-contract';
+import type { LiveAnimal, LiveEventMessage } from './live-contract';
 import { townClock } from '@/lib/spectator/time';
 
 export type FeedFilter = 'all' | 'people' | 'danger' | 'economy';
@@ -64,6 +64,8 @@ export interface FeedEntry {
   time: string;
   type: string;
   actorId: string | null;
+  /** The actor is an animal: its doings are no danger to people. */
+  animal: boolean;
   line: string;
   importance: number;
   /** Where it happened (a unit direction), when the event says. */
@@ -83,15 +85,38 @@ type Detail = LiveEventMessage['event'] & {
   position?: { unit: [number, number, number] } | null;
 };
 
+/** Who the feed can name: citizens by name, animals by kind (both by id). */
+export interface FeedSubjects {
+  names: ReadonlyMap<string, string>;
+  animals: ReadonlyMap<string, LiveAnimal['kind']>;
+}
+
+/** "A boar", "An elk", "A polar bear". */
+function anAnimal(kind: LiveAnimal['kind']) {
+  const words = kind.replaceAll('_', ' ');
+  return `${/^[aeiou]/.test(words) ? 'An' : 'A'} ${words}`;
+}
+
 /** The line and importance of today's feed events that don't carry their own yet. */
 function fallback(
   event: Detail,
-  names: ReadonlyMap<string, string>,
+  { names, animals }: FeedSubjects,
 ): { line: string; importance: number } {
   const who = (event.actor_id && names.get(event.actor_id)) ?? 'Someone';
+  const animal = event.actor_id ? animals.get(event.actor_id) : undefined;
   const { payload } = event;
   switch (event.type) {
     case 'died':
+      if (animal)
+        return {
+          line:
+            payload.cause === 'hunted'
+              ? `${anAnimal(animal)} was hunted`
+              : typeof payload.cause === 'string'
+                ? `${anAnimal(animal)} died (${payload.cause})`
+                : `${anAnimal(animal)} died`,
+          importance: 2,
+        };
       return {
         line:
           typeof payload.cause === 'string'
@@ -115,10 +140,10 @@ function fallback(
 /** One feed entry for a live event, or null when it is hidden (importance 0). */
 export function feedEntry(
   message: LiveEventMessage,
-  names: ReadonlyMap<string, string>,
+  subjects: FeedSubjects,
 ): FeedEntry | null {
   const event = message.event as Detail;
-  const plain = fallback(event, names);
+  const plain = fallback(event, subjects);
   const importance = event.importance ?? plain.importance;
   if (importance <= 0) return null;
   return {
@@ -127,6 +152,7 @@ export function feedEntry(
     time: townClock(message.tick).time,
     type: event.type,
     actorId: event.actor_id,
+    animal: event.actor_id !== null && subjects.animals.has(event.actor_id),
     line: event.line ?? plain.line,
     importance,
     position: event.position?.unit ?? null,
@@ -151,5 +177,7 @@ export function addEntry(
   return [merged, ...entries.filter((_, index) => index !== at)];
 }
 
+/** Danger is about people: an animal's death (hunted, killed) shows under All only. */
 export const shows = (entry: FeedEntry, filter: FeedFilter) =>
-  filter === 'all' || KINDS[filter].has(entry.type);
+  filter === 'all' ||
+  (KINDS[filter].has(entry.type) && !(entry.animal && filter === 'danger'));

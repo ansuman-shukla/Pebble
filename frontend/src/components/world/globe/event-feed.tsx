@@ -8,6 +8,7 @@ import {
   type FeedEntry,
   type FeedFilter,
   feedEntry,
+  type FeedSubjects,
   shows,
 } from '@/lib/live/event-feed';
 
@@ -24,14 +25,14 @@ const IMPORTANCE_CLASS: Record<number, string> = {
 
 export function EventFeed({
   listen,
-  names,
+  subjects,
   open,
   onToggle,
   onFly,
 }: {
   listen: LiveFeed['listen'];
-  /** Citizen names by id, for events that carry no line of their own yet. */
-  names: ReadonlyMap<string, string>;
+  /** Citizen names and animal kinds by id, for events that carry no line of their own yet. */
+  subjects: FeedSubjects;
   open: boolean;
   onToggle: () => void;
   /** Fly to where an entry happened (or to its actor). */
@@ -39,15 +40,15 @@ export function EventFeed({
 }) {
   const [entries, setEntries] = useState<FeedEntry[]>([]);
   const [filter, setFilter] = useState<FeedFilter>('all');
-  const namesRef = useRef(names);
+  const subjectsRef = useRef(subjects);
   useEffect(() => {
-    namesRef.current = names;
-  }, [names]);
+    subjectsRef.current = subjects;
+  }, [subjects]);
   useEffect(
     () =>
       listen((message) => {
         if (message.type !== 'event') return;
-        const entry = feedEntry(message, namesRef.current);
+        const entry = feedEntry(message, subjectsRef.current);
         if (entry) setEntries((current) => addEntry(current, entry));
       }),
     [listen],
