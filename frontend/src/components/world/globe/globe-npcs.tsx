@@ -61,11 +61,12 @@ import type { LabelStore } from '@/lib/world/label-store';
 import { animateHumanoid } from '@/lib/world/humanoid-clips';
 import {
   breathe,
+  cueOver,
+  cueSeconds,
   ease,
   easeSeconds,
   type Easing,
   GESTURE_CLIPS,
-  GESTURE_LENGTH,
   layer,
   newPlacement,
   place,
@@ -128,8 +129,6 @@ const AGE_LABEL_SCALE: Partial<Record<string, number>> = {
 const HEAD_LABEL_LIFT = 0.55;
 /** Turning rate towards the heading (1/s). */
 const TURN_RATE = 8;
-/** A blow taken shows the first 0.6 s of `Hard landing` (10 §4.5). */
-const HIT_SECONDS = 0.6;
 /** The sun this far below the horizon (its height over the local up) is night for a guard's torch. */
 const DUSK = -0.05;
 
@@ -368,13 +367,14 @@ function NpcModel({
     return labels.anchor(subject, rig.head, HEAD_LABEL_LIFT, 1);
   }, [labels, subject, rig, hidden]);
 
-  // a new cue (a gesture, a blow) plays once
+  // a new cue (a gesture, a blow) plays once; one that played out before the model was drawn doesn't
+  const playCue = useEffectEvent((next: Cue) => {
+    const age = (performance.now() - next.at) / 1000;
+    if (cueOver(next.kind, age, rate)) return;
+    body.current.oneShot = { cue: next, left: cueSeconds(next.kind) };
+  });
   useEffect(() => {
-    if (!cue) return;
-    body.current.oneShot = {
-      cue,
-      left: cue.kind === 'hit' ? HIT_SECONDS : GESTURE_LENGTH[cue.kind],
-    };
+    if (cue) playCue(cue);
   }, [cue]);
 
   const held = shown.pose === 'standing' ? shown.prop : null;

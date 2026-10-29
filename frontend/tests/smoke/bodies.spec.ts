@@ -31,6 +31,7 @@ import { CITIZEN_LOOKS } from '../../src/lib/world/citizen-looks';
 import { freeHand, holderOf, propModel } from '../../src/lib/world/hand-props';
 import { animateHumanoid } from '../../src/lib/world/humanoid-clips';
 import {
+  cueOver,
   ease,
   easeSeconds,
   hopHeight,
@@ -653,6 +654,19 @@ test.describe('cues', () => {
     }) as LiveMessage;
   const started = { ...EMPTY_LIVE, runId: 'run-1' };
 
+  test('a cue plays out once: a body drawn later does not replay it', () => {
+    // a blow shows 0.6 s, a wave 2.2 s (clip seconds: sped up with the clock to ×10, real time while paused)
+    expect(cueOver('hit', 0.5, 1)).toBe(false);
+    expect(cueOver('hit', 0.6, 1)).toBe(true);
+    expect(cueOver('wave', 2, 1)).toBe(false);
+    expect(cueOver('wave', 2.2, 1)).toBe(true);
+    expect(cueOver('wave', 0.21, 10)).toBe(false);
+    expect(cueOver('wave', 0.22, 10)).toBe(true);
+    expect(cueOver('wave', 0.22, 600)).toBe(true);
+    expect(cueOver('wave', 2, 0)).toBe(false);
+    expect(cueOver('wave', 180, 0)).toBe(true);
+  });
+
   test('gestures and blows become cues on the actor', () => {
     let state = applyMessage(started, event('gestured', { kind: 'jump' }), 5);
     expect(state.cues).toEqual([
@@ -706,6 +720,7 @@ async function drawn(page: Page, id: string) {
   return {
     motion: data.npcMotion ?? '',
     clip: data.npcClip ?? '',
+    loaded: data.npcLoaded === 'true',
     prop: data.npcProp ?? '',
     layer: data.npcLayer ?? '',
     posture: data.npcPosture ?? '',
@@ -847,6 +862,67 @@ test.describe('on the globe', () => {
     await expect
       .poll(() => drawn(page, 'tetsu'))
       .toMatchObject({ hidden: false, clip: 'Idle' });
+    expect(errors).toEqual([]);
+  });
+
+  test('a cue from before a body was drawn is not replayed when it comes near', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    await openGlobe(page, errors, '?mockLive=1&follow=tetsu');
+    await expect(page.getByTestId('npcs')).toHaveAttribute(
+      'data-npcs-ready',
+      '22',
+    );
+    // Oru is at band A's camp, 4 km away: his model isn't loaded when he waves
+    expect((await drawn(page, 'oru')).loaded).toBe(false);
+    await page.evaluate(() =>
+      (globalThis as unknown as Performer).__pebbleMockLive.perform('oru', {
+        activity: 'idle',
+        motion: 'idle',
+      }),
+    );
+    await page.evaluate(() =>
+      (globalThis as unknown as Performer).__pebbleMockLive.sendNow(
+        'gestured',
+        'oru',
+        { kind: 'wave' },
+      ),
+    );
+    // the wave is over (2.2 s) long before the camera gets there
+    await page.waitForTimeout(3000);
+    expect((await drawn(page, 'oru')).loaded).toBe(false);
+    // every layer and clip Oru shows from now on
+    await page.evaluate(() => {
+      const seen = new Set<string>();
+      (globalThis as unknown as { seen: Set<string> }).seen = seen;
+      setInterval(() => {
+        const { document } = globalThis as unknown as {
+          document: {
+            querySelector(selector: string): {
+              dataset: Record<string, string | undefined>;
+            } | null;
+          };
+        };
+        const node = document.querySelector('[data-npc="oru"]');
+        if (node?.dataset.npcLoaded === 'true')
+          seen.add(`${node.dataset.npcLayer}|${node.dataset.npcClip}`);
+      }, 30);
+    });
+    await page.getByRole('button', { name: 'people', exact: true }).click();
+    await page
+      .locator('[data-person="oru"]')
+      .getByRole('button', { name: 'follow' })
+      .click();
+    await expect
+      .poll(async () => (await drawn(page, 'oru')).loaded, { timeout: 30_000 })
+      .toBe(true);
+    await page.waitForTimeout(3000);
+    const seen = await page.evaluate(() => [
+      ...(globalThis as unknown as { seen: Set<string> }).seen,
+    ]);
+    expect(seen).toContain('|Idle');
+    expect(seen.filter((shown) => shown.startsWith('wave'))).toEqual([]);
     expect(errors).toEqual([]);
   });
 

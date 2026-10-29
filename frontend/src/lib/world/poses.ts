@@ -12,7 +12,9 @@
  */
 import { type Bone, type Object3D, Quaternion, Vector3 } from 'three';
 
+import type { Cue } from '@/lib/live/live-state';
 import type { Layer } from '@/lib/live/motion';
+import { visualRate } from '@/lib/world/visual-rate';
 
 const DEG = Math.PI / 180;
 
@@ -151,6 +153,19 @@ export const GESTURE_LENGTH: Record<
   jump: 0.6,
 };
 const GESTURE_PAUSE = 1;
+/** A blow taken shows the first 0.6 s of `Hard landing` (10 §4.5). */
+const HIT_SECONDS = 0.6;
+
+/** How long a cue plays once (clip seconds). */
+export const cueSeconds = (kind: Cue['kind']) =>
+  kind === 'hit' ? HIT_SECONDS : GESTURE_LENGTH[kind];
+
+/**
+ * Whether a cue that came `age` real seconds ago has played out at the clock's `rate` (paused, by real time): a body
+ * drawn only now (it was far, its model wasn't loaded) doesn't replay a wave or a blow from minutes ago.
+ */
+export const cueOver = (kind: Cue['kind'], age: number, rate: number) =>
+  age * Math.max(visualRate(rate), 1) >= cueSeconds(kind);
 
 /** A hop: 0.15 s crouching, 0.4 s up and down to 0.4 m, 0.05 s landing (m above the ground at clip time t). */
 export const JUMP_HEIGHT = 0.4;
