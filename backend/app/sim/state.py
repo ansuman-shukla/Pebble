@@ -1,10 +1,12 @@
 """The mutable world state: citizens, items, resource counters and random streams (plain dataclasses).
 
-Everything here is in a snapshot (`app.sim.snapshot`); nothing else in the simulation changes over time.
+Everything here is in a snapshot (`app.sim.snapshot`); nothing else in the simulation changes over time. Each later
+system keeps its own state in `WorldState.systems` (described by a `System`), so systems never add fields here.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -13,6 +15,7 @@ from pydantic import JsonValue
 from app.core.rng import Rng
 from app.sim.navigation import Route
 from app.sim.vec import Vec3
+from app.sim.world import SimWorld
 from app.world_api.models import ActionName, ActionResult, Volume
 
 AgeGroup = Literal["child", "teen", "young_adult", "middle_aged", "elder"]
@@ -195,6 +198,7 @@ class Fire:
 @dataclass
 class WorldState:
     tick: int
+    seed: int
     next_seq: int
     next_stack: int
     citizens: dict[str, Citizen]
@@ -209,3 +213,19 @@ class WorldState:
     fires: dict[str, Fire] = field(default_factory=dict)
     next_animal: int = 1
     next_fire: int = 1
+    systems: dict[str, object] = field(default_factory=dict)  # each registered system's state, by system name
+
+
+@dataclass(frozen=True)
+class System[S]:
+    """A system that keeps its own state (10-world-v1 §6.5): its name, the version of its snapshot block, and how to
+    make, dump and load that state. Per-citizen and per-animal data lives in it too, keyed by id."""
+
+    name: str
+    version: int  # bump when the dumped form changes: a snapshot holding another version starts a new run (D58)
+    new: Callable[[SimWorld], S]  # the state a new run starts with
+    dump: Callable[[S], JsonValue]  # plain JSON; sets sorted, so equal states dump equal
+    load: Callable[[JsonValue], S]
+
+    def of(self, state: WorldState) -> S:
+        return cast(S, state.systems[self.name])

@@ -1,8 +1,9 @@
 """The simulation: the single authority on what is true (02-simulation).
 
-Each tick (= 1 game minute): advance durative actions (walkers move) → bodies → ecology (M6) → perception and
-interrupts → visits → one `tick_summary`. Actions from brains arrive between ticks. The simulation never reads the
-wall clock and draws randomness only from its seeded streams, so the same seed and inputs give the same state.
+Each tick (= 1 game minute): advance durative actions (walkers move) → bodies → ecology (M6) → the systems' hooks
+(`app.sim.systems`) → perception and interrupts → visits → one `tick_summary`. Actions from brains arrive between
+ticks. The simulation never reads the wall clock and draws randomness only from its seeded streams, so the same seed
+and inputs give the same state.
 """
 
 import numpy as np
@@ -18,7 +19,7 @@ from app.observability.events import (
     Perceived,
     TickSummary,
 )
-from app.sim import actions, ecology, feed_animals, feed_citizens, resting
+from app.sim import actions, ecology, feed_animals, feed_citizens, resting, systems
 from app.sim.acting import refuse
 from app.sim.bodies import COLLAPSE_WAKE_ENERGY, HOT_BIOMES, Crossing, update_body
 from app.sim.citizens import CitizenSpec
@@ -48,7 +49,7 @@ WOODPILE_OFFSET_M = 3.2  # beyond the seats round the pit (2 m), between two of 
 WOODPILE_BEARING = 112.5
 
 
-def initial_state(world: SimWorld, seed: int) -> WorldState:
+def initial_state(world: SimWorld, seed: int, registry: systems.Registry = systems.REGISTRY) -> WorldState:
     rngs = {name: Rng.for_subsystem(seed, name) for name in RNG_STREAMS}
     resources = np.zeros_like(world.resource_caps)
     stocked = np.flatnonzero(world.resource_caps.any(axis=1))
@@ -69,6 +70,7 @@ def initial_state(world: SimWorld, seed: int) -> WorldState:
             ground[stack_id] = GroundStack(stack_id, "wood", WOODPILE, spot, world.nearest_cell(spot))
     return WorldState(
         tick=0,
+        seed=seed,
         next_seq=1,
         next_stack=len(ground) + 1,
         citizens={},
@@ -80,6 +82,7 @@ def initial_state(world: SimWorld, seed: int) -> WorldState:
         groups={group.id: group for group in groups},
         fires=fires,
         next_animal=len(animals) + 1,
+        systems={system.name: system.new(world) for system in registry.systems},
     )
 
 
@@ -90,12 +93,21 @@ class Simulation:
         state: WorldState,
         planner: Planner | None = None,
         accepts_gift: GiftPolicy | None = None,
+        registry: systems.Registry = systems.REGISTRY,
     ) -> None:
         self.core = SimCore(world, planner or Planner(world), state, accepts_gift)
+        self.registry = registry
 
     @classmethod
-    def new(cls, world: SimWorld, seed: int | None = None, planner: Planner | None = None) -> "Simulation":
-        return cls(world, initial_state(world, world.seed if seed is None else seed), planner)
+    def new(
+        cls,
+        world: SimWorld,
+        seed: int | None = None,
+        planner: Planner | None = None,
+        registry: systems.Registry = systems.REGISTRY,
+    ) -> "Simulation":
+        state = initial_state(world, world.seed if seed is None else seed, registry)
+        return cls(world, state, planner, registry=registry)
 
     @property
     def world(self) -> SimWorld:
@@ -293,6 +305,7 @@ class Simulation:
             worse[citizen.id] = self._body(citizen)
 
         ecology.step(core)
+        systems.run_hooks(core, self.registry)
 
         living = core.living()
         seen = self._visibility(living)

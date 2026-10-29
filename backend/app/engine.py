@@ -37,7 +37,8 @@ from app.sim.citizens import CITIZENS, load_citizens
 from app.sim.clock import SECONDS_PER_TICK, TICKS_PER_HOUR
 from app.sim.navigation import Planner
 from app.sim.simulation import Simulation
-from app.sim.snapshot import SNAPSHOT_VERSION, SimSnapshot, restore, take_snapshot
+from app.sim.snapshot import SimSnapshot, restore, take_snapshot
+from app.sim.snapshot import resumable as snapshot_resumable
 from app.sim.world import SimWorld, load_sim_world
 from app.world.generate import GENERATOR
 from app.world.spec import load_site_kinds, load_world_spec
@@ -333,9 +334,10 @@ def open_loop(
 
 
 def resumable(session: Session, run: Run) -> bool:
-    """Whether this simulation can continue the run (its latest snapshot has the current snapshot version)."""
+    """Whether this simulation can continue the run (its latest snapshot has the current snapshot and system
+    versions)."""
     snapshot_row = latest_snapshot(session, run.id)
-    return snapshot_row is not None and snapshot_row.state.get("version") == SNAPSHOT_VERSION
+    return snapshot_row is not None and snapshot_resumable(snapshot_row.state)
 
 
 def main(argv: Sequence[str] | None = None, db_engine: DbEngine | None = None) -> None:

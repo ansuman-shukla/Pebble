@@ -112,6 +112,17 @@ def test_a_run_from_an_older_simulation_is_not_resumed(db_session: Session, sim_
     assert again.run.id == fresh.run.id  # the current one resumes
 
 
+def test_a_run_with_other_system_blocks_is_not_resumed(db_session: Session, sim_world: SimWorld) -> None:
+    old = open_loop(db_session, sim_world, KEY, new_run=True, citizens=DEV_CITIZENS, clock=Clock())
+    snapshot = latest_snapshot(db_session, old.run.id)
+    assert snapshot is not None
+    snapshot.state = {**snapshot.state, "systems": {"retired": {"version": 1, "data": None}}}
+    db_session.add(snapshot)
+    db_session.flush()
+    fresh = open_loop(db_session, sim_world, KEY, new_run=False, citizens=DEV_CITIZENS, clock=Clock())
+    assert fresh.run.id != old.run.id
+
+
 class FakeTime:
     """A monotonic clock that only moves when the loop sleeps; `at` runs a callback once the time reaches it."""
 
