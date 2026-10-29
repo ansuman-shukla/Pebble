@@ -196,7 +196,7 @@ test.describe('ground layers of the real world', () => {
     return Float64Array.from({ length: position.count }, (_, v) => {
       a.fromArray(sums, v * 3).normalize();
       b.fromBufferAttribute(position, v).normalize();
-      return (Math.acos(a.dot(b)) * 180) / Math.PI;
+      return (Math.acos(Math.min(1, Math.max(-1, a.dot(b)))) * 180) / Math.PI;
     });
   }
 
