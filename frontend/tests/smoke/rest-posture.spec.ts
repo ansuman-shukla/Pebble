@@ -177,6 +177,10 @@ for (const posture of ['sitting', 'sleeping', 'lying'] as const) {
             );
           }
           if (posture === 'sleeping') {
+            // the thigh rises 35°, or less where a short leg can't reach the ground from there
+            const thigh = (print.knee!.thigh * 180) / Math.PI;
+            if (tall < 1) expect(thigh).toBeLessThan(34);
+            else expect(thigh).toBeCloseTo(35, 3);
             // the right knee drawn up, its foot standing flat on the ground (the ankle at its height over the sole)
             const knee = boneHeight(character, world, 'RightLeg', sx, sz);
             expect(knee, `${ground}: knee`).toBeGreaterThan(0.3 * tall);
@@ -314,5 +318,35 @@ for (const step of [1 / 60, 0.25]) {
     measured = 0;
     frames(1);
     expect(measured, 'settled: no measuring every frame').toBe(0);
+  });
+}
+
+for (const id of ['band-a-hunter', 'town-child']) {
+  test(`${id} asleep keeps its foot on the ground frame after frame`, async () => {
+    const look = CITIZEN_LOOKS.find((candidate) => candidate.id === id)!;
+    const character = createCharacter(look.config);
+    const rest = restOf(character);
+    const world = new Group();
+    const tilt = new Group();
+    const posed = new Group();
+    world.add(tilt);
+    tilt.add(posed);
+    posed.add(character);
+    const animation = await animateHumanoid(character, { clips: ['Idle'] });
+    const still = animation.play('Idle');
+    still.paused = true;
+    const state: Resting = { shape: null, print: null };
+    // on the slope that falls both ahead and to the side
+    const [, sx, sz] = GROUNDS[4];
+    const ground = (forward: number, side: number) => sx * side + sz * forward;
+    const body = { character, rest, tilt, posed, ground };
+    for (let frame = 0; frame < 30; frame++) {
+      animation.update(1 / 30);
+      layToRest(state, shapeOf('sleeping', still, [still]), body);
+    }
+    const low = clearance(character, world, sx, sz);
+    expect(Math.abs(low), `lowest vertex ${low}`).toBeLessThan(TOUCH);
+    const ankle = boneHeight(character, world, 'RightFoot', sx, sz);
+    expect(Math.abs(ankle - rest.ankle), `ankle ${ankle}`).toBeLessThan(TOUCH);
   });
 }
