@@ -1,8 +1,9 @@
 /*
- * The asset registry: world kinds -> vendored Polyfork files.
+ * The asset registry: world kinds -> vendored Polyfork files (or props drawn from code, procedural-props.ts).
  * The backend only ever names kinds; file ids, palettes and clip names live here.
  */
 import manifest from './asset-manifest.json' with { type: 'json' };
+import { PROCEDURAL_PROPS } from './procedural-props';
 
 export type PropKind =
   // town buildings
@@ -230,8 +231,8 @@ export const PROPS: Record<PropKind, string> = {
   camp_drying_rack: 'drying-net-rack-93ec3b',
   sleeping_mat: 'straw-pile-ebd54d',
   field_barricade: 'field-barricade-a646b9',
-  // no loom in the catalogue: a wooden frame stands in until a procedural loom is drawn (D131)
-  loom: 'horse-tether-rail-b26462',
+  // no loom in the catalogue: drawn from code (procedural-props.ts, D131)
+  loom: 'procedural-loom',
 };
 
 export type HandPropKind =
@@ -372,9 +373,14 @@ const BASE_Y: Record<string, number> = { 'moat-bridge-4fbcd9': -1.68 };
 /** Height at which to place an asset in a flat town (0 for everything that rests on the ground). */
 export const assetBaseY = (id: string) => BASE_Y[id] ?? 0;
 
-const SIZES = new Map(manifest.assets.map((asset) => [asset.id, asset.size_m]));
+const SIZES = new Map([
+  ...manifest.assets.map((asset) => [asset.id, asset.size_m] as const),
+  ...Object.entries(PROCEDURAL_PROPS).map(
+    ([id, prop]) => [id, prop.size] as const,
+  ),
+]);
 
-/** Real-world size in metres (Polyfork measures every asset; models rest on y = 0). */
+/** Real-world size in metres (Polyfork measures every asset, procedural props carry theirs; all rest on y = 0). */
 export function assetSize(id: string) {
   const size = SIZES.get(id);
   if (!size) throw new Error(`asset ${id} is not in the manifest`);

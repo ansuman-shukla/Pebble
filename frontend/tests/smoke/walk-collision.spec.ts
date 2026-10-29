@@ -17,6 +17,10 @@ import {
   type WalkPlacement,
   type WalkWater,
 } from '../../src/lib/world/collision';
+import {
+  isProcedural,
+  PROCEDURAL_PROPS,
+} from '../../src/lib/world/procedural-props';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const byId = new Map(manifest.assets.map((asset) => [asset.id, asset]));
@@ -27,6 +31,10 @@ function colliders(placements: WalkPlacement[]) {
     if (!Object.hasOwn(PROPS, kind)) continue;
     const id = PROPS[kind as PropKind];
     if (files.has(id)) continue;
+    if (isProcedural(id)) {
+      files.set(id, PROCEDURAL_PROPS[id].colliders);
+      continue;
+    }
     const file = path.join(ROOT, byId.get(id)!.files.colliders.path);
     files.set(id, JSON.parse(readFileSync(file, 'utf8')) as ColliderFile);
   }
@@ -74,6 +82,13 @@ test('walking diagonally into a wall slides along it', () => {
   expect(x).toBeLessThan(-1.4);
   expect(z).toBeGreaterThan(0.6);
   expect(z).toBeLessThan(0.66);
+});
+
+test('the loom drawn from code blocks its 1.2 x 0.8 m frame and nothing beside it', () => {
+  const loom = [place('loom', 0, 0)];
+  // the frame's front reaches z = 0.4; the player radius is 0.3
+  expect(move(loom, [0, 2], [0, -2])[1]).toBeCloseTo(0.7, 2);
+  expectAt(move(loom, [1, 2], [1, -2]), [1, -2]);
 });
 
 test('a wall placed with rotation 90 blocks along x instead', () => {

@@ -24,6 +24,10 @@ import {
   type WildBlockers,
 } from '../../src/lib/world/globe-walk';
 import { clipWater } from '../../src/lib/world/ground-shape';
+import {
+  isProcedural,
+  PROCEDURAL_PROPS,
+} from '../../src/lib/world/procedural-props';
 import { createScatter, type Scatter } from '../../src/lib/world/scatter';
 import {
   BLOCKING_SCATTER_ASSETS,
@@ -49,11 +53,15 @@ export const TOWN_GROUND_RADIUS = 225;
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const byId = new Map(manifest.assets.map((asset) => [asset.id, asset]));
 
-/** Colliders files from the vendored assets, by asset id. */
+/** Colliders files from the vendored assets (or props drawn from code), by asset id. */
 export function loadColliders(ids: Iterable<string>) {
   const files = new Map<string, ColliderFile>();
   for (const id of ids) {
     if (files.has(id)) continue;
+    if (isProcedural(id)) {
+      files.set(id, PROCEDURAL_PROPS[id].colliders);
+      continue;
+    }
     const file = path.join(ROOT, byId.get(id)!.files.colliders.path);
     files.set(id, JSON.parse(readFileSync(file, 'utf8')) as ColliderFile);
   }

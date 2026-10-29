@@ -35,6 +35,7 @@ import {
   type Region,
 } from '@/lib/world/citizen-looks';
 import { KIT_LOOKS, type KitLookId } from '@/lib/world/kit-looks';
+import { isProcedural, proceduralScene } from '@/lib/world/procedural-props';
 
 const ROW_Z: Record<Region, number> = { town: -4.5, band_a: 0, band_b: 4.5 };
 const CITIZEN_SPACING = 2;
@@ -168,6 +169,15 @@ function rowX(index: number, count: number, spacing: number) {
 }
 
 function AssetModel({ id }: { id: string }) {
+  return isProcedural(id) ? <ProceduralModel id={id} /> : <ModelFile id={id} />;
+}
+
+function ProceduralModel({ id }: { id: string }) {
+  const model = useMemo(() => proceduralScene(id).clone(), [id]);
+  return <primitive object={model} />;
+}
+
+function ModelFile({ id }: { id: string }) {
   const { scene } = useGLTF(assetUrl(id));
   // SkeletonUtils keeps skinned parts (the reed bed's and dune grass's wind-swayed blades) bound to their bones
   const model = useMemo(() => clone(scene), [scene]);

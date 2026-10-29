@@ -3,10 +3,12 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { expect, test } from '@playwright/test';
+import { Box3, type Mesh, Vector3 } from 'three';
 
 import manifest from '../../src/lib/world/asset-manifest.json' with { type: 'json' };
 import {
   ANIMALS,
+  assetSize,
   HAND_PROPS,
   type HandProp,
   type HandPropKind,
@@ -15,13 +17,18 @@ import {
 } from '../../src/lib/world/assets';
 import { CITIZEN_LOOKS } from '../../src/lib/world/citizen-looks';
 import { KIT_LOOKS } from '../../src/lib/world/kit-looks';
+import {
+  isProcedural,
+  PROCEDURAL_PROPS,
+  proceduralScene,
+} from '../../src/lib/world/procedural-props';
 import { VISITOR_LOOK } from '../../src/lib/world/visitor-look';
 import { createCharacter } from '../../src/vendor/polyfork/humanoid.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const byId = new Map(manifest.assets.map((asset) => [asset.id, asset]));
 const registryIds = new Set([
-  ...Object.values(PROPS),
+  ...Object.values(PROPS).filter((id) => !isProcedural(id)),
   ...Object.values(ANIMALS).map((animal) => animal.asset),
   ...Object.values(HAND_PROPS).flatMap((prop) =>
     'asset' in prop ? [prop.asset] : [],
@@ -171,6 +178,37 @@ test('the berry bush drops its fruit piece by piece (parts named fruit-N)', () =
     /^fruit-\d+$/.test(name),
   );
   expect(fruit.length).toBeGreaterThanOrEqual(8);
+});
+
+test('the loom is drawn from code: a 1.2 x 1.4 x 0.8 m wooden frame with warp threads, blocking all of it', () => {
+  const id = PROPS.loom;
+  expect(isProcedural(id)).toBe(true);
+  const scene = proceduralScene(id);
+  const bounds = new Box3().setFromObject(scene);
+  const size = bounds.getSize(new Vector3());
+  expect(bounds.min.y).toBeCloseTo(0, 5); // rests on the ground
+  expect([size.x, size.y, size.z].map((v) => v.toFixed(2))).toEqual([
+    '1.20',
+    '1.40',
+    '0.80',
+  ]);
+  expect(assetSize(id)).toEqual({ x: 1.2, y: 1.4, z: 0.8 });
+  const meshes = scene.children as Mesh[];
+  expect(meshes.map((mesh) => mesh.name)).toEqual(['loom-frame', 'loom-warp']);
+  // the warp runs from the breast beam (front, low) up to the warp beam (back, high), inside the frame
+  const warp = new Box3().setFromObject(meshes[1]);
+  expect(warp.min.y).toBeCloseTo(0.75, 1);
+  expect(warp.max.y).toBeCloseTo(1.25, 1);
+  expect(warp.max.z - warp.min.z).toBeGreaterThan(0.6);
+  expect(warp.max.x - warp.min.x).toBeGreaterThan(0.8);
+  expect(warp.max.x - warp.min.x).toBeLessThan(size.x);
+  const [part] = PROCEDURAL_PROPS[id].colliders.parts;
+  const hull = new Box3().setFromPoints(
+    part.map(([x, y, z]) => new Vector3(x, y, z)),
+  );
+  const corners = (box: Box3) =>
+    [...box.min.toArray(), ...box.max.toArray()].map((v) => v.toFixed(3));
+  expect(corners(hull)).toEqual(corners(bounds));
 });
 
 test('every pinned asset is used by the registry', () => {
