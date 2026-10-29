@@ -28,6 +28,7 @@ import { groundSpeed, headingAt, walking } from '@/lib/live/walk-path';
 import {
   activityWords,
   BASE_CLIPS,
+  clipLapse,
   type NpcClip,
   type NpcLook,
   npcLook,
@@ -56,8 +57,10 @@ import { createCharacter } from '@/vendor/polyfork/humanoid.mjs';
  * ended); one drawn far off (a reconnect, a hidden tab) fades out and back in on its path instead of jumping. Each
  * one faces the way it walks (its heading when standing), turns smoothly to its heading and stands on the rendered
  * ground (the town's plateau on its disc, else the terrain); sitters and sleepers rest on it, tilted to the ground
- * under them (`rest-posture.ts`). The gait is paced to the drawn ground speed. Models load only within NEAR metres
- * of the camera (and hide again past it); clips load per activity as first needed.
+ * under them (`rest-posture.ts`). The gait is paced to the drawn ground speed and every clip plays sped up with the
+ * clock (a fast-forwarded film, `clipLapse`), up to ×10: past that legs would blur, so they keep that cadence and
+ * the body glides. Models load only within NEAR metres of the camera (and hide again past it); clips load per
+ * activity as first needed.
  */
 
 /** Full models within this distance of the camera (they hide past HIDE). */
@@ -142,12 +145,15 @@ function setOpacity(character: Object3D, opacity: number) {
 function NpcModel({
   look,
   pose,
+  rate,
   trackRef,
   viewRef,
   ground,
 }: {
   look: CitizenLook;
   pose: NpcLook;
+  /** The clock: game seconds per real second (0 paused). */
+  rate: number;
   trackRef: RefObject<Track>;
   viewRef: RefObject<NpcView>;
   ground: GroundProbe;
@@ -223,7 +229,7 @@ function NpcModel({
       groundSpeed(track.path),
       viewRef.current,
     );
-    animation.update(Math.min(delta, MAX_FRAME));
+    animation.update(Math.min(delta, MAX_FRAME) * clipLapse(rate));
     layToRest(resting.current, shapeOf(pose.pose, playing.current, actions), {
       character,
       rest,
@@ -429,6 +435,7 @@ function Npc({
         <NpcModel
           look={look}
           pose={pose}
+          rate={rate}
           trackRef={trackRef}
           viewRef={viewRef}
           ground={ground}
