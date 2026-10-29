@@ -7,7 +7,7 @@ from typing import Literal, get_args
 
 from pydantic import JsonValue
 
-from app.world_api.models import Compass, Nearness, Perception, ResourceName, Seen, SelfView, TimeOfDay
+from app.world_api.models import ActionResult, Compass, Nearness, Perception, ResourceName, Seen, SelfView, TimeOfDay
 
 Phase = Literal["night", "morning", "day", "dusk"]
 Distance = Literal["here", "near", "close", "off", "far"]
@@ -139,9 +139,14 @@ def carried_food(you: SelfView) -> dict[str, int]:
     return food
 
 
-def full_load(perception: Perception, told_full: JsonValue) -> bool:
-    """Still carrying just what you carried when told you can't carry any more (`told_full`, a brain's note)."""
-    return told_full == perception.you.carrying
+def full_load(perception: Perception, noted: JsonValue) -> bool:
+    """Still carrying just what you carried when told you can't carry any more (`noted`, a brain's note)."""
+    return noted == perception.you.carrying
+
+
+def told_full(result: ActionResult | None) -> bool:
+    """The action ended saying the load is full (at once or as it went on): full until what you carry changes."""
+    return result is not None and result.text == FULL_LOAD
 
 
 def carries(perception: Perception, item: str) -> bool:

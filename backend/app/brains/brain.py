@@ -20,7 +20,6 @@ from app.brains.profile import BrainProfile
 from app.brains.routines import ROUTINES, Context, Option
 from app.brains.senses import (
     DISTANCE,
-    FULL_LOAD,
     Needs,
     at,
     at_home,
@@ -34,6 +33,7 @@ from app.brains.senses import (
     is_name,
     near,
     phase,
+    told_full,
     water_here,
     water_in_view,
     water_way,
@@ -100,6 +100,9 @@ class UtilityBrain:
             notes["greeted"] = []  # a new day: greet people again
             notes["chores"] = []
             notes.pop("full", None)  # carrying words are rough: a little eaten may not change them, so try again
+        number = notes.get("action")
+        if isinstance(number, int) and told_full(api.handle(number).result):  # the load filled as it went on
+            notes["full"] = list(perception.you.carrying)
         way = water_way(perception)
         if way is not None and self.profile.region != "town" and at_home(perception):
             notes["water_way"] = way  # which way the camp's water lies from home (only from there), for the dark
@@ -115,7 +118,7 @@ class UtilityBrain:
             streak = (previous if isinstance(previous, int) else 0) + 1
             notes["instant"] = streak
             notes["failed"] = notes.get("last") if handle.result.outcome == "failed" else None
-            if handle.result.text == FULL_LOAD:  # the load counts as full until what you carry changes
+            if told_full(handle.result):
                 notes["full"] = list(perception.you.carrying)
             if handle.result.outcome == "failed" or streak >= 2:
                 handle = api.wait(10 + 5 * self.pick(4))  # nothing to do right now: look again in a while

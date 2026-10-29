@@ -145,7 +145,7 @@ def _gathers(sim: Simulation, brain: UtilityBrain, minutes: int) -> list[str]:
         sim.step()
         for event in sim.drain():
             payload = event.payload.model_dump()
-            if event.type == "action_finished" and event.actor_id == brain.profile.citizen_id:
+            if event.type in ("action_finished", "action_interrupted") and event.actor_id == brain.profile.citizen_id:
                 if payload["action"] == "gather":
                     ended.append(payload["text"])
     return ended
@@ -179,6 +179,20 @@ def test_a_forager_with_a_full_load_stops_gathering_until_it_carries_less(
     forager.inventory["meat"] = 3  # carrying less now ("a little meat", say some was eaten): room to gather again
     lighter = _gathers(sim, brain, 3 * 60)
     assert any(text.startswith("You gather") for text in lighter)
+
+
+def test_a_forager_whose_load_fills_while_it_gathers_stops_gathering(new_sim: Callable[..., Simulation]) -> None:
+    sim = without_animals(new_sim())
+    child = sim.add_citizen(
+        make_spec("pip", age=9, site="band_a_camp", at=(0.0, 30.0), home=HOME_A, region="band_a", inventory={"meat": 3})
+    )
+    sim.state.resources[child.cell, RESOURCE_INDEX["berries"]] = 40
+    skip_to(sim, child.position, night=False)
+    brain = _brain(sim, child.id, role="child")
+    brain.decide()
+    assert _started(sim, child.id) == "gather"
+    child.inventory["meat"] = 10  # handed meat as it gathers: no room left when the gather ends
+    assert _gathers(sim, brain, 2 * 60) == ["You can't carry any more."]  # not told twice
 
 
 def test_a_forager_walks_to_the_fallen_wood_it_saw_not_the_camp_woodpile(new_sim: Callable[..., Simulation]) -> None:
