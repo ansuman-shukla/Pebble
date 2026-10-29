@@ -2,14 +2,17 @@
  * Drawn bodies never pass through each other (10 §4.3, D192). Every frame each drawn citizen is shifted off the spot
  * its track draws it at (`drawn-track.ts`, after the keep-right lane) by a small offset on the ground, away from anyone
  * drawn closer than KEEP_M now or about to be: a body on the move looks ahead along its pace (closest approach within
- * LOOK_S, at most LOOK_M away) and, head-on, sidesteps right of the way it goes, like the lanes. Once clear the offset
+ * LOOK_S, at most LOOK_M of closing in) and, head-on, sidesteps right of the way it goes, like the lanes. Once clear the offset
  * eases back to nothing, so a body at rest stands exactly where the feed says unless it would stand inside someone.
  *
  *   spot (track) ──+ offset──▶ drawn        pushed apart ≤ MAX_MPS · Δt a frame; eased to 0 when clear
  *
- * Who gives way: a walker more than someone standing still (GIVE); sitting and lying bodies never move, others step
- * round them. Time is the film's (`visualRate`): at ×10 it all happens ten times faster, past that bodies glide.
- * Drawn only: the sim, the paths and their joins stay where the feed says.
+ * Who gives way (`giveOf`): a walker more than someone standing still (GIVE); seated, sitting and lying bodies never
+ * move, others step round them, and someone sitting or lying down while stepped aside stands until back on the spot
+ * (`standsUntilBack`), so nobody slides seated; bodies out of sight (inside a house) leave the crowd. Time is the
+ * film's (`visualRate`): at ×10 it all happens ten times faster, past that bodies glide; with the clock at 0 (paused,
+ * a replayed moment) bodies on one spot part at once and nothing else moves. Drawn only: the sim, the paths and their
+ * joins stay where the feed says.
  *
  * Pure (no DOM, no React): `globe-npcs.tsx` keeps one crowd and one body per citizen; the tests drive it directly.
  */
@@ -19,17 +22,41 @@ import { Vector3 } from 'three';
 export const KEEP_M = 0.7;
 /** A body on the move sees someone coming this long ahead (seconds of motion)... */
 const LOOK_S = 1;
-/** ...and never further than this (metres of closing in, so time-lapse walkers don't look kilometres ahead). */
-const LOOK_M = 2;
+/**
+ * ...and never further than this (metres of closing in): two runners head-on close 7 m in that second, while
+ * time-lapse walkers don't look kilometres ahead.
+ */
+const LOOK_M = 8;
 /** The fastest the offset changes (metres per second of motion): with a walker's pace, under 0.04 m a frame at ×1. */
 const MAX_MPS = 0.9;
-/** How fast a clear body eases back onto its spot (1/s of motion). */
+/** How fast a clear body eases back onto its spot (1/s of motion)... */
 const RETURN_RATE = 2;
-/** An offset this small (metres) is gone: the body stands exactly on its spot. */
-const ON_SPOT_M = 1e-4;
+/** ...and never slower than this over the last few centimetres (metres per second of motion), so it gets there. */
+const MIN_RETURN_MPS = 0.25;
 
 /** How readily a body gives way, by what it is drawn doing. */
 export const GIVE = { walking: 1, standing: 0.5, resting: 0 } as const;
+
+/** Postures of bodies out of sight, which leave the crowd (nobody steps round them). */
+const UNSEEN: ReadonlySet<string> = new Set(['inside', 'hidden']);
+
+/**
+ * How readily a body in this posture gives way (`moving`: drawn walking its path), null out of sight. Only a standing
+ * body moves; any other posture (seated, sitting, sitting on the ground, sleeping, lying, crouching, or one added
+ * later) never does.
+ */
+export function giveOf(posture: string, moving: boolean): number | null {
+  if (UNSEEN.has(posture)) return null;
+  if (posture !== 'standing') return GIVE.resting;
+  return moving ? GIVE.walking : GIVE.standing;
+}
+
+/**
+ * Whether a body shown standing that is about to sit or lie down (`resting` next) should stand a moment longer: while
+ * it is drawn stepped aside it eases back onto its spot first, then sits there.
+ */
+export const standsUntilBack = (body: CrowdBody, resting: boolean) =>
+  resting && body.offset.lengthSq() > 0;
 
 export interface CrowdBody {
   /** Where its track drew it last frame (unit direction), before the offset. */
@@ -79,6 +106,7 @@ const flat = (vector: Vector3, up: Vector3) =>
 const apart = new Vector3();
 const closing = new Vector3();
 const closest = new Vector3();
+const miss = new Vector3();
 const away = new Vector3();
 const mine = new Vector3();
 const theirs = new Vector3();
@@ -106,7 +134,8 @@ function parting(body: CrowdBody, other: CrowdBody, up: Vector3, out: Vector3) {
 /**
  * How close the body drawn at `spot` + `offset` comes to `other` (metres; Infinity out of reach): now, or for a pair
  * closing in, at their closest within LOOK_S (and LOOK_M). Leaves the other's place at that moment, seen from the
- * body, in `closest`.
+ * body, in `closest`, and which way to step clear of it in `miss`: across the way they close in (stepping back along
+ * it only meets them later), or straight away from it when they aren't closing in; zero when they meet head-on.
  */
 function closestGap(
   body: CrowdBody,
@@ -124,7 +153,7 @@ function closestGap(
     spot,
   );
   if (apart.lengthSq() > (LOOK_M + KEEP_M) ** 2) return Infinity;
-  closing.subVectors(body.velocity, other.velocity);
+  flat(closing.subVectors(body.velocity, other.velocity), spot); // velocities lie on their own ground
   const speed = closing.length();
   const ahead =
     speed > 1e-6
@@ -134,7 +163,11 @@ function closestGap(
           LOOK_M / speed,
         )
       : 0;
-  return closest.copy(apart).addScaledVector(closing, ahead).length();
+  closest.copy(apart).addScaledVector(closing, ahead);
+  miss.copy(closest);
+  if (ahead > 0)
+    miss.addScaledVector(closing, -miss.dot(closing) / (speed * speed));
+  return closest.length();
 }
 
 /** Whether a body drawn with this offset would come closer than KEEP_M to anyone. */
@@ -157,20 +190,26 @@ function wouldCrowd(
 
 /**
  * Draws `body` apart from the rest of the crowd: `spot` (a unit direction, changed in place) is where its track draws
- * it this frame, `give` how readily it gives way now, `delta` seconds of motion since the last frame (real seconds
- * sped up like the clips, `visualRate`: up to ×10 the film runs faster; 0 when paused holds every offset) and `radius`
- * the planet's. Returns `spot`, shifted by the body's offset.
+ * it this frame, `give` how readily it gives way now (`giveOf`; null: out of sight, it leaves the crowd), `delta`
+ * seconds of motion since the last frame (real seconds sped up like the clips, `visualRate`: up to ×10 the film runs
+ * faster; 0 with the clock paused or on a replayed moment: bodies on one spot part at once, nothing eases) and
+ * `radius` the planet's. Returns `spot`, shifted by the body's offset.
  */
 export function separate(
   crowd: Crowd,
   body: CrowdBody,
   spot: Vector3,
-  give: number,
+  give: number | null,
   delta: number,
   radius: number,
 ) {
-  if (!body.placed) body.velocity.set(0, 0, 0);
-  else if (delta > 0)
+  if (give === null) {
+    body.placed = false; // nobody steps round it, and it comes back on its spot
+    body.offset.set(0, 0, 0);
+    return spot;
+  }
+  if (!body.placed || delta === 0) body.velocity.set(0, 0, 0);
+  else
     flat(
       body.velocity.subVectors(spot, body.spot).multiplyScalar(radius / delta),
       spot,
@@ -188,7 +227,7 @@ export function separate(
       const gap = closestGap(body, other, spot, body.offset, radius);
       if (gap >= KEEP_M) continue;
       crowded = true;
-      if (gap > 1e-3) away.copy(closest).divideScalar(gap);
+      if (miss.lengthSq() > 1e-6) away.copy(miss).normalize();
       else parting(body, other, spot, away);
       const share = give / (give + other.give);
       yielding = Math.max(yielding, share);
@@ -196,16 +235,24 @@ export function separate(
     }
   const most = MAX_MPS * delta;
   if (crowded) {
-    // the one giving way less also steps aside slower, so it still moves less while both step at their fastest
+    // the one giving way less also steps aside slower, so it still moves less while both step at their fastest; with
+    // the clock at 0 nothing animates, so they part at once
     const fastest = most * Math.min(2 * yielding, 1);
-    if (push.lengthSq() > fastest * fastest) push.setLength(fastest);
+    if (delta > 0 && push.lengthSq() > fastest * fastest)
+      push.setLength(fastest);
     body.offset.add(push);
   } else if (body.offset.lengthSq() > 0) {
     // clear: ease back onto the spot, unless that would step into someone (a body at rest that would overlap holds)
-    push.copy(body.offset).multiplyScalar(Math.exp(-RETURN_RATE * delta) - 1);
-    if (push.lengthSq() > most * most) push.setLength(most);
-    eased.addVectors(body.offset, push);
-    if (eased.lengthSq() < ON_SPOT_M * ON_SPOT_M) eased.set(0, 0, 0);
+    const off = body.offset.length();
+    const back = Math.min(
+      off,
+      most,
+      Math.max(
+        off * (1 - Math.exp(-RETURN_RATE * delta)),
+        MIN_RETURN_MPS * delta,
+      ),
+    );
+    eased.copy(body.offset).multiplyScalar(1 - back / off);
     if (give === 0 || !wouldCrowd(crowd, body, spot, eased, radius))
       body.offset.copy(eased);
   }

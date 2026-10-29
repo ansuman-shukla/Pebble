@@ -5,53 +5,67 @@ import {
   type Crowd,
   type CrowdBody,
   GIVE,
+  giveOf,
   KEEP_M,
   newCrowdBody,
   separate,
+  standsUntilBack,
 } from '../../src/lib/live/separation';
 
-/* Drawn bodies never pass through each other (no browser): walkers part as they meet, a crowd on one point spreads
- * out and holds still, sitters never move, and a clear body ends exactly on its spot. */
+/* Drawn bodies never pass through each other (no browser): walkers and runners part as they meet, a crowd on one
+ * point spreads out and holds still, sitters never move, nobody slides seated, bodies out of sight leave the crowd,
+ * and a clear body ends exactly on its spot. */
 
 const R = 2000;
 const FRAME = 1 / 60;
 const PACE = 1.4;
+const RUN = 3.5;
 /** A direction `x` metres east and `z` metres north of a spot on the planet (small distances: a flat chart). */
 const at = (x: number, z: number) => new Vector3(x / R, z / R, 1).normalize();
 const metres = (a: Vector3, b: Vector3) => a.angleTo(b) * R;
 const east = (spot: Vector3) => (spot.x / spot.z) * R;
 const north = (spot: Vector3) => (spot.y / spot.z) * R;
 
-/** Someone in the scene: where its track draws it `t` real seconds in, and how readily it gives way then. */
+/** Someone in the scene: where its track draws it `t` seconds in, the posture it takes then and whether it moves. */
 interface Actor {
   spot: (t: number) => [number, number];
-  give: (t: number) => number;
+  posture: (t: number) => string;
+  moving: (t: number) => boolean;
 }
 
-/** Walks in a straight line from `from` to `to` at walking pace, then stands there. */
-function walker(from: [number, number], to: [number, number]): Actor {
+/** Walks (or runs, at `pace`) in a straight line from `from` to `to`, then stands there. */
+function walker(
+  from: [number, number],
+  to: [number, number],
+  pace = PACE,
+): Actor {
   const length = Math.hypot(to[0] - from[0], to[1] - from[1]);
-  const arrive = length / PACE;
+  const arrive = length / pace;
   return {
     spot: (t) => {
       const k = Math.min(t / arrive, 1);
       return [from[0] + (to[0] - from[0]) * k, from[1] + (to[1] - from[1]) * k];
     },
-    give: (t) => (t < arrive ? GIVE.walking : GIVE.standing),
+    posture: () => 'standing',
+    moving: (t) => t < arrive,
   };
 }
 
+/** Stays on one spot in one posture (`moving`: drawn walking on the spot, giving way like a walker). */
 const still = (
   spot: [number, number],
-  give: number = GIVE.standing,
+  posture = 'standing',
+  moving = false,
 ): Actor => ({
   spot: () => spot,
-  give: () => give,
+  posture: () => posture,
+  moving: () => moving,
 });
 
 /**
  * Draws the scene frame by frame for `seconds` of real time at the clock's `rate` (0 paused; a function of the real
- * seconds gone for a clock that changes), everyone in turn as the globe does: the drawn and track spots.
+ * seconds gone for a clock that changes), everyone in turn as the globe does: the drawn and track spots, and the
+ * posture each is shown in (one about to sit stands until back on its spot).
  */
 function play(
   actors: Actor[],
@@ -66,6 +80,8 @@ function play(
   });
   const drawn: Vector3[][] = [];
   const spots: Vector3[][] = [];
+  const shown: string[][] = [];
+  let now = actors.map((actor) => actor.posture(0));
   let t = 0;
   for (let frame = 0; frame <= Math.round(seconds / FRAME); frame++) {
     const delta =
@@ -78,14 +94,22 @@ function play(
           crowd,
           bodies[i],
           at(...actor.spot(t)),
-          actor.give(t),
+          giveOf(actor.posture(t), actor.moving(t)),
           delta,
           R,
         ).clone(),
       ),
     );
+    now = actors.map((actor, i) => {
+      const next = actor.posture(t);
+      const hold =
+        now[i] === 'standing' &&
+        standsUntilBack(bodies[i], next !== 'standing');
+      return hold ? now[i] : next;
+    });
+    shown.push(now);
   }
-  return { drawn, spots, bodies };
+  return { drawn, spots, shown, bodies };
 }
 
 /** The closest any two are drawn over the whole scene (metres). */
@@ -118,6 +142,11 @@ test('two walkers meeting head-on on one line sidestep right of their way and pa
   const meeting = drawn[Math.round(10 / PACE / FRAME)];
   expect(north(meeting[0])).toBeLessThan(-0.25);
   expect(north(meeting[1])).toBeGreaterThan(0.25);
+  // stepping across their way, not shoved back along it
+  for (const [k, frame] of drawn.entries())
+    frame.forEach((spot, i) =>
+      expect(Math.abs(east(spot) - east(spots[k][i]))).toBeLessThan(0.1),
+    );
   // and they end exactly where they were going
   drawn
     .at(-1)!
@@ -207,7 +236,7 @@ test('five drawn on one point from the start part within a second and hold apart
 
 test('two on one point part by how readily each gives way: a walker steps further than someone standing', () => {
   const { drawn, spots } = play(
-    [still([0, 0], GIVE.walking), still([0, 0], GIVE.standing)],
+    [still([0, 0], 'standing', true), still([0, 0])],
     3,
   );
   const [walking, standing] = drawn
@@ -220,7 +249,7 @@ test('two on one point part by how readily each gives way: a walker steps furthe
 test('a sitter is never moved: walkers coming to its very spot stop round it', () => {
   const { drawn, spots } = play(
     [
-      still([0, 0], GIVE.resting),
+      still([0, 0], 'seated'),
       ...AROUND(3, 8).map((from) => walker(from, [0, 0])),
     ],
     15,
@@ -232,35 +261,127 @@ test('a sitter is never moved: walkers coming to its very spot stop round it', (
 
 test('two sitters on one spot are left alone (only the sim can part them)', () => {
   const { drawn } = play(
-    [still([0, 0], GIVE.resting), still([0, 0], GIVE.resting)],
+    [still([0, 0], 'sitting'), still([0, 0], 'sleeping')],
     1,
   );
   expect(metres(drawn.at(-1)![0], drawn.at(-1)![1])).toBe(0);
 });
 
-test('someone who sits down while stepped aside settles onto the seat, not jumping', () => {
+test('someone who sits down while stepped aside stands until back on the seat, then sits: never sliding seated', () => {
   const sitter: Actor = {
     spot: () => [0, 0],
-    give: (t) => (t < 2 ? GIVE.standing : GIVE.resting),
+    posture: (t) => (t < 2 ? 'standing' : 'seated'),
+    moving: () => false,
   };
-  const { drawn, spots } = play([sitter, still([0.2, 0])], 6);
-  expect(
-    metres(drawn[Math.round(1.9 / FRAME)][0], spots[0][0]),
-  ).toBeGreaterThan(0.1);
+  const { drawn, spots, shown } = play([sitter, still([0.2, 0])], 6);
+  const stepped = Math.round(1.9 / FRAME);
+  expect(metres(drawn[stepped][0], spots[0][0])).toBeGreaterThan(0.1); // stepped aside...
+  expect(shown[Math.round(2.05 / FRAME)][0]).toBe('standing'); // ...so it stands on a moment
   expect(biggestStep(drawn)).toBeLessThan(0.04);
-  expect(metres(drawn.at(-1)![0], spots.at(-1)![0])).toBeLessThan(1e-6); // on its seat
+  const seated = shown.flatMap((postures, k) =>
+    postures[0] === 'seated' ? [k] : [],
+  );
+  expect(seated.length).toBeGreaterThan(0); // it does sit
+  for (const k of seated) expect(metres(drawn[k][0], spots[k][0])).toBe(0); // exactly on its seat while seated
+  expect(seated[0]).toBeLessThan(Math.round(3 / FRAME)); // within a second
+  // the one standing beside it is clear of it once it sits
+  expect(metres(drawn.at(-1)![0], drawn.at(-1)![1])).toBeGreaterThanOrEqual(
+    KEEP_M - 0.02,
+  );
 });
 
-test('a paused clock holds every drawn body where it is', () => {
+test('a paused clock (or a replayed moment) parts bodies on one spot at once, then holds everything', () => {
   const { drawn } = play(
     [walker([-2, 0], [2, 0]), still([0, 0]), still([0, 0])],
     3,
-    (real) => (real < 1 ? 1 : 0), // paused a second in, mid-parting
+    (real) => (real < 0.1 ? 1 : 0), // paused just after they start parting
   );
-  const pausedAt = drawn[Math.round(1.05 / FRAME)];
-  expect(metres(pausedAt[1], pausedAt[2])).toBeGreaterThan(0.3); // parting...
-  for (const frame of drawn.slice(Math.round(1.05 / FRAME)))
-    frame.forEach((spot, i) => expect(metres(spot, pausedAt[i])).toBe(0)); // ...and held
+  const pausedAt = Math.round(0.1 / FRAME);
+  expect(metres(drawn[pausedAt - 1][1], drawn[pausedAt - 1][2])).toBeLessThan(
+    0.5,
+  ); // still parting...
+  const parted = drawn[pausedAt + Math.round(0.5 / FRAME)];
+  expect(closest([parted])).toBeGreaterThanOrEqual(KEEP_M - 0.02); // ...apart at once
+  for (const frame of drawn.slice(pausedAt + Math.round(0.5 / FRAME)))
+    frame.forEach((spot, i) =>
+      expect(metres(spot, parted[i])).toBeLessThan(1e-6),
+    ); // ...and held
+});
+
+test('a replayed moment of two on one spot draws them apart from its first frames', () => {
+  const { drawn } = play([still([0, 0]), still([0, 0])], 0.2, 0);
+  expect(metres(drawn.at(-1)![0], drawn.at(-1)![1])).toBeGreaterThanOrEqual(
+    KEEP_M - 0.02,
+  );
+});
+
+test('a body out of sight (inside a house) leaves the crowd: nobody steps round it, and it is drawn on its spot', () => {
+  const { drawn, spots } = play([still([0, 0], 'inside'), still([0, 0])], 2);
+  for (const [k, frame] of drawn.entries())
+    frame.forEach((spot, i) => expect(metres(spot, spots[k][i])).toBe(0));
+});
+
+test('a body left clear eases back onto its spot, about two-thirds of the way in half a second, then exactly', () => {
+  const leaves: Actor = {
+    spot: () => [0, 0],
+    posture: (t) => (t < 2 ? 'standing' : 'inside'),
+    moving: () => false,
+  };
+  const { drawn, spots } = play([leaves, still([0, 0])], 5);
+  const off = (s: number) =>
+    metres(drawn[Math.round(s / FRAME)][1], spots[0][1]);
+  expect(off(2)).toBeGreaterThan(0.3); // stepped aside while the other stood there
+  expect(off(2.5)).toBeLessThan(off(2) * 0.5);
+  expect(off(5)).toBe(0);
+});
+
+test('who gives way by posture: walking most, standing less, any other posture never; out of sight not at all', () => {
+  expect(giveOf('standing', true)).toBe(GIVE.walking);
+  expect(giveOf('standing', false)).toBe(GIVE.standing);
+  expect(GIVE.walking).toBeGreaterThan(GIVE.standing);
+  for (const posture of [
+    'seated',
+    'sitting',
+    'sitting_ground',
+    'sleeping',
+    'lying',
+    'crouching',
+    'some-new-pose',
+  ]) {
+    expect(giveOf(posture, false)).toBe(0);
+    expect(giveOf(posture, true)).toBe(0);
+  }
+  expect(giveOf('inside', false)).toBeNull();
+  expect(giveOf('hidden', true)).toBeNull();
+});
+
+test('two runners meeting head-on pass at least 0.7 m apart and end on their spots', () => {
+  const { drawn, spots } = play(
+    [walker([-15, 0], [15, 0], RUN), walker([15, 0], [-15, 0], RUN)],
+    12,
+  );
+  expect(closest(drawn)).toBeGreaterThanOrEqual(KEEP_M);
+  drawn
+    .at(-1)!
+    .forEach((spot, i) =>
+      expect(metres(spot, spots.at(-1)![i])).toBeLessThan(1e-6),
+    );
+});
+
+test('a walker and a runner meeting head-on pass at least 0.7 m apart', () => {
+  const { drawn } = play(
+    [walker([-15, 0], [15, 0], RUN), walker([10, 0], [-15, 0])],
+    12,
+  );
+  expect(closest(drawn)).toBeGreaterThanOrEqual(KEEP_M);
+});
+
+test('a runner overtaking a walker on its line goes round it', () => {
+  const { drawn } = play(
+    [walker([-10, 0], [20, 0], RUN), walker([0, 0], [20, 0])],
+    12,
+  );
+  expect(closest(drawn)).toBeGreaterThanOrEqual(0.6);
 });
 
 test('walkers far apart are drawn exactly on their spots', () => {

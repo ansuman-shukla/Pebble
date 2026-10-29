@@ -33,9 +33,10 @@ import {
 import {
   type Crowd,
   type CrowdBody,
-  GIVE,
+  giveOf,
   newCrowdBody,
   separate,
+  standsUntilBack,
 } from '@/lib/live/separation';
 import type { ShownDoings } from '@/lib/live/shown-doings';
 import { groundSpeed, headingAt, walking } from '@/lib/live/walk-path';
@@ -276,15 +277,10 @@ interface PlaceContext {
   /** Everyone drawn, and this citizen among them, to keep the bodies apart. */
   crowd: Crowd;
   self: CrowdBody;
-  posture: NpcLook['pose'];
   /** Game seconds per real second (0 paused). */
   rate: number;
   delta: number;
 }
-
-/** How readily a drawn body gives way: walking most, standing still less, sitting or lying never. */
-const giveOf = (posture: NpcLook['pose'], onward: boolean) =>
-  posture !== 'standing' ? GIVE.resting : onward ? GIVE.walking : GIVE.standing;
 
 /**
  * Walks the citizen on along its path, in its lane, clear of the others, onto the ground, turning the way it walks
@@ -309,7 +305,8 @@ function placeAlong(
     context.crowd,
     context.self,
     inLane,
-    giveOf(context.posture, onward),
+    // by the posture it is to take: someone about to sit is never pushed, and eases back before sitting
+    giveOf(npcLook(shownDoing(track)).pose, onward),
     delta * visualRate(rate),
     radius,
   );
@@ -427,9 +424,16 @@ function Npc({
   );
   const pose = useMemo(() => npcLook(doing), [doing]);
 
-  // the activity shown changes when a frame comes or the drawn body gets where the frame says it is
+  // the activity shown changes when a frame comes or the drawn body gets where the frame says it is; someone sitting
+  // or lying down while drawn stepped aside stands until back on their spot (separation.ts), never sliding seated
   const showDoing = () => {
-    const now = shownDoing(trackRef.current);
+    const next = shownDoing(trackRef.current);
+    const now =
+      next !== doing &&
+      pose.pose === 'standing' &&
+      standsUntilBack(self, npcLook(next).pose !== 'standing')
+        ? doing
+        : next;
     viewRef.current.activity = now.activity;
     if (now !== doing) setDoing(now);
   };
@@ -471,7 +475,6 @@ function Npc({
       heading: citizen.heading_deg,
       crowd,
       self,
-      posture: pose.pose,
       rate,
       delta: Math.min(frameDelta, MAX_FRAME),
     });
