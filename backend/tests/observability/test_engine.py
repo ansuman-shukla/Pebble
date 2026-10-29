@@ -100,6 +100,21 @@ def test_stopping_a_resumed_run_before_it_ticks_keeps_its_snapshot(db_session: S
     assert canonical_json(SimSnapshot.model_validate(last.state)) == canonical_json(take_snapshot(again.sim.state))
 
 
+def test_a_resumed_run_catches_up_its_lost_tail_without_waiting(db_session: Session, sim_world: SimWorld) -> None:
+    first = open_loop(db_session, sim_world, KEY, new_run=True, citizens=None, clock=Clock(), brains=False)
+    first.run_ticks(90, headless=True)  # an unclean stop: ticks 61..90 were committed but aren't in a snapshot
+
+    resumed = open_loop(db_session, sim_world, KEY, new_run=False, citizens=None, clock=Clock(), brains=False)
+    assert (resumed.sim.tick, resumed.catch_up_to) == (60, 90)
+    fake = FakeTime()
+    resumed.now, resumed.idle_sleep, resumed.brains = fake.now, fake.sleep, [fake.brain]
+    resumed.run_ticks(31, headless=False)
+    # spectators already saw ticks up to 90: they come back at once, then real time carries on from there
+    assert fake.ticked_at == pytest.approx([0.0] * 30 + [60.0], abs=1e-6)
+    run = db_session.get(Run, first.run.id)
+    assert run is not None and run.tick == 91
+
+
 def test_clock_commands_reach_the_engine(db_session: Session, sim_world: SimWorld) -> None:
     loop = open_loop(db_session, sim_world, KEY, new_run=True, citizens=None, clock=Clock())
     command = queue_command(db_session, loop.run.id, "clock", {"paused": True, "speed": 30})
