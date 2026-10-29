@@ -132,7 +132,8 @@ full at start). Far ring: minerals, gold, the best game.
 
 ### 1.5 Territory (`sim/territory.py`)
 - **Home ground:** town chart + 400 m; each camp 400 m. Owned by that group; one constant `HOME_GROUND_M = 400`.
-- **Claimed hotspots** are static in v1 (table 1.2): Lord's woods (town), Eastern wall scar (band A). A claimed
+- **Claimed hotspots** are static in v1 (table 1.2): Lord's woods (town), Eastern wall scar (band A), B wood
+  (band B). A claimed
   hotspot shows its marker: town boundary stone with a banner, band cairn with a hide streamer.
 - Taking from a node, hunting or fishing on another group's ground or claimed hotspot **succeeds** and is a
   `trespassed` deed (§3.3). In the Lord's woods, town folk may gather but only the lord and samurai may hunt.
@@ -170,50 +171,57 @@ inside the town chart; ≤ 15 m of a lit fire; ≥ 2 others within 10 m (D68). N
   inventories + stores + ground = 3 000.
 - Bands see and use coins like anyone (no money-concept learning in v1).
 
-### 2.2 Goods and values (`data/economy.yaml`, mon per unit)
-One table, used as the stall's base price, scripted barter judgement and scoreboard wealth. Bands judge by their own
-column (cross-valuation is why trade is worth the walk).
+### 2.2 Goods: value, source, sink (`data/economy.yaml`, mon per unit)
+One table, used as the stall's base price, scripted judgement and scoreboard wealth. Bands judge by their own column
+(cross-valuation is why trade is worth the walk). **Every good has a source and a sink; goods without a buyer in
+town are not sold at the stall.**
 
-| Item | Unit, weight | Food | Town | Band | Source |
-|---|---|---|---|---|---|
-| rice | measure 0.2 kg | 10 | 2 | 4 | paddies |
-| dried meat | strip 0.1 kg | 8 | 3 | 3 | craft at a drying rack |
-| meat / fish | 0.5 / 0.4 kg | 10 / 6 (raw) | 3 / 2 | 2 / 2 | hunt / fish |
-| berries / nuts / roots | piece | 2 / 3 / 6 | 0.2 / 0.2 / 0.5 | same | gather |
-| wood / reeds | 1 / 0.1 kg | – | 1 / 0.5 | 0.5 / 0.5 | gather, fell |
-| hide | 2 kg | – | 15 | 6 | hunt |
-| **flint** | nodule 0.5 kg | – | 2 | 5 | flint seams |
-| **obsidian** | shard 0.3 kg | – | 6 | 12 | obsidian field |
-| **iron sand** | measure 1 kg | – | 3 | 0 | iron-sand bar |
-| **gold** | grain 0.01 kg | – | 60 | 1 | falls pool (finite) |
-| **cloth** | length 1 kg | – | 25 | 15 | weave |
-| spear / **axe** / **sickle** | 1.5 / 1.2 / 0.6 kg | – | 20 / 60 / 50 | 30 / 40 / 0 | craft |
-| coins | mon | – | 1 | 1 | treasury |
+| Item | Unit, weight | Food | Town | Band | Source | Sink | Stall (lot, target) |
+|---|---|---|---|---|---|---|---|
+| rice | measure 0.2 kg | 10 | 2 | 4 | paddies | eaten | 2, 120 |
+| dried meat | strip 0.1 kg | 8 | 3 | 3 | craft at a drying rack | eaten (town buys it instead of rice) | 2, 20 |
+| meat / fish | 0.5 / 0.4 kg | 10 / 6 (raw) | 3 / 2 | 2 / 2 | hunt, fish, carcasses | eaten; spoil | not sold (dried meat is the traded form) |
+| berries / nuts / roots | piece | 2 / 3 / 6 | – | – | gather | eaten; spoil | not sold |
+| wood | 1 kg | – | 1 | 0.5 | deadwood, felling | fires, forge fuel (2 per iron craft), recipes | 4, 40 |
+| reeds | 0.1 kg | – | 0.5 | 0.5 | reed beds | cloth, packs | not sold (weavers gather) |
+| hide | 2 kg | – | 15 | 6 | hunt | packs | 1, 6 |
+| **flint** | nodule 0.5 kg | – | 2 | 5 | flint seams | stone spears and axes | not sold (bands knap their own) |
+| **obsidian** | shard 0.3 kg | – | 6 | 12 | obsidian field | obsidian spears (Bo and band hunters buy it) | 1, 6 |
+| **iron sand** | measure 1 kg | – | 4 | 0 | iron-sand bar | iron tools (Tetsu buys it) | 1, 20 |
+| **gold** | grain 0.01 kg | – | 20 | 10 | falls pool, 40 grains, finite | the lord's hoard: he buys it while the treasury holds > 1 800 and never sells | 1, 5 |
+| **cloth** | length 1 kg | – | 25 | 15 | loom | the keep (the lord buys and gives cloth to visiting band leaders) | 1, 6 |
+| **pack** | 1.5 kg | – | 30 | 30 | loom (2 hides + 2 reeds) | wears out (§2.4); +10 kg carry | 1, 3 |
+| spear: flint / obsidian / iron | 1.5 kg | – | 15 / 20 / 40 | 30 / 40 / 40 | craft | break with use | iron only: 1, 2 |
+| axe: stone / iron, **sickle** (iron) | 1.2 / 0.6 kg | – | 20 / 60, 50 | 25 / 40, 0 | craft | break with use; the lord's armoury | iron only: 1, 2 each |
+| coins | mon | – | 1 | 1 | treasury | – | – |
 
 ### 2.3 Crafting: `craft(recipe)` (durative, at a station within 4 m)
 | Recipe | Inputs | Skill | Station | Time | Effect |
 |---|---|---|---|---|---|
-| spear (stone / iron) | 1 wood + 1 flint or obsidian / 2 iron sand + 1 wood | hunting / smithing | camp fire pit / forge | 30 / 60 min | hunt ×1.4 (D70) |
-| axe (stone / iron) | 1 wood + 2 flint / 3 iron sand + 2 wood | gathering / smithing | fire pit / forge | 45 / 120 min | fells trees (stone 90 min) |
-| sickle (iron) | 3 iron sand + 1 wood | smithing | forge | 120 min | rice harvest 10 → 15 per session |
+| spear (flint / obsidian / iron) | 1 wood + 1 flint / 1 wood + 1 obsidian / 2 iron sand + 1 wood | hunting (stone), smithing (iron) | camp fire pit / forge | 30 / 30 / 60 min | hunt × 1.4 / 1.6 / 1.6 (D70's spear factor) |
+| axe (stone / iron) | 1 wood + 2 flint / 3 iron sand + 2 wood | gathering / smithing | fire pit / forge | 45 / 120 min | fells trees (stone 90 min a tree) |
+| sickle (iron) | 3 iron sand + 1 wood | smithing | forge | 120 min | rice harvest 10 → 15 a session |
 | cloth | 2 reeds | weaving | home loom | 60 min | `work("weave")` is an alias |
+| pack | 2 hides + 2 reeds | weaving | home loom | 60 min | carry +10 kg while carried |
 | dried meat | 1-5 meat → as many strips | – | drying rack | 30 min | never spoils |
 
-Stone tools carry the item name "stone spear"/"stone axe" (two item kinds per tool; stacks stay fungible).
+Every iron craft also burns 2 wood at the forge. Tools are separate item kinds per material, so stacks stay fungible.
 
 ### 2.4 Wear and spoilage (`sim/wear.py`)
-- **Spoilage at each holder's local dawn**: raw meat and fish −50 % (ceil), berries −30 %, roots −10 %; rice, nuts,
-  dried meat, cloth, minerals, tools never. One `spoiled {holder, items}` event per holder per dawn.
-- **Tools break** per use: spear 4 % per hunt strike, axe 2 % per felling, sickle 1.5 % per harvest session; stone ×2.
-  `tool_broke`. No per-piece wear state.
+- **Spoilage at each holder's local dawn** (stores and the stall too): raw meat and fish −50 % (ceil), berries −30 %,
+  roots −10 %; rice, nuts, dried meat, cloth, minerals, tools never. One `spoiled {holder, items}` per holder per dawn.
+- **Tools break** per use: spear 4 % per hunt strike, axe 2 % per felling, sickle 1.5 % per harvest session; stone ×2,
+  iron ×0.5 for spears. A **pack** breaks 3 % at each dawn it is carried. `tool_broke`. No per-piece wear state.
 
 ### 2.5 The market stall (`sim/market.py`)
 - The drawn market stall is a store owned by the merchant, **open while the merchant works `trade` within 6 m**;
   `buy`/`sell` fail otherwise ("The stall is shut.").
-- **Price = base × clamp(√(target / (stock + 1)), 0.5, 2.0)**, rounded up to whole mon per unit (small goods trade in
-  lots: berries/nuts 10, roots/reeds 2). The stall sells at the price and **buys at 75 %**, only what it can pay
-  for and up to 2 × target. Targets: rice 120, wood 40, hide 6, cloth 6, dried meat 20, fish 10, meat 10, flint 10,
-  obsidian 6, iron sand 20, gold 10, each tool 2. Seed stock: rice 60, cloth 2, dried meat 10, wood 20, one spear.
+- **Price factor = clamp(√(target / (stock + 1)), 0.5, 2.0).** Goods trade in lots (table 2.2).
+  **Sell price per lot = ⌈base × factor × lot⌉; buy price per lot = max(1, ⌊0.75 × sell price per lot⌋).** At
+  target stock: rice lot 2 sells for 4 and is bought for 3; wood lot 4: 4 / 3; hide 15 / 11; obsidian 6 / 4; iron
+  sand 4 / 3; gold 20 / 15; cloth 25 / 18; pack 30 / 22; sickle 50 / 37; iron axe 60 / 45; iron spear 40 / 30.
+- The stall buys only goods it sells (table 2.2), only with coins it holds, up to 2 × target. Seed stock: rice 60,
+  cloth 2, dried meat 10, wood 20, one iron spear.
 - At the stall a citizen perceives each item as "dear / fair / cheap" + the price in words. `prices_changed` when an
   item's word changes.
 - No person-to-person barter action in v1: swaps are agreed in speech and done with two `give`s.
@@ -222,9 +230,9 @@ Stone tools carry the item name "stone spear"/"stone axe" (two item kinds per to
 | Store | Owner | Reach | Notes |
 |---|---|---|---|
 | personal inventory | carrier | – | exists |
-| household chest (each town house, the keep, each lean-to) | the residents | 6 m of the home's door | `stash(item, amount)` puts carried items in; `pick_up` takes. Start: 20 rice in each non-keep household chest |
-| treasury = the keep's chest | lord's household | keep door | lord's coins |
-| granary = the storehouses | **the lord's household**; eaters: Masanori, Kenji, Goro, Ennen | storehouse door | start rice 400, wood 300; everyone else eats from their chest or buys |
+| household chest (each town house, each lean-to) | the residents | 6 m of the home's door | `stash(item, amount)` puts carried items in; `pick_up` takes. Start: 20 rice in each farm household chest |
+| treasury = the keep's chest | lord's household | keep door | coins, gold, the armoury's tools |
+| granary = the storehouses | **the lord's household** | storehouse door | start rice 400, wood 300; eaten from only by the keep household (Masanori, Kenji); the temple's 15 measures a day are a grant Ennen collects; Goro and everyone else buy their food |
 | market stall | merchant | stall stands | §2.5 |
 | field racks (2 hasa racks by the paddies) | each farm household | 6 m | rice left to dry overnight; the raid target |
 | camp drying rack, camp food pile | the band | 6 m | dried meat station |
@@ -233,15 +241,37 @@ Stone tools carry the item name "stone spear"/"stone axe" (two item kinds per to
 witnesses}` (witnesses = citizens who had the thief in view that tick). The owner notices at the store next time
 ("Some of your rice is gone.") without learning who. No pickpocketing.
 
-### 2.7 Tax, wages and the money loop (`sim/tax.py`)
+### 2.7 Tax, dues, wages and the coin loop (`sim/tax.py`)
 - **Rice tax 40 % of each paddy harvest** (nengu): `owed += ⌈0.4 × count⌉` on the harvester's household at each
-  `gather("rice")`; `work("store food")` at the granary pays it down first (`tax_paid`). Unpaid at local midnight →
-  `tax_overdue {household, owed}`; arrears carry over; 3 days overdue lets the lord judge `confiscate` (§3.4).
-- **Wages** are not a rule; they are the lord giving coins (scripted: 15 mon at dusk to Kenji and Goro; 30 mon per
-  tool ordered from the smith). The lord sells granary surplus (> 3 days of household food) at the stall every 2 days.
-- Loop: treasury → wages/orders → stall → farmers, smith, digger, bands → stall → treasury.
-- Daily `ledger` event per citizen at local midnight: coins, wealth, income/spend 24 h, tax owed (cheap series for
-  the scoreboard).
+  `gather("rice")` (`tax_assessed`); `work("store food")` at the granary pays it down first (`tax_paid`).
+- **Coin dues**, owed daily, settled on court day (week day 7) by `give(coins, lord)` at the keep (`tax_paid`): 5 mon
+  a day per non-farm household (Fumiko, Tetsu, Daisuke, Goro; the keep and the temple pay none) and **field dues** of
+  6 mon per paddy farmed per day (Genzo 24, Tokuji 12). Unpaid rice tax at local midnight or unpaid dues after court
+  day → `tax_overdue {household, rice, coins}`; arrears carry over; 3 days overdue lets the lord fine them (§3.4).
+- **Wages** are the lord giving coins: Goro 25 mon at dusk (he buys his food). Kenji is household (fed and housed, no
+  wage). The lord orders one iron tool every 2 days for the armoury (60 mon) while the treasury holds > 1 500, and
+  buys gold and cloth at the stall (table 2.2 sinks).
+- **Coin flow at steady state** (mon a day at fair prices, from the rice balance in §1.4; Q1's run checks that no
+  holder trends more than ±10 a day and the stall's prices clear the rest). Every coin that leaves a holder arrives at
+  another; the columns sum to zero:
+
+| Holder | In (from whom) | Out (to whom) | Net |
+|---|---|---|---|
+| Treasury | dues 20 (Fumiko, Tetsu, Daisuke, Goro) + field dues 36 (Genzo, Tokuji) + granary rice 19.5 (stall) = **75.5** | Goro 25, Tetsu 30, cloth 6 and gold 18 (stall) = **79** | −3.5 |
+| Stall (Fumiko) | rice 70 (Goro 20, Tetsu 20, Daisuke 16, band A 6, band B 8), iron sand 10, wood 2, hides 7.5, cloth 6, gold 18, sickles 5, obsidian 3 = **121.5** | rice 67.5 (Genzo 27, Tokuji 21, treasury 19.5), iron sand 7.5, wood 1.9, gold 13.5, cloth 4.5, hides 5.5, tools 3.7, obsidian 2.7, dried meat 2, dues 5 = **113.8** | +7.7 |
+| Genzo's household | rice 27, cloth 4.5 = **31.5** | field dues 24, hides 7.5 (packs), sickle 5 = **36.5** | −5 |
+| Tokuji | rice 21 | field dues 12 | +9 |
+| Goro | wage 25 | rice 20, dues 5 | 0 |
+| Tetsu | orders 30, tools to the stall 3.7 = **33.7** | rice 20, iron sand 10, wood 2, dues 5 = **37** | −3.3 |
+| Daisuke | iron sand 7.5, wood 1.9, gold 9 = **18.4** | rice 16, dues 5 = **21** | −2.6 |
+| Band A | hides 5.5, dried meat 2 = **7.5** | rice 6, obsidian 3 = **9** | −1.5 |
+| Band B | gold 4.5, obsidian 2.7 = **7.2** | rice 8 | −0.8 |
+
+  The loop: treasury → wages, orders, gold and cloth → stall and producers → rice, iron sand, hides, gold → farmers,
+  digger, bands → dues and the lord's granary sales → treasury. Gold leaves the loop into the lord's hoard (≈ 0.9 a
+  day; the 40 grains run out in ~6 weeks, ending the gold race); packs and cloth beyond these flows are small and
+  price-limited (Aiko's ≈ 1 pack every 4 days is left out). No holder only receives: the stall pays out its margin through purchases and dues.
+- Daily `ledger` event per citizen at local midnight: coins, wealth, income/spend 24 h, rice and coin owed.
 
 ---
 
