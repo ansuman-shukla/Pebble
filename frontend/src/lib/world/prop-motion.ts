@@ -2,7 +2,8 @@
  * Props that move on their own (10 §5.3): the `tick` loop many Polyfork models carry (a mill wheel, tree crowns,
  * rack sheaves, a well's rope, a bell striker, torch flames, fumarole billows), baked once per model and played on
  * the instanced parts, and the shared clock every living prop reads. Clips play at natural speed × `visualRate`,
- * so a paused clock stills them and past ×10 they keep that cadence (D83).
+ * so a paused clock stills them and past ×10 they keep that cadence (D83); loops that are wind sway (tree crowns,
+ * reeds, cloth, ropes) play on wind time, × `windRate`.
  */
 import {
   type AnimationClip,

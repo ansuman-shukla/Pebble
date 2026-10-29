@@ -12,9 +12,11 @@ import { PROPS } from '../../src/lib/world/assets';
 import { FLAT_MAPPING } from '../../src/lib/world/local-mapping';
 import {
   advanceProps,
+  clipPhase,
   dressPart,
   propViews,
   propWorld,
+  sampleClip,
 } from '../../src/lib/world/prop-motion';
 
 /*
@@ -191,6 +193,47 @@ test("a rack's sheaves sway with its loop, and stay hidden while its dressing is
   run([racks], 0.5);
   expect(isHidden(moves.get(0, 0, new Matrix4()))).toBe(false);
   racks.dispose();
+});
+
+test('a tree crown sways on wind time (at most ×3) and the mill wheel turns on clip time (up to ×10)', async () => {
+  const cherry = await living('cherry_tree', [['cherry', 0, 0]]);
+  const wheel = await living('water_wheel', [['mill', 5, 0]]);
+  propWorld.clipTime = 0;
+  propWorld.windTime = 0;
+  propWorld.rate = 60;
+  run([cherry, wheel], 1);
+  expect(propWorld.clipTime).toBeCloseTo(10, 3);
+  expect(propWorld.windTime).toBeCloseTo(3, 3);
+  /** The move the first looping sub-mesh of `kind` should have `time` seconds into its loop. */
+  const expected = async (
+    kind: keyof typeof PROPS,
+    id: string,
+    time: number,
+  ) => {
+    const model = await load(PROPS[kind]);
+    const clip = model.clip!;
+    const index = model.parts.find(({ moving }) => moving.length > 0)!.moving[0]
+      .clip!;
+    return sampleClip(
+      clip,
+      index,
+      time + clipPhase(id, clip.duration),
+      new Matrix4(),
+    );
+  };
+  const close = (actual: Matrix4, wanted: Matrix4) =>
+    actual.elements.forEach((value, i) =>
+      expect(value).toBeCloseTo(wanted.elements[i], 4),
+    );
+  const crown = cherry.moves[0].get(0, 0, new Matrix4());
+  expect(isRest(crown)).toBe(false);
+  close(crown, await expected('cherry_tree', 'cherry', 3));
+  close(
+    wheel.moves[0].get(0, 0, new Matrix4()),
+    await expected('water_wheel', 'mill', 10),
+  );
+  cherry.dispose();
+  wheel.dispose();
 });
 
 test('loops play for the nearest 64 within 120 m; the mill wheel turns wherever the camera is', async () => {

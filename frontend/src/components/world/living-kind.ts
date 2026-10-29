@@ -25,7 +25,8 @@ import { visualRate } from '@/lib/world/visual-rate';
 
 /*
  * The instances of one kind of placement and what moves their parts (10 §5.3), through a PartMoves texture per
- * part: the model's loop plays for the nearest instances (the mill wheel always turns), door leaves swing open
+ * part: the model's loop plays for the nearest instances (the mill wheel always turns; plants, cloth and ropes
+ * sway on wind time, at most ×3, mechanisms, flames and water on clip time), door leaves swing open
  * while someone passes through the doorway, and parts hide while they shouldn't show: a cold fire's `flame` and
  * `fuel`, and dressing a stream turned off (`dressPart`, prop-motion.ts).
  */
@@ -34,6 +35,17 @@ import { visualRate } from '@/lib/world/visual-rate';
 const FLAT_KINDS = new Set(['rice_paddy', 'paving_tile']);
 /** Kinds whose loop plays wherever the camera is, outside the clip budget. */
 const ALWAYS_MOVING = new Set(['water_wheel']);
+/** Kinds whose loop is a mechanism, a flame or water: it plays on clip time. Every other loop is wind sway. */
+const CLIP_LOOPS = new Set([
+  'water_wheel',
+  'well',
+  'bell_tower',
+  'reed_torch',
+  'fumarole',
+  'geyser',
+  'hot_spring_pool',
+  'stone_basin',
+]);
 /** Sub-meshes hidden while the fire they stand at is out. */
 const FIRE_PARTS = new Set(['flame', 'fuel']);
 /** A live fire belongs to the instance within this many metres of its flame. */
@@ -183,12 +195,15 @@ export class LivingKind {
       if (!playing.includes(index))
         propViews.turns.delete(this.placements[index].id);
     this.played = playing;
+    const time = CLIP_LOOPS.has(this.kind)
+      ? propWorld.clipTime
+      : propWorld.windTime;
     let first = true;
     for (const [index, slot] of this.slots.entries()) {
       if (slot.clip === null) continue;
       for (const at of playing) {
         if (this.hidden[at * this.slots.length + index]) continue;
-        sampleClip(clip, slot.clip, propWorld.clipTime + this.phases[at], move);
+        sampleClip(clip, slot.clip, time + this.phases[at], move);
         slot.moves.set(at, slot.part, move);
         if (!first) continue;
         move.decompose(unused, turn, unused);
