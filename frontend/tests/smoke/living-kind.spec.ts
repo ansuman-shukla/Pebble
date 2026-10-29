@@ -134,7 +134,8 @@ test('a door swings open for someone walking in and shuts after; standing still 
 test('a paused clock holds a door where it is', async () => {
   const houses = await living('townhouse', [['house-c', 0, 0]]);
   const walker = new Vector3(0, 0, 3);
-  propWorld.people = new Map([['walker', walker]]);
+  // one look at who passes is shared by the worker's tests: someone new, first seen standing here
+  propWorld.people = new Map([['late-walker', walker]]);
   run([houses], 0.3);
   propWorld.rate = 0;
   walker.z = 2;
