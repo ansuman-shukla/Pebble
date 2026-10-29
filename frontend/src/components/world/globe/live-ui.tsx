@@ -15,7 +15,8 @@ import { type LiveState, type Speech, speedWords } from '@/lib/live/live-state';
 import { activityWords } from '@/lib/live/npc-activity';
 import type { ShownDoings } from '@/lib/live/shown-doings';
 import type { Region } from '@/lib/world/citizen-looks';
-import type { LabelContent, LabelStore } from '@/lib/world/label-store';
+import { citizenLabels } from '@/lib/world/citizen-labels';
+import type { LabelStore } from '@/lib/world/label-store';
 
 /*
  * The live feed's controls over the globe: the clock with its speed buttons, the People panel (follow / go to),
@@ -201,8 +202,8 @@ export function PeoplePanel({
 }
 
 /**
- * What the citizens' labels say: a name tag each ("Pip · asleep", what the drawn body is shown doing) and the latest
- * speech of whoever spoke.
+ * What the citizens' labels say: a chip each (icon, name, what the drawn body is shown doing, need ring) and the
+ * latest speech.
  */
 export function CitizenLabels({
   store,
@@ -216,24 +217,10 @@ export function CitizenLabels({
   speech: Speech[];
 }) {
   const shown = useSyncExternalStore(doings.subscribe, doings.getSnapshot);
-  const contents = useMemo(() => {
-    const latest = new Map<string, Speech>();
-    for (const said of speech) latest.set(said.actorId, said);
-    return [
-      ...citizens.map((citizen): LabelContent => ({
-        id: `npc-${citizen.id}`,
-        subject: citizen.id,
-        kind: 'name',
-        text: `${citizen.name} · ${activityWords(shown.get(citizen.id) ?? citizen)}`,
-      })),
-      ...[...latest.values()].map((said): LabelContent => ({
-        id: `say-${said.actorId}`,
-        subject: said.actorId,
-        kind: 'speech',
-        text: said.words,
-      })),
-    ];
-  }, [citizens, shown, speech]);
+  const contents = useMemo(
+    () => citizenLabels(citizens, shown, speech),
+    [citizens, shown, speech],
+  );
   useEffect(() => store.describe('citizens', contents), [store, contents]);
   return null;
 }

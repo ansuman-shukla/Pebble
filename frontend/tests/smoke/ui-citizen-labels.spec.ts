@@ -1,9 +1,13 @@
 import { expect, test } from '@playwright/test';
 
+import type { Doing } from '../../src/lib/live/drawn-track';
 import type { LiveCitizen } from '../../src/lib/live/live-contract';
 import { citizenLabels } from '../../src/lib/world/citizen-labels';
 
 /* What the globe's citizen chips and bubbles say (no browser). */
+
+/** No body has shown anything yet: chips go by the feed. */
+const NOTHING_SHOWN = new Map<string, Doing>();
 
 function citizen(overrides: Partial<LiveCitizen> = {}): LiveCitizen {
   return {
@@ -30,10 +34,10 @@ function citizen(overrides: Partial<LiveCitizen> = {}): LiveCitizen {
 }
 
 const ringOf = (state: string[]) =>
-  citizenLabels([citizen({ state })], [])[0].ring;
+  citizenLabels([citizen({ state })], NOTHING_SHOWN, [])[0].ring;
 
 test('a chip names the citizen, says what they do and shows its icon', () => {
-  expect(citizenLabels([citizen()], [])).toEqual([
+  expect(citizenLabels([citizen()], NOTHING_SHOWN, [])).toEqual([
     {
       id: 'npc-genzo',
       subject: 'genzo',
@@ -45,7 +49,9 @@ test('a chip names the citizen, says what they do and shows its icon', () => {
     },
   ]);
   const walking = citizen({ activity: 'walking', action_label: 'the well' });
-  expect(citizenLabels([walking], [])[0].detail).toBe('walking to the well');
+  expect(citizenLabels([walking], NOTHING_SHOWN, [])[0].detail).toBe(
+    'walking to the well',
+  );
   const icons = (
     [
       ['idle', 'stand'],
@@ -62,7 +68,10 @@ test('a chip names the citizen, says what they do and shows its icon', () => {
       ['talking', 'talk'],
       ['dead', 'dead'],
     ] as const
-  ).map(([activity]) => citizenLabels([citizen({ activity })], [])[0].icon);
+  ).map(
+    ([activity]) =>
+      citizenLabels([citizen({ activity })], NOTHING_SHOWN, [])[0].icon,
+  );
   expect(icons).toEqual([
     'stand',
     'walk',
@@ -97,6 +106,7 @@ test('hungry or thirsty rings orange, hurt rings red and wins, mild words ring n
 test('each speaker gets one bubble with their latest words, over their own anchor', () => {
   const labels = citizenLabels(
     [citizen(), citizen({ id: 'hana', name: 'Hana' })],
+    NOTHING_SHOWN,
     [
       { id: 'e1', actorId: 'hana', words: 'Good morning!', at: 1 },
       { id: 'e2', actorId: 'genzo', words: 'Rain soon.', at: 2 },
