@@ -194,7 +194,17 @@ test('the loom is drawn from code: a 1.2 x 1.4 x 0.8 m wooden frame with warp th
   ]);
   expect(assetSize(id)).toEqual({ x: 1.2, y: 1.4, z: 0.8 });
   const meshes = scene.children as Mesh[];
-  expect(meshes.map((mesh) => mesh.name)).toEqual(['loom-frame', 'loom-warp']);
+  expect(meshes.map((mesh) => mesh.name)).toEqual([
+    'loom-frame',
+    'loom-warp',
+    'loom-cloth',
+  ]);
+  // a third of the warp is woven: the cloth lies over its front, rolled onto the breast beam
+  const cloth = new Box3().setFromObject(meshes[2]);
+  expect(cloth.min.y).toBeCloseTo(0.75 - 0.035, 2);
+  expect(cloth.max.y).toBeLessThan(1.0);
+  expect(cloth.max.z).toBeCloseTo(0.36 + 0.035, 2);
+  expect(cloth.min.z).toBeGreaterThan(-0.2);
   // the warp runs from the breast beam (front, low) up to the warp beam (back, high), inside the frame
   const warp = new Box3().setFromObject(meshes[1]);
   expect(warp.min.y).toBeCloseTo(0.75, 1);

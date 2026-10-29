@@ -13,6 +13,7 @@ import {
   Vector3,
 } from 'three';
 
+import { FireSmoke } from '@/components/world/globe/fire-smoke';
 import type { LiveFire } from '@/lib/live/live-contract';
 import { assetSize, PROPS } from '@/lib/world/assets';
 import { type GlobeTerrain, tangentFrame } from '@/lib/world/globe';
@@ -21,8 +22,8 @@ import { groundUnder, type WalkTown } from '@/lib/world/walk-charts';
 /*
  * The live fires: every lit fire within reach of the camera flickers as a few additive flame cones and a glow
  * sprite sized by its strength (embers, low, burning), and the nearest few cast warm light. The light count is
- * fixed (unused lights go dark) so lighting never changes the scene's shaders. Cold fires draw nothing: the pit
- * or basket prop is already there.
+ * fixed (unused lights go dark) so lighting never changes the scene's shaders. Smoke and sparks rise over them
+ * (fire-smoke.tsx). Cold fires draw no flames: the pit or basket prop is already there, its flame or fuel hidden.
  */
 
 /** Flames are drawn within this distance of the camera. */
@@ -278,6 +279,7 @@ export function GlobeFires({
         />
       ))}
       <FireLights views={views} />
+      <FireSmoke fires={views} />
     </>
   );
 }
