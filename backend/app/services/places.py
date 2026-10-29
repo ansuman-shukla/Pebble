@@ -1,4 +1,5 @@
-"""Names for ids and spots, as spectators read them: places, homes, storehouses and "where is this point".
+"""Names for ids and spots, as spectators read them: places, homes, storehouses and "where is this point"; and the
+world's layout as the client draws it (hotspots, roads, features and the packed flora table).
 
 Built from the simulation's static world (the same places and structures citizens use), once per api process.
 """
@@ -11,7 +12,10 @@ from sqlmodel import Session
 
 from app.sim.vec import Vec3
 from app.sim.world import Place, SimWorld, load_sim_world
-from app.world.store import WorldGenerator
+from app.world.flora import generate_flora
+from app.world.spec import load_site_kinds, load_world_spec
+from app.world.store import WorldGenerator, WorldKey, load_or_generate, world_key
+from app.world.view import WorldPlaces, WorldView
 
 
 class PlaceRef(BaseModel):
@@ -83,3 +87,26 @@ def place_index(session: Session, generator: WorldGenerator) -> PlaceIndex:
             index = PlaceIndex(load_sim_world(session, generator))
             _indexes[generator.version] = index
         return index
+
+
+@dataclass(frozen=True)
+class WorldLayout:
+    key: WorldKey
+    places: WorldPlaces
+    flora: bytes  # the packed table of `app.world.flora`
+
+
+_layouts: dict[WorldKey, WorldLayout] = {}
+
+
+def world_layout(session: Session, generator: WorldGenerator) -> WorldLayout:
+    """Places and flora of the current world (built on first use, ~1 s, then kept for the process)."""
+    spec, kinds = load_world_spec(), load_site_kinds()
+    key = world_key(spec, kinds, generator.version)
+    with _lock:
+        layout = _layouts.get(key)
+        if layout is None:
+            view = WorldView.model_validate_json(load_or_generate(session, spec, kinds, generator))
+            layout = WorldLayout(key=key, places=view.places, flora=generate_flora(view, spec).pack())
+            _layouts[key] = layout
+        return layout

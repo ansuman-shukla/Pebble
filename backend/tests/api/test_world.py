@@ -8,11 +8,12 @@ from sqlmodel import Session
 from app.api.deps import get_session, get_world_generator
 from app.core.config import settings
 from app.main import app
+from app.world.flora import generate_flora
 from app.world.generate import GENERATOR, generate_view
-from app.world.spec import BIOME_NAMES, SITE_IDS, WorldSpec
+from app.world.spec import BIOME_NAMES, SITE_IDS, WorldSpec, load_world_spec
 from app.world.store import WorldGenerator
 from app.world.town import KindSpec
-from app.world.view import WorldView, decode_array
+from app.world.view import WorldPlaces, WorldView, decode_array
 
 WORLD_URL = f"{settings.API_V1_STR}/world"
 
@@ -110,4 +111,37 @@ def test_world_schema_names_the_world_models(client: TestClient) -> None:
     schemas = client.get(f"{settings.API_V1_STR}/openapi.json").json()["components"]["schemas"]
 
     for name in ("WorldView", "Site", "Anchor", "River", "TownPlacement"):
+        assert name in schemas, name
+
+
+def test_places_are_served_from_the_stored_world(client: TestClient, counting: CountingGenerator) -> None:
+    world = WorldView.model_validate(client.get(WORLD_URL).json())
+    response = client.get(f"{WORLD_URL}/places")
+
+    assert response.status_code == 200
+    places = WorldPlaces.model_validate(response.json())
+    assert places == world.places
+    assert len(places.hotspots) == 14 and places.flora_kinds[0] == "oak_tree"
+    assert counting.calls == 1
+
+
+def test_flora_is_served_packed_cached_and_revalidated(client: TestClient, counting: CountingGenerator) -> None:
+    world = WorldView.model_validate(client.get(WORLD_URL).json())
+    response = client.get(f"{WORLD_URL}/flora")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/octet-stream"
+    assert response.content == generate_flora(world, load_world_spec()).pack()
+    assert len(response.content) % 9 == 0 and len(response.content) > 9 * 40_000
+    etag = response.headers["etag"]
+    assert "max-age" in response.headers["cache-control"]
+    again = client.get(f"{WORLD_URL}/flora", headers={"If-None-Match": etag})
+    assert again.status_code == 304 and again.content == b""
+    assert counting.calls == 1
+
+
+def test_world_schema_names_the_places_models(client: TestClient) -> None:
+    schemas = client.get(f"{settings.API_V1_STR}/openapi.json").json()["components"]["schemas"]
+
+    for name in ("WorldPlaces", "Hotspot", "Feature", "Road", "Bridge", "Ground"):
         assert name in schemas, name
