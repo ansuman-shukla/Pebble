@@ -117,6 +117,25 @@ def test_a_walk_shorter_than_a_tick_is_drawn_walking_all_the_way(new_sim: Callab
     assert moved.speed_mps == pytest.approx(FLAT_WALK_MPS)
 
 
+def test_a_walker_who_collapses_mid_walk_is_streamed_only_up_to_where_they_fell(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    sim = new_sim()
+    citizen = sim.add_citizen(make_spec(knows_places=["town", "main-gate", "training-ground"]))
+    WorldApi(sim, citizen.id).walk_to_place("the training ground")
+    sim.step()
+    sim.drain()
+    citizen.body.energy = 0.0
+    before = citizen.position
+    sim.step()
+    moved = _moved(sim, citizen.id)
+    assert citizen.action is not None and citizen.action.collapsed  # asleep where the step ended
+    assert moved is not None
+    _starts_where_they_stood(sim, moved, before)
+    assert moved.route[-1].unit == citizen.position
+    assert _seconds(moved.route)[-1] == pytest.approx(SECONDS_PER_TICK)  # nothing of the walk's plan beyond
+
+
 def test_nobody_standing_still_is_streamed(new_sim: Callable[..., Simulation]) -> None:
     sim = new_sim()
     citizen = sim.add_citizen(make_spec())
@@ -153,6 +172,7 @@ def test_the_times_follow_each_legs_walking_cost(new_sim: Callable[..., Simulati
     assert at_corner.t_s == pytest.approx(30.0 * seconds_per_cost)
     assert _speeds(sim, moved.route)[0] == pytest.approx(FLAT_WALK_MPS)
     assert _speeds(sim, moved.route)[-1] == pytest.approx(FLAT_WALK_MPS / 2)
+    assert moved.speed_mps == pytest.approx(FLAT_WALK_MPS)  # where the route starts: on the grass
     assert sim.world.distance_m(drawn_on(moved.route, SECONDS_PER_TICK), citizen.position) < DRAWN_M
     # the rest of the forest leg (60 m at cost 2, less what the step walked) and nothing past the route's end
     walked_m = 30.0 + (WALK_M_PER_TICK - 30.0) / 2.0
@@ -210,3 +230,21 @@ def test_a_hunter_who_strikes_is_streamed_only_up_to_the_strike(
     assert moved is not None and hunter.action is None  # struck this tick: no plan left to draw
     assert [point.unit for point in moved.route] == [before, hunter.position]
     assert _seconds(moved.route) == [0.0, SECONDS_PER_TICK]
+
+
+def test_a_short_creep_into_the_strike_is_timed_at_the_stalking_pace(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 40 m off: 28 m of creeping (to 12 m off) brings the deer within the strike in a little over half a minute
+    sim, api, _ = _hunter(new_sim, 40.0)
+    monkeypatch.setattr(wild, "hunt_chance", lambda *_: 1.0)
+    hunter = sim.citizen("hunter")
+    api.hunt("the deer")
+    before = hunter.position
+    sim.step()
+    moved = _moved(sim, "hunter")
+    assert moved is not None and hunter.action is None
+    assert [point.unit for point in moved.route] == [before, hunter.position]
+    creep_m = 40.0 - wild.HUNT_STRIKE_M * 0.8
+    assert _seconds(moved.route) == pytest.approx([0.0, creep_m / wild.STALK_PACE_M * SECONDS_PER_TICK])
+    assert moved.speed_mps == pytest.approx(wild.STALK_PACE_M / SECONDS_PER_TICK, rel=1e-3)
