@@ -5,7 +5,13 @@ import path from 'node:path';
 import { expect, test } from '@playwright/test';
 
 import manifest from '../../src/lib/world/asset-manifest.json' with { type: 'json' };
-import { ANIMALS, PROPS } from '../../src/lib/world/assets';
+import {
+  ANIMALS,
+  HAND_PROPS,
+  type HandPropKind,
+  PROPS,
+  type PropKind,
+} from '../../src/lib/world/assets';
 import { CITIZEN_LOOKS } from '../../src/lib/world/citizen-looks';
 import { KIT_LOOKS } from '../../src/lib/world/kit-looks';
 import { VISITOR_LOOK } from '../../src/lib/world/visitor-look';
@@ -16,6 +22,9 @@ const byId = new Map(manifest.assets.map((asset) => [asset.id, asset]));
 const registryIds = new Set([
   ...Object.values(PROPS),
   ...Object.values(ANIMALS).map((animal) => animal.asset),
+  ...Object.values(HAND_PROPS).flatMap((prop) =>
+    'asset' in prop ? [prop.asset] : [],
+  ),
 ]);
 
 /** Names of the meshes a character is built from (`body` + `attach-<slot>-mesh` per garment). */
@@ -27,6 +36,14 @@ function meshNames(config: Parameters<typeof createCharacter>[0]) {
   return names.sort();
 }
 
+function glbNodeNames(id: string) {
+  const glb = readFileSync(path.join(ROOT, byId.get(id)!.files.glb.path));
+  const json = JSON.parse(
+    glb.subarray(20, 20 + glb.readUInt32LE(12)).toString('utf8'),
+  ) as { nodes: { name?: string }[] };
+  return json.nodes.map((node) => node.name ?? '');
+}
+
 test('every registry kind resolves to a vendored file matching its pinned hash', () => {
   for (const id of registryIds) {
     const asset = byId.get(id);
@@ -35,6 +52,79 @@ test('every registry kind resolves to a vendored file matching its pinned hash',
     expect(createHash('sha256').update(file).digest('hex'), id).toBe(
       asset!.files.glb.sha256,
     );
+  }
+});
+
+// the kinds and props World v1 (docs/design/10-world-v1.md) draws: nodes, dens, roads, markers, stores, stations
+const WORLD_V1_KINDS: PropKind[] = [
+  'berry_bush',
+  'root_patch',
+  'reed_bed',
+  'nut_tree',
+  'tree_stump',
+  'fallen_log',
+  'driftwood',
+  'dead_tree',
+  'flint_seam',
+  'obsidian_field',
+  'rice_paddy',
+  'cave_mouth',
+  'bone_scatter',
+  'signpost',
+  'log_bridge',
+  'boundary_stone',
+  'banner',
+  'cairn',
+  'market_stall',
+  'forge',
+  'anvil',
+  'chest',
+  'grain_sack',
+  'coin_pouch',
+  'drying_rack',
+  'camp_drying_rack',
+  'sleeping_mat',
+  'loom',
+  'field_barricade',
+  'bell_tower',
+  'storehouse',
+];
+const WORLD_V1_HAND_PROPS: HandPropKind[] = [
+  'axe',
+  'hoe',
+  'hammer',
+  'torch',
+  'spear',
+  'basket',
+  'coin_pouch',
+  'sack',
+  'pick',
+  'fishing_rod',
+];
+
+test('every World v1 kind and hand prop with a model resolves to a pinned asset', () => {
+  for (const kind of WORLD_V1_KINDS) {
+    const id = PROPS[kind];
+    expect(byId.get(id)?.files.glb.path, kind).toBeDefined();
+  }
+  for (const kind of WORLD_V1_HAND_PROPS) {
+    const prop = HAND_PROPS[kind];
+    if ('asset' in prop)
+      expect(byId.get(prop.asset)?.files.glb.path, kind).toBeDefined();
+  }
+});
+
+test('wardrobe hand props are items the pinned humanoid engine carries in the right hand', () => {
+  const wardrobeProps = Object.values(HAND_PROPS).flatMap((prop) =>
+    'wardrobe' in prop ? [prop.wardrobe] : [],
+  );
+  expect(wardrobeProps.length).toBeGreaterThan(0);
+  for (const item of wardrobeProps) {
+    const config = {
+      ...KIT_LOOKS.farmer,
+      wear: { ...KIT_LOOKS.farmer.wear, righthand: item },
+    };
+    expect(meshNames(config), item).toContain('attach-righthand-mesh');
   }
 });
 
@@ -51,6 +141,13 @@ test('kit looks build rigged humanoids wearing every garment they name', () => {
   expect(KIT_LOOKS.buddhist_monk.wear.neck).toMatchObject({ name: 'kesa' });
   expect(KIT_LOOKS.ashigaru.wear.coat).toMatchObject({ name: 'do-maru' });
   expect(KIT_LOOKS.farmer.wear.neck).toMatchObject({ name: 'mino' });
+});
+
+test('the berry bush drops its fruit piece by piece (parts named fruit-N)', () => {
+  const fruit = glbNodeNames(PROPS.berry_bush).filter((name) =>
+    /^fruit-\d+$/.test(name),
+  );
+  expect(fruit.length).toBeGreaterThanOrEqual(8);
 });
 
 test('every pinned asset is used by the registry', () => {

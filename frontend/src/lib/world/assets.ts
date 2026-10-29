@@ -95,7 +95,33 @@ export type PropKind =
   | 'fumarole'
   | 'geyser'
   | 'hot_spring_pool'
-  | 'giant_tree';
+  | 'giant_tree'
+  // world v1 nodes (named by their node kind) and their stages
+  | 'berry_bush'
+  | 'root_patch'
+  | 'reed_bed'
+  | 'nut_tree'
+  | 'tree_stump'
+  | 'flint_seam'
+  | 'obsidian_field'
+  // world v1 dens, remains, roads and markers
+  | 'cave_mouth'
+  | 'bone_scatter'
+  | 'signpost'
+  | 'log_bridge'
+  | 'boundary_stone'
+  | 'cairn'
+  // world v1 stores, stations and furniture
+  | 'market_stall'
+  | 'forge'
+  | 'anvil'
+  | 'chest'
+  | 'grain_sack'
+  | 'coin_pouch'
+  | 'camp_drying_rack'
+  | 'sleeping_mat'
+  | 'loom'
+  | 'field_barricade';
 
 export const PROPS: Record<PropKind, string> = {
   castle_keep: 'tenshu-keep-2ff636',
@@ -182,6 +208,60 @@ export const PROPS: Record<PropKind, string> = {
   geyser: 'geyser-cone-2b5033',
   hot_spring_pool: 'hot-spring-pool-26312c',
   giant_tree: 'oak-tree-50ee7c',
+  berry_bush: 'berry-bush-ee4812',
+  root_patch: 'taro-plant-8c0493',
+  reed_bed: 'totora-reed-bed-36d78f',
+  nut_tree: 'broadleaf-oak-997c22',
+  tree_stump: 'tree-stump-ec3f48',
+  flint_seam: 'ballast-heap-2fb138',
+  obsidian_field: 'lava-rock-pile-d56d19',
+  cave_mouth: 'smuggler-cave-mouth-69a07e',
+  bone_scatter: 'bone-scatter-90313d',
+  signpost: 'trail-signpost-bd29a7',
+  log_bridge: 'log-plank-bridge-a5f74f',
+  boundary_stone: 'garden-rock-2d3b51',
+  cairn: 'pipi-horeko-cairn-f5db4b',
+  market_stall: 'market-stall-94937d',
+  forge: 'blacksmith-forge-09fa85',
+  anvil: 'anvil-1286cb',
+  chest: 'timber-crate-ba0739',
+  grain_sack: 'grain-sack-401d96',
+  coin_pouch: 'coin-pouch-be4dd8',
+  camp_drying_rack: 'drying-net-rack-93ec3b',
+  sleeping_mat: 'straw-pile-ebd54d',
+  loom: 'jinmaku-camp-curtain-8efdbe',
+  field_barricade: 'field-barricade-a646b9',
+};
+
+export type HandPropKind =
+  | 'axe'
+  | 'hoe'
+  | 'hammer'
+  | 'torch'
+  | 'spear'
+  | 'basket'
+  | 'coin_pouch'
+  | 'sack'
+  | 'pick'
+  | 'fishing_rod';
+
+/**
+ * What a citizen holds or carries: a vendored model attached to a hand bone, or an item of the humanoid engine's
+ * own wardrobe (`righthand` slot) where the catalogue has no separate model.
+ */
+export type HandProp = { asset: string } | { wardrobe: string };
+
+export const HAND_PROPS: Record<HandPropKind, HandProp> = {
+  axe: { asset: 'hand-axe-cee9e7' },
+  hoe: { asset: 'garden-hoe-3974ad' },
+  hammer: { asset: 'hammer-fa3e51' },
+  torch: { asset: 'torch-stake-d82a2c' },
+  spear: { asset: 'yari-spear-e72c1f' },
+  basket: { asset: 'kete-reed-basket-6ca36c' },
+  coin_pouch: { asset: 'coin-pouch-be4dd8' },
+  sack: { asset: 'grain-sack-401d96' },
+  pick: { wardrobe: 'pick' },
+  fishing_rod: { wardrobe: 'fishing-rod' },
 };
 
 /**
