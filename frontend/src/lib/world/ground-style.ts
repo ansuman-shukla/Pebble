@@ -12,10 +12,11 @@
  *   nearest cell's id 0..1;
  * - `vec3 groundTintShift(vec3 tint)`: how a grass tint shifts the grass colours (1 for the reference tint);
  * - every colour below as `<layer>_<name>` (linear `vec3`).
- * `groundLook(layer, p, tint, fw, g)` returns the layer's colour at planet point p (rgb) and its relief 0..1 (a),
- * which drives the bump: 0.5 is the ground's mean level (where the detail fades out too), so the layers meet
- * without a step. `tint` is the terrain's grass tint there (the vertex colour); `g` holds the noises the
- * breakup already paid for (15 m drifts, 3 m patches, 1 m grain, 11 m drifts), free to reuse.
+ * `groundLook(layer, p, tint, fw, g, roughness)` returns the layer's colour at planet point p (rgb) and its relief
+ * 0..1 (a), which drives the bump: 0.5 is the ground's mean level (where the detail fades out too), so the layers
+ * meet without a step. `tint` is the terrain's grass tint there (the vertex colour); `g` holds the noises the
+ * breakup already paid for (15 m drifts, 3 m patches, 1 m grain, 11 m drifts), free to reuse. `roughness` comes in
+ * as the layer's own and a pattern may change it (glossy puddles).
  */
 import type { GroundLayer } from './ground-shader';
 
@@ -74,7 +75,7 @@ export const biomeColor = (name: string) =>
   BIOME_COLORS[name] ?? FALLBACK_COLOR;
 
 const PATTERNS = /* glsl */ `
-vec4 groundLook(int layer, vec3 p, vec3 tint, float fw, vec4 g) {
+vec4 groundLook(int layer, vec3 p, vec3 tint, float fw, vec4 g, inout float roughness) {
   vec3 c;
   float relief;
   if (layer == 0) {
@@ -170,11 +171,47 @@ vec4 groundLook(int layer, vec3 p, vec3 tint, float fw, vec4 g) {
     c *= 0.97 + 0.06 * gFine(p, 6.0, fw);
     relief = mix(drift, ripple, 0.5 * keep);
   } else {
-    // mud: dark wet hollows in lighter drying mud
-    float wet = smoothstep(0.52, 0.62, g.y * 0.7 + g.z * 0.3);
-    c = mix(mud_light, mud_dark, wet);
-    c *= 0.88 + 0.24 * gFine(p + 7.0, 3.7, fw);
-    relief = 0.65 - 0.5 * wet;
+    // mud: dark wet hollows in lighter drying mud, trodden silt, cracks where it dried, glossy puddles in the
+    // wettest hollows and the odd tuft of grass or reed
+    float damp = g.y * 0.7 + g.z * 0.3;
+    float wet = smoothstep(0.52, 0.62, damp);
+    float lumps = gFine(p + 7.0, 3.7, fw);
+    float silt = gFine(p + 19.0, 13.0, fw);
+    // the wet mud is churned finer
+    c = mix(mud_light, mud_dark, wet) * (0.88 + 0.24 * lumps) * (0.9 - 0.06 * wet + (0.2 + 0.12 * wet) * silt);
+    relief = 0.65 - 0.5 * wet + (lumps - 0.5) * 0.3 + (silt - 0.5) * (0.15 + 0.15 * wet);
+    // the driest patches part into plates along cracks a few centimetres wide, at least a pixel and a half (fw * 2.4
+    // cell units a pixel), fainter as they widen
+    float keepCracks = (1.0 - smoothstep(0.2, 0.5, fw * 2.4)) * (1.0 - smoothstep(0.34, 0.42, damp - (g.w - 0.5) * 0.3));
+    if (keepCracks > 0.0) {
+      vec3 plates = gCells(p * 2.4 + vec3(g.z, g.w, g.x) * 0.8);
+      float crackWidth = 0.03 + fw * 3.6;
+      // some cracks die out, so the plates join up instead of paving the ground
+      float crack = (1.0 - smoothstep(0.0, crackWidth, plates.y - plates.x)) * smoothstep(0.3, 0.55, lumps) * keepCracks * 0.03 / crackWidth;
+      c *= (1.0 + 0.05 * (plates.z - 0.5) * keepCracks) * (1.0 - 0.45 * crack);
+      relief -= crack * 0.35;
+    }
+    // ragged tufts of reed and grass a few centimetres across, and water standing in hoof pocks in the wet mud,
+    // gone where a pixel can't hold them
+    float keepTufts = 1.0 - smoothstep(0.2, 0.5, fw * 6.0);
+    if (keepTufts > 0.0) {
+      vec3 tufts = gCells(p * 6.0 + 3.0);
+      float d = tufts.x + (silt - 0.5) * 0.15;
+      float r = 0.2 + 0.12 * fract(tufts.z * 7.0);
+      float tuft = (1.0 - smoothstep(r - 6.0 * fw, r + 0.04, d)) * step(0.84, tufts.z) * (1.0 - wet * 0.7) * keepTufts;
+      c = mix(c, mix(mud_reed, mud_shoot, fract(tufts.z * 13.0)) * (0.8 + 0.4 * silt), tuft);
+      float pock = (1.0 - smoothstep(r * 1.3 - 6.0 * fw, r * 1.3 + 0.04, d)) * step(tufts.z, 0.25) * wet * keepTufts;
+      c = mix(c, mud_water * 0.75, pock * 0.8);
+      roughness = mix(roughness, 0.25, pock);
+      relief += tuft * 0.3 - pock * 0.2;
+    }
+    // standing water: dark, flat and glossy, with a wet rim
+    float pond = damp * 0.7 + lumps * 0.15 + g.w * 0.15;
+    float pool = smoothstep(0.67, 0.69 + fw * 0.5, pond);
+    c *= 1.0 - 0.25 * smoothstep(0.63, 0.67, pond);
+    c = mix(c, mud_water * (0.9 + 0.2 * g.z), pool);
+    relief = mix(relief, 0.15, pool);
+    roughness = mix(roughness, 0.2, pool);
   }
   return vec4(c, relief);
 }
@@ -261,6 +298,9 @@ export const GROUND_STYLE: GroundStyle = {
       colors: {
         light: '#6e5b40',
         dark: '#3b3124',
+        water: '#4a5258',
+        reed: '#6f7a3c',
+        shoot: '#94924f',
       },
       roughness: 0.7,
       bump: 0.03,

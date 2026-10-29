@@ -333,6 +333,18 @@ vec3 groundBump(vec3 position, vec3 normal, float h) {
 `;
 
 /*
+ * The style's patterns with every constant and helper they read, for a shader of its own: `vec4 groundLook(int
+ * layer, vec3 p, vec3 tint, float fw, vec4 g, inout float roughness)` and `vec4 groundNoises(vec3 p, float fw, out
+ * float extra)` for its g.
+ */
+export const groundLookGlsl = () =>
+  [
+    styleChunk(GROUND_STYLE).constants,
+    GROUND_HELPERS,
+    GROUND_STYLE.patterns,
+  ].join('\n');
+
+/*
  * Sets diffuseColor (from the grass tint already in it), groundRoughness, groundRelief (metres) and groundGap (the
  * top two layers' height gap).
  */
@@ -372,14 +384,16 @@ float groundGap = 9.0;
 #ifdef GROUND_LOW
       t = 1.0;
 #endif
-      vec4 look = groundLook(first, p, tint, fw, g);
-      vec4 other = t < 0.999 ? groundLook(second, p, tint, fw, g) : look;
+      float firstRoughness = GROUND_ROUGHNESS[first];
+      float secondRoughness = GROUND_ROUGHNESS[second];
+      vec4 look = groundLook(first, p, tint, fw, g, firstRoughness);
+      vec4 other = t < 0.999 ? groundLook(second, p, tint, fw, g, secondRoughness) : look;
       vec3 pattern = mix(other.rgb, look.rgb, t);
       // relief about each layer's mean level (0.5), so a layer's edge is no step
       groundRelief = mix((other.a - 0.5) * GROUND_DEPTH[second], (look.a - 0.5) * GROUND_DEPTH[first], t);
       // the bump fades out with distance and as a pixel's footprint outgrows the relief's detail
       groundRelief *= (1.0 - smoothstep(${glslFloat(BUMP_FOOTPRINT[0])}, ${glslFloat(BUMP_FOOTPRINT[1])}, fw)) * (1.0 - smoothstep(30.0, 40.0, dist));
-      groundRoughness = mix(GROUND_ROUGHNESS[second], GROUND_ROUGHNESS[first], t);
+      groundRoughness = mix(secondRoughness, firstRoughness, t);
       near = mix(pattern, near, smoothstep(GROUND_PATTERN_END * 0.8, GROUND_PATTERN_END, dist));
     }
     float tone = 0.92 + 0.16 * g.x;

@@ -19,6 +19,7 @@ import {
   type GroundLayer,
   type GroundWeights,
   groundBlendGlsl,
+  groundLookGlsl,
   groundQuality,
   weightsArray,
 } from '../../src/lib/world/ground-shader';
@@ -537,6 +538,64 @@ test.describe('ground blend', () => {
     expect(samples.at(-1)!.first).toBe(layer('dirt'));
     expect(samples.filter((s) => s.first === layer('gravel'))).toEqual([]);
     expect(largestStep(samples)).toBeLessThan(0.2);
+  });
+});
+
+interface PatternPixels {
+  /** Share of pixels with a glossy roughness (below 0.35). */
+  glossy: number;
+  /** Share of olive pixels (grass and reed tufts: green at least as strong as red, little blue). */
+  olive: number;
+  /** Mean lightness step (0..255) between neighbouring pixels: the pattern's fine detail. */
+  detail: number;
+}
+
+const PATTERN_SIZE = 1024;
+
+/** Draws a layer's pattern (`groundLookGlsl`) over a square of level ground, `pixel` metres a pixel. */
+function patternPixels(page: Page, name: GroundLayer, pixel: number) {
+  const shader = `#version 300 es
+precision highp float;
+precision highp int;
+out vec4 color;
+${groundLookGlsl()}
+void main() {
+  vec3 p = vec3(310.0, 1960.0, 270.0) + vec3(gl_FragCoord.x, 0.0, gl_FragCoord.y) * ${pixel.toFixed(4)};
+  float extra;
+  vec4 g = groundNoises(p, ${pixel.toFixed(4)}, extra);
+  float roughness = GROUND_ROUGHNESS[${layer(name)}];
+  vec4 look = groundLook(${layer(name)}, p, grass_reference, ${pixel.toFixed(4)}, g, roughness);
+  color = vec4(look.rgb, roughness);
+}`;
+  return drawFragment<PatternPixels>(page, {
+    shader,
+    width: PATTERN_SIZE,
+    height: PATTERN_SIZE,
+    summary: `(() => {
+      const n = pixels.length / 4;
+      const light = (i) => (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3;
+      let [glossy, olive, steps] = [0, 0, 0];
+      for (let i = 0; i < pixels.length; i += 4) {
+        if (pixels[i + 3] < 0.35 * 255) glossy += 1;
+        if (pixels[i + 1] >= pixels[i] - 4 && pixels[i + 2] < pixels[i + 1] * 0.5) olive += 1;
+        if ((i / 4) % ${PATTERN_SIZE} < ${PATTERN_SIZE - 1}) steps += Math.abs(light(i) - light(i + 4));
+      }
+      return { glossy: glossy / n, olive: olive / n, detail: steps / n };
+    })()`,
+  });
+}
+
+test.describe('ground patterns', () => {
+  test('mud close up has cracks, tufts and glossy puddles, not a smooth smear', async ({
+    page,
+  }) => {
+    // 20 m of mud at 2 cm a pixel: puddles in the wettest hollows (the smooth mud before them had none)
+    const wide = await patternPixels(page, 'mud', 0.02);
+    expect(wide.glossy).toBeGreaterThan(0.02);
+    // 5 m of it at 5 mm: tufts, and the silt and cracks that more than quadrupled the detail of the smooth mud
+    const close = await patternPixels(page, 'mud', 0.005);
+    expect(close.olive).toBeGreaterThan(0.0005);
+    expect(close.detail).toBeGreaterThan(0.13);
   });
 });
 
