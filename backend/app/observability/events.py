@@ -10,6 +10,7 @@ from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict
 
+from app.sim.locomotion import Gait
 from app.sim.state import AnimalActivity, FireKind
 from app.sim.vec import Vec3
 from app.world_api.models import ActionName, Outcome, Volume
@@ -66,7 +67,6 @@ ActorKind = Literal["citizen", "animal", "world", "player", "god"]
 Visibility = Literal["public", "private"]
 BodyValues = tuple[float, float, float, float]  # hunger, thirst, energy, health
 JsonScalar = str | int | float | bool | None
-Gait = Literal["walk", "jog", "run", "stalk"]  # a citizen's (10 §4.1)
 AnimalGait = Literal["walk", "trot", "run", "stalk", "swim"]  # trot: an animal's sustained speed (10 §4.6)
 GestureKind = Literal["wave", "bow", "nod", "shake_head", "point", "laugh", "jump"]
 Driver = Literal["hunger", "thirst", "rest", "danger", "duty", "ambition", "social", "night"]
