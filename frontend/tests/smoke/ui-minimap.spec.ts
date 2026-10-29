@@ -272,3 +272,19 @@ for (const [width, height] of [
     expect(errors).toEqual([]);
   });
 }
+
+test('a click on the minimap lets go of a followed citizen', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  const world = await openHeld(page, errors);
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('KeyF');
+  await expect(world).toHaveAttribute('data-follow');
+  await landed(world);
+  const box = (await minimap(page).locator('canvas').boundingBox())!;
+  await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.3);
+  await expect(world).not.toHaveAttribute('data-follow');
+  await landed(world);
+  expect(errors).toEqual([]);
+});
