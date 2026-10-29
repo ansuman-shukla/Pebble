@@ -6,7 +6,7 @@ the simulation assigns deterministically; the store gives each a ULID and resolv
 """
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict
 
@@ -61,6 +61,7 @@ EventType = Literal[
     "gestured",
     "goal_set",
 ]
+WORLD_V1_TYPES: tuple[EventType, ...] = get_args(EventType)[get_args(EventType).index("node_changed") :]
 ActorKind = Literal["citizen", "animal", "world", "player", "god"]
 Visibility = Literal["public", "private"]
 BodyValues = tuple[float, float, float, float]  # hunger, thirst, energy, health

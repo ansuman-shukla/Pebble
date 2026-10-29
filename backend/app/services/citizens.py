@@ -13,6 +13,7 @@ from sqlmodel import Session, col, select
 
 from app.db.models import Event
 from app.observability.events import (
+    WORLD_V1_TYPES,
     ActionEnded,
     ActionStarted,
     Died,
@@ -26,6 +27,7 @@ from app.observability.events import (
     Said,
     Visibility,
 )
+from app.observability.lines import GROUP_NAMES, Told, tell
 from app.services.clock import run_or_latest
 from app.services.entities import Activity, Position, citizen_entity, world_at
 from app.services.places import PlaceIndex, PlaceRef
@@ -47,6 +49,7 @@ TIMELINE_TYPES: tuple[EventType, ...] = (
     "item_moved",
     "knowledge_changed",
     "intervention",
+    *WORLD_V1_TYPES,
 )  # `perceived` (every look around, long) only when asked for
 RECENT_ENTRIES = 8
 MAX_TIMELINE = 500
@@ -558,7 +561,9 @@ def _summary(
             return f"hears of {name}", None, []
         case "perceived":
             return "looks around", Perceived.model_validate(payload).text, []
-    return row.type.replace("_", " "), None, []
+
+    told = Told(type=row.type, actor_kind=row.actor_kind, actor_id=row.actor_id, payload=payload)
+    return tell(told, lambda ref: people[ref].name if ref in people else GROUP_NAMES.get(ref, ref))[0], None, []
 
 
 def timeline_entry(
