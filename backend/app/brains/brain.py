@@ -20,6 +20,7 @@ from app.brains.profile import BrainProfile
 from app.brains.routines import ROUTINES, Context, Option
 from app.brains.senses import (
     DISTANCE,
+    FULL_LOAD,
     Needs,
     at,
     at_home,
@@ -97,6 +98,7 @@ class UtilityBrain:
             notes["asleep"] = False
             notes["greeted"] = []  # a new day: greet people again
             notes["chores"] = []
+            notes.pop("full", None)  # carrying words are rough: a little eaten may not change them, so try again
         options = self.options(perception)
         best = max(options, key=lambda option: option.score)
         if best.score < 60 and self.socialise(perception):
@@ -109,6 +111,8 @@ class UtilityBrain:
             streak = (previous if isinstance(previous, int) else 0) + 1
             notes["instant"] = streak
             notes["failed"] = notes.get("last") if handle.result.outcome == "failed" else None
+            if handle.result.text == FULL_LOAD:  # the load counts as full until what you carry changes
+                notes["full"] = list(perception.you.carrying)
             if handle.result.outcome == "failed" or streak >= 2:
                 handle = api.wait(10 + 5 * self.pick(4))  # nothing to do right now: look again in a while
                 notes["instant"] = 0

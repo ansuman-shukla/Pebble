@@ -52,6 +52,7 @@ AMOUNT: tuple[tuple[str, int], ...] = (
     ("a few", 2),
     ("a little", 2),
 )
+FULL_LOAD = "You can't carry any more."  # what an action says when the load is full
 DISTANCE: dict[Nearness, Distance] = {
     "right beside you": "here",
     "a few paces": "near",
@@ -136,6 +137,11 @@ def carried_food(you: SelfView) -> dict[str, int]:
                 food[name] = food.get(name, 0) + count
                 break
     return food
+
+
+def full_load(perception: Perception, told_full: JsonValue) -> bool:
+    """Still carrying just what you carried when told you can't carry any more (`told_full`, a brain's note)."""
+    return told_full == perception.you.carrying
 
 
 def carries(perception: Perception, item: str) -> bool:

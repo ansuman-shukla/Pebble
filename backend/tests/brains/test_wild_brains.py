@@ -149,6 +149,34 @@ def _gathers(sim: Simulation, brain: UtilityBrain, minutes: int) -> list[str]:
     return ended
 
 
+@pytest.mark.parametrize(
+    ("role", "age", "meat"),
+    [("child", 9, 10), ("gatherer", 30, 50)],  # 5 and 25 kg: all they can carry (a gatherer also has a wood chore)
+)
+def test_a_forager_with_a_full_load_stops_gathering_until_it_carries_less(
+    new_sim: Callable[..., Simulation], role: str, age: int, meat: int
+) -> None:
+    sim = without_animals(new_sim())
+    forager = sim.add_citizen(
+        make_spec(
+            "pip", age=age, site="band_a_camp", at=(0.0, 30.0), home=HOME_A, region="band_a", inventory={"meat": meat}
+        )
+    )
+    sim.state.resources[forager.cell, RESOURCE_INDEX["berries"]] = 40  # bushes heavy with berries right here
+    skip_to(sim, forager.position, night=False)
+    brain = _brain(sim, forager.id, role=role)
+    full = _gathers(sim, brain, 2 * 60)
+    assert full == ["You can't carry any more."]  # told once, it stops trying
+
+    brain.api.notes["asleep"] = True  # a new day (just woken): it tries once more
+    brain.decide()
+    assert str(brain.api.notes["last"]).startswith("gather")
+
+    forager.inventory["meat"] = 3  # carrying less now ("a little meat", say some was eaten): room to gather again
+    lighter = _gathers(sim, brain, 90)
+    assert any(text.startswith("You gather") for text in lighter)
+
+
 def test_a_forager_walks_to_the_fallen_wood_it_saw_not_the_camp_woodpile(new_sim: Callable[..., Simulation]) -> None:
     sim = without_animals(new_sim())
     gatherer = sim.add_citizen(
