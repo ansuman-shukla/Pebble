@@ -156,3 +156,48 @@ test('a mixed cluster shows a neutral icon and the worst need ring among its mem
   await expect.poll(ringOfCluster).toBe('hurt');
   expect(errors).toEqual([]);
 });
+
+test('a bubble names its speaker when the speaker has no chip of their own under it', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  const world = await openHeld(page, errors);
+  await goToPerson(page, world, 'tak');
+  let cluster: Awaited<ReturnType<typeof chipsOn>>[number] | undefined;
+  await expect
+    .poll(async () => {
+      cluster = (await chipsOn(page)).find((chip) => chip.members.length > 1);
+      return cluster !== undefined;
+    })
+    .toBe(true);
+  const { leader, members } = cluster!;
+  const follower = members.find((id: string) => id !== leader)!;
+  const say = (actor: string, words: string) =>
+    page.evaluate(
+      ([actor, words]) =>
+        (globalThis as unknown as MockLiveWindow).__pebbleMockLive.sayNow(
+          actor,
+          words,
+        ),
+      [actor, words],
+    );
+  const names = new Map(
+    (await page.evaluate(() =>
+      (globalThis as unknown as MockLiveWindow).__pebbleMockLive
+        .entities()
+        .citizens.map((citizen) => [citizen.id, citizen.name]),
+    )) as [string, string][],
+  );
+
+  await say(follower, 'The berries are ripe.');
+  const followerBubble = page.locator(`[data-label="say-${follower}"]`);
+  await expect(followerBubble).toBeVisible();
+  await expect(followerBubble).toHaveText(
+    `${names.get(follower)}: The berries are ripe.`,
+  );
+  await say(leader, 'Good.');
+  const leaderBubble = page.locator(`[data-label="say-${leader}"]`);
+  await expect(leaderBubble).toBeVisible();
+  await expect(leaderBubble).toHaveText('Good.');
+  expect(errors).toEqual([]);
+});

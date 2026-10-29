@@ -11,6 +11,7 @@ export type MockLiveWindow = {
     restartRun(): void;
     setClock(change: { speed?: number; paused?: boolean }): void;
     entities(): EntitiesView;
+    sayNow(actor: string, words: string): void;
     feel(actor: string, words: string[]): void;
   };
 };

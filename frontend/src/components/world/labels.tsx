@@ -299,18 +299,25 @@ export function ChipProjector({
       ),
     );
     const leading = new Map(chips.map((chip) => [chip.leader, chip]));
+    /** A bubble names its speaker when no chip of their own is drawn under it. */
+    const bubbleText = (content: LabelContent) => {
+      const speaker = chipOf.get(content.subject);
+      return speaker && !leading.has(content.subject)
+        ? { speaker: `${speaker.text}: `, words: content.text }
+        : { speaker: '', words: content.text };
+    };
     const bubbles = layoutBubbles(
       speech.flatMap((content): BubbleAnchor[] => {
         const spot = spotOf(content.subject);
-        return spot
-          ? [
-              {
-                ...spot,
-                id: content.id,
-                ...measured(content.id, content.text, 'speech'),
-              },
-            ]
-          : [];
+        if (!spot) return [];
+        const { speaker, words } = bubbleText(content);
+        return [
+          {
+            ...spot,
+            id: content.id,
+            ...measured(content.id, speaker + words, 'speech'),
+          },
+        ];
       }),
       chips,
     );
@@ -340,8 +347,10 @@ export function ChipProjector({
       const bubble = shownBubbles.get(content.id);
       element.style.display = bubble ? '' : 'none';
       if (!bubble) continue;
+      const { speaker, words } = bubbleText(content);
+      setText(element.querySelector('[data-speaker]'), speaker);
       place(element, bubble.x, bubble.bottom);
-      drawn.push({ element, key: content.id, text: content.text });
+      drawn.push({ element, key: content.id, text: speaker + words });
     }
     // read after every change above: one layout per frame
     for (const { element, key, text } of drawn)
@@ -411,7 +420,10 @@ export function ChipOverlay({ store }: { store: LabelStore }) {
           }
         >
           {content.kind === 'speech' ? (
-            content.text
+            <>
+              <span data-speaker className="font-semibold" />
+              {content.text}
+            </>
           ) : (
             <Chip content={content} />
           )}
