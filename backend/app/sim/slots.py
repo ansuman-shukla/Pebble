@@ -3,7 +3,7 @@ inside each other and every worker is at the thing they work at.
 
 The layout (`data/slots.yaml`) gives each structure kind, placement and named place its slots: seats, mats, stands,
 queues, work slots and each home's `inside`. A citizen holds at most one claim: a slot, or a free spot of the ring
-fallback (r 1.0/1.8/2.6/3.4 m x 8 bearings, walkable, at least `PERSONAL_M` from any body or claim). Walks claim
+fallback (r 1.2/2.0/2.8/3.6 m, spots a metre apart, walkable, at least `PERSONAL_M` from any body or claim). Walks claim
 where they go (`reserve_*`), rest a seat, sleep a mat or `inside`, work its task's slot.
 
 At each tick's end `settle` keeps the claims honest and the bodies apart:
@@ -49,8 +49,8 @@ OCCUPY_M = 0.05  # a body this close to its claim is on it
 APPROACH_M = 8.0  # a mat (sleep) or a stand freed in a queue is taken this close, and walked to at the tick's end
 SEAT_M = 4.0  # rest takes a free seat this close
 ALREADY_THERE_M = 1.0  # a walk to a spot this close is no walk (movement's "You are already there")
-RING_M = (1.0, 1.8, 2.6, 3.4)  # the ring fallback's radii, 8 bearings each
-RING_BEARINGS = 8
+RING_M = (1.2, 2.0, 2.8, 3.6)  # the ring fallback's radii (a pace off the centre, then a body's space apart)
+RING_SPACING_M = 1.0  # neighbouring spots on one ring lie at least this far apart
 BESIDE_TURNS = (0.0, 30.0, -30.0, 60.0, -60.0, 90.0, -90.0, 120.0, -120.0, 150.0, -150.0, 180.0)  # free_round
 STRAIGHT_M = 1.5  # a step this short goes straight; longer ones follow the planner's route
 MIN_STEP_S = 0.5
@@ -401,18 +401,21 @@ def nearest_free(
     return min(free)[2] if free else None
 
 
+def ring_bearings(radius: float) -> int:
+    """How many spots fit on a ring of this radius at least RING_SPACING_M apart (7 at 1.2 m, 22 at 3.6 m)."""
+    return math.floor(math.pi / math.asin(RING_SPACING_M / (2 * radius)))
+
+
 def ring_spot(core: SimCore, citizen: Citizen, centre: Vec3, with_centre: bool) -> Vec3 | None:
     """The first walkable spot round `centre` (the centre itself first if `with_centre`) clear of every body and
-    claim but the citizen's own: r 1.0, 1.8, 2.6 and 3.4 m, 8 bearings each from north."""
+    claim but the citizen's own: r 1.2, 2.0, 2.8 and 3.6 m, spots a metre apart on each ring from north."""
     spots = _taken(core, citizen.id)
-    radii = ((0.0,) if with_centre else ()) + RING_M
-    for radius in radii:
-        for index in range(1 if radius == 0 else RING_BEARINGS):
-            spot = (
-                centre
-                if radius == 0
-                else step_towards(centre, index * 360.0 / RING_BEARINGS, radius, core.world.radius_m)
-            )
+    if with_centre and walkable(core, centre) and _clear(core, centre, spots):
+        return centre
+    for radius in RING_M:
+        count = ring_bearings(radius)
+        for index in range(count):
+            spot = step_towards(centre, index * 360.0 / count, radius, core.world.radius_m)
             if walkable(core, spot) and _clear(core, spot, spots):
                 return spot
     return None

@@ -16,11 +16,13 @@ from app.sim.slots import (
     SLOTS,
     Slot,
     build_layout,
+    claim,
     claim_of,
     crowded,
     held_slot,
     layout,
     load_slots_spec,
+    ring_bearings,
     ring_spot,
     step_to,
     walkable,
@@ -230,8 +232,15 @@ def test_band_sleepers_take_their_lean_tos_mats_then_the_fires_by_their_door(
     sim.step()
     beds = [held_slot(sim.core, m) for m in band]
     owners = sorted(bed.owner for bed in beds if bed is not None)
-    assert owners == ["band_a_camp:fire-pit"] * 7 + ["band_a_camp:shelter-n"] * 2  # the fire's mats on their side
-    assert all(bed is None or bed.kind == "mat" for bed in beds) and beds.count(None) == 1  # the last lies down
+    assert owners.count("band_a_camp:shelter-n") == 2 and owners.count("band_a_camp:fire-pit") >= 6
+    assert all(bed is None or bed.kind == "mat" for bed in beds) and beds.count(None) == 10 - len(owners)
+    fire_mats = [
+        slot
+        for slot in layout(sim.core).owners["band_a_camp:fire-pit"]
+        if slot.kind == "mat" and sim.world.distance_m(slot.position, home.door) <= 6.0
+    ]
+    for mat in fire_mats:  # the fire's mats on their side are all taken, or someone lies by them already
+        assert mat in beds or any(sim.world.distance_m(m.position, mat.position) < PERSONAL_M for m in band)
     assert all(sim.world.distance_m(m.position, home.door) <= 6.0 for m in band)
     assert _apart(sim, band) >= PERSONAL_M and crowded(sim.core) == []
 
@@ -392,3 +401,24 @@ def test_steps_to_a_spot_take_the_time_the_person_walks_it_in(new_sim: Callable[
     metres = sum(sim.world.distance_m(a[0], b[0]) for a, b in zip(walked, walked[1:], strict=False))
     assert len(walked) > 2
     assert walked[-1][1] == pytest.approx(metres / ground_mps(sim.core, trader, "walk"), rel=1e-3)
+
+
+def test_a_crowd_round_one_point_spreads_a_metre_apart_from_a_pace_off(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    crowd = [
+        sim.add_citizen(make_spec(f"c{k}", site="band_a_camp", at=(12.0, 12.0), region="band_a")) for k in range(10)
+    ]
+    point = crowd[0].position
+    spots = []
+    for person in crowd:
+        spot = ring_spot(sim.core, person, point, with_centre=False)
+        assert spot is not None
+        claim(sim.core, person, None, spot)
+        spots.append(spot)
+    radii = [round(sim.world.distance_m(spot, point), 2) for spot in spots]
+    assert radii == [1.2] * 7 + [2.0] * 3  # a pace off first: the first ring holds 7
+    for ring in (spots[:7], spots[7:]):
+        gaps = [sim.world.distance_m(a, b) for index, a in enumerate(ring) for b in ring[index + 1 :]]
+        assert min(gaps) >= 0.99  # a metre apart on a ring, not 0.77 m (8 round 1 m) as a scrum
+    assert all(sim.world.distance_m(a, b) >= PERSONAL_M for index, a in enumerate(spots) for b in spots[index + 1 :])
+    assert [ring_bearings(r) for r in (1.2, 2.0, 2.8, 3.6)] == [7, 12, 17, 22]
