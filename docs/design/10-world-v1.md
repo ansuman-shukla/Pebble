@@ -58,56 +58,77 @@ counters (D56, `sim/items.py RESOURCES`) are removed. Two sources, one table (`s
 - Snapshots store only nodes that differ from full; the live feed carries the node stages that changed this tick.
 
 ### 1.2 Hotspots, rings and the band B move
-Nodes cluster into **16 named hotspots** in three rings around each settlement (home ≤ 400 m, middle 0.5-1 km, far
+Nodes cluster into **14 named hotspots** in three rings around each settlement (home ≤ 400 m, middle 0.4-1 km, far
 > 1.2 km). **Band B moves to about (25, −35)**: 1.45 km west of the town, local time 3 h behind (town 07-17 = band B
 04-14), so both bands can meet the town by daylight. Band A stays east (2.8 km, +6 h). World generation bumps to
-m4.0 (new world, new runs).
+m4.0 (new world, new runs). The Hot springs and the Standing stones stay landmarks (named, walkable scenery) with no
+rule of their own.
 
-| # | Hotspot | At (lat, lon) | Nodes | Distance | Claim | Danger |
+| # | Hotspot | At (lat, lon) | Nodes | Distance (ring) | Claim | Danger |
 |---|---|---|---|---|---|---|
-| 1 | Gulf shore | 38, 20 | 3 sea fishing spots, 6 driftwood | town 220 m | town ground | low |
-| 2 | South marsh | 30, 12 | 6 reed beds, 4 root patches, **iron-sand bar** on the Mill river | town 280 m | town ground | low |
-| 3 | North woods | 46, 10 | woodlot (flora ×1.5), 10 deadwood | town 280 m | town ground | wolves at night |
-| 4 | Lord's woods | forest patch on the town ↔ band B path, ~600 m from town (P1 picks), r 150 m | flora ×1.5, deer and boar hunting ground | town 0.6 km, B 0.9 km | **town; hunting reserved to lord and samurai** | wolf den |
-| 5 | Elder grove | 12, 6 (+ the Elder tree) | 25 berry bushes, 10 oaks | town 930 m | none | bear den 250 m off |
+| 1 | Gulf shore | 38, 20 | 3 sea fishing spots, 6 driftwood | town 220 m (home) | town ground | low |
+| 2 | South marsh | 30, 12 | 6 reed beds, 4 root patches, **iron-sand bar** on the Mill river | town 280 m (home) | town ground | low |
+| 3 | North woods | 46, 10 | woodlot (flora ×1.5), 10 deadwood | town 280 m (home) | town ground | wolves at night |
+| 4 | Lord's woods | forest patch on the town ↔ band B road, ~600 m from town (P1 picks), r 150 m | flora ×1.5, deer and boar hunting ground, waterhole | town 0.6 km, B 0.9 km (middle) | **town; hunting reserved to lord and samurai** | wolf den 40-60 m off the road |
+| 5 | Elder grove | 12, 6 (+ the Elder tree) | 25 berry bushes, 10 oaks | town 930 m (middle) | none | bear den at the grove's edge, 30-50 m from the nearest bushes |
 | 6 | Obsidian field | smoking mountain crater + 22, −14 | 3 obsidian fields | town 1.2 km, B 0.5 km | none (the town ↔ B contest) | heat: thirst ×1.5 |
-| 7 | Falls pool | great falls lake, −2, 15 | gold pool, 3 fishing spots | town 1.4 km | none | wolves |
-| 8 | Hot springs | 46, −18 (landmark) | – (bathing is scenery) | town 820 m | none | cold |
-| 9 | Standing stones | 28, −4 (landmark) | – (meeting ground on the loop) | – | none | – |
-| 10 | A savanna | 20, 98 | antelope + rabbit hunting ground, 10 root patches, waterhole | A 290 m | band A ground | lion den 1 km N |
-| 11 | River marsh | 10, 88 | 5 reed beds, 2 river fishing spots, 6 berry bushes | A 420 m | band A | low |
-| 12 | Bridge meadows | 8, 82 | 2 deer herds' hunting ground, 10 deadwood, waterhole | A 630 m, town 2.4 km | band A | wolf den; town ↔ A chokepoint |
-| 13 | Painted cave flint | 20, 108 | flint seam A | A 390 m | band A | – |
-| 14 | Eastern wall scar | 10, 125 | rich flint seam, goats | A 860 m | band A (claimed hotspot) | – |
-| 15 | B wood | broadleaf patch ≤ 300 m of B | 15 berry bushes, 8 oaks, 8 root patches | B ≤ 300 m | band B ground | bear den |
-| 16 | B shore | shallow-sea coast ≤ 800 m of B | 3 sea fishing spots, driftwood, small flint seam B | B ≤ 800 m | band B | low |
+| 7 | Falls pool | great falls lake, −2, 15 | gold pool (2 spots), 3 fishing spots | town 1.4 km, B 1.6 km (far) | none: **the gold race** (Daisuke and band B both pan; finite) | wolves |
+| 8 | A savanna | 20, 98 | antelope + rabbit hunting ground, waterhole (its root patches are the home ring's 8) | A 290 m (home) | band A ground | lion den 1 km N |
+| 9 | River marsh | 10, 88 | 5 reed beds, 2 river fishing spots, 6 berry bushes | A 420 m (middle) | none | low |
+| 10 | Bridge meadows | 8, 82 | 2 deer herds' hunting ground, 10 deadwood, waterhole | A 630 m, town 2.4 km (middle) | none | wolf den beside the town ↔ A path |
+| 11 | Painted cave flint | 20, 108 | flint seam A | A 390 m (home) | band A ground | – |
+| 12 | Eastern wall scar | 10, 125 | rich flint seam, goats | A 860 m (middle) | band A (claimed hotspot) | – |
+| 13 | B wood | broadleaf patch 500-900 m from B, on the side away from the town | 15 berry bushes, 8 oaks, 8 root patches | B 0.5-0.9 km (middle) | band B (claimed hotspot) | bear den |
+| 14 | B shore | shallow-sea coast 500-900 m from B | 3 sea fishing spots, driftwood, small flint seam B | B 0.5-0.9 km (middle) | none | low |
 
-B's hunting ground is the savanna/grass within 400 m of its camp (P1 pins one herd there); its lure toward the town
-is the Lord's woods (poaching), the obsidian field and the town's rice. Validation at generation: every hotspot on
-land of its biome, reachable on foot, ≥ 40 m apart; positions are targets, P1 may move them ≤ 150 m to satisfy this.
+B's hunting ground is the grass within 400 m of its camp (P1 pins one herd there); its lures toward the town are the
+Lord's woods (poaching), the obsidian field, the gold pool and the town's rice. Validation at generation: every
+hotspot on land of its biome, reachable on foot, ≥ 40 m apart, in its ring; positions are targets, P1 may move them
+≤ 150 m to satisfy this.
 
-**Ring budget (why people travel):** each camp's home ring holds 8 berry bushes, 8 root patches, 6 deadwood and the
-flora trees: ≈ 140 food a day sustainable against a band's ≈ 500-600. Start stock ≈ 1 100 food, so the home ring runs
-thin on day 3-4 and foragers go to middle-ring hotspots (25-40 food nodes each, full at start). Far ring: minerals,
-gold, dens, the best game.
+**Ring budget (why people travel):** P1 caps each camp's home ring (≤ 400 m) at exactly 8 berry bushes, 8 root
+patches and 6 deadwood piles besides the trees: ≈ 140 food a day sustainable against a band's ≈ 500-600. Start stock
+≈ 1 100 food, so the home ring runs thin on day 3-4 and foragers go to middle-ring hotspots (25-40 food nodes each,
+full at start). Far ring: minerals, gold, the best game.
 
 ### 1.3 Roads, paths and bridges (`world/roads.py`, part of the world view)
 - Graph: town gates, camps, hotspot centres, landmarks; routed by Dijkstra on the cell graph over terrain cost, most
   important first; each routed cell is discounted to 0.35× for later routes so they merge into trunks.
 - **Roads** (3 m, gravel ruts): main gate → North woods, Gulf shore, South marsh; west gate → Lord's woods → band B;
-  west gate → Standing stones → Hot springs; main gate → Elder grove → Falls pool; spur to the obsidian field.
+  west gate → Standing stones (landmark); main gate → Elder grove → Falls pool; spur to the obsidian field.
   **Paths** (1.5 m, trodden earth): the land loop ("the great trail"), each camp to its hotspots and to the loop.
 - Sim cost: road cell `max(0.8, base × 0.5)`, path cell `max(0.9, base × 0.7)`; a road or path over a river is a
   **bridge** (cost 0.8, drawn log-plank bridge) instead of the 1.5 ford. A* then prefers roads with no new movement
   code. A **signpost** stands at every road junction (names the two places). Perception: "You are on the road from
   the castle town to the Elder grove."
 
-### 1.4 Rice paddies (replace `FARM_GROWTH` and the virtual field store)
-- `work("farm")` at a paddy spot = 60 min tending, **+34 growth** (elders ×0.6); one counted hour per paddy per day.
-  100 growth → ripe (stock 60). `gather("rice")` at a ripe paddy harvests ≤ 10 per 20 min (15 with a sickle). Empty →
-  stubble; `work("farm")` on stubble replants (seedlings, growth 0). An untended ripe paddy loses 2 a day.
-- Start growth staggered 0/20/40/60/80/100 → up to 120 measures a day (1 200 food) against the town's 11 people ×
-  100 = 1 100 food a day. Farmers only ever stand inside the paddies.
+### 1.4 Rice paddies and the rice balance (replace `FARM_GROWTH` and the virtual field store)
+- `work("farm")` at a paddy spot = 60 min of tending (elders 90 min), **+50 growth**, at most one counted tending per
+  paddy per day. 100 growth → ripe (stock 60). `gather("rice")` at a ripe paddy harvests ≤ 10 per 20 min session (15
+  with a sickle). Empty → stubble; tending stubble replants it (seedlings, growth 0) and counts as that day's
+  tending. An untended ripe paddy loses 2 a day. So each paddy runs a **3-day cycle**: harvest + replant, tend (50),
+  tend (100, ripe the next morning). Start: paddies at growth 0, 0, 50, 50, 100, 100. Farmers only ever stand inside
+  the paddies.
+- **Steady-state rice balance** (measures a day; a person eats 10 = 100 hunger; checked by Q1's run):
+
+| Step | Measures/day | Arithmetic |
+|---|---|---|
+| Harvest | **120** | 6 paddies × 60 measures ÷ 3-day cycle (Genzo's household farms 4 paddies = 80, Tokuji 2 = 40) |
+| Rice tax 40 % → granary | 48 | 0.4 × 120 (Genzo 32, Tokuji 16) |
+| Farm households keep | 72 | Genzo 48, Tokuji 24 |
+| … eat | 40 | Genzo, Aiko, Hana 30; Tokuji 10 |
+| … sell at the stall | 32 | Genzo 18, Tokuji 14 |
+| Granary → keep household | 20 | Masanori, Kenji |
+| Granary → temple grant | 15 | Ennen eats 10, gives 5 as noon alms |
+| Granary → stall (lord's surplus) | 13 | 48 − 20 − 15, sold every second day (26) |
+| Stall in | 45 | 32 + 13 |
+| Stall out | 45 | Goro 10, Tetsu 10, Daisuke 8 (+ fish), Fumiko 10 (her own stock), band A 3, band B 4 |
+| Eaten in total | 120 | 40 + 20 + 15 + 45 = harvest ✓ |
+
+- **Labour:** per day 2 harvest-and-replant paddies (2 × (2 h + 1 h) = 6 h; 4.7 h with sickles) + 4 tending hours
+  (Tokuji's at 1.5 h) ≈ 10 h: Genzo 6 h, Tokuji 3 h, Aiko 2 h in the afternoons.
+- **Shocks show fast:** a hurt farmer, a raid on the racks (they hold a day's harvest overnight) or a missed harvest
+  drops the stall's rice stock below target within 2 days, and its price rises up to ×2 (§2.5).
 
 ### 1.5 Territory (`sim/territory.py`)
 - **Home ground:** town chart + 400 m; each camp 400 m. Owned by that group; one constant `HOME_GROUND_M = 400`.
@@ -120,13 +141,18 @@ gold, dens, the best game.
 ### 1.6 Threats and safety
 | Threat | Rule |
 |---|---|
-| Predators (D68 extended, §5) | dens at the hotspots marked; within 40 m of its den a predator defends by day too (charges anyone within 25 m); wolf packs (2-4) hunt together at night and go only for a person alone (nobody within 10 m) and > 15 m from a fire |
+| Predators (D68 extended, §4.6) | dens at the hotspots marked; within 40 m of its den a predator defends by day too (charges anyone within 25 m); wolf packs (2-4) hunt together at night and go only for a person alone (nobody within 10 m) and > 15 m from a fire; a citizen charged at a den learns it ("the wolves' den") and keeps 60 m from it after |
 | Raids | band B, hungry (§3.6), takes rice from the town's field racks at town night |
 | Poaching / trespass | §3.3 |
 | Theft | owned stores (§2.6) |
-| Bad water | drinking still water (lake, wetland, hot pool) 15 % → `injured` cause `bad water` (5-10) and thirst ×1.5 for 12 h; rivers, springs and the well are safe |
-| Hunger | ring budget, spoilage (§2.4), tax (§2.7) |
+| Hunger | ring budget, spoilage (§2.4), tax and dues (§2.7) |
 | Tools break | §2.4 |
+
+**Exposure by schedule** (so threats actually meet people; scripted brains, BR1/BR2): band hunters leave before
+dawn (predators still hunt while the sun is below +4°); Daisuke's wood trips to the North woods start late afternoon
+and come back at dusk; foragers on middle-ring outings may be caught by dusk; Goro walks the racks loop at night;
+Kaz poaches past the Lord's woods den; the Elder grove's bushes lie within the bear den's 40 m defence ring at its
+edge.
 
 **Safe zones** (said as `you.safety`: "inside the walls", "by the fire", "in company", "on home ground", "exposed"):
 inside the town chart; ≤ 15 m of a lit fire; ≥ 2 others within 10 m (D68). Night outside all of them is exposed.
