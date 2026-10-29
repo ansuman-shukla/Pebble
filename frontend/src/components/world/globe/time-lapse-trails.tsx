@@ -11,8 +11,8 @@ import {
 import type { NpcViews } from './globe-npcs';
 import {
   pruneTrails,
-  SAMPLE_S,
   sampleTrail,
+  trailStep,
   trailVertices,
   type Trails,
   writeTrails,
@@ -22,7 +22,8 @@ import { isTimeLapse } from '@/lib/world/visual-rate';
 
 /*
  * Fast-forward trails (10 §4.2.3): in time-lapse (above ×10) every drawn citizen drags the last 20 real seconds of
- * its drawn path as a fading line, all in one LineSegments. At ×10 and below, or paused, there are none.
+ * its drawn path as a fading line ending at its body, all in one LineSegments. At ×10 and below, or paused, there are
+ * none.
  */
 
 /** Trails for at most this many citizens. */
@@ -39,9 +40,14 @@ const VERTICES = trailVertices(MOVERS);
 const lifted = new Vector3();
 const alphas = new Float32Array(VERTICES);
 
+type TrailGeometry = BufferGeometry<{
+  position: BufferAttribute;
+  color: BufferAttribute;
+}>;
+
 /** Room for every mover's trail; nothing drawn until the first sample. */
-function newGeometry() {
-  const geometry = new BufferGeometry();
+function newGeometry(): TrailGeometry {
+  const geometry: TrailGeometry = new BufferGeometry();
   const attribute = (size: number) =>
     new BufferAttribute(new Float32Array(VERTICES * size), size).setUsage(
       DynamicDrawUsage,
@@ -60,9 +66,9 @@ export function TimeLapseTrails({
   /** Game seconds per real second (0 paused). */
   rate: number;
 }) {
-  const line = useRef<LineSegments>(null);
+  const line = useRef<LineSegments<TrailGeometry>>(null);
   const trails = useRef<Trails>(new Map());
-  const since = useRef(0);
+  const clock = useRef(0);
   const geometry = useMemo(() => newGeometry(), []);
   useEffect(() => () => geometry.dispose(), [geometry]);
 
@@ -76,9 +82,9 @@ export function TimeLapseTrails({
   useFrame((_, delta) => {
     const mesh = line.current;
     if (!lapse || !mesh) return;
-    since.current += delta;
-    if (since.current < SAMPLE_S) return;
-    since.current %= SAMPLE_S;
+    clock.current += delta;
+    const now = clock.current;
+    const step = trailStep(rate);
     const drawn = new Set<string>();
     for (const view of views.values()) {
       if (drawn.size >= MOVERS) break;
@@ -86,7 +92,7 @@ export function TimeLapseTrails({
       if (position.lengthSq() === 0) continue; // not placed yet
       drawn.add(view.id);
       lifted.copy(position).setLength(position.length() + LIFT_M);
-      sampleTrail(trails.current, view.id, lifted);
+      sampleTrail(trails.current, view.id, lifted, now, step);
     }
     pruneTrails(trails.current, drawn);
     const { position: positions, color: colors } = mesh.geometry.attributes;
@@ -95,6 +101,7 @@ export function TimeLapseTrails({
       positions.array as Float32Array,
       alphas,
       snapMetres(RUN_MPS, rate),
+      now,
     );
     const rgba = colors.array as Float32Array;
     for (let v = 0; v < vertices; v++) {
@@ -103,8 +110,11 @@ export function TimeLapseTrails({
       rgba[v * 4 + 2] = COLOR[2];
       rgba[v * 4 + 3] = alphas[v] * OPACITY;
     }
-    positions.needsUpdate = true;
-    colors.needsUpdate = true;
+    for (const attribute of [positions, colors]) {
+      attribute.clearUpdateRanges();
+      attribute.addUpdateRange(0, vertices * attribute.itemSize);
+      attribute.needsUpdate = true;
+    }
     mesh.geometry.setDrawRange(0, vertices);
   });
 

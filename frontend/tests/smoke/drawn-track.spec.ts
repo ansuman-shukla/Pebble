@@ -492,24 +492,24 @@ test('two walkers passing on one street are drawn at least 0.6 m apart', () => {
 /** Metres east of the north-south street through the origin. */
 const east = (spot: Vector3) => (spot.x / spot.z) * R;
 
-for (const { turn, end, settled } of [
-  {
-    turn: 'a corner',
-    end: [20, 20],
-    settled: (spot: Vector3) => east(spot) - 20,
-  },
-  { turn: 'a U-turn', end: [0, 0], settled: (spot: Vector3) => -south(spot) },
-] as const)
+const TURNS: {
+  turn: string;
+  end: [number, number];
+  /** How far right of the way it turned the walker is drawn. */
+  settled: (spot: Vector3) => number;
+}[] = [
+  { turn: 'a corner', end: [20, 20], settled: (spot) => east(spot) - 20 },
+  { turn: 'a U-turn', end: [0, 0], settled: (spot) => -south(spot) },
+];
+
+for (const { turn, end, settled } of TURNS)
   test(`a walker eases across into its new lane at ${turn}, never jumping`, () => {
     const track = newTrack(
-      tick(
-        [...end],
-        [
-          [0, 0, 0],
-          [20, 0, 14.4],
-          [...end, 28.8],
-        ],
-      ),
+      tick(end, [
+        [0, 0, 0],
+        [20, 0, 14.4],
+        [...end, 28.8],
+      ]),
       R,
     );
     const spots = [
