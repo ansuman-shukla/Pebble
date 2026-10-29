@@ -9,6 +9,7 @@ from sqlmodel import Session
 from app.engine import EngineLoop
 from app.observability.events import TaxChange
 from app.services import citizens as citizens_service
+from app.sim import wear
 from app.sim.citizens import CITIZENS, load_citizens
 from app.sim.world import SimWorld
 from tests.api.spectator import API, Story, dev_run, timeline
@@ -204,6 +205,36 @@ def test_timeline_tells_world_v1_events_and_attackers(
     assert told["tax_paid"]["summary"] == "pays 5 mon of tax for Genzo's house"
     struck = told["injured"]
     assert (struck["summary"], struck["related"]) == ("is struck by Genzo", ["dev-genzo"])
+
+
+def test_timeline_tells_what_spoils_and_what_wears_out(
+    client: TestClient, spectator_session: Session, sim_world: SimWorld
+) -> None:
+    loop = dev_run(spectator_session, sim_world)
+    core, aiko, haru = loop.sim.core, loop.sim.citizen("dev-aiko"), loop.sim.citizen("dev-haru")
+    loop.run_ticks(1, headless=True)
+    aiko.inventory.update({"meat": 6, "berries": 4, "pack": 1, "flint spear": 1})
+    haru.inventory["meat"] = 6
+    wear.WEAR.of(loop.sim.state).rising = {aiko.id, haru.id}  # their dawn
+    wear.spoil_at_dawn(core, lambda _unit: False)
+    while "pack" in aiko.inventory:
+        wear.wear_packs_at_dawn(core, lambda _unit: False)
+    while not wear.use_tool(core, aiko, "flint spear"):
+        pass
+    loop.run_ticks(1, headless=True)
+
+    lines = [(e["type"], e["summary"]) for e in timeline(client, "dev-aiko", from_tick=1)]
+    assert ("spoiled", "a few berries and a little meat spoil") in lines
+    assert ("tool_broke", "a pack wears out") in lines and ("tool_broke", "a flint spear breaks") in lines
+    assert not [line for line in lines if line[0] == "item_moved"]  # the losses tell their moves to the world
+    moves = timeline(client, "dev-aiko", type="item_moved", from_tick=1)
+    assert sorted(e["summary"] for e in moves) == [
+        "loses a few berries",
+        "loses a flint spear",
+        "loses a little meat",
+        "loses a pack",
+    ]
+    assert [e["summary"] for e in timeline(client, "dev-haru", type="spoiled")] == ["a little meat spoils"]
 
 
 # --- needs ---
