@@ -35,7 +35,7 @@ from app.sim.slots import (
 )
 from app.sim.snapshot import restore, state_hash, take_snapshot
 from app.sim.state import Citizen
-from app.sim.vec import bearing_deg, step_towards
+from app.sim.vec import bearing_deg, slerp, step_towards
 from app.sim.work import WORK_BY_NAME
 from app.sim.world import SimWorld
 from app.world.town import load_town
@@ -89,6 +89,14 @@ def test_the_layout_keeps_personal_space_and_stands_on_walkable_ground(sim_world
         and sim_world.distance_m(legs(sim_world, sitter.position, sitter.heading_deg), other.position) < PERSONAL_M
     ]
     assert on_legs == []  # no stand, seat or mat on a sitter's or lier's legs (the fire's stands sat on them)
+    for camp in ("band_a_camp", "band_b_camp"):  # nobody sleeps across the way from a lean-to to the fire
+        fire = sim_world.structures[f"{camp}:fire-pit"].centre
+        for structure in sim_world.structures.values():
+            if structure.kind != "lean_to" or structure.site != camp:
+                continue
+            way = [slerp(structure.door, fire, k / 20) for k in range(21)]
+            for mat in (slot for slot in lay.owners[f"{camp}:fire-pit"] if slot.kind == "mat"):
+                assert min(sim_world.distance_m(mat.position, p) for p in way) >= 0.9, (structure.id, mat.id)
     for slot in spots:
         if slot.kind in ("stand", "queue", "work") and sim_world.town_point(slot.position) is not None:
             assert sim_world.town.walk.is_walkable(*sim_world.town_point(slot.position) or (0, 0)), slot.id
