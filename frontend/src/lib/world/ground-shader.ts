@@ -240,7 +240,9 @@ float gNoise(vec3 p) {
 }
 /*
  * Cells (Worley noise over the 8 nearest lattice points): x = distance to the nearest feature point, y = to the
- * second nearest, z = the nearest cell's id in 0..1. y − x is small along the cells' borders.
+ * second nearest, z = the nearest cell's id in 0..1. y − x is small along the cells' borders. The points keep to
+ * the middle half of their cells so 8 lattice points always hold the nearest (and the second nearest wherever
+ * y − x is small): wider jitter missed some, which drew straight seams along the lattice.
  */
 vec3 gCells(vec3 p) {
   vec3 base = floor(p - 0.5);
@@ -251,7 +253,7 @@ vec3 gCells(vec3 p) {
     ivec3 c = ivec3(base) + ivec3(k & 1, (k >> 1) & 1, k >> 2);
     uint h = groundPcg((uint(c.x) * 0x8da6b343u) ^ (uint(c.y) * 0xd8163841u) ^ (uint(c.z) * 0xcb1ab31fu));
     vec3 jitter = vec3(uvec3(h, h >> 10u, h >> 20u) & 1023u) * (1.0 / 1023.0);
-    float d = length(vec3(c) + 0.15 + 0.7 * jitter - p);
+    float d = length(vec3(c) + 0.25 + 0.5 * jitter - p);
     if (d < f1) {
       f2 = f1;
       f1 = d;
