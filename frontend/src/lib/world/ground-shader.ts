@@ -119,16 +119,16 @@ const PICK_BAND = 0.1;
 
 /*
  * The two layers that draw their pattern: the top two by height (the weights h after the breakup, lifted by the
- * fields), and the first one's share t (0.5..1). Each layer's height rises from -1 with its weight, so a layer
- * fades in rather than pops; the top two share a band and the second fades out as the third catches up, so the
- * blend never jumps where the pick changes.
+ * fields), the first one's share t (0.5..1) and the gap between their heights (0 along the edge where they
+ * swap). Each layer's height rises from -1 with its weight, so a layer fades in rather than pops; the top two share
+ * a band and the second fades out as the third catches up, so the blend never jumps where the pick changes.
  */
 const GROUND_PICK = /* glsl */ `
 const vec2 GROUND_PHASE[8] = vec2[8](${GROUND_LAYERS.map((layer) => {
   const angle = (PICK_PHASE[layer] * Math.PI) / 180;
   return `vec2(${glslFloat(Math.cos(angle) * PICK_SPREAD)}, ${glslFloat(Math.sin(angle) * PICK_SPREAD)})`;
 }).join(', ')});
-float groundPick(float hw[8], float f0, float f1, out int first, out int second) {
+float groundPick(float hw[8], float f0, float f1, out int first, out int second, out float gap) {
   first = 0;
   second = 0;
   float h1 = -9.0;
@@ -149,6 +149,7 @@ float groundPick(float hw[8], float f0, float f1, out int first, out int second)
       second = i;
     } else if (h > h3) h3 = h;
   }
+  gap = h1 - h2;
   float a1 = min(h1 - h2 + ${glslFloat(PICK_BAND / 2)}, h1 - h3);
   float a2 = min(max(h2 - h1 + ${glslFloat(PICK_BAND / 2)}, 0.0), h2 - h3);
   return a1 + a2 > 0.0 ? a1 / (a1 + a2) : 1.0;
@@ -157,15 +158,15 @@ float groundPick(float hw[8], float f0, float f1, out int first, out int second)
 
 /*
  * The breakup, then the pick: `float groundBlend(inout float w[8], float f0, float f1, float edge, out int first,
- * out int second)` returns the first layer's share and leaves the broken-up weights in w.
+ * out int second, out float gap)` returns the first layer's share and leaves the broken-up weights in w.
  */
 export const groundBlendGlsl = (rules: GroundBreakup[]) => /* glsl */ `
 ${breakupGlsl(rules)}
 ${GROUND_PICK}
-float groundBlend(inout float w[8], float f0, float f1, float edge, out int first, out int second) {
+float groundBlend(inout float w[8], float f0, float f1, float edge, out int first, out int second, out float gap) {
   float hw[8] = w;
   groundBreakup(w, hw, f0, f1, edge);
-  return groundPick(hw, f0, f1, first, second);
+  return groundPick(hw, f0, f1, first, second, gap);
 }
 `;
 
@@ -328,10 +329,14 @@ vec3 groundBump(vec3 position, vec3 normal, float h) {
 }
 `;
 
-/* Sets diffuseColor (from the grass tint already in it), groundRoughness and groundRelief (metres). */
+/*
+ * Sets diffuseColor (from the grass tint already in it), groundRoughness, groundRelief (metres) and groundGap (the
+ * top two layers' height gap).
+ */
 const FRAGMENT_COLOR = /* glsl */ `
 float groundRoughness;
 float groundRelief = 0.0;
+float groundGap = 9.0;
 {
   vec3 tint = diffuseColor.rgb;
   float w[8] = float[8](vGround0.x, vGround0.y, vGround0.z, vGround0.w, vGround1.x, vGround1.y, vGround1.z, vGround1.w);
@@ -354,7 +359,7 @@ float groundRelief = 0.0;
     float f1 = g.w * 0.5 + extra * 0.32 + (1.0 - g.z) * 0.18;
     int first;
     int second;
-    float t = groundBlend(w, f0, f1, ${BREAKUP_EDGE} + fw * 0.5, first, second);
+    float t = groundBlend(w, f0, f1, ${BREAKUP_EDGE} + fw * 0.5, first, second, groundGap);
     // past the patterns the top two layers' own colours, so they part along the fields, not the mesh's triangles
     vec3 near = mix(groundBase(second, tint), groundBase(first, tint), t);
     if (dist < GROUND_PATTERN_END) {
@@ -389,7 +394,10 @@ const FRAGMENT_NORMAL = /* glsl */ `
 
 const FRAGMENT_BUMP = /* glsl */ `
 #ifdef GROUND_BUMP
-normal = groundBump(-vViewPosition, normal, groundRelief);
+// the bump fades out within a few pixels of a layer's edge, where the two layers' reliefs meet as a step (a wide
+// gap is no edge, however fast it changes: a layer's weight rising from 0 lifts the second's height steeply)
+float groundEdge = groundGap / max(fwidth(groundGap), 1e-4);
+normal = groundBump(-vViewPosition, normal, groundRelief * max(smoothstep(1.0, 6.0, groundEdge), smoothstep(0.1, 0.3, groundGap)));
 #endif
 `;
 

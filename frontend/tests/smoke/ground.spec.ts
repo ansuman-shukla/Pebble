@@ -361,7 +361,8 @@ void main() {
   vec2 f = mix(fFrom, fTo, x);
   int first;
   int second;
-  float t = groundBlend(w, f.x, f.y, 0.04, first, second);
+  float gap;
+  float t = groundBlend(w, f.x, f.y, 0.04, first, second, gap);
   color = vec4(float(first) / 7.0, float(second) / 7.0, mix(float(second), float(first), t) / 7.0, t);
 }`;
   const pixels = await page.evaluate<number[]>(`(() => {
