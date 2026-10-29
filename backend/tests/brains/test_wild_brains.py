@@ -222,8 +222,15 @@ def _drinks_in_the_dark(sim: Simulation, brain: UtilityBrain, sun: float) -> boo
     sim.drain()
     citizen.body.thirst = 70  # thirsty before bed
     drank = False
+    walks: list[float] = []  # how far each walk the way the water lay went
     for _ in range(60):
+        number, start = brain.api.notes.get("action"), citizen.position
         brain.tick()
+        towards = brain.api.notes.get("action") != number and brain.api.notes["last"] == "go towards the water"
+        while towards and citizen.action is not None:
+            sim.step()
+        if towards:
+            walks.append(sim.core.distance_m(start, citizen.position))
         sim.step()
         drank |= any(
             event.type == "action_finished"
@@ -231,6 +238,7 @@ def _drinks_in_the_dark(sim: Simulation, brain: UtilityBrain, sun: float) -> boo
             and event.payload.model_dump()["action"] == "drink"
             for event in sim.drain()
         )
+    assert walks and max(walks) < 20  # a few steps at a time, looking again: none on past where the water shows
     return drank and citizen.body.thirst < 30
 
 
@@ -277,6 +285,22 @@ def test_a_band_notes_the_way_to_its_water_only_at_home(new_sim: Callable[..., S
         while child.action is not None:
             sim.step()
         assert brain.api.notes["water_way"] == seen_from_home  # from there, it would be the wrong way from home
+
+    while all("Band B camp" in place for place, _ in looks.values()):  # out past "not far from" camp too
+        rings |= {n for cell in rings for n in sim.world.neighbours[cell]}
+        looks = {cell: elsewhere(cell) for cell in sorted(rings)}
+    skip_to(sim, child.position, night=True)
+    dark = {cell: elsewhere(cell) for cell in sorted(rings)}
+    unseen = [cell for cell, (place, way) in dark.items() if way is None and not place.startswith("at your home")]
+    in_camp = next(c for c in unseen if dark[c][0].startswith("at Band B camp"))
+    near_camp = next(c for c in unseen if "not far from Band B camp" in dark[c][0])
+    beyond = next(c for c in unseen if "Band B camp" not in dark[c][0])
+    child.body.thirst = 70
+    for cell, last in ((in_camp, "rest at camp"), (near_camp, "rest at camp"), (beyond, "go towards the water")):
+        put_in_the_wild(sim, child.id, cell)  # thirsty in the dark, the water out of sight, away from home
+        brain.api.notes["last"] = last  # far off, even if it had set out the way the water lies from home
+        brain.decide()
+        assert brain.api.notes["last"] in ("go drink", "go home")  # not that way: from here it may be wrong
     put_in_the_wild(sim, child.id, home)
     assert _drinks_in_the_dark(sim, brain, -15.0)
 
