@@ -1,5 +1,5 @@
 /*
- * Where a live citizen is drawn, frame by frame: on the timed path its latest tick
+ * Where a live citizen is drawn, frame by frame, and what it is shown doing: on the timed path its latest tick
  * streamed (`walk-path.ts`), one tick behind the sim, joined where the last path left it. Normally the new path starts
  * right there (the feed streams each move from where the mover stood when the tick began), so nothing jumps; a walker
  * drawn short of it (a page opened mid-tick) walks the rest of its old path first; a drawn spot a little past it (a
@@ -7,6 +7,9 @@
  * was and back in on its path instead of jumping.
  *
  *   opacity 1 ──fade out at the old spot──▶ 0 ──fade in on the path──▶ 1      (FADE_S real seconds in all)
+ *
+ * While the drawn body still walks to where the feed says the citizen is now, it is shown moving: a walk that ended
+ * within the tick (in sleep, a collapse, death) shows its new activity and pose only once the body gets there.
  *
  * Pure (no DOM, no React): `globe-npcs.tsx` keeps one per citizen and the tests drive it directly.
  */
@@ -22,20 +25,45 @@ import {
   snapMetres,
   type WalkPath,
 } from './walk-path';
-import type { RoutePoint } from '@/lib/client/types.gen';
+import type { CitizenEntity, RoutePoint } from '@/lib/client/types.gen';
 
 /** How fast the drawn spot eases onto a new tick's path when it is a little off (1/s). */
 const CATCH_UP_RATE = 3;
 /** A resync fades the body out where it was drawn and in on its path over this long (real seconds). */
 export const FADE_S = 0.3;
 
-/** What a feed frame says of a citizen's place and move. */
-interface Streamed {
+/** What a citizen is shown doing (the label's words and the pose come from it). */
+export type Doing = Pick<
+  CitizenEntity,
+  'activity' | 'action_label' | 'cause_of_death'
+>;
+
+/** What a feed frame says of a citizen's place, move and doing. */
+interface Streamed extends Doing {
   position: { unit: [number, number, number] };
   route: RoutePoint[];
   speed_mps: number;
   heading_deg: number;
 }
+
+/** The activities of someone on the move (drawn with the gait, standing). */
+const MOVING: ReadonlySet<Doing['activity']> = new Set([
+  'walking',
+  'running',
+  'hunting',
+]);
+/** Shown for a body that moved before it was seen doing anything moving. */
+const WALKING: Doing = {
+  activity: 'walking',
+  action_label: '',
+  cause_of_death: null,
+};
+
+const doingOf = ({ activity, action_label, cause_of_death }: Doing): Doing => ({
+  activity,
+  action_label,
+  cause_of_death,
+});
 
 export interface Track {
   /** The path the feed streamed for this tick (one point when standing) and how far along it the citizen is. */
@@ -48,6 +76,10 @@ export interface Track {
   fade: { from: Vector3; elapsed: number } | null;
   /** How opaque the body is drawn (below 1 only while fading). */
   opacity: number;
+  /** What the latest frame says the citizen is doing. */
+  doing: Doing;
+  /** What it is shown doing instead while the drawn body walks to where the frame says it is (moving). */
+  held: Doing | null;
 }
 
 /**
@@ -61,8 +93,14 @@ export function newTrack(citizen: Streamed, radius: number): Track {
     yaw: (citizen.heading_deg * Math.PI) / 180,
     fade: null,
     opacity: 1,
+    doing: doingOf(citizen),
+    held: MOVING.has(citizen.activity) ? null : WALKING,
   };
 }
+
+/** What the citizen is shown doing now (the same object until it changes). */
+export const shownDoing = (track: Track) =>
+  track.held && track.path.time < track.path.arrive ? track.held : track.doing;
 
 /** Where the citizen is drawn on its path, eased by the catch-up offset (a unit direction into `out`). */
 const onPath = (track: Track, out: Vector3) =>
@@ -78,6 +116,13 @@ export function follow(
   radius: number,
   rate: number,
 ) {
+  const shown = shownDoing(track);
+  track.doing = doingOf(citizen);
+  track.held = MOVING.has(citizen.activity)
+    ? null
+    : MOVING.has(shown.activity)
+      ? shown
+      : WALKING;
   const next = citizenPath(citizen, radius);
   const carried = carriedOn(track.path, next, radius);
   if (carried) {

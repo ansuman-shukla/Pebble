@@ -23,7 +23,13 @@ import { Label } from '@/components/world/labels';
 import { MAX_FRAME, smoothing } from '@/components/world/player/motion';
 import type { LiveCitizen } from '@/lib/live/live-contract';
 import type { Speech } from '@/lib/live/live-state';
-import { follow, moveOn, newTrack, type Track } from '@/lib/live/drawn-track';
+import {
+  follow,
+  moveOn,
+  newTrack,
+  shownDoing,
+  type Track,
+} from '@/lib/live/drawn-track';
 import { groundSpeed, headingAt, walking } from '@/lib/live/walk-path';
 import {
   activityWords,
@@ -91,6 +97,8 @@ interface NpcView {
   /** World position of the feet and the facing tangent (the follow camera reads these). */
   pose: GlobePlayerState;
   activity: string;
+  /** How the body is posed (from the activity shown). */
+  posture: NpcLook['pose'];
   /** The clip playing, '' until the model is loaded (or while it is far). */
   clip: string;
   loaded: boolean;
@@ -311,6 +319,7 @@ function newView(citizen: LiveCitizen): NpcView {
     id: citizen.id,
     pose: { position: new Vector3(), facing: new Vector3(), ground: 0 },
     activity: citizen.activity,
+    posture: 'standing',
     clip: '',
     loaded: false,
     near: false,
@@ -347,8 +356,11 @@ function Npc({
   if (!look) throw new Error(`unknown citizen look ${citizen.look}`);
   const group = useRef<Group>(null);
   const [mounted, setMounted] = useState(false);
-  const trackRef = useRef<Track>(newTrack(citizen, radius));
+  const [firstTrack] = useState(() => newTrack(citizen, radius));
+  const trackRef = useRef<Track>(firstTrack);
   const viewRef = useRef<NpcView>(newView(citizen));
+  // what the body is shown doing: the frame's activity, or a moving one while it walks there (drawn-track)
+  const [doing, setDoing] = useState(() => shownDoing(firstTrack));
   // the ground around the drawn body, for laying a sitter or a sleeper along it
   const ground = useMemo<GroundProbe>(() => {
     const spot = new Vector3();
@@ -373,17 +385,20 @@ function Npc({
     }),
     [],
   );
-  const { activity, action_label: label } = citizen;
-  const pose = useMemo(
-    () => npcLook({ activity, action_label: label }),
-    [activity, label],
-  );
+  const pose = useMemo(() => npcLook(doing), [doing]);
+
+  // the activity shown changes when a frame comes or the drawn body gets where the frame says it is
+  const showDoing = () => {
+    const now = shownDoing(trackRef.current);
+    viewRef.current.activity = now.activity;
+    if (now !== doing) setDoing(now);
+  };
 
   // every new frame: the move it streams, joined where the citizen is drawn (a speed change alone sends the same
   // citizens and keeps the path)
   const onFrame = useEffectEvent((next: LiveCitizen) => {
     follow(trackRef.current, next, radius, rate);
-    viewRef.current.activity = next.activity;
+    showDoing();
   });
   useLayoutEffect(() => onFrame(citizen), [citizen]);
 
@@ -409,6 +424,8 @@ function Npc({
       rate,
       delta: Math.min(frameDelta, MAX_FRAME),
     });
+    showDoing();
+    view.posture = pose.pose;
     const people = peopleRef.current;
     const feet = people.get(citizen.id);
     if (feet) feet.copy(view.pose.position);
@@ -444,7 +461,7 @@ function Npc({
       <Label
         store={labels}
         id={`npc-${citizen.id}`}
-        text={`${citizen.name} · ${activityWords(citizen)}`}
+        text={`${citizen.name} · ${activityWords(doing)}`}
         height={labelHeight}
       />
       {speech && (

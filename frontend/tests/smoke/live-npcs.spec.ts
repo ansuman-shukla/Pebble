@@ -60,6 +60,8 @@ interface Npc {
   feet: Vector3[];
   /** The way the body faces (a unit vector). */
   facing: Vector3;
+  /** How the body is posed: standing, sitting or lying. */
+  posture: string;
 }
 
 type Dataset = { dataset: Record<string, string | undefined> };
@@ -69,6 +71,7 @@ type MockLiveWindow = {
     sayNow(actor: string, words: string): void;
     restartRun(): void;
     setClock(change: { speed?: number; paused?: boolean }): void;
+    skip(ticks: number): void;
     entities(): EntitiesView;
     noRun: boolean;
   };
@@ -100,6 +103,7 @@ async function npcs(page: Page): Promise<Npc[]> {
     loaded: data.npcLoaded === 'true',
     feet: data.npcFeet ? footPair(data.npcFeet) : [],
     facing: new Vector3(...(data.npcFacing ?? '0,0,0').split(',').map(Number)),
+    posture: data.npcPosture ?? '',
   }));
 }
 
@@ -230,6 +234,22 @@ test('the 15 citizens glide between ticks, stand on the ground and play their ac
   // someone walked a long way (Kenji: 82 m to the gate in one tick) without jumping there
   expect(moved).toBeGreaterThanOrEqual(1);
   expect(biggestStep).toBeLessThan(35);
+  // a body drawn moving is shown on the move, standing: a walk's last stretch keeps its walking (the frame already
+  // says what comes next, e.g. resting by the fire), nobody glides sitting or lying
+  const moves = (k: number, id: string) =>
+    samples[k]
+      .find((npc) => npc.id === id)!
+      .position.distanceTo(
+        samples[k - 1].find((npc) => npc.id === id)!.position,
+      ) > 0.05;
+  const gliding = samples.slice(1, -1).flatMap((all, k) =>
+    all
+      .filter((npc) => moves(k + 1, npc.id) && moves(k + 2, npc.id)) // on the way, not just arrived
+
+      .filter((npc) => npc.activity !== 'walking' || npc.posture !== 'standing')
+      .map((npc) => `${npc.id} ${npc.activity} ${npc.posture}`),
+  );
+  expect(gliding).toEqual([]);
 
   // each loaded citizen plays its activity's clip (walkers: the gait, or standing once arrived); a new
   // activity's clip takes a moment to fetch, so this settles over a few polls
@@ -463,6 +483,38 @@ test('the labels of citizens standing close together do not cover each other', a
   );
   expect(boxes.length).toBeGreaterThanOrEqual(2);
   expect(covered).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('a walk that ends in a rest within the tick is drawn walking all the way there, then sits', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  await openLive(page, errors, '?mockLive=1', 1);
+  // Sela gathers berries until tick 19; at tick 20 she walks the 33 m back to the fire pit and sits down to rest
+  await page.evaluate(() => {
+    const mock = (globalThis as unknown as MockLiveWindow).__pebbleMockLive;
+    mock.skip(18);
+    mock.setClock({ speed: 10 });
+  });
+  await page.waitForTimeout(1_000); // past the resync to tick 18
+  const samples: Npc[] = [];
+  for (let elapsed = 0; elapsed < 16_000; elapsed += 100) {
+    samples.push(await npcOf(page, 'sela'));
+    await page.waitForTimeout(100);
+  }
+  const moving = (k: number) =>
+    k > 0 &&
+    k < samples.length - 1 &&
+    samples[k].position.distanceTo(samples[k - 1].position) > 0.05 &&
+    samples[k + 1].position.distanceTo(samples[k].position) > 0.05;
+  const onTheWay = samples.filter((_, k) => moving(k));
+  expect(onTheWay.length).toBeGreaterThanOrEqual(10); // 33 m at ×10: over 2 s of walking
+  expect(
+    onTheWay.map(({ activity, posture }) => `${activity} ${posture}`),
+  ).toEqual(onTheWay.map(() => 'walking standing'));
+  const last = samples.at(-1)!;
+  expect([last.activity, last.posture]).toEqual(['resting', 'sitting']);
   expect(errors).toEqual([]);
 });
 

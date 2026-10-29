@@ -2,15 +2,17 @@ import { expect, test } from '@playwright/test';
 import { Vector3 } from 'three';
 
 import {
+  type Doing,
   FADE_S,
   follow,
   moveOn,
   newTrack,
+  shownDoing,
 } from '../../src/lib/live/drawn-track';
 import type { RoutePoint } from '../../src/lib/client/types.gen';
 
-/* Where a live citizen is drawn frame by frame (no browser): every move walked, one tick behind, only a resync
- * fades. */
+/* Where a live citizen is drawn frame by frame (no browser): every move walked, one tick behind, only a resync fades;
+ * shown moving while it walks. */
 
 const R = 2000;
 const FRAME = 1 / 60;
@@ -19,8 +21,12 @@ const at = (x: number, z: number): [number, number, number] =>
   new Vector3(x / R, z / R, 1).normalize().toArray();
 const metres = (a: Vector3, b: Vector3) => a.angleTo(b) * R;
 
-/** A tick of the feed: where the citizen is, and the timed route of its move (none when it stood still). */
-function tick(position: [number, number], route: [number, number, number][]) {
+/** A tick of the feed: where the citizen is, the timed route of its move (none when it stood still), its doing. */
+function tick(
+  position: [number, number],
+  route: [number, number, number][],
+  doing: Partial<Doing> = {},
+) {
   const points: RoutePoint[] = route.map(([x, z, t]) => ({
     unit: at(x, z),
     height_m: 8,
@@ -33,7 +39,11 @@ function tick(position: [number, number], route: [number, number, number][]) {
     route: points,
     speed_mps: speed,
     heading_deg: 0,
-  };
+    activity: route.length > 0 ? 'walking' : 'idle',
+    action_label: '',
+    cause_of_death: null,
+    ...doing,
+  } satisfies Doing & Record<string, unknown>;
 }
 
 /** A walk east at 83.3 m a tick: where it stands after `ticks`, and the route of the tick that got it there. */
@@ -280,4 +290,104 @@ test('a resync far away fades out where the body was and in on its path, never j
   expect(metres(seen.at(-1)!.spot, new Vector3(...at(400, 0)))).toBeLessThan(
     0.01,
   );
+});
+
+/** A walk east of 20 m in 14.4 s within the tick, ending in `doing`. */
+const shortWalk = (doing: Partial<Doing>) =>
+  tick(
+    [20, 0],
+    [
+      [0, 0, 0],
+      [20, 0, 14.4],
+    ],
+    doing,
+  );
+
+/** What the citizen is shown doing over the next tick, a second at a time (the activity whenever it changes). */
+function shownOver(track: ReturnType<typeof newTrack>, rate = 1) {
+  const shown = [shownDoing(track)];
+  for (let second = 0; second < 60; second++) {
+    moveOn(track, 1 / rate, rate, new Vector3());
+    const now = shownDoing(track);
+    if (now !== shown.at(-1)) shown.push(now);
+  }
+  return shown;
+}
+
+for (const rate of [1, 10]) {
+  test(`at ×${rate} a walk that ends in sleep within the tick is shown walking until the drawn body gets there`, () => {
+    const track = newTrack(
+      tick([0, 0], [], { activity: 'walking', action_label: 'home' }),
+      R,
+    );
+    follow(track, shortWalk({ activity: 'sleeping' }), R, rate);
+    const shown = shownOver(track, rate);
+    expect(shown.map(({ activity }) => activity)).toEqual([
+      'walking',
+      'sleeping',
+    ]);
+    expect(shown[0].action_label).toBe('home'); // still "walking home" on the way
+    // it lay down where the walk ended, after 14.4 s of walking
+    const track2 = newTrack(
+      tick([0, 0], [], { activity: 'walking', action_label: 'home' }),
+      R,
+    );
+    follow(track2, shortWalk({ activity: 'sleeping' }), R, rate);
+    moveOn(track2, 14 / rate, rate, new Vector3());
+    expect(shownDoing(track2).activity).toBe('walking');
+    moveOn(track2, 0.5 / rate, rate, new Vector3());
+    expect(shownDoing(track2).activity).toBe('sleeping');
+  });
+}
+
+test('someone who dies mid-walk is shown walking up to where they fell, then dead', () => {
+  const track = newTrack(tick([0, 0], [], { activity: 'running' }), R);
+  follow(track, shortWalk({ activity: 'dead', cause_of_death: 'wolf' }), R, 1);
+  expect(shownOver(track).map(({ activity }) => activity)).toEqual([
+    'running',
+    'dead',
+  ]);
+});
+
+test('someone who moves before doing anything moving is shown walking until they get there', () => {
+  // standing about, then a walk that collapsed in exhaustion within the tick
+  const track = newTrack(tick([0, 0], []), R);
+  follow(track, shortWalk({ activity: 'sleeping' }), R, 1);
+  expect(shownOver(track).map(({ activity }) => activity)).toEqual([
+    'walking',
+    'sleeping',
+  ]);
+  // first seen in a snapshot like that
+  const seen = newTrack(shortWalk({ activity: 'sleeping' }), R);
+  expect(shownOver(seen).map(({ activity }) => activity)).toEqual([
+    'walking',
+    'sleeping',
+  ]);
+});
+
+test('a sleeper who wakes and walks off is shown walking at once; standing still shows the new activity at once', () => {
+  const track = newTrack(tick([0, 0], [], { activity: 'sleeping' }), R);
+  follow(
+    track,
+    tick(
+      [83.3, 0],
+      [
+        [0, 0, 0],
+        [83.3, 0, 60],
+      ],
+      { activity: 'walking', action_label: 'the well' },
+    ),
+    R,
+    1,
+  );
+  expect(shownOver(track).map(({ activity }) => activity)).toEqual(['walking']);
+  follow(track, tick([83.3, 0], [], { activity: 'drinking' }), R, 1);
+  expect(shownDoing(track).activity).toBe('drinking');
+});
+
+test('the walk on along the plan is not held: once the drawn body is where the frame says, it shows the frame', () => {
+  const track = newTrack(walkingEast(1), R);
+  play(track, 6.5, 10); // a tick late: on into the plan ahead
+  follow(track, tick([83.3, 0], [], { activity: 'idle' }), R, 10);
+  expect(shownDoing(track).activity).toBe('idle');
 });
