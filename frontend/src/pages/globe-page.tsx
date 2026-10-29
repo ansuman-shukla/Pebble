@@ -49,6 +49,7 @@ import type {
   GlobePlayerState,
 } from '@/components/world/globe/globe-player';
 import { GlobeWalker } from '@/components/world/globe/globe-walker';
+import { EventFeed } from '@/components/world/globe/event-feed';
 import {
   CitizenPicker,
   Inspector,
@@ -83,6 +84,7 @@ import { useTown } from '@/hooks/use-town';
 import { useWorld } from '@/hooks/use-world';
 import type { TownView, WorldView } from '@/lib/client/types.gen';
 import { CLOCK_SPEEDS } from '@/lib/live/clock-speeds';
+import type { FeedEntry } from '@/lib/live/event-feed';
 import type { LiveCitizen } from '@/lib/live/live-contract';
 import { feedMinutes } from '@/lib/live/live-state';
 import { ShownDoings } from '@/lib/live/shown-doings';
@@ -681,6 +683,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = live.citizens.find((citizen) => citizen.id === selectedId);
   const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [feedOpen, setFeedOpen] = useState(true);
   const pinned = useMemo(
     () => [...new Set([selectedId, followId])].filter((id) => id !== null),
     [selectedId, followId],
@@ -756,7 +759,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   );
 
   // the spectator keys (10-world-v1 §5.4): Tab cycles the selection, F follows it, G goes to it, Space pauses,
-  // 1-4 pick the clock's speeds, I shows or hides the inspector, Esc lets go of everything
+  // 1-4 pick the clock's speeds, I and L show or hide the inspector and the event feed, Esc lets go of everything
   const clockLive = feed.status !== 'off';
   const { paused: livePaused, citizens } = live;
   const { setClock } = feed;
@@ -772,6 +775,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
         if (code === 'KeyF' && selectedId) follow(selectedId);
         if (code === 'KeyG' && selectedId) goToCitizen(selectedId);
         if (code === 'KeyI') setInspectorOpen((open) => !open);
+        if (code === 'KeyL') setFeedOpen((open) => !open);
         if (clockLive && code === 'Space') setClock({ paused: !livePaused });
         const speed = CLOCK_SPEEDS[Number(code.replace('Digit', '')) - 1];
         if (clockLive && code.startsWith('Digit') && speed)
@@ -800,6 +804,25 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
     window.addEventListener('keydown', claim);
     return () => window.removeEventListener('keydown', claim);
   }, [citizens, npcViews]);
+
+  const names = useMemo(
+    () => new Map(citizens.map((citizen) => [citizen.id, citizen.name])),
+    [citizens],
+  );
+  const flyTo = useCallback(
+    (entry: FeedEntry) => {
+      if (entry.position) {
+        const api = dropRef.current;
+        setFollowId(null);
+        settle(
+          api
+            ? api.goNear(new Vector3(...entry.position))
+            : { ok: false, reason: 'loading' },
+        );
+      } else if (entry.actorId) goToCitizen(entry.actorId);
+    },
+    [settle, goToCitizen],
+  );
 
   // the footer and the clock describe where the camera looks, not where the hidden avatar stands (F19, F20)
   const place = useCameraPlace(planet, focusRef);
@@ -1077,6 +1100,15 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
           }}
           onFollow={follow}
           onGoTo={goToCitizen}
+        />
+      )}
+      {feed.status !== 'off' && (
+        <EventFeed
+          listen={feed.listen}
+          names={names}
+          open={feedOpen}
+          onToggle={() => setFeedOpen((open) => !open)}
+          onFly={flyTo}
         />
       )}
       {selected && inspectorOpen && (
