@@ -206,6 +206,10 @@ async function drawn(page: Page): Promise<Map<string, Drawn>> {
   );
 }
 
+/** Drawn walking or running (not standing on its path). */
+const moving = (seen: Drawn | undefined): seen is Drawn =>
+  seen !== undefined && seen.speed > 0 && seen.clip !== 'Idle';
+
 const skip = (page: Page, ticks: number) =>
   page.evaluate(
     (count) =>
@@ -297,6 +301,8 @@ test('no moonwalking at ×10: movers face the way they go and their gait keeps p
   await openAt(page, errors, 'antelope:241', 4, 60);
   await skip(page, 3); // the lion prowls in; next tick the antelope bolt, then trot
   await setClock(page, { speed: 10 });
+  // a sample is judged by the way it came and the way it goes on, both while moving: when they agree it is on a
+  // straight stretch, not setting off (turning as it starts) nor straddling a corner (a slow sample can span one)
   const ways = new Map<string, Vector3>();
   let previous = await drawn(page);
   let checked = 0;
@@ -306,15 +312,21 @@ test('no moonwalking at ×10: movers face the way they go and their gait keeps p
     const now = await drawn(page);
     for (const [id, d] of now) {
       const before = previous.get(id);
-      if (!before || d.speed <= 0 || d.clip === 'Idle') continue;
+      const came = ways.get(id);
+      ways.delete(id);
+      if (!moving(before) || !moving(d)) continue;
+      // the way over the ground: facing is level, so a climb doesn't count
+      const up = before.position.clone().normalize();
       const going = d.position.clone().sub(before.position);
+      going.addScaledVector(up, -going.dot(up));
       if (going.length() < 0.5) continue;
       going.normalize();
-      const straight = (ways.get(id)?.dot(going) ?? 0) > 0.99; // not turning
       ways.set(id, going);
-      if (!straight) continue;
-      expect(going.dot(d.facing), `${id} faces its way`).toBeGreaterThan(0.9);
-      expect(d.pace, `${id} paced`).toBeGreaterThan(0);
+      if (!came || came.dot(going) <= 0.99) continue;
+      expect(going.dot(before.facing), `${id} faces its way`).toBeGreaterThan(
+        0.9,
+      );
+      expect(before.pace, `${id} paced`).toBeGreaterThan(0);
       checked += 1;
     }
     previous = now;
