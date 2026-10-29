@@ -583,6 +583,24 @@ stalker; "cover" is how long a fleeing animal needs to reach safety (burrow, cli
   about every other night: with 6 such groups (lion and wolves near band A, wolves and a bear near band B, wolves and
   a fox near the town) that is ≈ 3 kill sequences a night within 1 km of people. Bears can't run down deer (G* 0) and
   live off boar, carcasses and berries.
+- **Predators and people** (D68's conditions unchanged: dusk to dawn, hungry, a person alone within 40 m, > 15 m from
+  a lit fire, outside the walls; or anyone within 25 m of a den by day). A person runs 3.5 m/s for 3 min, then 2.5:
+  every predator wins that race from 40 m (G* > 100 m), so a committed attack always connects unless the person
+  reaches a fire, two others or the walls first, or drives it off with a spear (D75). One animal bites at a time (a
+  wolf pack's others hold back); each bite ends the attack with 50 %, at most 3 (D68), so 1.75 bites per attack.
+
+| Predator → person | Bite | P(caught once committed) | Bites per attack | P(death), full health | P(death), health 60 |
+|---|---|---|---|---|---|
+| wolf | 12-25 | 1.0 | 1.75 | 0 | 0.06 |
+| lion | 20-35 | 1.0 | 1.75 | 0.002 | 0.31 |
+| bear (den defence or hunt) | 25-40 | 1.0 | 1.75 | 0.10 | 0.45 |
+| polar bear (snow lands, far from people) | 30-45 | 1.0 | 1.75 | 0.24 | 0.50 |
+
+  **Expected per 14 days per seed** (from the exposure schedule of §1.6): ≈ 12 predator approaches on a person, of
+  which ≈ 3 become attacks (the rest meet a fire, a group, a spear or the walls), ≈ 5 bites, ≈ 1-2 den-defence
+  charges, and ≈ 0.25 deaths (≈ 0.1 from a bear attack on a healthy person, ≈ 0.15 from attacks on people already
+  hurt). With starvation and scripted violence at 0, deaths over both seeds are Poisson with mean ≈ 0.5, so the
+  checklist allows at most 2 deaths in 44 lives (P(≥ 3) ≈ 1.4 %).
 - **Kills leave remains:** a predator kill → `feeding` 60-120 min; then half the species' meat (rounded down) drops as
   ground `meat` (scavenging is a real choice) and the body becomes `remains` (bone-scatter prop) after 1 game day until
   its slot respawns (D66). A hunter's kill becomes `remains` at once. People ≤ 15 m from a feeding predator are a
