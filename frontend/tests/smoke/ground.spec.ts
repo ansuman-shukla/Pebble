@@ -23,7 +23,7 @@ import {
   weightsArray,
 } from '../../src/lib/world/ground-shader';
 import type { GroundBreakup } from '../../src/lib/world/ground-style';
-import { openGlobe, WORLD_URL } from './globe-helpers';
+import { openGlobe, OUTSIDE_THE_WALLS, WORLD_URL } from './globe-helpers';
 
 /*
  * The ground shader (bible §5.1): 8 layer weights per terrain vertex that follow the rules (rock on steep slopes,
@@ -515,8 +515,6 @@ const GROUND_PIXELS = `(() => {
 
 const groundPixels = (page: Page) => page.evaluate<GroundPixels>(GROUND_PIXELS);
 
-// South of the town, outside its walls and ground disc: open grassland at street level, facing the town.
-const OUTSIDE_THE_WALLS = '?at=31.2,12,0&time=12:00';
 // The spawn at the south gate: the town's own grass.
 const TOWN_GATE = '?time=12:00';
 

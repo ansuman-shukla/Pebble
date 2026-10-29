@@ -1,14 +1,11 @@
 import { expect, test } from '@playwright/test';
 
-import { openGlobe } from './globe-helpers';
+import { openGlobe, OUTSIDE_THE_WALLS } from './globe-helpers';
 
 /*
  * The ground shader's frame cost against the flat ground (bible §5.1: at most 1.5 ms a frame), at street level
  * outside the town walls where the ground fills most of the view.
  */
-
-// South of the town, outside its walls and ground disc: open grassland at street level, facing the town.
-const OUTSIDE_THE_WALLS = '?at=31.2,12,0&time=12:00';
 
 /** Mean frame time (ms) over 2 s of animation frames. */
 const FRAME_TIME = `new Promise((resolve) => {
