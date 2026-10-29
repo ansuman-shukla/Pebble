@@ -101,7 +101,16 @@ def test_every_v1_event_reads_as_a_sentence_with_names_not_ids(event_type: str) 
             "Genzo harvests rice",
             2,
         ),
-        # 1: speech, a node emptied, a fire lit
+        # 1: speech, a node emptied, a fire lit, an animal hurt or dead but not by a hunt or a predator
+        ("died", {"cause": "attacked by Tek"}, "deer:7", "animal", "A deer dies (attacked by Tek)", 1),
+        (
+            "injured",
+            {"amount": 9.0, "cause": "attacked by Tek"},
+            "deer:7",
+            "animal",
+            "A deer is wounded (attacked by Tek)",
+            1,
+        ),
         ("said", {"words": "Hello", "volume": "normal", "heard_by": []}, "ama", "citizen", "Ama: “Hello”", 1),
         (
             "node_changed",
@@ -170,6 +179,14 @@ def test_every_v1_event_reads_as_a_sentence_with_names_not_ids(event_type: str) 
             "tek",
             "citizen",
             "Tek starts walking to the west",
+            0,
+        ),
+        (
+            "action_started",
+            {"number": 4, "action": "walk_to", "args": {}, "label": "home"},
+            "tek",
+            "citizen",
+            "Tek starts walking home",
             0,
         ),
         (
