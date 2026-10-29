@@ -226,6 +226,24 @@ def test_lost_ticks_are_caught_up_without_real_time_waits(
     assert elapsed < 3.0  # waiting for each of the 12 ticks at speed 120 would take 6 s
 
 
+def test_a_reload_while_catching_up_keeps_the_catch_up_target(
+    named: NamedEngine, committing_engine: Engine, sim_world: SimWorld
+) -> None:
+    sleeps = Sleeps()
+    with Session(named.engine) as session:
+        loop = _open(session, sim_world, sleeps)
+        loop.run_ticks(70, headless=True)
+        loop.brains.append(KillBefore(named, committing_engine, {70, 64}))  # 64: while catching up after the first
+        queue_command(session, loop.run.id, "clock", {"speed": 120})
+        loop.apply_commands()
+        started = time.monotonic()
+        loop.run_ticks(2, headless=False)  # back to 60 twice; the run had committed only 64 when the second hit
+        elapsed = time.monotonic() - started
+        assert loop.sim.tick == 72 and loop.catch_up_to == 70
+    assert sleeps.delays == [RETRY_FIRST_S, RETRY_FIRST_S]
+    assert elapsed < 3.0  # ticks 65..70 in real time as well would take another 3 s
+
+
 def test_a_connection_killed_while_the_engine_waits_is_replaced_without_a_reload(
     named: NamedEngine, committing_engine: Engine, sim_world: SimWorld, caplog: pytest.LogCaptureFixture
 ) -> None:

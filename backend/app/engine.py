@@ -247,13 +247,14 @@ class EngineLoop:
             citizen_brains(fresh.sim, run.world_seed) if isinstance(hook, CitizenBrains) else hook
             for hook in self.brains
         ]
-        self.catch_up_to = fresh.catch_up_to
+        # a reload while catching up resumes from a run committed short of the old target: keep that target
+        self.catch_up_to = max(self.catch_up_to, fresh.catch_up_to)
 
     def shut_down(self) -> None:
         """Snapshot where we are so a restart loses nothing (unless that snapshot is stored already: the hour's, or
         the one a run resumed from and stopped again before ticking), and mark the run stopped."""
         stored = latest_snapshot(self.store.session, self.store.run_id)
-        if stored is None or stored.tick != self.sim.tick:
+        if stored is None or stored.last_seq != self.sim.state.next_seq - 1:
             self.store.snapshot(take_snapshot(self.sim.state))
         self.store.commit(self.sim.tick, self.clock.speed, self.clock.paused, status="stopped")
 
