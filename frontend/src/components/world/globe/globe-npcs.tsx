@@ -19,10 +19,9 @@ import {
 } from 'three';
 
 import type { GlobePlayerState } from './globe-player';
-import { Label } from '@/components/world/labels';
+import { LabelAnchor } from '@/components/world/labels';
 import { MAX_FRAME, smoothing } from '@/components/world/player/motion';
 import type { LiveCitizen } from '@/lib/live/live-contract';
-import type { Speech } from '@/lib/live/live-state';
 import {
   follow,
   moveOn,
@@ -30,9 +29,9 @@ import {
   shownDoing,
   type Track,
 } from '@/lib/live/drawn-track';
+import type { ShownDoings } from '@/lib/live/shown-doings';
 import { groundSpeed, headingAt, walking } from '@/lib/live/walk-path';
 import {
-  activityWords,
   BASE_CLIPS,
   clipLapse,
   type NpcClip,
@@ -73,8 +72,6 @@ import { createCharacter } from '@/vendor/polyfork/humanoid.mjs';
 const NEAR = 400;
 const HIDE = 420;
 const LABEL_HEIGHT = 2.1;
-/** Speech bubbles hang this far above the name label. */
-const SPEECH_ABOVE = 0.45;
 /** Labels hang lower over lying and sitting bodies. */
 const LYING_LABEL_HEIGHT = 0.7;
 const SITTING_LABEL_HEIGHT = 1.2;
@@ -333,10 +330,10 @@ function newView(citizen: LiveCitizen): NpcView {
 
 function Npc({
   citizen,
-  speech,
   terrain,
   town,
   labels,
+  doings,
   rate,
   replay,
   peopleRef,
@@ -345,10 +342,10 @@ function Npc({
   subjectRef,
 }: {
   citizen: LiveCitizen;
-  speech: Speech | undefined;
   terrain: GlobeTerrain;
   town: WalkTown;
   labels: LabelStore;
+  doings: ShownDoings;
   /** The clock: game seconds per real second (0 paused). */
   rate: number;
   /** A replayed moment: drawn where it says, not a tick behind (no tick follows). */
@@ -408,6 +405,7 @@ function Npc({
     showDoing();
   });
   useLayoutEffect(() => onFrame(citizen), [citizen]);
+  useEffect(() => doings.show(citizen.id, doing), [doings, citizen.id, doing]);
 
   useEffect(() => {
     const id = citizen.id;
@@ -465,21 +463,7 @@ function Npc({
           ground={ground}
         />
       )}
-      <Label
-        store={labels}
-        id={`npc-${citizen.id}`}
-        text={`${citizen.name} · ${activityWords(doing)}`}
-        height={labelHeight}
-      />
-      {speech && (
-        <Label
-          store={labels}
-          id={`say-${citizen.id}`}
-          text={speech.words}
-          height={labelHeight + SPEECH_ABOVE}
-          kind="speech"
-        />
-      )}
+      <LabelAnchor store={labels} subject={citizen.id} lift={labelHeight} />
     </group>
   );
 }
@@ -490,10 +474,10 @@ export function GlobeNpcs({
   speed,
   paused,
   replay = false,
-  speech,
   terrain,
   town,
   labels,
+  doings,
   peopleRef,
   views,
   followId,
@@ -505,10 +489,11 @@ export function GlobeNpcs({
   paused: boolean;
   /** The citizens of a replayed moment (`?tick=`), which no tick follows. */
   replay?: boolean;
-  speech: Speech[];
   terrain: GlobeTerrain;
   town: WalkTown;
   labels: LabelStore;
+  /** Filled with what each citizen is shown doing, for their labels. */
+  doings: ShownDoings;
   /** Filled with where everyone's feet are, for the walker's collisions. */
   peopleRef: RefObject<Map<string, Vector3>>;
   /** Filled with what is drawn of each citizen. */
@@ -517,22 +502,16 @@ export function GlobeNpcs({
   /** The followed citizen's pose, for the follow camera. */
   subjectRef: RefObject<GlobePlayerState>;
 }) {
-  const latest = useMemo(() => {
-    const byActor = new Map<string, Speech>();
-    for (const said of speech) byActor.set(said.actorId, said);
-    return byActor;
-  }, [speech]);
-
   return (
     <>
       {citizens.map((citizen) => (
         <Npc
           key={citizen.id}
           citizen={citizen}
-          speech={latest.get(citizen.id)}
           terrain={terrain}
           town={town}
           labels={labels}
+          doings={doings}
           rate={paused ? 0 : speed}
           replay={replay}
           peopleRef={peopleRef}

@@ -50,6 +50,7 @@ import type {
 import { GlobeWalker } from '@/components/world/globe/globe-walker';
 import { ReplayBadge } from '@/components/world/globe/replay-badge';
 import {
+  CitizenLabels,
   LiveClock,
   NpcHooks,
   PeoplePanel,
@@ -76,6 +77,7 @@ import { useTown } from '@/hooks/use-town';
 import { useWorld } from '@/hooks/use-world';
 import type { TownView, WorldView } from '@/lib/client/types.gen';
 import { feedMinutes } from '@/lib/live/live-state';
+import { ShownDoings } from '@/lib/live/shown-doings';
 import { BIOME_PROPS } from '@/lib/world/biome-props';
 import {
   FAST_RATE,
@@ -99,7 +101,7 @@ import {
 } from '@/lib/world/globe';
 import { biomeColor } from '@/lib/world/globe-mesh';
 import { clipWater, TOWN_WATER_Y } from '@/lib/world/ground-shape';
-import type { LabelStore } from '@/lib/world/label-store';
+import type { LabelStore, UpAt } from '@/lib/world/label-store';
 import {
   type RiverLayout,
   riverLayout,
@@ -125,6 +127,8 @@ const SITE_CLEARING = 45;
 /** The readout names a camp or landmark within this many metres of its anchor (the town: its clearing). */
 const SITE_NEARBY = 100;
 const LABEL_DISTANCE = 40;
+/** Labels lift away from the planet's centre. */
+const PLANET_UP: UpAt = (at, out) => out.copy(at).normalize();
 
 interface Start {
   position: Vector3;
@@ -271,6 +275,7 @@ type GlobeSceneProps = {
   dropRef: RefObject<DropApi | null>;
   goTo: GoToSite[];
   labels: LabelStore;
+  doings: ShownDoings;
   clockRef: RefObject<GameClock>;
   focusRef: RefObject<Vector3>;
   cameraMode: CameraMode;
@@ -303,6 +308,7 @@ const GlobeScene = memo(function GlobeScene({
   dropRef,
   goTo,
   labels,
+  doings,
   clockRef,
   focusRef,
   cameraMode,
@@ -378,10 +384,10 @@ const GlobeScene = memo(function GlobeScene({
         speed={live.speed}
         paused={live.paused}
         replay={replay}
-        speech={live.speech}
         terrain={terrain}
         town={walkTown}
         labels={labels}
+        doings={doings}
         peopleRef={peopleRef}
         views={npcViews}
         followId={followId}
@@ -536,7 +542,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
     },
     [settle],
   );
-  const labels = useLabelStore();
+  const labels = useLabelStore(PLANET_UP);
   const [startTime] = useState(
     () => parseTime(params.get('time')) ?? START_MINUTES,
   );
@@ -560,6 +566,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
     live.runId !== null && (replay !== null || feed.status === 'live');
   const peopleRef = useRef(new Map<string, Vector3>());
   const [npcViews] = useState<NpcViews>(() => new Map());
+  const [doings] = useState(() => new ShownDoings());
   const [animalViews] = useState<AnimalViews>(() => new Map());
   const [fireViews] = useState<FireViews>(() => new Map());
   const subjectRef = useRef<GlobePlayerState>({
@@ -747,6 +754,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
         dropRef={dropRef}
         goTo={goTo}
         labels={labels}
+        doings={doings}
         clockRef={clockRef}
         focusRef={focusRef}
         cameraMode={cameraMode}
@@ -761,6 +769,12 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
         onWaterfalls={markWaterfalls}
       />
       <LabelOverlay store={labels} />
+      <CitizenLabels
+        store={labels}
+        citizens={live.citizens}
+        doings={doings}
+        speech={live.speech}
+      />
       <NpcHooks citizens={live.citizens} views={npcViews} focusRef={focusRef} />
       <AnimalHooks views={animalViews} />
       <FireHooks views={fireViews} />

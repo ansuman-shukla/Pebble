@@ -1,17 +1,25 @@
-import { type RefObject, useEffect, useRef } from 'react';
+import {
+  type RefObject,
+  useEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from 'react';
 import type { Vector3 } from 'three';
 
 import type { NpcViews } from './globe-npcs';
 import { Button } from '@/components/ui/button';
 import type { ClockChange, LiveStatus } from '@/hooks/use-live-citizens';
 import type { LiveCitizen } from '@/lib/live/live-contract';
-import { type LiveState, speedWords } from '@/lib/live/live-state';
+import { type LiveState, type Speech, speedWords } from '@/lib/live/live-state';
 import { activityWords } from '@/lib/live/npc-activity';
+import type { ShownDoings } from '@/lib/live/shown-doings';
 import type { Region } from '@/lib/world/citizen-looks';
+import type { LabelContent, LabelStore } from '@/lib/world/label-store';
 
 /*
- * The live feed's controls over the globe: the clock with its speed buttons, the People panel (follow / go to)
- * and, hidden, the per-citizen data attributes the browser tests read.
+ * The live feed's controls over the globe: the clock with its speed buttons, the People panel (follow / go to),
+ * the citizens' labels and, hidden, the per-citizen data attributes the browser tests read.
  */
 
 const REGIONS: Record<Region, string> = {
@@ -190,6 +198,44 @@ export function PeoplePanel({
       </ul>
     </div>
   );
+}
+
+/**
+ * What the citizens' labels say: a name tag each ("Pip · asleep", what the drawn body is shown doing) and the latest
+ * speech of whoever spoke.
+ */
+export function CitizenLabels({
+  store,
+  citizens,
+  doings,
+  speech,
+}: {
+  store: LabelStore;
+  citizens: LiveCitizen[];
+  doings: ShownDoings;
+  speech: Speech[];
+}) {
+  const shown = useSyncExternalStore(doings.subscribe, doings.getSnapshot);
+  const contents = useMemo(() => {
+    const latest = new Map<string, Speech>();
+    for (const said of speech) latest.set(said.actorId, said);
+    return [
+      ...citizens.map((citizen): LabelContent => ({
+        id: `npc-${citizen.id}`,
+        subject: citizen.id,
+        kind: 'name',
+        text: `${citizen.name} · ${activityWords(shown.get(citizen.id) ?? citizen)}`,
+      })),
+      ...[...latest.values()].map((said): LabelContent => ({
+        id: `say-${said.actorId}`,
+        subject: said.actorId,
+        kind: 'speech',
+        text: said.words,
+      })),
+    ];
+  }, [citizens, shown, speech]);
+  useEffect(() => store.describe('citizens', contents), [store, contents]);
+  return null;
 }
 
 const fixed = (value: number) => value.toFixed(2);

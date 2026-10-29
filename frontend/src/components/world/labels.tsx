@@ -3,30 +3,55 @@ import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { type Group, Vector3 } from 'three';
 
 import { type LabelBox, stackLabels } from '@/lib/world/label-layout';
-import type { LabelEntry, LabelStore } from '@/lib/world/label-store';
+import type { LabelStore } from '@/lib/world/label-store';
 
 /*
- * Name labels over 3D objects: anchors live in the scene, the text lives in one DOM overlay, and a projector
- * moves each label to its anchor's screen position every frame, stacking labels that would overlap. (drei's
- * <Html> creates a React root per label and dropped one of them reliably in this app.)
+ * Labels over 3D objects: anchors live in the scene, the text lives in one DOM overlay (both go through the
+ * label store, lib/world/label-store.ts), and a projector moves each label to its subject's anchor on screen every
+ * frame, stacking labels that would overlap. (drei's <Html> creates a React root per label and dropped one of them
+ * reliably in this app.)
  */
 
-type LabelProps = {
+/**
+ * An anchor inside the scene: `subject`'s labels hang `lift` metres above wherever this is placed, unless an anchor
+ * with a higher `priority` (or a newer one with the same) is live for the subject.
+ */
+export function LabelAnchor({
+  store,
+  subject,
+  lift = 0,
+  priority = 0,
+}: {
+  store: LabelStore;
+  subject: string;
+  lift?: number;
+  priority?: number;
+}) {
+  const anchor = useRef<Group>(null);
+  useEffect(
+    () => store.anchor(subject, anchor.current!, lift, priority),
+    [store, subject, lift, priority],
+  );
+  return <group ref={anchor} />;
+}
+
+/** A name tag `height` metres above its parent object: its anchor and its text in one. */
+export function Label({
+  store,
+  id,
+  text,
+  height,
+}: {
   store: LabelStore;
   id: string;
   text: string;
   height: number;
-  kind?: LabelEntry['kind'];
-};
-
-/** An anchor inside the scene; place it as a child of the object it names. */
-export function Label({ store, id, text, height, kind }: LabelProps) {
-  const anchor = useRef<Group>(null);
+}) {
   useEffect(
-    () => store.add({ id, text, anchor: anchor.current!, kind }),
-    [store, id, text, kind],
+    () => store.describe(id, [{ id, subject: id, kind: 'name', text }]),
+    [store, id, text],
   );
-  return <group ref={anchor} position={[0, height, 0]} />;
+  return <LabelAnchor store={store} subject={id} lift={height} />;
 }
 
 const projected = new Vector3();
@@ -44,12 +69,12 @@ export function LabelProjector({
 }) {
   useFrame(({ camera, size }) => {
     const shown: { element: HTMLElement; box: LabelBox }[] = [];
-    for (const { id, anchor, kind = 'name' } of store.getSnapshot()) {
+    for (const { id, subject, kind } of store.getSnapshot()) {
       const element = store.elements.get(id);
       if (!element) continue;
-      anchor.getWorldPosition(projected);
+      const anchored = store.anchorPosition(subject, projected) !== null;
       const distance = projected.distanceTo(camera.position);
-      const near = distance <= maxDistance;
+      const near = anchored && distance <= maxDistance;
       projected.project(camera);
       const onScreen =
         near &&
@@ -83,7 +108,7 @@ export function LabelOverlay({ store }: { store: LabelStore }) {
   const entries = useSyncExternalStore(store.subscribe, store.getSnapshot);
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      {entries.map(({ id, text, kind = 'name' }) => (
+      {entries.map(({ id, text, kind }) => (
         <span
           key={id}
           data-label={id}
