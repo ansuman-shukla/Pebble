@@ -334,22 +334,26 @@ apron/headband/straw hat; Bo/Vesa = existing band outfits.
 - **Witnesses** = citizens whose visibility set that tick contains the doer (normal sight: day 150 m, night 20 m,
   forest ×0.4). Witnesses know the deed at once (`known_deeds`); others only through `accuse`. Unwitnessed deeds stay
   in the log for spectators ("got away with it").
-- **Sanctuary:** nobody can be seized within 22 m of the temple. **Children** (< 13) can only be pardoned.
+- **Children** (< 13) can't be seized or judged; their deeds still move standing.
+- **Chains are proven by scenario tests** (J1/J2, E2, T1): a scripted set-up per deed kind (thief, witness, officer,
+  judge placed by the test) runs a few game hours and asserts the whole chain deed → witness → accuse → seize →
+  judge → sentence served, so the law never depends on a long run happening to produce it.
 
 ### 3.4 Enforcement (`sim/justice.py`)
 | Action | Kind | Rule |
 |---|---|---|
 | `accuse(person, to)` | instant | passes every deed you know of `person` to `to` (within speech range, awake); `to` learns them as hearsay ("Goro says Kaz stole rice."). Lies stay free speech (`say`) |
-| `seize(person)` | durative 1 min, reach 2 m | p = clamp(0.5 + 0.3·(armed_s − armed_t) + 0.3·(str_s − str_t) + 0.2 per armed helper within 3 m, 0.1, 0.95). Success → target `held`: only look/check/say/wait/flee; walks led 1 m behind the seizer at 0.8× speed. Held `flee` succeeds 15 % per try (+25 % if the seizer is hurt or asleep) → `escaped`. Failure interrupts the target ("Kenji tries to seize you") |
-| `release(person)` | instant | ends held |
-| `judge(person, sentence)` | durative 15 min | target held or confined within 4 m (town: at the castle; band: at the fire); the judge must know a deed of the target. Sentences: **pardon**; **fine N** (≤ 200 mon: purse, then household chest, then goods at town value; to the treasury, in bands to the victim); **restore** (stolen goods or their value back to the owner); **confine H** (≤ 12 h; band: tied at the fire); **confiscate** (the owed tax rice from the household chest) |
+| `seize(person)` | durative 1 min, reach 2 m | p = clamp(0.5 + 0.3·(armed_s − armed_t) + 0.3·(str_s − str_t) + 0.2 per armed helper within 3 m, 0.1, 0.95). Success → target `held`: only look/check/say/wait; walks led 1 m behind the seizer at 0.8× speed. Failure interrupts the target ("Kenji tries to seize you"), who may run |
+| `judge(person, sentence)` | durative 15 min | target held or confined within 4 m (town: at the castle; band: at the fire); the judge must know a deed of the target (or the household's arrears). Sentences: **fine N** (≤ 200 mon: purse, then household chest, then goods at town value; the victim is paid the stolen value first, the rest goes to the treasury, in bands to the victim; arrears are fined in rice or coins) or **confine H** (≤ 12 h; band: tied at the fire) |
 | `tend(person)` | durative 30 min, reach 2 m | healing skill; target +3 health per hour while tended (Ennen, Oru, Vesa) |
 
+- **Held ends** at the judgement (a fine frees at once), after 12 h, or when the seizer is hurt, asleep or dead
+  (`released {cause}`). There is no release action and no escape roll in v1.
 - **The gaol** = `castle-store-w`: 2 slots; a held person left there is `confined` until judged or 12 h pass; it has a
-  bucket (`drink` works), no food (hence the 12 h cap). Events: `accused, seized, released, escaped, confined, judged,
+  bucket (`drink` works), no food (hence the 12 h cap). Events: `accused, seized, released, confined, judged,
   sentence_served, tended`.
-- Scripted lord's table: first theft → restore + fine 2× value (else confine 6 h); poaching → meat confiscated +
-  fine 1×; night trespass → confine till dawn; assault → confine 12 h; 3 days `tax_overdue` → confiscate.
+- Scripted lord's table: theft → fine 2× value (if unpaid: confine 6 h); poaching → fine 1× value of the take;
+  night trespass → confine till dawn; assault → confine 12 h; 3 days `tax_overdue` → fine the arrears.
 
 ### 3.5 Standing (reputation) and bonds (`sim/society.py`)
 - **Standing** per citizen per group, −100..100. Start: own group +50 (leaders +70), band A in town +10, band B in
@@ -369,8 +373,9 @@ apron/headband/straw hat; Bo/Vesa = existing band outfits.
   ≤ −60 outcast.
 - **Bonds** per pair, −100..100: from data (kin +60, mates +70) plus gift +4 (≤ 8 a day), sale +3, tended +10,
   struck −30, robbed (known) −20, accused by −10, seized by −15. Used by the gift accept policy (bond ≤ −40 refuses)
-  and by brains (who to share with, greet or avoid). One `bonds_changed` batch per citizen per day.
-- Standing and bonds are public social facts (events, replayable), told to minds only as words.
+  and by brains (who to share with, greet or avoid). Bonds are derived from those existing events (replay), so they
+  have no event of their own.
+- Standing (`standing_changed`) and bonds are public social facts, told to minds only as words.
 
 ### 3.6 Calendar and contact
 - **Week** = 7 game days (`day_of_week` 1-7, same count for all). Day 1 market day; day 7 court day (open court at
@@ -385,8 +390,8 @@ apron/headband/straw hat; Bo/Vesa = existing band outfits.
 | Raids | band B → field racks | when B's camp food < 1 day for the band 2 days running: Barro, Kaz, Nim go at town night (B's evening) to the racks; Goro's watch may catch them |
 | Poaching | Kaz | no game in B's ground after 2 searches → hunts in the Lord's woods with p = 1 − H |
 | Justice | outsiders caught | judged by the lord; band leaders come to pay fines for their own |
-| Healers | Ennen ↔ Oru/Vesa | meet at noon alms or the springs, greet and walk together |
-| Gold | Daisuke ↔ Barro | the falls pool is outside both grounds; whoever is there takes |
+| Healers | Ennen ↔ Oru/Vesa | meet at noon alms at the main gate, greet and walk together |
+| Gold race | Daisuke ↔ band B | the falls pool (2 spots, 40 grains, finite) is outside every ground: Daisuke pans on week days 2 and 6; when band B is hungry and Vesa's counsel wins over a raid, Barro and Nim pan gold to buy rice instead; first come, first served; once the gold is gone band B's peaceful option is gone too |
 
 Scripted brains never start an assault or a killing (D75 stands); steal only by need (band B raid rule; a town
 citizen with hunger > 90, no food and no coins takes 5 rice from the nearest store with p = 1 − H).
