@@ -19,7 +19,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from app.core.config import settings
 from app.engine import Clock, EngineLoop, open_loop
-from app.observability.events import GoalSet, Stole, Traded
+from app.observability.events import GoalSet, NodeChanged, Stole, Traded
 from app.observability.store import queue_command
 from app.services.live import LIVE_EVENT_TYPES, LiveEvent, LiveState
 from app.sim.citizens import CITIZENS
@@ -172,6 +172,8 @@ def test_the_feed_sends_public_events_worth_telling_and_names_animals_and_househ
         core.emit("sold", Traded.model_validate(sale), actor=genzo, visibility="private")
         core.emit("stole", Stole(owner="farmhouse-1", store="rack-1", item="rice", count=5), actor=kaz)
         core.injure(genzo, 5.0, "animal attack", "a wolf attacks you", attacker=wolf.id)
+        picked = NodeChanged(node="node-1", kind="berry_bush", item="berries", before=12, after=7, stage="half")
+        core.emit("node_changed", picked, actor=kaz)  # importance 0, but the client draws node stages from it
         loop.run_ticks(1, headless=True)
         messages = _until_tick(ws, 1)
     told = {e.type: e for e in (LiveEvent.model_validate(m).event for m in messages if m["type"] == "event")}
@@ -181,6 +183,12 @@ def test_the_feed_sends_public_events_worth_telling_and_names_animals_and_househ
     assert bought.position is not None and bought.position.unit == genzo.position
     assert (told["stole"].line, told["stole"].importance) == ("Kaz steals 5 rice from Genzo's house", 2)
     assert (told["injured"].line, told["injured"].importance) == ("A wolf attacks Genzo", 3)
+    picked_up = told["node_changed"]
+    assert (picked_up.line, picked_up.importance, picked_up.payload["stage"]) == (
+        "Kaz gathers berries from a berry bush",
+        0,
+        "half",
+    )
 
 
 def test_a_page_opened_mid_tick_learns_how_far_into_the_tick_the_world_is(

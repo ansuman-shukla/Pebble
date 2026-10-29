@@ -52,9 +52,9 @@ from app.sim.snapshot import SimSnapshot
 
 log = logging.getLogger("pebble.live")
 
-# sent whatever their importance (clients follow actions and speech); any other public event is sent when its line
-# is worth telling (importance 1-3)
-LIVE_EVENT_TYPES = frozenset({"said", "died", "action_started", "action_finished"})
+# sent whatever their importance (clients follow actions, speech and node stages); any other public event is sent
+# when its line is worth telling (importance 1-3)
+LIVE_EVENT_TYPES = frozenset({"said", "died", "action_started", "action_finished", "node_changed"})
 LISTEN_TIMEOUT_S = 1.0  # how often the listener looks at the clock while no ticks arrive (pause, speed changes)
 RESYNC = None  # queued to clients that must reconnect for a fresh snapshot (a newer run, a rewritten history)
 
