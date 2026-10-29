@@ -136,9 +136,9 @@ test('kinds share one clip budget: the nearest 64 within 120 m across them', () 
 });
 
 test('the prop clock plays clips up to ×10 and wind up to ×3, once a frame, nothing while paused', () => {
-  const start = { clip: propWorld.clipTime, wind: propWorld.windTime };
   propWorld.rate = 1;
   advanceProps(100);
+  const start = { clip: propWorld.clipTime, wind: propWorld.windTime };
   advanceProps(100.05);
   advanceProps(100.05);
   expect(propWorld.clipTime - start.clip).toBeCloseTo(0.05, 6);

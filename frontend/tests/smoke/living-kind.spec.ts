@@ -90,6 +90,8 @@ const isHidden = (matrix: Matrix4) =>
   matrix.elements.every((value, i) => (i === 15 ? value === 1 : value === 0));
 
 test.beforeEach(() => {
+  // the prop clock is shared by every test in this worker: start it afresh
+  propWorld.elapsed = Number.NaN;
   propWorld.rate = 1;
   propWorld.people = new Map();
   propWorld.fires = new Map();
@@ -173,6 +175,21 @@ test("a cold fire's fuel hides and shows again when it is lit; turned-off dressi
   run([stalls], 0.5);
   expect(isRest(stalls.moves[0].get(0, 0, new Matrix4()))).toBe(true);
   stalls.dispose();
+});
+
+test("a rack's sheaves sway with its loop, and stay hidden while its dressing is off", async () => {
+  const racks = await living('drying_rack', [['farm-rack', 0, 0]]);
+  const [moves] = racks.moves;
+  run([racks], 0.5);
+  expect(isRest(moves.get(0, 0, new Matrix4()))).toBe(false);
+  dressPart('farm-rack', 'sheaf-row-1', false);
+  run([racks], 1);
+  expect(isHidden(moves.get(0, 0, new Matrix4()))).toBe(true);
+  expect(isHidden(moves.get(0, 1, new Matrix4()))).toBe(false);
+  dressPart('farm-rack', 'sheaf-row-1', true);
+  run([racks], 0.5);
+  expect(isHidden(moves.get(0, 0, new Matrix4()))).toBe(false);
+  racks.dispose();
 });
 
 test('loops play for the nearest 64 within 120 m; the mill wheel turns wherever the camera is', async () => {
