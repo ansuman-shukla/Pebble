@@ -72,6 +72,11 @@ test('?tick= draws the citizens where they were then and keeps the feed off', as
   await expect(page.getByTestId('replay-badge')).toContainText(
     `day ${then.day} · ${then.time}`,
   );
+  // the spectator keys work on a replay too, but it has no clock to pause or speed up
+  const keys = page.getByTestId('spectator-keys');
+  await expect(keys).toHaveText(
+    'Tab select, F follow, G go to, I inspector, Esc let go',
+  );
   await expect
     .poll(async () => Math.max(...offsets(await drawn(page), then, radius)), {
       timeout: 20_000,
@@ -98,6 +103,7 @@ test('?tick= draws the citizens where they were then and keeps the feed off', as
   await expect(world).toHaveAttribute('data-live-status', 'live', {
     timeout: 20_000,
   });
+  await expect(keys).toContainText(', Space pause, 1-4 speed, ');
   expect(errors).toEqual([]);
 });
 

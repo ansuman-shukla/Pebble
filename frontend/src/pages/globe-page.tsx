@@ -1033,10 +1033,10 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
           {cameraMode === 'fly' && ', Q/E down/up'}
           {dropping && '. Click land to drop there, Esc cancels'}
         </span>
-        {clockLive && (
+        {(clockLive || replay) && (
           <span className="basis-full" data-testid="spectator-keys">
-            Tab select, F follow, G go to, I inspector, Space pause, 1-4 speed,
-            Esc let go
+            Tab select, F follow, G go to, I inspector
+            {clockLive && ', Space pause, 1-4 speed'}, Esc let go
           </span>
         )}
       </div>
