@@ -8,15 +8,16 @@ from pydantic import BaseModel
 from sqlmodel import Session
 
 from app.db.models import Run
-from app.observability.events import RoutePoint
+from app.observability.events import AnimalGait, Driver, RoutePoint, Target
 from app.observability.replay import ReplayAnimal, ReplayCitizen, ReplayEvent, ReplayFire, ReplayState, replay
 from app.observability.store import events_after, latest_snapshot
 from app.services.clock import run_or_latest
 from app.sim.bodies import body_words
 from app.sim.clock import town_clock
 from app.sim.fauna import AnimalKind
+from app.sim.motion import Motion, Posture, body_motion, load_share
 from app.sim.snapshot import SimSnapshot
-from app.sim.state import AnimalActivity, Body, FireKind, Region
+from app.sim.state import AnimalActivity, Body, FireKind, Region, age_group
 from app.sim.vec import Vec3, lat_lon_deg
 
 Activity = Literal[
@@ -65,6 +66,15 @@ class Position(BaseModel):
     lon: float
 
 
+class Needs(BaseModel):
+    """0-100: hunger and thirst grow, energy and health run down."""
+
+    hunger: float
+    thirst: float
+    energy: float
+    health: float
+
+
 class CitizenEntity(BaseModel):
     id: str
     name: str
@@ -88,6 +98,20 @@ class CitizenEntity(BaseModel):
     action_label: str  # destination or thing, in words
     state: list[str]  # coarse body words ("hungry", "tired"); empty = fine
     cause_of_death: str | None
+    # spectator fields (10-world-v1 §6.4): how the body is drawn (the client maps motion and posture to clips and
+    # poses, `sim/motion.py`), why and on what they act, their needs, purse and standing
+    motion: Motion
+    posture: Posture
+    slot_heading: float | None  # facing on a seat or work slot (yaw like heading_deg); None: their own heading
+    goal: str  # what they are after, in their words (their latest set_goal); "" when unsaid
+    driver: Driver | None  # why: hunger, thirst, rest, danger, duty, ambition, social, night
+    target: Target | None  # what their action is about
+    needs: Needs
+    carrying: dict[str, int]  # item -> count (coins apart)
+    coins: int
+    rank: int | None  # 1 child .. 5 lord (10 §3.2), once the cast carries it
+    standing: int | None  # -100..100 with their own group, once society keeps it
+    titles: list[str]  # lord, samurai, ashigaru, leader
 
 
 class AnimalEntity(BaseModel):
@@ -97,6 +121,12 @@ class AnimalEntity(BaseModel):
     position: Position  # height_m: the ground, or the water surface for swimmers
     heading_deg: float  # yaw in the local tangent frame like citizens' (0 = south, 90 = east, 180 = north)
     activity: AnimalActivity
+    # how to draw its last tick's move, the same rule as a citizen's route (empty when it didn't move)
+    route: list[RoutePoint]
+    speed_mps: float
+    gait: AnimalGait
+    goal: str  # what it is after, in words ("grazing", "stalking the deer"); "" when not told
+    target: Target | None  # its quarry, its threat or where it heads
 
 
 class FireEntity(BaseModel):
@@ -123,14 +153,27 @@ def activity(citizen: ReplayCitizen, tick: int) -> Activity:
     doing = ACTIVITIES.get(citizen.action or "")
     if doing is not None:
         return doing
-    if citizen.said_tick is not None and tick - citizen.said_tick < TALKING_TICKS:
+    if talking(citizen, tick):
         return "talking"
     return "idle"
+
+
+def talking(citizen: ReplayCitizen, tick: int) -> bool:
+    return citizen.said_tick is not None and tick - citizen.said_tick < TALKING_TICKS
 
 
 def citizen_entity(citizen: ReplayCitizen, tick: int) -> CitizenEntity:
     hunger, thirst, energy, health = citizen.body
     lat, lon = lat_lon_deg(citizen.position)
+    body = body_motion(
+        alive=citizen.alive,
+        asleep=citizen.asleep,
+        action=citizen.action,
+        args=citizen.action_args,
+        gait=citizen.gait,
+        load=load_share(citizen.inventory, age_group(citizen.age)),
+        talking=talking(citizen, tick),
+    )
     return CitizenEntity(
         id=citizen.id,
         name=citizen.name,
@@ -150,6 +193,18 @@ def citizen_entity(citizen: ReplayCitizen, tick: int) -> CitizenEntity:
         action_label=citizen.action_label,
         state=body_words(Body(hunger=hunger, thirst=thirst, energy=energy, health=health)) if citizen.alive else [],
         cause_of_death=citizen.cause_of_death,
+        motion=body.motion,
+        posture=body.posture,
+        slot_heading=body.slot_heading,
+        goal=citizen.goal,
+        driver=citizen.driver,
+        target=citizen.target,
+        needs=Needs(hunger=hunger, thirst=thirst, energy=energy, health=health),
+        carrying={item: count for item, count in citizen.inventory.items() if item != "coins"},
+        coins=citizen.inventory.get("coins", 0),
+        rank=None,
+        standing=citizen.standing,
+        titles=[],
     )
 
 
@@ -166,6 +221,11 @@ def animal_entity(animal: ReplayAnimal) -> AnimalEntity:
         position=position(animal.position, animal.height_m),
         heading_deg=animal.heading_deg,
         activity=animal.activity,
+        route=list(animal.route),
+        speed_mps=animal.speed_mps,
+        gait=animal.gait,
+        goal=animal.goal,
+        target=animal.target,
     )
 
 

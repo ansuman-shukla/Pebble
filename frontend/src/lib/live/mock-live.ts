@@ -24,6 +24,7 @@ import {
 } from './live-contract';
 import { MockWild } from './mock-wild';
 import type {
+  CitizenEntity,
   LiveEventDetail,
   Position,
   RoutePoint,
@@ -72,6 +73,70 @@ interface MockPerson {
 }
 
 const WELL: Spot = [-21, 52];
+
+type Motion = CitizenEntity['motion'];
+type Posture = CitizenEntity['posture'];
+
+/** The backend's motion table (`app/sim/motion.py`) for the mock's doings; work and gathering go by their label. */
+const MOTIONS: Record<Exclude<Activity, 'walking' | 'dead'>, Motion> = {
+  idle: 'idle',
+  running: 'run',
+  sleeping: 'lie',
+  resting: 'sit_ground',
+  gathering: 'gather_low',
+  eating: 'eat',
+  drinking: 'drink',
+  working: 'idle',
+  hunting: 'stalk',
+  fishing: 'fish',
+  tending_fire: 'tend',
+  talking: 'talk',
+};
+const LABEL_MOTIONS: Record<string, Motion> = {
+  berries: 'gather_high',
+  nuts: 'gather_high',
+  'tending the rice paddies': 'farm',
+  'planting the seed beds': 'farm',
+  'weaving at the loom': 'craft',
+  'mending the drying rack': 'craft',
+  'filling the storehouse': 'pick_up',
+  'chopping firewood': 'chop',
+};
+const POSTURES: Partial<Record<Motion, Posture>> = {
+  sit: 'sitting',
+  sit_ground: 'sitting_ground',
+  lie: 'lying',
+  inside: 'inside',
+  gather_low: 'crouching',
+  pan: 'crouching',
+  tend: 'crouching',
+  craft: 'crouching',
+  pray: 'sitting_ground',
+};
+/** Why they do what they do (the feed's `goal` and `driver`), by doing. */
+const GOALS: Partial<Record<Activity, [string, CitizenEntity['driver']]>> = {
+  working: ['get the day’s work done', 'duty'],
+  gathering: ['bring food home', 'hunger'],
+  eating: ['eat something', 'hunger'],
+  drinking: ['have a drink', 'thirst'],
+  resting: ['get my strength back', 'rest'],
+  sleeping: ['sleep till morning', 'night'],
+  talking: ['hear the news', 'social'],
+};
+/** Rank, titles, purse and standing (10-world-v1 §3.1-3.2); everyone else is a rank-2 adult with no coins. */
+const SOCIETY: Record<
+  string,
+  Pick<CitizenEntity, 'rank' | 'titles' | 'coins' | 'standing'>
+> = {
+  tadamasa: { rank: 5, titles: ['lord'], coins: 2015, standing: 70 },
+  kenji: { rank: 4, titles: ['samurai'], coins: 60, standing: 55 },
+  genzo: { rank: 2, titles: [], coins: 60, standing: 50 },
+  aiko: { rank: 2, titles: [], coins: 60, standing: 50 },
+  sora: { rank: 1, titles: [], coins: 5, standing: 50 },
+  oru: { rank: 4, titles: ['leader'], coins: 0, standing: 70 },
+  brak: { rank: 4, titles: ['leader'], coins: 0, standing: 70 },
+};
+const COMMONER = { rank: 2, titles: [], coins: 0, standing: 50 };
 
 const PEOPLE: MockPerson[] = [
   {
@@ -793,8 +858,63 @@ export class MockLiveServer {
         activity,
         role: look.role,
         region: look.region,
+        ...this.spectator(state, activity, route.length > 1),
       };
     });
+  }
+
+  /** The feed's spectator fields (10-world-v1 §6.4) for what someone is doing. */
+  private spectator(
+    state: PersonState,
+    activity: Activity,
+    moved: boolean,
+  ): Pick<
+    CitizenEntity,
+    | 'motion'
+    | 'posture'
+    | 'slot_heading'
+    | 'goal'
+    | 'driver'
+    | 'target'
+    | 'needs'
+    | 'carrying'
+    | 'coins'
+    | 'rank'
+    | 'standing'
+    | 'titles'
+  > {
+    const step = state.person.plan[state.step];
+    const motion: Motion = moved
+      ? 'walk'
+      : activity === 'walking' || activity === 'dead'
+        ? 'idle'
+        : (LABEL_MOTIONS[labelOf(step)] ?? MOTIONS[activity]);
+    const [goal, driver] = GOALS[activity] ?? ['', null];
+    const target =
+      'walk' in step && activity === 'walking'
+        ? {
+            kind: 'place' as const,
+            id: null,
+            name: step.to,
+            position: placeOf({ ...state, at: step.walk }).unit,
+          }
+        : null;
+    return {
+      motion,
+      posture: POSTURES[motion] ?? 'standing',
+      slot_heading: null,
+      goal,
+      driver,
+      target,
+      needs: {
+        hunger: activity === 'eating' ? 55 : 20,
+        thirst: activity === 'drinking' ? 55 : 15,
+        energy: activity === 'sleeping' || activity === 'resting' ? 35 : 80,
+        health: 100,
+      },
+      carrying: activity === 'gathering' ? { [labelOf(step)]: 3 } : {},
+      ...(SOCIETY[state.person.id] ?? COMMONER),
+    };
   }
 
   /** This tick's step from where they stood, then (still walking) the next ticks of the walk, timed. */
@@ -823,6 +943,8 @@ export class MockLiveServer {
 }
 
 const stepTicks = (step: Step) => ('walk' in step ? 0 : step.ticks);
+
+const labelOf = (step: Step) => ('label' in step && step.label) || '';
 
 /** Where someone stands, as the feed says it. */
 function placeOf(state: PersonState): Position {
