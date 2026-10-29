@@ -80,8 +80,9 @@ export function BiomeScatter({
       KINDS.map((kind, index): KindSet => {
         const parts = kindParts(models[index].scene, PROPS[kind]);
         const make = (capacity: number, shadow: boolean) =>
-          parts.map(({ geometry, material }) => {
+          parts.map(({ geometry, material, depthMaterial }) => {
             const mesh = new InstancedMesh(geometry, material, capacity);
+            if (depthMaterial) mesh.customDepthMaterial = depthMaterial;
             mesh.count = 0;
             mesh.visible = false;
             mesh.castShadow = shadow;

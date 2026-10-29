@@ -67,6 +67,7 @@ import { TimeLapseTrails } from '@/components/world/globe/time-lapse-trails';
 import { VolcanoSmoke } from '@/components/world/globe/volcano-smoke';
 import { Waterfalls } from '@/components/world/globe/waterfalls';
 import { ChipOverlay, ChipProjector } from '@/components/world/labels';
+import { LivingProps, PropHooks } from '@/components/world/living-props';
 import {
   CAMERA_MODES,
   type CameraMode,
@@ -483,6 +484,11 @@ const GlobeScene = memo(function GlobeScene({
         terrain={terrain}
         town={walkTown}
         views={fireViews}
+      />
+      <LivingProps
+        clockRef={clockRef}
+        peopleRef={peopleRef}
+        fires={fireViews}
       />
       <GlobeWalker
         terrain={terrain}
@@ -1010,6 +1016,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
       <NpcHooks citizens={live.citizens} views={npcViews} focusRef={focusRef} />
       <AnimalHooks views={animalViews} />
       <FireHooks views={fireViews} />
+      <PropHooks />
       {!ready && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <span className="rounded-lg bg-white/80 px-3 py-2 text-sm shadow">
