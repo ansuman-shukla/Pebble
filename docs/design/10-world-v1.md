@@ -187,7 +187,7 @@ town are not sold at the stall.**
 | Item | Unit, weight | Food | Town | Band | Source | Sink | Stall (lot, target) |
 |---|---|---|---|---|---|---|---|
 | rice | measure 0.2 kg | 10 | 2 | 4 | paddies | eaten | 2, 120 |
-| dried meat | strip 0.1 kg | 8 | 3 | 3 | craft at a drying rack | eaten (town buys it instead of rice) | 2, 20 |
+| dried meat | strip 0.1 kg | 8 | 3 | 3 | craft at a drying rack | eaten (the merchant eats the stall's, ≈ 2 strips a day, in place of rice) | 2, 20 |
 | meat / fish | 0.5 / 0.4 kg | 10 / 6 (raw) | 3 / 2 | 2 / 2 | hunt, fish, carcasses | eaten; spoil | not sold (dried meat is the traded form) |
 | berries / nuts / roots | piece | 2 / 3 / 6 | – | – | gather | eaten; spoil | not sold |
 | wood | 1 kg | – | 1 | 0.5 | deadwood, felling | fires, forge fuel (2 per iron craft), recipes | 4, 40 |
