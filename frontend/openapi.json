@@ -2297,6 +2297,10 @@
             "type": "string",
             "title": "Time"
           },
+          "tick_elapsed_s": {
+            "type": "number",
+            "title": "Tick Elapsed S"
+          },
           "citizens": {
             "items": {
               "$ref": "#/components/schemas/CitizenEntity"
@@ -2325,6 +2329,7 @@
           "tick",
           "day",
           "time",
+          "tick_elapsed_s",
           "citizens",
           "animals",
           "fires"
@@ -3241,6 +3246,10 @@
             "type": "boolean",
             "title": "Paused"
           },
+          "tick_elapsed_s": {
+            "type": "number",
+            "title": "Tick Elapsed S"
+          },
           "citizens": {
             "items": {
               "$ref": "#/components/schemas/CitizenEntity"
@@ -3272,6 +3281,7 @@
           "time",
           "speed",
           "paused",
+          "tick_elapsed_s",
           "citizens",
           "animals",
           "fires"

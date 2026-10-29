@@ -2,6 +2,7 @@
 (nearest snapshot + events)."""
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel
@@ -13,7 +14,7 @@ from app.observability.replay import ReplayAnimal, ReplayCitizen, ReplayEvent, R
 from app.observability.store import events_after, latest_snapshot
 from app.services.clock import run_or_latest
 from app.sim.bodies import body_words
-from app.sim.clock import town_clock
+from app.sim.clock import SECONDS_PER_TICK, town_clock
 from app.sim.fauna import AnimalKind
 from app.sim.motion import Motion, Posture, body_motion, load_share
 from app.sim.snapshot import SimSnapshot
@@ -142,6 +143,7 @@ class EntitiesView(BaseModel):
     tick: int
     day: int
     time: str
+    tick_elapsed_s: float  # game seconds of the latest tick passed (tick_elapsed); 0 for a past tick (`at`)
     citizens: list[CitizenEntity]
     animals: list[AnimalEntity]
     fires: list[FireEntity]
@@ -246,6 +248,14 @@ def wild_entities(state: ReplayState) -> tuple[list[AnimalEntity], list[FireEnti
     return animals, fires
 
 
+def tick_elapsed(counted_s: float, counted_at: datetime, speed: float, paused: bool, now: datetime) -> float:
+    """Game seconds since the current tick happened, 0..SECONDS_PER_TICK: `counted_s` of them counted up to
+    `counted_at` (the engine's write time of the tick: 0), the rest passing at the clock's speed while it runs. A page
+    opened mid-tick draws walkers that far along the tick's path (D100: they trail the sim by one tick)."""
+    passed = counted_s if paused else counted_s + (now - counted_at).total_seconds() * speed
+    return min(max(passed, 0.0), float(SECONDS_PER_TICK))
+
+
 def snapshot_before(tick: int) -> int:
     """The snapshot to replay a tick from: one before it, so the tick's own summary (walks ahead) is replayed too."""
     return max(tick - 1, 0)
@@ -256,6 +266,7 @@ class WorldAt:
     run: Run
     tick: int
     state: ReplayState
+    tick_written_at: datetime | None  # when the engine wrote the tick's summary (None: tick 0, or not replayed)
 
 
 def world_at(session: Session, run_id: str | None = None, at: int | None = None) -> WorldAt | None:
@@ -270,21 +281,34 @@ def world_at(session: Session, run_id: str | None = None, at: int | None = None)
     snapshot_row = latest_snapshot(session, run.id, at_or_before=snapshot_before(tick))
     if snapshot_row is None:
         raise TickNotReached(f"run {run.id} has no snapshot at or before tick {tick}")
-    events = [
-        ReplayEvent(tick=e.tick, type=e.type, actor_id=e.actor_id, payload=e.payload)
-        for e in events_after(session, run.id, snapshot_row.last_seq, until_tick=tick)
-    ]
-    return WorldAt(run=run, tick=tick, state=replay(SimSnapshot.model_validate(snapshot_row.state), events))
+    rows = events_after(session, run.id, snapshot_row.last_seq, until_tick=tick)
+    events = [ReplayEvent(tick=e.tick, type=e.type, actor_id=e.actor_id, payload=e.payload) for e in rows]
+    written = next((e.real_time for e in reversed(rows) if e.type == "tick_summary" and e.tick == tick), None)
+    state = replay(SimSnapshot.model_validate(snapshot_row.state), events)
+    return WorldAt(run=run, tick=tick, state=state, tick_written_at=written)
 
 
-def entities_at(session: Session, run_id: str | None = None, at: int | None = None) -> EntitiesView | None:
+def entities_at(
+    session: Session, run_id: str | None = None, at: int | None = None, now: datetime | None = None
+) -> EntitiesView | None:
     """None when there is no run; raises TickNotReached for a tick the run hasn't simulated yet."""
     world = world_at(session, run_id, at)
     if world is None:
         return None
     day, time = town_clock(world.tick)
+    elapsed = 0.0
+    if at is None and world.tick_written_at is not None:
+        run = world.run
+        elapsed = tick_elapsed(0.0, world.tick_written_at, float(run.speed), run.paused, now or datetime.now(UTC))
     citizens = [citizen_entity(citizen, world.tick) for _, citizen in sorted(world.state.citizens.items())]
     animals, fires = wild_entities(world.state)
     return EntitiesView(
-        run_id=world.run.id, tick=world.tick, day=day, time=time, citizens=citizens, animals=animals, fires=fires
+        run_id=world.run.id,
+        tick=world.tick,
+        day=day,
+        time=time,
+        tick_elapsed_s=elapsed,
+        citizens=citizens,
+        animals=animals,
+        fires=fires,
     )

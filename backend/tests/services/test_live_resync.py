@@ -67,7 +67,7 @@ def _connect(hub: LiveHub, run_id: str) -> Client:
     subscription = hub.subscribe(run_id, loop, queue)
     assert subscription is not None
     subscriber, snapshot = subscription
-    return Client(subscriber, json.loads(snapshot), loop, queue)
+    return Client(subscriber, _world(json.loads(snapshot)), loop, queue)
 
 
 def _restart_with_another_tail(session: Session, sim_world: SimWorld, loop: EngineLoop) -> EngineLoop:
@@ -84,8 +84,12 @@ def _fresh_snapshot(session: Session, run_id: str) -> dict[str, object]:
     session.expire_all()
     run = session.get(Run, run_id)
     assert run is not None
-    snapshot: dict[str, object] = json.loads(load_feed(session, run).message("snapshot").model_dump_json())
-    return snapshot
+    return _world(json.loads(load_feed(session, run).message("snapshot").model_dump_json()))
+
+
+def _world(snapshot: dict[str, object]) -> dict[str, object]:
+    """The snapshot without how far into the tick it was read (that depends on when)."""
+    return {key: value for key, value in snapshot.items() if key != "tick_elapsed_s"}
 
 
 def test_a_rewritten_tail_sends_watching_clients_to_resync(
