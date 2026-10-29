@@ -66,6 +66,36 @@ export type AnimalEntity = {
 };
 
 /**
+ * Bridge
+ */
+export type Bridge = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Road
+     */
+    road: string;
+    /**
+     * Cell
+     */
+    cell: number | null;
+    /**
+     * Position
+     */
+    position: [
+        number,
+        number,
+        number
+    ];
+    /**
+     * Heading Deg
+     */
+    heading_deg: number;
+};
+
+/**
  * CitizenEntity
  */
 export type CitizenEntity = {
@@ -622,6 +652,62 @@ export type Extent = {
 };
 
 /**
+ * Feature
+ *
+ * A fixed thing in the wild: a node (seam, fishing spot, waterhole...), a den, a signpost or a claim marker.
+ */
+export type Feature = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: 'fishing_spot' | 'flint_seam' | 'obsidian_field' | 'iron_sand_bar' | 'gold_pool' | 'waterhole' | 'den' | 'signpost' | 'marker';
+    /**
+     * Hotspot
+     */
+    hotspot?: string | null;
+    /**
+     * Position
+     */
+    position: [
+        number,
+        number,
+        number
+    ];
+    /**
+     * Cell
+     */
+    cell: number;
+    /**
+     * Water
+     */
+    water?: 'sea' | 'river' | 'lake' | null;
+    /**
+     * Pool
+     */
+    pool?: boolean;
+    /**
+     * Cap
+     */
+    cap?: number | null;
+    /**
+     * Animal
+     */
+    animal?: string | null;
+    /**
+     * Names
+     */
+    names?: Array<string>;
+    /**
+     * Owner
+     */
+    owner?: 'town' | 'band_a' | 'band_b' | null;
+};
+
+/**
  * FireEntity
  */
 export type FireEntity = {
@@ -689,6 +775,42 @@ export type Footprint = {
 };
 
 /**
+ * Ground
+ *
+ * A hunting ground around a settlement.
+ */
+export type Ground = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Site
+     */
+    site: string;
+    /**
+     * Centre
+     */
+    centre: [
+        number,
+        number,
+        number
+    ];
+    /**
+     * Radius M
+     */
+    radius_m: number;
+    /**
+     * Hunting
+     */
+    hunting: Array<string>;
+};
+
+/**
  * HTTPValidationError
  */
 export type HttpValidationError = {
@@ -728,6 +850,80 @@ export type Holding = {
      * Words
      */
     words: string;
+};
+
+/**
+ * Hotspot
+ *
+ * A named cluster of nodes (10-world-v1 §1.2).
+ */
+export type Hotspot = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Called
+     */
+    called: string;
+    /**
+     * Centre
+     */
+    centre: [
+        number,
+        number,
+        number
+    ];
+    /**
+     * Cell
+     */
+    cell: number;
+    /**
+     * Radius M
+     */
+    radius_m: number;
+    /**
+     * Settlement
+     */
+    settlement: string;
+    /**
+     * Ring
+     */
+    ring: 'home' | 'middle' | 'far';
+    /**
+     * Distance M
+     */
+    distance_m: number;
+    /**
+     * Claim
+     */
+    claim?: 'town' | 'band_a' | 'band_b' | null;
+    /**
+     * Danger
+     */
+    danger: string;
+    /**
+     * Thirst
+     */
+    thirst?: number;
+    /**
+     * Woodland
+     */
+    woodland?: number;
+    /**
+     * Flora
+     */
+    flora?: {
+        [key: string]: number;
+    };
+    /**
+     * Hunting
+     */
+    hunting?: Array<string>;
 };
 
 /**
@@ -1056,6 +1252,42 @@ export type River = {
      * Name
      */
     name?: string | null;
+    /**
+     * Cells
+     */
+    cells: Array<number>;
+};
+
+/**
+ * Road
+ *
+ * A road (3 m) or path (1.5 m): an optional lead inside the town chart, then a cell route outside it.
+ */
+export type Road = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: 'road' | 'path';
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Stops
+     */
+    stops: Array<string>;
+    /**
+     * Lead
+     */
+    lead?: Array<[
+        number,
+        number,
+        number
+    ]>;
     /**
      * Cells
      */
@@ -1444,6 +1676,42 @@ export type ValidationError = {
 };
 
 /**
+ * WorldPlaces
+ *
+ * Hotspots, grounds, fixed features, roads and bridges (`GET /api/v1/world/places`).
+ */
+export type WorldPlaces = {
+    /**
+     * Hotspots
+     */
+    hotspots: Array<Hotspot>;
+    /**
+     * Grounds
+     */
+    grounds: Array<Ground>;
+    /**
+     * Features
+     */
+    features: Array<Feature>;
+    /**
+     * Roads
+     */
+    roads: Array<Road>;
+    /**
+     * Bridges
+     */
+    bridges: Array<Bridge>;
+    /**
+     * Flora Kinds
+     */
+    flora_kinds: Array<string>;
+    /**
+     * Flora Nodes
+     */
+    flora_nodes: Array<string>;
+};
+
+/**
  * WorldView
  */
 export type WorldView = {
@@ -1499,6 +1767,7 @@ export type WorldView = {
      * Sites
      */
     sites: Array<Site>;
+    places: WorldPlaces;
 };
 
 export type AdminChangeClockData = {
@@ -2007,3 +2276,35 @@ export type WorldReadWorldResponses = {
 };
 
 export type WorldReadWorldResponse = WorldReadWorldResponses[keyof WorldReadWorldResponses];
+
+export type WorldReadPlacesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/world/places';
+};
+
+export type WorldReadPlacesResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorldPlaces;
+};
+
+export type WorldReadPlacesResponse = WorldReadPlacesResponses[keyof WorldReadPlacesResponses];
+
+export type WorldReadFloraData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/world/flora';
+};
+
+export type WorldReadFloraResponses = {
+    /**
+     * The packed flora table.
+     */
+    200: Blob | File;
+};
+
+export type WorldReadFloraResponse = WorldReadFloraResponses[keyof WorldReadFloraResponses];

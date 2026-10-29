@@ -1087,7 +1087,7 @@
           "world"
         ],
         "summary": "Read World",
-        "description": "The planet: grid, heights, biomes, rivers, land loop and sites (stored JSON, generated on first request).",
+        "description": "The planet: grid, heights, biomes, rivers, land loop, sites and places (stored, generated on first request).",
         "operationId": "world-read_world",
         "responses": {
           "200": {
@@ -1098,6 +1098,46 @@
                   "$ref": "#/components/schemas/WorldView"
                 }
               }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/world/places": {
+      "get": {
+        "tags": [
+          "world"
+        ],
+        "summary": "Read Places",
+        "description": "Hotspots, hunting grounds, fixed features (nodes, dens, signposts, markers), roads, bridges and flora kinds.",
+        "operationId": "world-read_places",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorldPlaces"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/world/flora": {
+      "get": {
+        "tags": [
+          "world"
+        ],
+        "summary": "Read Flora",
+        "description": "Every usable tree, bush, root patch, reed bed and deadwood pile, packed (layout in `app.world.flora`):\n`cell u32[n] | east i8[n] | north i8[n] | kind u8[n] | scale u8[n] | yaw u8[n]`, little-endian, n = bytes / 9.",
+        "operationId": "world-read_flora",
+        "responses": {
+          "200": {
+            "description": "The packed flora table.",
+            "content": {
+              "application/octet-stream": {}
             }
           }
         }
@@ -1235,6 +1275,59 @@
           "activity"
         ],
         "title": "AnimalEntity"
+      },
+      "Bridge": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "road": {
+            "type": "string",
+            "title": "Road"
+          },
+          "cell": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cell"
+          },
+          "position": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "Position"
+          },
+          "heading_deg": {
+            "type": "number",
+            "title": "Heading Deg"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "road",
+          "cell",
+          "position",
+          "heading_deg"
+        ],
+        "title": "Bridge"
       },
       "CitizenEntity": {
         "properties": {
@@ -2207,6 +2300,137 @@
         ],
         "title": "Extent"
       },
+      "Feature": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "fishing_spot",
+              "flint_seam",
+              "obsidian_field",
+              "iron_sand_bar",
+              "gold_pool",
+              "waterhole",
+              "den",
+              "signpost",
+              "marker"
+            ],
+            "title": "Kind"
+          },
+          "hotspot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hotspot"
+          },
+          "position": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "Position"
+          },
+          "cell": {
+            "type": "integer",
+            "title": "Cell"
+          },
+          "water": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "sea",
+                  "river",
+                  "lake"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Water"
+          },
+          "pool": {
+            "type": "boolean",
+            "title": "Pool",
+            "default": false
+          },
+          "cap": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap"
+          },
+          "animal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Animal"
+          },
+          "names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Names",
+            "default": []
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "town",
+                  "band_a",
+                  "band_b"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "position",
+          "cell"
+        ],
+        "title": "Feature",
+        "description": "A fixed thing in the wild: a node (seam, fishing spot, waterhole...), a den, a signpost or a claim marker."
+      },
       "FireEntity": {
         "properties": {
           "id": {
@@ -2304,6 +2528,61 @@
         "title": "Footprint",
         "description": "Axis-aligned size after rotation."
       },
+      "Ground": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "site": {
+            "type": "string",
+            "title": "Site"
+          },
+          "centre": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "Centre"
+          },
+          "radius_m": {
+            "type": "number",
+            "title": "Radius M"
+          },
+          "hunting": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Hunting"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "site",
+          "centre",
+          "radius_m",
+          "hunting"
+        ],
+        "title": "Ground",
+        "description": "A hunting ground around a settlement."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -2362,6 +2641,125 @@
           "words"
         ],
         "title": "Holding"
+      },
+      "Hotspot": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "called": {
+            "type": "string",
+            "title": "Called"
+          },
+          "centre": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "Centre"
+          },
+          "cell": {
+            "type": "integer",
+            "title": "Cell"
+          },
+          "radius_m": {
+            "type": "number",
+            "title": "Radius M"
+          },
+          "settlement": {
+            "type": "string",
+            "title": "Settlement"
+          },
+          "ring": {
+            "type": "string",
+            "enum": [
+              "home",
+              "middle",
+              "far"
+            ],
+            "title": "Ring"
+          },
+          "distance_m": {
+            "type": "number",
+            "title": "Distance M"
+          },
+          "claim": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "town",
+                  "band_a",
+                  "band_b"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim"
+          },
+          "danger": {
+            "type": "string",
+            "title": "Danger"
+          },
+          "thirst": {
+            "type": "number",
+            "title": "Thirst",
+            "default": 1.0
+          },
+          "woodland": {
+            "type": "number",
+            "title": "Woodland",
+            "default": 1.0
+          },
+          "flora": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Flora",
+            "default": {}
+          },
+          "hunting": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Hunting",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "called",
+          "centre",
+          "cell",
+          "radius_m",
+          "settlement",
+          "ring",
+          "distance_m",
+          "danger"
+        ],
+        "title": "Hotspot",
+        "description": "A named cluster of nodes (10-world-v1 \u00a71.2)."
       },
       "KnownPlace": {
         "properties": {
@@ -2840,6 +3238,71 @@
           "cells"
         ],
         "title": "River"
+      },
+      "Road": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "road",
+              "path"
+            ],
+            "title": "Kind"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "stops": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Stops"
+          },
+          "lead": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array",
+              "maxItems": 3,
+              "minItems": 3
+            },
+            "type": "array",
+            "title": "Lead",
+            "default": []
+          },
+          "cells": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Cells"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "stops",
+          "cells"
+        ],
+        "title": "Road",
+        "description": "A road (3 m) or path (1.5 m): an optional lead inside the town chart, then a cell route outside it."
       },
       "RoutePoint": {
         "properties": {
@@ -3518,6 +3981,71 @@
         ],
         "title": "ValidationError"
       },
+      "WorldPlaces": {
+        "properties": {
+          "hotspots": {
+            "items": {
+              "$ref": "#/components/schemas/Hotspot"
+            },
+            "type": "array",
+            "title": "Hotspots"
+          },
+          "grounds": {
+            "items": {
+              "$ref": "#/components/schemas/Ground"
+            },
+            "type": "array",
+            "title": "Grounds"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/Feature"
+            },
+            "type": "array",
+            "title": "Features"
+          },
+          "roads": {
+            "items": {
+              "$ref": "#/components/schemas/Road"
+            },
+            "type": "array",
+            "title": "Roads"
+          },
+          "bridges": {
+            "items": {
+              "$ref": "#/components/schemas/Bridge"
+            },
+            "type": "array",
+            "title": "Bridges"
+          },
+          "flora_kinds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Flora Kinds"
+          },
+          "flora_nodes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Flora Nodes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "hotspots",
+          "grounds",
+          "features",
+          "roads",
+          "bridges",
+          "flora_kinds",
+          "flora_nodes"
+        ],
+        "title": "WorldPlaces",
+        "description": "Hotspots, grounds, fixed features, roads and bridges (`GET /api/v1/world/places`)."
+      },
       "WorldView": {
         "properties": {
           "seed": {
@@ -3583,6 +4111,9 @@
             },
             "type": "array",
             "title": "Sites"
+          },
+          "places": {
+            "$ref": "#/components/schemas/WorldPlaces"
           }
         },
         "type": "object",
@@ -3599,7 +4130,8 @@
           "triangles",
           "rivers",
           "land_loop",
-          "sites"
+          "sites",
+          "places"
         ],
         "title": "WorldView"
       }
