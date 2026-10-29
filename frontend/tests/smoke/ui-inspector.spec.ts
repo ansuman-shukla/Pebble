@@ -178,25 +178,43 @@ test('the hint line names the spectator keys', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test('at 1280x800 the toolbar with its key lines ends above the inspector and the People panel', async ({
+test('at 1280x800 the toolbar ends above the inspector and the People panel, however many lines it wraps onto', async ({
   page,
 }) => {
   const errors: string[] = [];
   await page.setViewportSize({ width: 1280, height: 800 });
-  await openHeld(page, errors);
+  const world = await openHeld(page, errors);
   await page.keyboard.press('Tab');
   await page.getByRole('button', { name: 'people', exact: true }).click();
-  const keys = (await page.getByTestId('spectator-keys').boundingBox())!;
-  for (const panel of [
+  const panels = [
     inspector(page),
     page.getByRole('region', { name: 'People' }),
-  ]) {
-    await expect(panel).toBeVisible();
-    expect((await panel.boundingBox())!.y).toBeGreaterThan(
-      keys.y + keys.height,
-    );
-  }
+  ];
+  const toolbarEnd = async () => {
+    const keys = (await page.getByTestId('spectator-keys').boundingBox())!;
+    return keys.y + keys.height;
+  };
+  const panelsBelow = async (end: number) => {
+    for (const panel of panels) {
+      await expect(panel).toBeVisible();
+      await expect
+        .poll(async () => (await panel.boundingBox())!.y)
+        .toBeGreaterThan(end);
+    }
+  };
+  const twoLines = await toolbarEnd();
+  await panelsBelow(twoLines);
   await page.screenshot({ path: test.info().outputPath('toolbar-1280.png') });
+
+  // fly mode's keys and the drop hint wrap the hint onto a second line: the panels move down with the keys line
+  await page.getByRole('button', { name: 'fly', exact: true }).click();
+  await page.getByRole('button', { name: 'drop', exact: true }).click();
+  await expect(world).toHaveAttribute('data-dropping', 'true');
+  await expect.poll(toolbarEnd).toBeGreaterThan(twoLines + 10);
+  await panelsBelow(await toolbarEnd());
+  await page.screenshot({
+    path: test.info().outputPath('toolbar-fly-drop-1280.png'),
+  });
   expect(errors).toEqual([]);
 });
 
