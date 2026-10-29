@@ -50,6 +50,7 @@ import type {
 import { GlobeWalker } from '@/components/world/globe/globe-walker';
 import { ReplayBadge } from '@/components/world/globe/replay-badge';
 import {
+  CitizenLabels,
   LiveClock,
   NpcHooks,
   PeoplePanel,
@@ -99,7 +100,7 @@ import {
 } from '@/lib/world/globe';
 import { biomeColor } from '@/lib/world/globe-mesh';
 import { clipWater, TOWN_WATER_Y } from '@/lib/world/ground-shape';
-import type { LabelStore } from '@/lib/world/label-store';
+import type { LabelStore, UpAt } from '@/lib/world/label-store';
 import {
   type RiverLayout,
   riverLayout,
@@ -125,6 +126,8 @@ const SITE_CLEARING = 45;
 /** The readout names a camp or landmark within this many metres of its anchor (the town: its clearing). */
 const SITE_NEARBY = 100;
 const LABEL_DISTANCE = 40;
+/** Labels lift away from the planet's centre. */
+const PLANET_UP: UpAt = (at, out) => out.copy(at).normalize();
 
 interface Start {
   position: Vector3;
@@ -378,7 +381,6 @@ const GlobeScene = memo(function GlobeScene({
         speed={live.speed}
         paused={live.paused}
         replay={replay}
-        speech={live.speech}
         terrain={terrain}
         town={walkTown}
         labels={labels}
@@ -536,7 +538,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
     },
     [settle],
   );
-  const labels = useLabelStore();
+  const labels = useLabelStore(PLANET_UP);
   const [startTime] = useState(
     () => parseTime(params.get('time')) ?? START_MINUTES,
   );
@@ -761,6 +763,11 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
         onWaterfalls={markWaterfalls}
       />
       <LabelOverlay store={labels} />
+      <CitizenLabels
+        store={labels}
+        citizens={live.citizens}
+        speech={live.speech}
+      />
       <NpcHooks citizens={live.citizens} views={npcViews} focusRef={focusRef} />
       <AnimalHooks views={animalViews} />
       <FireHooks views={fireViews} />

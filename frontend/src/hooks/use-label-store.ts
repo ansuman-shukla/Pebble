@@ -1,7 +1,8 @@
 import { useState } from 'react';
 
-import { LabelStore } from '@/lib/world/label-store';
+import { LabelStore, type UpAt } from '@/lib/world/label-store';
 
-export function useLabelStore() {
-  return useState(() => new LabelStore())[0];
+/** One label store for the page's lifetime; `up` is read once (flat scenes: +y). */
+export function useLabelStore(up?: UpAt) {
+  return useState(() => new LabelStore(up))[0];
 }
