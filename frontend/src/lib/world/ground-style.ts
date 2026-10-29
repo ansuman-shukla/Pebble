@@ -139,15 +139,18 @@ vec4 groundLook(int layer, vec3 p, vec3 tint, float fw, vec4 g) {
     c *= 0.93 + 0.14 * gFine(p, 11.0, fw);
     relief = mix(0.5, ripple, keep);
   } else if (layer == 5) {
-    // rock: weathered stone, broken by a few cracks along warped slab borders, lichen in places
+    // rock: weathered slabs of uneven tone in strata, grooved along their borders, a few dark cracks, lichen
     vec3 slabs = gCells(p * 0.55 + vec3(g.x, g.y, g.w) * 4.0);
     float keep = 1.0 - smoothstep(0.25, 0.6, fw * 0.55);
-    float crack = (1.0 - smoothstep(0.01, 0.05, slabs.y - slabs.x)) * smoothstep(0.5, 0.62, g.z) * keep;
+    float border = slabs.y - slabs.x;
+    float crack = (1.0 - smoothstep(0.01, 0.05, border)) * smoothstep(0.45, 0.6, g.z) * keep;
+    float groove = (1.0 - smoothstep(0.0, 0.12, border)) * keep;
+    float strata = sin(length(p) * 2.1 + g.w * 9.0 + g.y * 3.0) * (1.0 - smoothstep(0.4, 1.2, fw));
     float grain = gFine(p + 3.0, 3.1, fw);
-    c = mix(rock_dark, rock_light, mix(0.5, slabs.z, keep) * 0.3 + g.x * 0.3 + g.y * 0.15 + grain * 0.25);
+    c = mix(rock_dark, rock_light, mix(0.5, slabs.z, keep) * 0.45 + g.x * 0.25 + grain * 0.3);
     c = mix(c, rock_lichen, smoothstep(0.62, 0.72, g.w) * smoothstep(0.5, 0.8, grain) * 0.6);
-    c *= 1.0 - 0.4 * crack;
-    relief = grain * 0.6 + g.y * 0.4 - crack * 0.5;
+    c *= (1.0 + 0.08 * strata) * (1.0 - 0.45 * crack - 0.15 * groove);
+    relief = 0.55 + (grain - 0.5) * 0.5 + (g.y - 0.5) * 0.3 + strata * 0.1 - groove * 0.4;
   } else if (layer == 6) {
     // snow: soft drifts, blue in their hollows, wind-carved ripples near by
     float drift = g.x * 0.6 + g.y * 0.4;
@@ -226,10 +229,10 @@ export const GROUND_STYLE: GroundStyle = {
       bump: 0.03,
     },
     rock: {
-      base: '#837d74',
+      base: '#8b867d',
       colors: {
-        dark: '#625d57',
-        light: '#9d978c',
+        dark: '#625e58',
+        light: '#ada79b',
         lichen: '#8e9466',
       },
       roughness: 0.85,
