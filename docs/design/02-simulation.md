@@ -21,7 +21,7 @@ writes every change to the event store.
 |---|---|---|
 | Citizen | 15 people | entity with body, inventory, knowledge, role |
 | Animal | deer, boar, wolf, bear, lion, fish shoals, birds | entity (herds/shoals as groups) |
-| Item | berries, meat, fish, wood, flint, spear, hide, rice | stacks in inventories, on the ground or in stores |
+| Item | food, wood, reeds, hide, minerals, cloth, packs, tools by material and coins (10-world-v1 §2.2, `sim/items.py`) | stacks in inventories, on the ground or in stores |
 | Structure | houses, castle, walls, fire pit, shelter, storehouse, well, paddy | entity anchored to cells |
 | Resource | berry bushes, nut trees, reeds, flint seam, fish stock | per-cell counters that deplete and regrow |
 
