@@ -584,7 +584,7 @@ export type EventView = {
     /**
      * Type
      */
-    type: 'tick_summary' | 'citizen_spawned' | 'perceived' | 'action_started' | 'action_finished' | 'action_interrupted' | 'said' | 'thought' | 'need_changed' | 'injured' | 'died' | 'item_moved' | 'resource_changed' | 'knowledge_changed' | 'animal_spawned' | 'fire_changed' | 'intervention' | 'snapshot';
+    type: 'tick_summary' | 'citizen_spawned' | 'perceived' | 'action_started' | 'action_finished' | 'action_interrupted' | 'said' | 'thought' | 'need_changed' | 'injured' | 'died' | 'item_moved' | 'resource_changed' | 'knowledge_changed' | 'animal_spawned' | 'fire_changed' | 'intervention' | 'snapshot' | 'node_changed' | 'tree_felled' | 'trespassed' | 'stole' | 'bought' | 'sold' | 'crafted' | 'spoiled' | 'tool_broke' | 'tax_assessed' | 'tax_paid' | 'tax_overdue' | 'ledger' | 'prices_changed' | 'accused' | 'seized' | 'released' | 'confined' | 'judged' | 'sentence_served' | 'standing_changed' | 'leader_changed' | 'bell_rang' | 'tended' | 'gestured' | 'goal_set';
     /**
      * Cell
      */
@@ -1473,7 +1473,7 @@ export type TimelineEntry = {
     /**
      * Type
      */
-    type: 'tick_summary' | 'citizen_spawned' | 'perceived' | 'action_started' | 'action_finished' | 'action_interrupted' | 'said' | 'thought' | 'need_changed' | 'injured' | 'died' | 'item_moved' | 'resource_changed' | 'knowledge_changed' | 'animal_spawned' | 'fire_changed' | 'intervention' | 'snapshot';
+    type: 'tick_summary' | 'citizen_spawned' | 'perceived' | 'action_started' | 'action_finished' | 'action_interrupted' | 'said' | 'thought' | 'need_changed' | 'injured' | 'died' | 'item_moved' | 'resource_changed' | 'knowledge_changed' | 'animal_spawned' | 'fire_changed' | 'intervention' | 'snapshot' | 'node_changed' | 'tree_felled' | 'trespassed' | 'stole' | 'bought' | 'sold' | 'crafted' | 'spoiled' | 'tool_broke' | 'tax_assessed' | 'tax_paid' | 'tax_overdue' | 'ledger' | 'prices_changed' | 'accused' | 'seized' | 'released' | 'confined' | 'judged' | 'sentence_served' | 'standing_changed' | 'leader_changed' | 'bell_rang' | 'tended' | 'gestured' | 'goal_set';
     /**
      * Visibility
      */
@@ -1907,7 +1907,7 @@ export type CitizensReadCitizenTimelineData = {
          *
          * default: everything but tick summaries and looking around
          */
-        type?: Array<'tick_summary' | 'citizen_spawned' | 'perceived' | 'action_started' | 'action_finished' | 'action_interrupted' | 'said' | 'thought' | 'need_changed' | 'injured' | 'died' | 'item_moved' | 'resource_changed' | 'knowledge_changed' | 'animal_spawned' | 'fire_changed' | 'intervention' | 'snapshot'> | null;
+        type?: Array<'tick_summary' | 'citizen_spawned' | 'perceived' | 'action_started' | 'action_finished' | 'action_interrupted' | 'said' | 'thought' | 'need_changed' | 'injured' | 'died' | 'item_moved' | 'resource_changed' | 'knowledge_changed' | 'animal_spawned' | 'fire_changed' | 'intervention' | 'snapshot' | 'node_changed' | 'tree_felled' | 'trespassed' | 'stole' | 'bought' | 'sold' | 'crafted' | 'spoiled' | 'tool_broke' | 'tax_assessed' | 'tax_paid' | 'tax_overdue' | 'ledger' | 'prices_changed' | 'accused' | 'seized' | 'released' | 'confined' | 'judged' | 'sentence_served' | 'standing_changed' | 'leader_changed' | 'bell_rang' | 'tended' | 'gestured' | 'goal_set'> | null;
         /**
          * Order
          */
@@ -2122,7 +2122,7 @@ export type EventsReadEventsData = {
         /**
          * Type
          */
-        type?: Array<'tick_summary' | 'citizen_spawned' | 'perceived' | 'action_started' | 'action_finished' | 'action_interrupted' | 'said' | 'thought' | 'need_changed' | 'injured' | 'died' | 'item_moved' | 'resource_changed' | 'knowledge_changed' | 'animal_spawned' | 'fire_changed' | 'intervention' | 'snapshot'> | null;
+        type?: Array<'tick_summary' | 'citizen_spawned' | 'perceived' | 'action_started' | 'action_finished' | 'action_interrupted' | 'said' | 'thought' | 'need_changed' | 'injured' | 'died' | 'item_moved' | 'resource_changed' | 'knowledge_changed' | 'animal_spawned' | 'fire_changed' | 'intervention' | 'snapshot' | 'node_changed' | 'tree_felled' | 'trespassed' | 'stole' | 'bought' | 'sold' | 'crafted' | 'spoiled' | 'tool_broke' | 'tax_assessed' | 'tax_paid' | 'tax_overdue' | 'ledger' | 'prices_changed' | 'accused' | 'seized' | 'released' | 'confined' | 'judged' | 'sentence_served' | 'standing_changed' | 'leader_changed' | 'bell_rang' | 'tended' | 'gestured' | 'goal_set'> | null;
         /**
          * Since Tick
          */
