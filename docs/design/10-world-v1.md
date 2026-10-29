@@ -247,9 +247,9 @@ Every iron craft also burns 2 wood at the forge. Tools are separate item kinds p
 | field racks (2 hasa racks by the paddies) | each farm household | 6 m | rice left to dry overnight; the raid target |
 | camp drying rack, camp food pile | the band | 6 m | dried meat station |
 
-**Theft:** `pick_up` from a store you don't own **succeeds** and emits `stole {thief, owner, store, item, count,
-witnesses}` (witnesses = citizens who had the thief in view that tick). The owner notices at the store next time
-("Some of your rice is gone.") without learning who. No pickpocketing.
+**Theft:** `pick_up` from a store you don't own **succeeds** and emits `stole {owner, store, item, count, witnesses}`
+with the thief as actor (witnesses = citizens who had the thief in view that tick). The owner notices at the store next
+time ("Some of your rice is gone.") without learning who. No pickpocketing.
 
 ### 2.7 Tax, dues, wages and the coin loop (`sim/tax.py`)
 - **Rice tax 40 % of each paddy harvest** (nengu): `owed += ⌈0.4 × count⌉` on the harvester's household at each

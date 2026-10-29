@@ -4,11 +4,14 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlmodel import Session
 
 from app.engine import EngineLoop
+from app.observability.events import TaxChange
 from app.services import citizens as citizens_service
 from app.sim.citizens import CITIZENS, load_citizens
-from tests.api.spectator import API, Story, timeline
+from app.sim.world import SimWorld
+from tests.api.spectator import API, Story, dev_run, timeline
 
 
 @pytest.mark.usefixtures("spectator_session")
@@ -185,6 +188,22 @@ def test_timeline_pages_filters_and_orders(client: TestClient) -> None:
     assert all(e["type"] == "action_started" for e in unheard) and unheard
     assert client.get(f"{API}/citizens/nobody/timeline").status_code == 404
     assert client.get(f"{API}/citizens/dev-aiko/timeline", params={"limit": 0}).status_code == 422
+
+
+@pytest.mark.usefixtures("spectator_session")
+def test_timeline_tells_world_v1_events_and_attackers(
+    client: TestClient, spectator_session: Session, sim_world: SimWorld
+) -> None:
+    loop = dev_run(spectator_session, sim_world)
+    aiko, genzo = loop.sim.citizen("dev-aiko"), loop.sim.citizen("dev-genzo")
+    rent = TaxChange(household="farmhouse-1", coins=5, owed_coins=0)
+    loop.sim.core.emit("tax_paid", rent, actor=aiko)
+    loop.sim.core.injure(aiko, 5.0, "violence", "Genzo strikes you", attacker=genzo.id)
+    loop.run_ticks(1, headless=True)
+    told = {e["type"]: e for e in timeline(client, "dev-aiko")}  # world v1 types are on the timeline by default
+    assert told["tax_paid"]["summary"] == "pays 5 mon of tax for Genzo's house"
+    struck = told["injured"]
+    assert (struck["summary"], struck["related"]) == ("is struck by Genzo", ["dev-genzo"])
 
 
 # --- needs ---

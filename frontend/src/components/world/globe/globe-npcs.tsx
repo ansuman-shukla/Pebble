@@ -22,6 +22,7 @@ import type { GlobePlayerState } from './globe-player';
 import { LabelAnchor } from '@/components/world/labels';
 import { MAX_FRAME, smoothing } from '@/components/world/player/motion';
 import type { LiveCitizen } from '@/lib/live/live-contract';
+import { type TickClock, tickElapsed } from '@/lib/live/live-state';
 import {
   follow,
   keepRight,
@@ -366,6 +367,7 @@ function Npc({
   doings,
   rate,
   replay,
+  tickElapsed,
   peopleRef,
   crowd,
   views,
@@ -381,6 +383,8 @@ function Npc({
   rate: number;
   /** A replayed moment: drawn where it says, not a tick behind (no tick follows). */
   replay: boolean;
+  /** Game seconds into the current tick now (a citizen first seen mid-tick is drawn that far along). */
+  tickElapsed: () => number;
   peopleRef: RefObject<Map<string, Vector3>>;
   crowd: Crowd;
   views: NpcViews;
@@ -392,7 +396,9 @@ function Npc({
   if (!look) throw new Error(`unknown citizen look ${citizen.look}`);
   const group = useRef<Group>(null);
   const [mounted, setMounted] = useState(false);
-  const [firstTrack] = useState(() => newTrack(citizen, radius, replay));
+  const [firstTrack] = useState(() =>
+    newTrack(citizen, radius, replay, tickElapsed()),
+  );
   const trackRef = useRef<Track>(firstTrack);
   const viewRef = useRef<NpcView>(newView(citizen));
   const [self] = useState(() => newCrowdBody(citizen.id));
@@ -522,6 +528,7 @@ export function GlobeNpcs({
   citizens,
   speed,
   paused,
+  tickClock,
   replay = false,
   terrain,
   town,
@@ -536,6 +543,8 @@ export function GlobeNpcs({
   /** The feed's clock: game seconds per real second, and whether it is paused. */
   speed: number;
   paused: boolean;
+  /** How far into the current tick the feed was, and when. */
+  tickClock: TickClock;
   /** The citizens of a replayed moment (`?tick=`), which no tick follows. */
   replay?: boolean;
   terrain: GlobeTerrain;
@@ -552,6 +561,10 @@ export function GlobeNpcs({
   subjectRef: RefObject<GlobePlayerState>;
 }) {
   const [crowd] = useState<Crowd>(() => new Set());
+  // read when a citizen is first drawn (not during later renders)
+  const elapsed = () =>
+    tickElapsed({ tickClock, speed, paused }, performance.now());
+
   return (
     <>
       {citizens.map((citizen) => (
@@ -564,6 +577,7 @@ export function GlobeNpcs({
           doings={doings}
           rate={clockRate(speed, paused)}
           replay={replay}
+          tickElapsed={elapsed}
           peopleRef={peopleRef}
           crowd={crowd}
           views={views}

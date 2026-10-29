@@ -13,7 +13,9 @@ import {
 } from '../../src/lib/live/live-contract';
 import { LANE_M } from '../../src/lib/live/drawn-track';
 import { KEEP_M } from '../../src/lib/live/separation';
+import type { MockStartHook } from '../../src/lib/live/mock-live';
 import { npcLook } from '../../src/lib/live/npc-activity';
+import { citizenPath, pointAt } from '../../src/lib/live/walk-path';
 import {
   anchorMapping,
   buildTerrain,
@@ -1086,5 +1088,43 @@ test('the real feed: the 22 citizens stand where the engine says, on the ground,
   await expect(page.getByRole('region', { name: 'People' })).toContainText(
     entities.citizens[0].name,
   );
+  expect(errors).toEqual([]);
+});
+
+test('a page opened mid-tick at ×60 draws each walker as far along its path as the tick has gone', async ({
+  page,
+}) => {
+  // the mock starts at tick 1 (two citizens on their way), held 15 game seconds into it at ×60
+  const elapsed = 15;
+  await page.addInitScript(
+    (start) => {
+      (globalThis as MockStartHook).__pebbleMockStart = start;
+    },
+    { ticks: 1, speed: 60, elapsed },
+  );
+  const errors: string[] = [];
+  const world = await openGlobe(page, errors, '?mockLive=1');
+  await expect(page.getByTestId('npcs')).toHaveAttribute(
+    'data-npcs-ready',
+    '22',
+  );
+  await expect(world).toHaveAttribute('data-live-status', 'live');
+  const view = await page.evaluate(() =>
+    (globalThis as unknown as MockLiveWindow).__pebbleMockLive.entities(),
+  );
+  expect(view.tick_elapsed_s).toBe(elapsed);
+  const shown = new Map(
+    (await npcs(page)).map((npc) => [npc.id, npc.position.normalize()]),
+  );
+  const walkers = view.citizens.filter((citizen) => citizen.route.length > 1);
+  expect(walkers.length).toBeGreaterThan(0);
+  for (const walker of walkers) {
+    const path = citizenPath(walker, R);
+    const start = pointAt(path, new Vector3());
+    path.time = Math.min(path.times[0] + elapsed, path.arrive);
+    const along = pointAt(path, new Vector3());
+    expect(start.angleTo(along) * R).toBeGreaterThan(5); // the check means something
+    expect(shown.get(walker.id)!.angleTo(along) * R).toBeLessThan(0.5);
+  }
   expect(errors).toEqual([]);
 });

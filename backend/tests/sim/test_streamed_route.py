@@ -244,6 +244,7 @@ def test_a_hunter_creeping_up_is_streamed_at_the_stalking_pace(
     moved = _moved(sim, "hunter")
     assert moved is not None and hunter.action is not None
     _starts_where_they_stood(sim, moved, before)
+    assert moved.gait == "stalk"
     stalk_mps = wild.STALK_PACE_M * pace / SECONDS_PER_TICK
     # (the sim creeps along the chord towards the deer: a few cm short of the arc's length)
     assert moved.speed_mps == pytest.approx(stalk_mps, rel=1e-3)

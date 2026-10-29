@@ -31,6 +31,6 @@ export function useReplayCitizens(tick: number | null): LiveState | null {
     retry: false,
   });
   if (tick === null) return null;
-  const replayed = data ? applyEntities(EMPTY_LIVE, data) : EMPTY_LIVE;
+  const replayed = data ? applyEntities(EMPTY_LIVE, data, 0) : EMPTY_LIVE;
   return { ...replayed, paused: true };
 }

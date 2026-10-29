@@ -21,6 +21,7 @@ def moves(core: SimCore, before: dict[str, Vec3]) -> dict[str, Moved]:
                 heading_deg=citizen.heading_deg,
                 route=route,
                 speed_mps=speed_mps,
+                gait=core.strides[citizen.id].gait,
             )
     return moved
 

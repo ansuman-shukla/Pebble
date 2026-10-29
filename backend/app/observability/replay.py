@@ -14,20 +14,27 @@ from numpy.typing import NDArray
 from app.observability.events import (
     ActionEnded,
     ActionStarted,
+    AnimalGait,
     AnimalSpawned,
     BodyValues,
     CitizenSpawned,
     Died,
+    Driver,
     FireChanged,
+    GoalSet,
     ItemLocation,
     ItemMoved,
+    JsonScalar,
     KnowledgeChanged,
     ResourceChanged,
     RoutePoint,
+    StandingChanged,
+    Target,
     TickSummary,
 )
 from app.sim.fire import strength
 from app.sim.items import RESOURCE_INDEX
+from app.sim.locomotion import Gait
 from app.sim.snapshot import SimSnapshot
 from app.sim.state import AnimalActivity, FireKind, Region
 from app.sim.vec import Vec3
@@ -55,6 +62,7 @@ class ReplayCitizen:
     action: str | None = None
     action_number: int | None = None
     action_label: str = ""
+    action_args: dict[str, JsonScalar] = field(default_factory=dict)
     inventory: dict[str, int] = field(default_factory=dict)
     skills: tuple[str, ...] = ()
     places: dict[str, str] = field(default_factory=dict)  # place id -> visited | rough
@@ -64,6 +72,12 @@ class ReplayCitizen:
     # tick to see it at that tick)
     route: tuple[RoutePoint, ...] = field(default=(), compare=False)
     speed_mps: float = field(default=0.0, compare=False)
+    gait: Gait | None = field(default=None, compare=False)  # how they moved this tick (None: they didn't)
+    # spectator facts the sim keeps no state for yet (not in snapshots: a replay from a snapshot starts without them)
+    target: Target | None = field(default=None, compare=False)  # what their action is about
+    goal: str = field(default="", compare=False)  # their latest `goal_set`
+    driver: Driver | None = field(default=None, compare=False)
+    standing: int | None = field(default=None, compare=False)  # with their own group (`standing_changed`)
 
 
 @dataclass
@@ -85,6 +99,12 @@ class ReplayAnimal:
     heading_deg: float
     activity: AnimalActivity
     alive: bool = True
+    # how its latest pose says to draw it (not in snapshots, like a citizen's route)
+    route: tuple[RoutePoint, ...] = field(default=(), compare=False)
+    speed_mps: float = field(default=0.0, compare=False)
+    gait: AnimalGait = field(default="walk", compare=False)
+    goal: str = field(default="", compare=False)
+    target: Target | None = field(default=None, compare=False)
 
 
 @dataclass
@@ -152,6 +172,7 @@ def from_snapshot(snapshot: SimSnapshot) -> ReplayState:
             action=c.action.kind if c.action is not None else None,
             action_number=c.action.number if c.action is not None else None,
             action_label=c.action.label if c.action is not None else "",
+            action_args=dict(c.action.args) if c.action is not None else {},
             inventory={item: count for item, count in c.inventory.items() if count},
             skills=tuple(c.skills),
             places={place_id: known.level for place_id, known in c.places.items()},
@@ -191,17 +212,21 @@ def apply_event(state: ReplayState, event: ReplayEvent) -> None:
         for citizen_id, citizen in state.citizens.items():
             moved = summary.moved.get(citizen_id)
             if moved is None:  # standing still: not walking on
-                citizen.route, citizen.speed_mps = (), 0.0
+                citizen.route, citizen.speed_mps, citizen.gait = (), 0.0, None
                 continue
             citizen.position, citizen.height_m, citizen.cell = moved.position, moved.height_m, moved.cell
             citizen.heading_deg = moved.heading_deg
-            citizen.route, citizen.speed_mps = tuple(moved.route), moved.speed_mps
+            citizen.route, citizen.speed_mps, citizen.gait = tuple(moved.route), moved.speed_mps, moved.gait
         for citizen_id, body in summary.bodies.items():
             state.citizens[citizen_id].body = body
+        for animal in state.animals.values():
+            animal.route, animal.speed_mps = (), 0.0
         for animal_id, pose in summary.animals.items():
             animal = state.animals[animal_id]
             animal.position, animal.height_m, animal.cell = pose.position, pose.height_m, pose.cell
             animal.heading_deg, animal.activity = pose.heading_deg, pose.activity
+            animal.route, animal.speed_mps, animal.gait = tuple(pose.route), pose.speed_mps, pose.gait
+            animal.goal, animal.target = pose.goal, pose.target
     elif kind == "citizen_spawned":
         spawned = CitizenSpawned.model_validate(event.payload)
         state.citizens[spawned.id] = ReplayCitizen(
@@ -228,6 +253,7 @@ def apply_event(state: ReplayState, event: ReplayEvent) -> None:
         started = ActionStarted.model_validate(event.payload)
         citizen = state.citizens[_actor(event)]
         citizen.action, citizen.action_number, citizen.action_label = started.action, started.number, started.label
+        citizen.action_args, citizen.target = dict(started.args), started.target
         if started.action == "sleep":
             citizen.asleep = True
     elif kind in ("action_finished", "action_interrupted"):
@@ -237,6 +263,7 @@ def apply_event(state: ReplayState, event: ReplayEvent) -> None:
             if citizen.action == "sleep":
                 citizen.asleep = False
             citizen.action, citizen.action_number, citizen.action_label = None, None, ""
+            citizen.action_args, citizen.target = {}, None
     elif kind == "said":
         state.citizens[_actor(event)].said_tick = event.tick
     elif kind == "died":
@@ -273,6 +300,15 @@ def apply_event(state: ReplayState, event: ReplayEvent) -> None:
     elif kind == "resource_changed":
         changed = ResourceChanged.model_validate(event.payload)
         state.resources[changed.cell, RESOURCE_INDEX[changed.resource]] = changed.after
+    elif kind == "goal_set":
+        goal = GoalSet.model_validate(event.payload)
+        citizen = state.citizens[_actor(event)]
+        citizen.goal, citizen.driver = goal.text, goal.driver
+    elif kind == "standing_changed":
+        standing = StandingChanged.model_validate(event.payload)
+        citizen = state.citizens[_actor(event)]
+        if standing.group == citizen.region:
+            citizen.standing = standing.after
     elif kind == "knowledge_changed":
         learned = KnowledgeChanged.model_validate(event.payload)
         citizen = state.citizens[_actor(event)]
