@@ -44,6 +44,9 @@ def finish_wait(core: SimCore, citizen: Citizen, _action: ActionState) -> None:
 def collapse(core: SimCore, citizen: Citizen) -> None:
     if citizen.action is not None:
         apply_partial(core, citizen, citizen.action)
-        core.end_action(citizen, "interrupted", "Your legs give way; you collapse, exhausted.")
+        if citizen.body.alive:  # raw food eaten so far can kill, and dying has ended the action
+            core.end_action(citizen, "interrupted", "Your legs give way; you collapse, exhausted.")
+    if not citizen.body.alive:  # what they had eaten so far killed them
+        return
     citizen.body.asleep = True
     begin(core, citizen, "sleep", "", {"collapsed": True}).collapsed = True

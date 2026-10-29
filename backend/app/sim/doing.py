@@ -124,7 +124,8 @@ def finish_gather(core: SimCore, citizen: Citizen, action: ActionState) -> None:
 
 def finish_eat(core: SimCore, citizen: Citizen, action: ActionState) -> None:
     text = _eat(core, citizen, action, action.amount)
-    core.end_action(citizen, "done" if text else "failed", text or "There's nothing left to eat.")
+    if citizen.body.alive:  # raw food can kill, and dying has ended the action
+        core.end_action(citizen, "done" if text else "failed", text or "There's nothing left to eat.")
 
 
 def finish_drink(core: SimCore, citizen: Citizen, action: ActionState) -> None:

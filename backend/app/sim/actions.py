@@ -142,9 +142,10 @@ def start(core: SimCore, citizen: Citizen, action: Action) -> int:
     if current is not None and current.collapsed and citizen.body.energy < COLLAPSE_WAKE_ENERGY:
         return settled(core, citizen, action.action, "failed", "You are too exhausted to move.")
     if current is not None:
-        doing.apply_partial(core, citizen, current)
         text = "You get up." if current.kind == "sleep" else f"You stop {VERB[current.kind]} to do something else."
-        core.end_action(citizen, "interrupted", text)
+        _interrupt(core, citizen, current, text, None)
+        if not citizen.body.alive:  # what they had eaten so far killed them
+            return settled(core, citizen, action.action, "failed", "Everything goes dark.")
     starter = STARTS.get(action.action)
     if starter is None:
         return settled(core, citizen, action.action, "failed", NOT_YET)
@@ -164,14 +165,6 @@ def advance(core: SimCore, citizen: Citizen) -> None:
         if finisher is None:
             raise ValueError(f"{action.kind} has no timed completion")
         finisher(core, citizen, action)
-
-
-# --- body events that end actions ---
-
-
-def end_for_death(core: SimCore, citizen: Citizen, died_seq: int) -> None:
-    if citizen.action is not None:
-        core.end_action(citizen, "interrupted", "Everything goes dark.", cause_seq=died_seq)
 
 
 # --- interrupts (once per tick, after bodies) ---
@@ -299,7 +292,8 @@ def approaching(
 
 def _interrupt(core: SimCore, citizen: Citizen, action: ActionState, text: str, cause_seq: int | None) -> None:
     doing.apply_partial(core, citizen, action)
-    core.end_action(citizen, "interrupted", text, cause_seq)
+    if citizen.body.alive:  # raw food eaten so far can kill, and dying has ended the action
+        core.end_action(citizen, "interrupted", text, cause_seq)
 
 
 def _names(words: str, name: str) -> bool:
