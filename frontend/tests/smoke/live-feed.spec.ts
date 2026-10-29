@@ -17,14 +17,15 @@ import {
   speedWords,
 } from '../../src/lib/live/live-state';
 import { MockLiveServer } from '../../src/lib/live/mock-live';
-import { activityWords, npcLook } from '../../src/lib/live/npc-activity';
+import { activityWords } from '../../src/lib/live/npc-activity';
 import { advance, citizenPath, pointAt } from '../../src/lib/live/walk-path';
 import { CITIZEN_LOOKS } from '../../src/lib/world/citizen-looks';
 import { directionFromLatLon } from '../../src/lib/world/globe';
 import { createMockWorld } from '../../src/lib/world/mock-world';
 
 /*
- * The live feed without a browser: the frame/event reducer, how activities show, and the mock feed.
+ * The live feed without a browser: the frame/event reducer, activities in words, and the mock feed (how bodies
+ * move: `bodies.spec.ts`).
  */
 
 const AT = directionFromLatLon(35, 12);
@@ -206,43 +207,6 @@ test('said events become speech that expires after a few seconds', () => {
 test('feed time in game minutes since day 0', () => {
   expect(feedMinutes({ day: 0, time: '08:00' })).toBe(480);
   expect(feedMinutes({ day: 2, time: '23:59' })).toBe(2 * 1440 + 23 * 60 + 59);
-});
-
-test('activities pick their clip and pose', () => {
-  const look = (activity: LiveCitizen['activity'], label = '') =>
-    npcLook({ activity, action_label: label });
-  expect(look('idle')).toEqual({
-    clip: 'Idle',
-    pose: 'standing',
-    still: false,
-  });
-  expect(look('walking').clip).toBe('Walk');
-  expect(look('eating').clip).toBe('Eating');
-  expect(look('drinking').clip).toBe('Drinking');
-  expect(look('talking').clip).toBe('Talking');
-  expect(look('resting')).toEqual({
-    clip: 'Sitting',
-    pose: 'sitting',
-    still: false,
-  });
-  expect(look('sleeping')).toEqual({
-    clip: 'Idle',
-    pose: 'sleeping',
-    still: true, // no idle sway lying down
-  });
-  expect(look('dead')).toEqual({ clip: 'Idle', pose: 'lying', still: true });
-  // the engine's work tasks
-  expect(look('working', 'tending the rice paddies').clip).toBe('Harvesting');
-  expect(look('working', 'filling the storehouse').clip).toBe('Pick up');
-  expect(look('working', 'keeping watch').clip).toBe('Arms folded');
-  expect(look('working', 'trading at the market').clip).toBe('Talking');
-  expect(look('working', 'weaving at the loom').clip).toBe('Fixing');
-  expect(look('working', 'holding court').clip).toBe('Talking');
-  expect(look('working', 'planting the seed beds').clip).toBe('Planting');
-  expect(look('working', 'chopping firewood').clip).toBe('Chopping wood');
-  expect(look('gathering', 'firewood').clip).toBe('Pick up');
-  expect(look('gathering', 'roots').clip).toBe('Pick up');
-  expect(look('gathering', 'berries').clip).toBe('Harvesting');
 });
 
 test('activities in words', () => {

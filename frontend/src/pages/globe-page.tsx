@@ -455,9 +455,12 @@ const GlobeScene = memo(function GlobeScene({
       </Suspense>
       <GlobeNpcs
         citizens={live.citizens}
+        cues={live.cues}
         speed={live.speed}
         paused={live.paused}
         replay={replay}
+        clockRef={clockRef}
+        townLon={planet.town.lon}
         terrain={terrain}
         town={walkTown}
         labels={labels}

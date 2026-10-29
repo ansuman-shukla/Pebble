@@ -253,6 +253,10 @@ export function NpcHooks({
         node.dataset.npcGround = fixed(ground);
         node.dataset.npcActivity = view.activity;
         node.dataset.npcPosture = view.posture;
+        node.dataset.npcMotion = view.motion;
+        node.dataset.npcProp = view.prop;
+        node.dataset.npcLayer = view.layer;
+        node.dataset.npcHidden = String(view.hidden);
         node.dataset.npcClip = view.clip;
         node.dataset.npcLoaded = String(view.loaded);
         node.dataset.npcClipClock = view.clipClock.toFixed(3);
