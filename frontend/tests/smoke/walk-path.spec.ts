@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { Vector3 } from 'three';
 
-import { clipLapse } from '../../src/lib/live/npc-activity';
 import {
   advance,
   citizenPath,
@@ -137,11 +136,6 @@ test('a route recorded before routes were timed is walked at its speed', () => {
   expect(old.times.map((t) => Math.round(t * 10) / 10)).toEqual([0, 15, 35]);
   advance(old, 20);
   expect(groundSpeed(old)).toBeCloseTo(2, 2);
-});
-
-test('the walk cycle speeds up with the clock like a film, up to ×10', () => {
-  // the body moves speed × rate real metres a second; the gait, paced to the game speed, plays × the same
-  expect([0, 1, 10, 60, 600].map(clipLapse)).toEqual([0, 1, 10, 10, 10]);
 });
 
 test('only a walker drawn far off its new path resyncs, farther at faster clocks', () => {

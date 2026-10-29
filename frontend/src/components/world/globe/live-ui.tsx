@@ -18,10 +18,11 @@ import type { ShownDoings } from '@/lib/live/shown-doings';
 import type { Region } from '@/lib/world/citizen-looks';
 import { citizenLabels } from '@/lib/world/citizen-labels';
 import type { LabelStore } from '@/lib/world/label-store';
+import { clockRate, timeLapseBadge } from '@/lib/world/visual-rate';
 
 /*
- * The live feed's controls over the globe: the clock with its speed buttons (and the local time where the camera
- * is), the People panel (select, follow, go to),
+ * The live feed's controls over the globe: the clock with its speed buttons (the local time where the camera is,
+ * and a time-lapse badge past ×10), the People panel (select, follow, go to),
  * the citizens' labels and, hidden, the per-citizen data attributes the browser tests read.
  */
 
@@ -56,6 +57,7 @@ export function LiveClock({
   /** The local time where the camera is, when that's not the town ("Band B camp", "04:10"). */
   site: { name: string; time: string } | null;
 }) {
+  const badge = timeLapseBadge(clockRate(state.speed, state.paused));
   return (
     <div
       className="flex items-center gap-1 rounded-lg bg-white/80 p-1 text-sm shadow"
@@ -73,6 +75,14 @@ export function LiveClock({
       <span className="text-muted-foreground px-1" data-testid="live-speed">
         {speedWords(state)}
       </span>
+      {badge && (
+        <span
+          className="rounded bg-amber-200 px-1.5 text-xs font-medium text-amber-900"
+          data-testid="time-lapse-badge"
+        >
+          {badge}
+        </span>
+      )}
       <Button
         size="sm"
         variant={state.paused ? 'default' : 'ghost'}

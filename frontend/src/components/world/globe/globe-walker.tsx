@@ -61,6 +61,8 @@ type GlobeWalkerProps = {
   cameraMode: CameraMode;
   onCameraModeChange: (mode: CameraMode) => void;
   travel: boolean;
+  /** The clock runs past ×10 (the orbit camera rises to see the trails). */
+  timeLapse: boolean;
   /** Kept on the surface point the active camera looks after (for the sun and the props). */
   focusRef: RefObject<Vector3>;
   /** Filled with the drop / go-to controls once the walk is ready. */
@@ -161,6 +163,7 @@ export function GlobeWalker({
   cameraMode,
   onCameraModeChange,
   travel,
+  timeLapse,
   focusRef,
   dropRef,
   goTo,
@@ -278,6 +281,7 @@ export function GlobeWalker({
           terrain={terrain}
           playerRef={playerRef}
           focusRef={focusRef}
+          timeLapse={timeLapse}
           onHandover={handover}
         />
       )}

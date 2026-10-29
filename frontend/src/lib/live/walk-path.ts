@@ -137,6 +137,15 @@ export function pointAt(path: WalkPath, out: Vector3) {
     .normalize();
 }
 
+/** Metres still to walk to the path's end (0 standing or there). */
+export function metresLeft(path: WalkPath) {
+  const { points, starts } = path;
+  if (points.length === 1) return 0;
+  const leg = legAt(path);
+  const at = starts[leg] + (starts[leg + 1] - starts[leg]) * shareOf(path, leg);
+  return starts[starts.length - 1] - at;
+}
+
 /** Ground speed where the walker is (game metres per game second); 0 standing or at the end. */
 export function groundSpeed(path: WalkPath) {
   if (!walking(path)) return 0;
