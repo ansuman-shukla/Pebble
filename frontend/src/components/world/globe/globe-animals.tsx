@@ -46,11 +46,25 @@ const DEPTH: Partial<Record<LiveAnimal['kind'], number>> = {
 const GAITS: Record<AnimalActivity, AnimalGait> = {
   idle: 'idle',
   grazing: 'idle',
+  alert: 'idle',
+  frozen: 'idle',
+  pouncing: 'idle',
+  attacking: 'idle',
+  feeding: 'idle',
+  drinking: 'idle',
+  floating: 'idle',
   sleeping: 'idle',
   dead: 'idle',
+  remains: 'idle',
   walking: 'move',
+  prowling: 'move',
+  stalking: 'move',
+  swimming: 'move',
+  trotting: 'run',
   running: 'run',
+  fleeing: 'run',
   hunting: 'run',
+  chasing: 'run',
 };
 
 const basis = new Matrix4();

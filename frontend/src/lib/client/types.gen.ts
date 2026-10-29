@@ -62,7 +62,7 @@ export type AnimalEntity = {
     /**
      * Activity
      */
-    activity: 'idle' | 'grazing' | 'walking' | 'running' | 'hunting' | 'sleeping' | 'dead';
+    activity: 'idle' | 'grazing' | 'alert' | 'walking' | 'trotting' | 'running' | 'fleeing' | 'frozen' | 'prowling' | 'stalking' | 'hunting' | 'chasing' | 'pouncing' | 'attacking' | 'feeding' | 'drinking' | 'floating' | 'swimming' | 'sleeping' | 'dead' | 'remains';
     /**
      * Route
      */
