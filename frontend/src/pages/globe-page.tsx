@@ -1087,59 +1087,62 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
           </span>
         )}
       </div>
-      <div className="pointer-events-none absolute right-3 bottom-3 flex flex-col items-end gap-2 *:pointer-events-auto">
-        {minimapOpen && ready && (
-          <Minimap
-            sites={goTo}
-            terrain={planet.terrain}
-            biomeNames={view.biome_names}
-            town={minimapTown}
+      {/* the right column: People on top, shrinking to what the minimap, clock and follow bar below leave */}
+      <div className="pointer-events-none absolute top-(--toolbar-bottom) right-3 bottom-3 flex flex-col items-end gap-2 *:pointer-events-auto">
+        {peopleOpen && (
+          <PeoplePanel
             citizens={live.citizens}
-            animals={live.animals}
-            fires={live.fires}
-            views={npcViews}
-            focusRef={focusRef}
-            onGo={goNear}
+            followId={followId}
+            selectedId={selectedId}
+            onSelect={(id) => {
+              setSelectedId(id);
+              setInspectorOpen(true);
+            }}
+            onFollow={follow}
+            onGoTo={goToCitizen}
           />
         )}
-        {replay && <ReplayBadge state={replay} />}
-        {feed.status !== 'off' && (
-          <LiveClock
-            state={live}
-            status={feed.status}
-            onChange={feed.setClock}
-            site={siteClock}
-          />
-        )}
-        {followed && (
-          <div className="flex items-center gap-2 rounded-lg bg-white/80 p-1 pl-2 text-sm shadow">
-            following {followed.name}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={(event) => {
-                setFollowId(null);
-                event.currentTarget.blur();
-              }}
-            >
-              stop following
-            </Button>
-          </div>
-        )}
+        <div className="pointer-events-none! mt-auto flex shrink-0 flex-col items-end gap-2 *:pointer-events-auto">
+          {minimapOpen && ready && (
+            <Minimap
+              sites={goTo}
+              terrain={planet.terrain}
+              biomeNames={view.biome_names}
+              town={minimapTown}
+              citizens={live.citizens}
+              animals={live.animals}
+              fires={live.fires}
+              views={npcViews}
+              focusRef={focusRef}
+              onGo={goNear}
+            />
+          )}
+          {replay && <ReplayBadge state={replay} />}
+          {feed.status !== 'off' && (
+            <LiveClock
+              state={live}
+              status={feed.status}
+              onChange={feed.setClock}
+              site={siteClock}
+            />
+          )}
+          {followed && (
+            <div className="flex items-center gap-2 rounded-lg bg-white/80 p-1 pl-2 text-sm shadow">
+              following {followed.name}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={(event) => {
+                  setFollowId(null);
+                  event.currentTarget.blur();
+                }}
+              >
+                stop following
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
-      {peopleOpen && (
-        <PeoplePanel
-          citizens={live.citizens}
-          followId={followId}
-          selectedId={selectedId}
-          onSelect={(id) => {
-            setSelectedId(id);
-            setInspectorOpen(true);
-          }}
-          onFollow={follow}
-          onGoTo={goToCitizen}
-        />
-      )}
       {feed.status !== 'off' && (
         <EventFeed
           listen={feed.listen}

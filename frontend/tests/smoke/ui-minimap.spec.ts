@@ -210,3 +210,65 @@ test('seen from the town, band B (145° away) and band A sit on the edge toward 
   }
   expect(errors).toEqual([]);
 });
+
+for (const [width, height] of [
+  [1280, 800],
+  [1920, 1080],
+]) {
+  test(`at ${width}x${height} the People panel ends above the minimap and the clock`, async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    await page.setViewportSize({ width, height });
+    const world = await openHeld(page, errors);
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('KeyF');
+    await landed(world);
+    await page.getByRole('button', { name: 'people', exact: true }).click();
+    const people = page.getByRole('region', { name: 'People' });
+    await expect(people).toBeVisible();
+    await expect(minimap(page)).toBeVisible();
+    const box = async (locator: ReturnType<Page['locator']>) =>
+      (await locator.boundingBox())!;
+    const panel = await box(people);
+    const below = [
+      await box(minimap(page)),
+      await box(page.getByTestId('live-clock')),
+      await box(page.getByRole('button', { name: 'stop following' })),
+    ];
+    for (const other of below) {
+      expect(panel.y + panel.height).toBeLessThanOrEqual(other.y);
+      // all of it on screen, not pushed off the bottom
+      expect(other.y + other.height).toBeLessThanOrEqual(height);
+    }
+    // still a useful list: several people without scrolling
+    expect(panel.height).toBeGreaterThan(150);
+    // the column between and beside its boxes lets clicks through to the scene
+    const [map] = below;
+    const hits = await page.evaluate(
+      (points) =>
+        points.map(
+          ([x, y]) =>
+            (
+              globalThis as unknown as {
+                document: {
+                  elementFromPoint(
+                    x: number,
+                    y: number,
+                  ): { tagName: string } | null;
+                };
+              }
+            ).document.elementFromPoint(x, y)?.tagName,
+        ),
+      [
+        [map.x - 20, map.y + map.height / 2],
+        [panel.x + 20, (panel.y + panel.height + map.y) / 2],
+      ],
+    );
+    expect(hits).toEqual(['CANVAS', 'CANVAS']);
+    await page.screenshot({
+      path: test.info().outputPath(`all-open-${width}.png`),
+    });
+    expect(errors).toEqual([]);
+  });
+}
