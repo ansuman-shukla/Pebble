@@ -12,7 +12,7 @@ from app.observability.events import Gait, JsonScalar, TickSummary
 from app.observability.replay import ReplayEvent, apply_event, from_snapshot
 from app.services.entities import TALKING_TICKS, citizen_entity
 from app.sim.citizens import CITIZENS, load_citizens
-from app.sim.motion import CARRY_WALK_LOAD, BodyMotion, body_motion, load_share
+from app.sim.motion import BodyMotion, body_motion, load_share
 from app.sim.simulation import Simulation
 from app.sim.snapshot import take_snapshot
 
@@ -40,12 +40,13 @@ def _motion(
         ({"asleep": True, "action": "sleep"}, ("lie", "lying")),
         ({"asleep": True, "action": "sleep", "args": {"collapsed": True}}, ("lie", "lying")),
         ({"action": "walk_to", "gait": "walk"}, ("walk", "standing")),
-        ({"action": "walk_to", "gait": "walk", "load": CARRY_WALK_LOAD}, ("carry_walk", "standing")),
-        ({"action": "walk_to", "gait": "walk", "load": CARRY_WALK_LOAD - 0.01}, ("walk", "standing")),
+        ({"action": "walk_to", "gait": "walk", "load": 0.5}, ("carry_walk", "standing")),
+        ({"action": "walk_to", "gait": "walk", "load": 0.49}, ("walk", "standing")),
         ({"action": "flee", "gait": "run", "load": 0.9}, ("run", "standing")),
         ({"action": "follow", "gait": "jog"}, ("jog", "standing")),
         ({"action": "hunt", "gait": "stalk"}, ("stalk", "standing")),
         ({"action": "hunt"}, ("stalk", "standing")),
+        ({"action": "hunt", "gait": "run"}, ("run", "standing")),  # the chase
         ({"action": "walk_to"}, ("idle", "standing")),  # arrived, or blocked: standing
         ({"action": "gather", "args": {"resource": "berries"}}, ("gather_high", "standing")),
         ({"action": "gather", "args": {"resource": "nuts"}}, ("gather_high", "standing")),
@@ -60,6 +61,7 @@ def _motion(
         ({"action": "work", "args": {"task": "govern"}}, ("talk", "standing")),
         ({"action": "work", "args": {"task": "pray"}}, ("pray", "sitting_ground")),
         ({"action": "work", "args": {"task": "guard"}}, ("idle", "standing")),
+        ({"action": "work", "args": {"task": "juggle"}}, ("idle", "standing")),
         ({"action": "rest", "args": {"minutes": 30}}, ("sit_ground", "sitting_ground")),
         ({"action": "fish"}, ("fish", "standing")),
         ({"action": "attack"}, ("attack", "standing")),
@@ -70,6 +72,7 @@ def _motion(
         ({}, ("idle", "standing")),
         ({"talking": True}, ("talk", "standing")),
         ({"action": "wait", "talking": True}, ("talk", "standing")),
+        ({"action": "walk_to", "talking": True}, ("talk", "standing")),  # arrived and speaking
         ({"action": "gather", "args": {"resource": "roots"}, "talking": True}, ("gather_low", "crouching")),
     ],
 )
