@@ -11,6 +11,7 @@ import {
 import {
   type GroundPoint,
   groundWeights,
+  quantizeWeights,
   terrainGeometry,
 } from '../../src/lib/world/globe-mesh';
 import {
@@ -60,9 +61,10 @@ test.describe('ground layer rules', () => {
     expect(steep.rock).toBe(1);
     expect(steep.grass).toBe(0);
     const between = weigh({ slope: 34 });
-    expect(between.rock).toBeGreaterThan(0.3);
-    expect(between.rock).toBeLessThan(0.7);
+    expect(between.rock).toBeCloseTo(0.5, 6);
     expect(sum(between)).toBeCloseTo(1, 6);
+    expect(weigh({ slope: 28 }).rock).toBe(0);
+    expect(weigh({ slope: 40 }).rock).toBe(1);
   });
 
   test('biomes lay their own layer and share the rest with grass', () => {
@@ -105,10 +107,20 @@ test.describe('ground layer rules', () => {
     expect(weigh({ height: 32, lakeLevel: 30 }).sand).toBe(0);
     expect(weigh({ height: 30.01, lakeLevel: 30 }).mud).toBe(1);
     expect(weigh({ height: -1 }).sand).toBe(1);
+    // just under the water surface the sea floor rule wins over any biome
+    expect(weigh({ claims: claims({ snow: 1 }), height: 0.1 }).sand).toBe(1);
     expect(weigh({ height: -10 }).mud).toBe(1);
     const shelf = weigh({ height: -4.75 });
     expect(shelf.sand).toBeCloseTo(0.5, 6);
     expect(shelf.mud).toBeCloseTo(0.5, 6);
+  });
+
+  test('weights pack into bytes summing to 255, the largest remainders rounding up', () => {
+    const bytes = new Uint8Array(4);
+    quantizeWeights([0.1, 0.45, 0.45, 0], bytes, 0);
+    expect([...bytes]).toEqual([25, 115, 115, 0]);
+    quantizeWeights([0.2, 0.3, 0.1, 0.4], bytes, 0);
+    expect([...bytes]).toEqual([51, 77, 25, 102]);
   });
 
   test('constant weights put the unnamed rest on grass', () => {
@@ -193,7 +205,58 @@ test.describe('ground layers of the real world', () => {
         worst,
         Math.abs(weightsOf(v).reduce((total, w) => total + w, 0) - 1),
       );
-    expect(worst).toBeLessThanOrEqual(0.01);
+    // the plan allows ± 0.01; the bytes sum to exactly 255
+    expect(worst).toBeLessThan(1e-6);
+  });
+
+  test('level ground carries the layer of its biome (bible §5.1) and grass the rest', () => {
+    const own: Record<string, [GroundLayer, number]> = {
+      grassland: ['grass', 1],
+      beach: ['sand', 0.6],
+      broadleaf_forest: ['forest_floor', 0.7],
+      taiga: ['forest_floor', 0.7],
+      wetland: ['mud', 0.6],
+      hills: ['gravel', 0.25],
+      mountain: ['rock', 0.5],
+      savanna: ['dirt', 0.3],
+      tundra: ['gravel', 0.4],
+      volcanic: ['gravel', 0.6],
+      snow: ['snow', 1],
+      ice: ['snow', 1],
+    };
+    const { biomes, cellCount, heights } = terrain.globe;
+    const vertices = slopes();
+    const byte = 1 / 255 + 1e-6;
+    const failures: string[] = [];
+    const seen = new Set<string>();
+    // a cell's own point is mesh vertex `cell` and reads only that cell's biome; level, above the beach band and
+    // below the snow line nothing else claims it
+    for (let cell = 0; cell < cellCount; cell++) {
+      const biome = view.biome_names[biomes[cell]];
+      if (!own[biome] || vertices[cell] >= 28) continue;
+      if (heights[cell] <= 2.6 || heights[cell] >= 215) continue;
+      const [name, share] = own[biome];
+      const weights = weightsOf(cell);
+      seen.add(biome);
+      if (Math.abs(weights[layer(name)] - share) > byte)
+        failures.push(`${biome} cell ${cell}: ${name} ${weights[layer(name)]}`);
+      if (
+        Math.abs(
+          weights[layer('grass')] -
+            (name === 'grass' ? 1 : name === 'snow' ? 0 : 1 - share),
+        ) > byte
+      )
+        failures.push(
+          `${biome} cell ${cell}: grass ${weights[layer('grass')]}`,
+        );
+    }
+    expect(failures).toEqual([]);
+    // the volcano has no level ground below the snow line
+    expect([...seen].sort()).toEqual(
+      Object.keys(own)
+        .filter((biome) => biome !== 'volcanic')
+        .sort(),
+    );
   });
 
   test('slopes of 45° and more are rock, beaches sand, snow biomes snow, forests forest floor, lake beds mud', () => {

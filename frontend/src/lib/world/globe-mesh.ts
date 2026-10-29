@@ -132,7 +132,11 @@ export function groundWeights(
 const remainders = new Float64Array(GROUND_LAYERS.length);
 
 /** Weights as bytes summing to exactly 255 (the largest remainders round up). */
-function quantize(weights: ArrayLike<number>, out: Uint8Array, offset: number) {
+export function quantizeWeights(
+  weights: ArrayLike<number>,
+  out: Uint8Array,
+  offset: number,
+) {
   const count = weights.length;
   let total = 0;
   for (let k = 0; k < count; k++) total += weights[k];
@@ -404,7 +408,7 @@ export function terrainGeometry(
         if (done[id]) continue;
         done[id] = 1;
         groundWeights(locate(t, i, j, slopes[id]), weights);
-        quantize(weights, layers, id * 8);
+        quantizeWeights(weights, layers, id * 8);
       }
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new Float32BufferAttribute(vertices, 3));
