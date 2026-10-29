@@ -176,6 +176,29 @@ test('with nobody selected Tab starts at the citizen nearest where the camera lo
   expect(errors).toEqual([]);
 });
 
+test('keys pressed with Ctrl, Cmd or Alt are left to the browser', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  const world = await openHeld(page, errors);
+  const speed = page.getByTestId('live-speed');
+  await expect(speed).toHaveText('paused');
+  for (const modifier of ['Control', 'Meta', 'Alt'])
+    for (const key of ['Tab', 'Space', 'Digit3', 'KeyT'])
+      await page.keyboard.press(`${modifier}+${key}`);
+  await expect(world).not.toHaveAttribute('data-selected');
+  await expect(speed).toHaveText('paused');
+  await expect(world).toHaveAttribute('data-travel', 'false');
+  // the same keys alone drive the scene
+  await page.keyboard.press('Tab');
+  await expect(world).toHaveAttribute('data-selected', /./);
+  await page.keyboard.press('Digit3');
+  await expect(speed).toHaveText('×60');
+  await page.keyboard.press('KeyT');
+  await expect(world).toHaveAttribute('data-travel', 'true');
+  expect(errors).toEqual([]);
+});
+
 test('Space pauses and 1-4 pick the clock speeds', async ({ page }) => {
   const errors: string[] = [];
   await openHeld(page, errors);
