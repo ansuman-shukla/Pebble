@@ -59,6 +59,8 @@ const KINDS: Record<Exclude<FeedFilter, 'all'>, ReadonlySet<string>> = {
 export interface FeedEntry {
   /** The newest merged event's id. */
   id: string;
+  /** Every merged event's id, so a resend of any of them adds nothing. */
+  ids: readonly string[];
   tick: number;
   /** Town "HH:MM" of `tick`. */
   time: string;
@@ -148,6 +150,7 @@ export function feedEntry(
   if (importance <= 0) return null;
   return {
     id: event.id,
+    ids: [event.id],
     tick: message.tick,
     time: townClock(message.tick).time,
     type: event.type,
@@ -168,12 +171,16 @@ export function addEntry(
   entries: readonly FeedEntry[],
   entry: FeedEntry,
 ): FeedEntry[] {
-  if (entries.some((old) => old.id === entry.id)) return [...entries];
+  if (entries.some((old) => old.ids.includes(entry.id))) return [...entries];
   const at = entries
     .slice(0, MERGE_WITHIN)
     .findIndex((old) => sameStory(old, entry));
   if (at === -1) return [entry, ...entries].slice(0, FEED_KEEP);
-  const merged = { ...entry, count: entries[at].count + 1 };
+  const merged = {
+    ...entry,
+    ids: [...entries[at].ids, entry.id],
+    count: entries[at].count + 1,
+  };
   return [merged, ...entries.filter((_, index) => index !== at)];
 }
 

@@ -124,9 +124,13 @@ test('repeats merge into a recent entry, counted and moved to the top', () => {
     'Tek fished ×3',
     'Pip: “Look!” ×1',
   ]);
-  // the same event twice (a resend) adds nothing
+  // the same event twice (a resend) adds nothing, even one merged under a newer repeat
   const once = entry(event('died', 'pip'));
   expect(addEntry(addEntry([], once), once)).toEqual([once]);
+  const first = fished();
+  const merged = addEntry(addEntry([], first), fished());
+  expect(addEntry(merged, first)).toEqual(merged);
+  expect(merged[0].count).toBe(2);
   // the same words from someone else are another story
   const felled = (actor: string) =>
     entry(
