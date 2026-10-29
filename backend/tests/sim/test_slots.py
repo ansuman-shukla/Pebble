@@ -486,3 +486,28 @@ def test_whoever_just_arrived_steps_aside_not_whoever_stood_there(new_sim: Calla
     walked = sim.core.strides[comer.id].walked
     assert walked[0] == (start, 0.0) and walked[-1][0] == comer.position  # ...drawn walking on to there
     assert crowded(sim.core) == []
+
+
+def test_a_step_aside_after_a_walk_keeps_to_the_tick_and_the_walkers_speed(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    walker = sim.add_citizen(make_spec("walker", at=(-40.0, 61.0)))
+    start, to_unit = walker.position, sim.world.town.to_unit
+    middle, end = to_unit(-39.0, 61.0), to_unit(-38.0, 61.0)
+    sim.core.strides[walker.id] = Stride(1, ((start, 0.0), (middle, 20.0), (end, 40.0)))  # stopped early
+    sim.core.place_at(walker, end)
+    aside = to_unit(-38.0, 62.0)
+    assert step_to(sim.core, walker, aside)
+    walked = sim.core.strides[walker.id].walked
+    pace = ground_mps(sim.core, walker, "walk")
+    assert walked[:3] == ((start, 0.0), (middle, 20.0), (end, 40.0))  # on from where they stopped...
+    assert walked[3][0] == aside and walked[3][1] == pytest.approx(40.0 + 1.0 / pace, rel=0.02)  # ...at their pace
+
+    budget = ground_mps(sim.core, walker, "walk") * 60.0  # a walk round a corner using the whole tick at full speed
+    leg = budget / 2
+    corner = [to_unit(-40.0, 61.0), to_unit(-40.0 + leg, 61.0), to_unit(-40.0 + leg, 61.0 + leg)]
+    sim.core.strides[walker.id] = Stride(1, ((corner[0], 0.0), (corner[1], 30.0), (corner[2], 60.0)))
+    sim.core.place_at(walker, corner[2])
+    assert step_to(sim.core, walker, to_unit(-40.0 + leg, 62.0 + leg))  # on past the end: farther than the walk
+    walked = sim.core.strides[walker.id].walked
+    metres = sum(sim.world.distance_m(a[0], b[0]) for a, b in zip(walked, walked[1:], strict=False))
+    assert metres <= budget * 1.001 and walked[-1][1] == 60.0  # cut the corner: no faster than they walk

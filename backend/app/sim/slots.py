@@ -728,13 +728,7 @@ def step_to(core: SimCore, citizen: Citizen, spot: Vec3, straight: bool = False,
     when there's no such way there within the tick."""
     stride = core.strides.get(citizen.id)
     if stride is not None and len(stride.walked) >= 2:
-        walked: list[TimedPoint] = list(stride.walked[:-1])
-        if core.distance_m(walked[-1][0], spot) < 0.001:
-            walked.pop()
-        walked.append((spot, stride.walked[-1][1]))
-        if len(walked) < 2:
-            walked.insert(0, stride.walked[0])
-        core.strides[citizen.id] = Stride(stride.action, tuple(walked), stride.ahead, stride.gait)
+        core.strides[citizen.id] = Stride(stride.action, _on_to(core, citizen, stride, spot), stride.ahead, stride.gait)
     else:
         path = _path(core, citizen, spot, straight, far)
         if path is None:
@@ -743,6 +737,27 @@ def step_to(core: SimCore, citizen: Citizen, spot: Vec3, straight: bool = False,
         core.strides[citizen.id] = Stride(number, path)
     core.place_at(citizen, spot)
     return True
+
+
+def _on_to(core: SimCore, citizen: Citizen, stride: Stride, spot: Vec3) -> tuple[TimedPoint, ...]:
+    """A walk that ended this tick, ending at the spot instead: on from where it stopped at walking pace if the tick
+    has time for it, else (it used the whole tick) to the spot instead of its last corner, or its last corners when
+    that would go farther than the walker's gait goes in a tick (B1's speed cap)."""
+    walked = list(stride.walked)
+    end, end_s = walked[-1]
+    step_s = max(MIN_STEP_S, core.distance_m(end, spot) / ground_mps(core, citizen, "walk"))
+    if end_s + step_s <= SECONDS_PER_TICK:
+        return (*walked, (spot, end_s + step_s))
+    budget = max(ground_mps(core, citizen, stride.gait) * SECONDS_PER_TICK, _metres(core, walked))
+    for keep in range(len(walked) - 1, 0, -1):
+        kept = walked[:keep]
+        if _metres(core, kept) + core.distance_m(kept[-1][0], spot) <= budget:
+            return (*kept, (spot, end_s))
+    return (walked[0], (spot, end_s))
+
+
+def _metres(core: SimCore, points: list[TimedPoint]) -> float:
+    return sum(core.distance_m(a[0], b[0]) for a, b in zip(points, points[1:], strict=False))
 
 
 def _path(
