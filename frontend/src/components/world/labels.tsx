@@ -12,20 +12,25 @@ import type { LabelStore } from '@/lib/world/label-store';
  * reliably in this app.)
  */
 
-/** An anchor inside the scene: `subject`'s labels hang `lift` metres above wherever this is placed. */
+/**
+ * An anchor inside the scene: `subject`'s labels hang `lift` metres above wherever this is placed, unless an anchor
+ * with a higher `priority` (or a newer one with the same) is live for the subject.
+ */
 export function LabelAnchor({
   store,
   subject,
   lift = 0,
+  priority = 0,
 }: {
   store: LabelStore;
   subject: string;
   lift?: number;
+  priority?: number;
 }) {
   const anchor = useRef<Group>(null);
   useEffect(
-    () => store.anchor(subject, anchor.current!, lift),
-    [store, subject, lift],
+    () => store.anchor(subject, anchor.current!, lift, priority),
+    [store, subject, lift, priority],
   );
   return <group ref={anchor} />;
 }

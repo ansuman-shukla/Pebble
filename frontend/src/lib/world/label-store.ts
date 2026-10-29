@@ -20,6 +20,8 @@ export interface LabelAnchor {
   object: Object3D;
   /** Metres above the object's world position, along `up` there. */
   lift: number;
+  /** Among a subject's anchors the highest priority wins, the newest among equals. */
+  priority: number;
 }
 
 type LabelKind = 'name' | 'speech';
@@ -37,7 +39,7 @@ export interface LabelContent {
 
 export class LabelStore {
   readonly elements = new Map<string, HTMLElement>();
-  private anchors = new Map<string, LabelAnchor>();
+  private anchors = new Map<string, LabelAnchor[]>();
   private groups = new Map<string, readonly LabelContent[]>();
   private listeners = new Set<() => void>();
   private snapshot: readonly LabelContent[] = [];
@@ -45,20 +47,28 @@ export class LabelStore {
   constructor(private readonly up: UpAt = FLAT_UP) {}
 
   /**
-   * Hangs `subject`'s labels `lift` metres above `object` until the returned function is called. A later anchor
-   * replaces an earlier one (e.g. the head bone once the model loads); removing a replaced anchor does nothing.
+   * Hangs `subject`'s labels `lift` metres above `object` until the returned function is called. A subject keeps
+   * every live anchor: the highest `priority` wins and the newest among equals, so a head bone (priority 1) stays in
+   * front of a body (0) that re-anchors with a new lift; removing the winner falls back to the next one.
    */
-  anchor(subject: string, object: Object3D, lift = 0) {
-    const entry = { object, lift };
-    this.anchors.set(subject, entry);
+  anchor(subject: string, object: Object3D, lift = 0, priority = 0) {
+    const entry = { object, lift, priority };
+    const live = this.anchors.get(subject) ?? [];
+    live.push(entry);
+    this.anchors.set(subject, live);
     return () => {
-      if (this.anchors.get(subject) === entry) this.anchors.delete(subject);
+      const index = live.indexOf(entry);
+      if (index < 0) return;
+      live.splice(index, 1);
+      if (!live.length) this.anchors.delete(subject);
     };
   }
 
   /** Where `subject`'s labels hang (world coordinates) into `out`, or null while it has no anchor. */
   anchorPosition(subject: string, out: Vector3): Vector3 | null {
-    const entry = this.anchors.get(subject);
+    const entry = this.anchors
+      .get(subject)
+      ?.reduce((best, next) => (next.priority >= best.priority ? next : best));
     if (!entry) return null;
     entry.object.getWorldPosition(out);
     return out.addScaledVector(this.up(out, lifted), entry.lift);
