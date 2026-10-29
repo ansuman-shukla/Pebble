@@ -16,7 +16,7 @@ import {
   SPEECH_MS,
   speedWords,
 } from '../../src/lib/live/live-state';
-import { MockLiveServer } from '../../src/lib/live/mock-live';
+import { MockLiveServer, mockMotion } from '../../src/lib/live/mock-live';
 import { activityWords, npcLook } from '../../src/lib/live/npc-activity';
 import { advance, citizenPath, pointAt } from '../../src/lib/live/walk-path';
 import { CITIZEN_LOOKS } from '../../src/lib/world/citizen-looks';
@@ -49,6 +49,18 @@ function entity(overrides: Partial<LiveCitizen> = {}): LiveCitizen {
     action_label: '',
     state: [],
     cause_of_death: null,
+    motion: 'idle',
+    posture: 'standing',
+    slot_heading: null,
+    goal: '',
+    driver: null,
+    target: null,
+    needs: { hunger: 10, thirst: 10, energy: 90, health: 100 },
+    carrying: {},
+    coins: 0,
+    rank: null,
+    standing: null,
+    titles: [],
     ...overrides,
   };
 }
@@ -141,6 +153,11 @@ test('frames carry the animals and the fires', () => {
     position: { unit: [AT.x, AT.y, AT.z], height_m: 10, lat: 35, lon: 12 },
     heading_deg: 90,
     activity: 'grazing',
+    route: [],
+    speed_mps: 0,
+    gait: 'walk',
+    goal: 'grazing',
+    target: null,
   };
   const pit: LiveFire = {
     id: 'band_a_camp:fire-pit',
@@ -341,4 +358,65 @@ test('the mock feed streams each move like the engine: from where it stood, time
     }
   }
   expect(moves).toBeGreaterThan(5);
+});
+
+test('the mock feed carries the spectator fields: motion, why, needs, purse, rank and the animals’ paths', () => {
+  const world = createMockWorld();
+  const server = new MockLiveServer(world);
+  server.skip(3);
+  const { citizens, animals } = server.entities();
+  const byId = new Map(citizens.map((citizen) => [citizen.id, citizen]));
+  // Genzo starts in the paddies, Aiko at her loom: their motion says so, not their label
+  expect(byId.get('genzo')).toMatchObject({
+    activity: 'working',
+    motion: 'farm',
+    posture: 'standing',
+    goal: 'get the day’s work done',
+    driver: 'duty',
+    coins: 60,
+  });
+  expect(byId.get('aiko')).toMatchObject({
+    motion: 'craft',
+    posture: 'crouching',
+  });
+  expect(byId.get('tadamasa')).toMatchObject({ rank: 5, titles: ['lord'] });
+  for (const citizen of citizens) {
+    expect(Object.keys(citizen.needs).sort()).toEqual([
+      'energy',
+      'health',
+      'hunger',
+      'thirst',
+    ]);
+    if (citizen.activity === 'walking') {
+      expect(citizen.motion).toBe(citizen.route.length > 1 ? 'walk' : 'idle');
+      expect(citizen.target).toMatchObject({ kind: 'place' });
+    }
+  }
+  server.skip(20);
+  const walking = server
+    .entities()
+    .animals.filter((animal) => animal.route.length > 0);
+  expect(walking.length).toBeGreaterThan(0);
+  for (const animal of walking) {
+    expect(animal.route[0].t_s).toBe(0);
+    expect(animal.speed_mps).toBeGreaterThan(0);
+    expect(['grazing', 'wandering', 'prowling']).toContain(animal.goal); // what it does once there
+  }
+  expect(animals.every((animal) => animal.gait === 'walk')).toBe(true);
+});
+
+test('in the mock feed, the dead and sleepers lie like the backend says, whatever their step is about', () => {
+  expect(mockMotion('dead', 'tending the rice paddies', false)).toBe('lie');
+  expect(mockMotion('sleeping', 'weaving at the loom', false)).toBe('lie');
+  expect(mockMotion('working', 'tending the rice paddies', false)).toBe('farm');
+  expect(mockMotion('dead', '', true)).toBe('lie');
+  expect(mockMotion('working', '', true)).toBe('walk');
+  const server = new MockLiveServer(createMockWorld());
+  server.skip(14 * 60 + 5); // 22:05: everyone is asleep
+  for (const citizen of server.entities().citizens)
+    expect([citizen.activity, citizen.motion, citizen.posture]).toEqual([
+      'sleeping',
+      'lie',
+      'lying',
+    ]);
 });

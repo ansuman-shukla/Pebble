@@ -63,6 +63,23 @@ export type AnimalEntity = {
      * Activity
      */
     activity: 'idle' | 'grazing' | 'walking' | 'running' | 'hunting' | 'sleeping' | 'dead';
+    /**
+     * Route
+     */
+    route: Array<RoutePoint>;
+    /**
+     * Speed Mps
+     */
+    speed_mps: number;
+    /**
+     * Gait
+     */
+    gait: 'walk' | 'trot' | 'run' | 'stalk' | 'swim';
+    /**
+     * Goal
+     */
+    goal: string;
+    target: Target | null;
 };
 
 /**
@@ -168,6 +185,50 @@ export type CitizenEntity = {
      * Cause Of Death
      */
     cause_of_death: string | null;
+    /**
+     * Motion
+     */
+    motion: 'idle' | 'walk' | 'jog' | 'run' | 'carry_walk' | 'stalk' | 'sit' | 'sit_ground' | 'lie' | 'inside' | 'gather_low' | 'gather_high' | 'pick_up' | 'chop' | 'mine' | 'pan' | 'farm' | 'fish' | 'craft' | 'eat' | 'drink' | 'talk' | 'trade' | 'gesture' | 'attack' | 'tend' | 'pray' | 'ring_bell';
+    /**
+     * Posture
+     */
+    posture: 'standing' | 'crouching' | 'sitting' | 'sitting_ground' | 'lying' | 'inside';
+    /**
+     * Slot Heading
+     */
+    slot_heading: number | null;
+    /**
+     * Goal
+     */
+    goal: string;
+    /**
+     * Driver
+     */
+    driver: 'hunger' | 'thirst' | 'rest' | 'danger' | 'duty' | 'ambition' | 'social' | 'night' | null;
+    target: Target | null;
+    needs: Needs;
+    /**
+     * Carrying
+     */
+    carrying: {
+        [key: string]: number;
+    };
+    /**
+     * Coins
+     */
+    coins: number;
+    /**
+     * Rank
+     */
+    rank: number | null;
+    /**
+     * Standing
+     */
+    standing: number | null;
+    /**
+     * Titles
+     */
+    titles: Array<string>;
 };
 
 /**
@@ -1126,6 +1187,30 @@ export type NeedReading = {
 };
 
 /**
+ * Needs
+ *
+ * 0-100: hunger and thirst grow, energy and health run down.
+ */
+export type Needs = {
+    /**
+     * Hunger
+     */
+    hunger: number;
+    /**
+     * Thirst
+     */
+    thirst: number;
+    /**
+     * Energy
+     */
+    energy: number;
+    /**
+     * Health
+     */
+    health: number;
+};
+
+/**
  * NeedsSeries
  */
 export type NeedsSeries = {
@@ -1413,6 +1498,34 @@ export type StatsView = {
      * Days
      */
     days: Array<DayCount>;
+};
+
+/**
+ * Target
+ *
+ * What an action is about, for spectators (a person, an animal, a node, a store, a place...).
+ */
+export type Target = {
+    /**
+     * Kind
+     */
+    kind: 'person' | 'animal' | 'node' | 'store' | 'structure' | 'fire' | 'stack' | 'place' | 'direction';
+    /**
+     * Id
+     */
+    id?: string | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Position
+     */
+    position?: [
+        number,
+        number,
+        number
+    ] | null;
 };
 
 /**
