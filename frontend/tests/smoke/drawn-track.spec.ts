@@ -292,6 +292,26 @@ test('a resync far away fades out where the body was and in on its path, never j
   );
 });
 
+test('a resync during a resync fades out where the body was last seen, never showing it in between', () => {
+  const track = newTrack(tick([0, 0], []), R);
+  follow(track, tick([400, 0], []), R, 1);
+  play(track, FADE_S / 4, 1); // fading out at the old spot
+  follow(track, tick([800, 0], []), R, 1); // another reconnect before it showed up at 400 m
+  const seen: { opacity: number; spot: Vector3 }[] = [];
+  expect(play(track, FADE_S + 0.1, 1, seen)).toBeLessThan(0.01);
+  const shown = seen.filter(({ opacity }) => opacity > 0.15);
+  expect(
+    shown.every(
+      ({ spot }) =>
+        metres(spot, new Vector3(...at(0, 0))) < 0.01 ||
+        metres(spot, new Vector3(...at(800, 0))) < 0.01,
+    ),
+  ).toBe(true);
+  expect(metres(seen.at(-1)!.spot, new Vector3(...at(800, 0)))).toBeLessThan(
+    0.01,
+  );
+});
+
 /** A walk east of 20 m in 14.4 s within the tick, ending in `doing`. */
 const shortWalk = (doing: Partial<Doing>) =>
   tick(
