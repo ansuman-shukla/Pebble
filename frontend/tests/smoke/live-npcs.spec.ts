@@ -293,6 +293,11 @@ const standing = async (page: Page) =>
  * planted they stay within ~2 cm. (Work clips like Fixing step about in the capture itself, so they aren't
  * held to this.)
  */
+/**
+ * How far behind the engine a mover may be drawn (m): a tick of fleeing (5 km/h × 1.6, backend `FLEE_PACE`), two
+ * for a page opened mid-tick (its walkers finish the tick before's route first).
+ */
+const DRAWN_BEHIND_M = 2 * (5000 / 60) * 1.6;
 /** The activities of someone on the move. */
 const MOVING: Activity[] = ['walking', 'running', 'hunting'];
 
@@ -775,7 +780,7 @@ test('the real feed: the 15 citizens stand where the engine says, on the ground,
     )
     .toBeGreaterThan(0);
 
-  // the engine's positions (at most a tick of walking apart while frames glide in)
+  // the engine's positions (at most a tick of walking apart while frames glide in, two for a page opened mid-tick)
   const api = await page.request.get(ENTITIES_URL);
   expect(api.status()).toBe(200);
   const entities = (await api.json()) as EntitiesView;
@@ -788,7 +793,9 @@ test('the real feed: the 15 citizens stand where the engine says, on the ground,
     const npc = drawn.find((candidate) => candidate.id === citizen.id)!;
     expect(npc, citizen.id).toBeDefined();
     const unit = new Vector3(...citizen.position.unit);
-    expect(npc.position.clone().normalize().angleTo(unit) * R).toBeLessThan(90);
+    expect(npc.position.clone().normalize().angleTo(unit) * R).toBeLessThan(
+      DRAWN_BEHIND_M,
+    );
     const direction = npc.position.clone().normalize();
     expect(
       Math.abs(npc.position.length() - (R + groundUnder(direction))),
@@ -826,7 +833,7 @@ test('the real feed: the 15 citizens stand where the engine says, on the ground,
             ...(npc.activity === citizen.activity || onTheWay
               ? []
               : [`${citizen.id}: ${npc.activity} ≠ ${citizen.activity}`]),
-            ...(off < (still ? 0.5 : 90)
+            ...(off < (still ? 0.5 : DRAWN_BEHIND_M)
               ? []
               : [`${citizen.id}: ${off.toFixed(2)} m off`]),
           ];
