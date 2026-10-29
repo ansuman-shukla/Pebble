@@ -7,6 +7,7 @@ database afterwards).
 import queue
 import threading
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -153,3 +154,18 @@ def test_a_death_reaches_the_feed_within_its_tick_with_its_line_and_place(
     struck = next(e for e in events if e.type == "injured")
     assert (struck.line, struck.importance) == ("Kaz strikes Genzo", 3)
     assert messages[-1]["type"] == "tick" and messages[-1]["tick"] == 1
+
+
+def test_a_page_opened_mid_tick_learns_how_far_into_the_tick_the_world_is(
+    client: TestClient, committed_run: EngineLoop
+) -> None:
+    loop = committed_run
+    loop.store.clock = lambda: datetime.now(UTC) - timedelta(seconds=20)  # tick 1 was written 20 s ago (at ×1)
+    loop.run_ticks(1, headless=True)
+    with client.websocket_connect(f"{API}/live?run_id={loop.run.id}") as ws:
+        snapshot = LiveState.model_validate(_receive(ws))
+        assert snapshot.tick == 1 and 19.0 < snapshot.tick_elapsed_s < 30.0
+        loop.store.clock = lambda: datetime.now(UTC)
+        loop.run_ticks(1, headless=True)
+        tick = LiveState.model_validate(_until_tick(ws, 2)[-1])
+    assert tick.tick == 2 and tick.tick_elapsed_s < 5.0  # a tick as it happens: just begun
