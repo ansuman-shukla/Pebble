@@ -11,7 +11,7 @@ The world is a **real sphere**: walk in one direction long enough and you come b
 |---|---|---|
 | Radius | 2 km (config) | circumference ~12.6 km, surface ~50 km² |
 | Grid | hex sphere (subdivided icosahedron, Goldberg dual), frequency 60 | 10·60²+2 = 36,002 cells (12 pentagons), each ~40 m across |
-| Walking speed | 5 km/h on flat ground | terrain multiplies cost (forest ×1.5, hills ×2, snow ×3, water impassable) |
+| Walking speed | 1.4 m/s (5 km/h) on flat ground; jog 2.5, run 3.5 (10-world-v1 §4.1, D114) | terrain multiplies cost (forest ×1.5, hills ×2, snow ×3, water impassable), so do climbs (Tobler, D114); roads and paths are cheaper (D80) |
 | Walk around the world | ~2.5 game hours on the land loop | the world feels big because of terrain, danger and need, not raw distance |
 
 ```
