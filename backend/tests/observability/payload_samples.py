@@ -22,7 +22,6 @@ V1_SAMPLES: dict[str, dict[str, Any]] = {
         "witnesses": ["kenji"],
     },
     "stole": {
-        "thief": "kaz",
         "owner": "farmhouse-1",
         "store": "rack-1",
         "item": "rice",

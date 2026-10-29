@@ -298,7 +298,8 @@ class Trespassed(Payload):
 
 
 class Stole(Payload):
-    thief: str
+    """The actor is the thief."""
+
     owner: str  # the owning household or group
     store: str
     item: str
