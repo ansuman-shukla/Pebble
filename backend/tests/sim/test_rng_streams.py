@@ -28,6 +28,28 @@ def _draws() -> Iterator[tuple[str, str | None, int]]:
                 yield path.stem, name, node.lineno
 
 
+def _rolls_loose(node: ast.AST) -> bool:
+    """`Rng(...)`, the `random` module or numpy's `random`: dice rolled outside the named streams."""
+    if isinstance(node, ast.Import):
+        return any(alias.name == "random" or alias.name.startswith("numpy.random") for alias in node.names)
+    if isinstance(node, ast.ImportFrom):
+        module = node.module or ""
+        return module in ("random", "numpy.random") or (
+            module == "numpy" and any(alias.name == "random" for alias in node.names)
+        )
+    if isinstance(node, ast.Attribute):
+        return node.attr == "random" and isinstance(node.value, ast.Name) and node.value.id in ("np", "numpy")
+    return isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "Rng"
+
+
+def _loose_randomness(source: str) -> list[int]:
+    return [
+        node.lineno
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.stmt | ast.expr) and _rolls_loose(node)
+    ]
+
+
 def _state(seed: int) -> WorldState:
     return WorldState(
         tick=0,
@@ -59,6 +81,30 @@ def test_only_the_state_holds_the_streams() -> None:
         if path.name not in KEEPERS:
             text = path.read_text()
             assert ".rngs" not in text and "for_subsystem" not in text, f"{path.name} reaches a stream by hand"
+
+
+def test_no_module_rolls_dice_outside_the_streams() -> None:
+    loose = {
+        path.name: lines
+        for path in sorted(SIM.rglob("*.py"))
+        if path.name not in KEEPERS and (lines := _loose_randomness(path.read_text()))
+    }
+    assert loose == {}, "draw from `state.rng('<module>.<purpose>')`, never a fresh Rng or the random modules"
+
+
+def test_the_dice_lint_catches_each_way_around_the_streams() -> None:
+    assert _loose_randomness("rng = Rng(7)\nrng.random()\nstate.rng('animals.graze').random()") == [1]
+    for loose in (
+        "import random",
+        "from random import choice",
+        "import numpy.random",
+        "from numpy.random import default_rng",
+        "from numpy import random",
+        "np.random.default_rng(1)",
+        "numpy.random.rand()",
+    ):
+        assert _loose_randomness(loose) == [1], loose
+    assert _loose_randomness("import numpy as np\nnp.zeros(3)\nrng.random()") == []
 
 
 def test_a_stream_is_made_from_the_seed_and_its_name_and_new_draws_shift_no_other() -> None:
