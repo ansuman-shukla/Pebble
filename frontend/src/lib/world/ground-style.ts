@@ -99,10 +99,12 @@ vec4 groundLook(int layer, vec3 p, vec3 tint, float fw, vec4 g) {
     // dirt: trodden earth, mottled, with pebbles
     float mottle = g.y * 0.6 + g.z * 0.4;
     c = mix(dirt_dark, dirt_light, smoothstep(0.3, 0.7, mottle));
-    float pebble = smoothstep(0.76, 0.86, gFine(p + 3.0, 9.0, fw));
+    float pebbles = gFine(p + 3.0, 9.0, fw);
+    // edges at least a pixel and a half wide (the noise climbs ~13 a metre)
+    float pebble = smoothstep(0.76, 0.86 + 20.0 * fw, pebbles);
     c = mix(c, dirt_pebble, pebble * 0.7);
     c *= 0.86 + 0.28 * gFine(p + 8.0, 12.0, fw);
-    relief = 0.35 + mottle * 0.2 + pebble * 0.6;
+    relief = 0.4 + mottle * 0.1 + smoothstep(0.6, 0.9, pebbles) * 0.6;
   } else if (layer == 3) {
     // gravel: loose rounded stones of uneven sizes and tones (cells, some left empty) in darker grit, mottled in
     // clumps that still show where the stones are too small to see
@@ -111,11 +113,14 @@ vec4 groundLook(int layer, vec3 p, vec3 tint, float fw, vec4 g) {
     float grit = gFine(p + 2.0, 31.0, fw);
     c = mix(gravel_grit, gravel_mid, smoothstep(0.2, 0.85, mottle)) * (0.9 + 0.2 * grit);
     float stones = 0.0;
+    float domes = 0.0;
     float kb = 1.0 - smoothstep(0.2, 0.5, fw * 9.0);
     if (kb > 0.0) {
       vec3 big = gCells(p * 9.0);
       float r = 0.26 + 0.2 * fract(big.z * 7.0) + 0.06 * (grit - 0.5);
-      float stone = (1.0 - smoothstep(r - 0.06, r + 0.03, big.x)) * step(0.15, big.z) * kb;
+      float stone = (1.0 - smoothstep(r - 0.06 - 9.0 * fw, r + 0.03, big.x)) * step(0.15, big.z) * kb;
+      // rounded: the relief rises over the whole stone, not in a step at its rim
+      domes = (1.0 - smoothstep(0.0, r + 0.03, big.x)) * step(0.15, big.z) * kb;
       vec3 tone = mix(mix(gravel_light, gravel_warm, smoothstep(0.4, 0.8, fract(big.z * 13.0))), gravel_dark, step(0.85, fract(big.z * 29.0)));
       c = mix(c, tone * (0.8 + 0.3 * smoothstep(r, 0.0, big.x)), stone);
       stones = stone;
@@ -123,13 +128,15 @@ vec4 groundLook(int layer, vec3 p, vec3 tint, float fw, vec4 g) {
     float ks = 1.0 - smoothstep(0.2, 0.5, fw * 23.0);
     if (ks > 0.0) {
       vec3 small = gCells(p * 23.0 + 5.0);
-      float stone = (1.0 - smoothstep(0.24, 0.34, small.x)) * step(0.25, small.z) * ks * (1.0 - stones);
+      float stone = (1.0 - smoothstep(0.24 - 23.0 * fw, 0.34, small.x)) * step(0.25, small.z) * ks * (1.0 - stones);
       c = mix(c, mix(gravel_mid, gravel_light, small.z) * 1.05, stone);
       stones += stone * 0.6;
+      domes += (1.0 - smoothstep(0.0, 0.34, small.x)) * step(0.25, small.z) * ks * (1.0 - stones) * 0.6;
     }
     // far away the stones and grit average out into the mottle
     c = mix(c, mix(gravel_far_dark, gravel_far_light, smoothstep(0.2, 0.85, mottle)), 1.0 - max(kb, ks));
-    relief = mix(0.5, 0.15 + 0.85 * stones, max(kb, ks)) + (clump - 0.5) * 0.4;
+    // the stones cover ~15 % of the ground in domes on average
+    relief = 0.5 + (domes - 0.15) * 1.2 * max(kb, ks);
   } else if (layer == 4) {
     // sand: pale drifts with wind ripples
     float keep = 1.0 - smoothstep(0.15, 0.4, fw * 1.2);
@@ -143,14 +150,17 @@ vec4 groundLook(int layer, vec3 p, vec3 tint, float fw, vec4 g) {
     vec3 slabs = gCells(p * 0.55 + vec3(g.x, g.y, g.w) * 4.0);
     float keep = 1.0 - smoothstep(0.25, 0.6, fw * 0.55);
     float border = slabs.y - slabs.x;
-    float crack = (1.0 - smoothstep(0.01, 0.05, border)) * smoothstep(0.45, 0.6, g.z) * keep;
+    // a crack at least a pixel and a half wide (fw * 0.55 cell units a pixel), fainter as it widens
+    float crackWidth = 0.05 + fw * 0.8;
+    float crack = (1.0 - smoothstep(0.01, crackWidth, border)) * smoothstep(0.45, 0.6, g.z) * keep * 0.05 / crackWidth;
     float groove = (1.0 - smoothstep(0.0, 0.12, border)) * keep;
-    float strata = sin(length(p) * 2.1 + g.w * 9.0 + g.y * 3.0) * (1.0 - smoothstep(0.4, 1.2, fw));
+    float strata = sin(length(p) * 2.1 + g.w * 9.0 + g.y * 3.0) * (1.0 - smoothstep(0.15, 0.5, fw));
     float grain = gFine(p + 3.0, 3.1, fw);
     c = mix(rock_dark, rock_light, mix(0.5, slabs.z, keep) * 0.45 + g.x * 0.25 + grain * 0.3);
     c = mix(c, rock_lichen, smoothstep(0.62, 0.72, g.w) * smoothstep(0.5, 0.8, grain) * 0.6);
-    c *= (1.0 + 0.08 * strata) * (1.0 - 0.45 * crack - 0.15 * groove);
-    relief = 0.55 + (grain - 0.5) * 0.5 + (g.y - 0.5) * 0.3 + strata * 0.1 - groove * 0.4;
+    c *= (1.0 + 0.08 * strata) * (1.0 - 0.45 * crack - 0.15 * groove) * (0.9 + 0.2 * gFine(p + 13.0, 9.0, fw));
+    // a groove is a few decimetres wide: its relief goes before it narrows to a few pixels
+    relief = 0.55 + (grain - 0.5) * 0.5 + strata * 0.1 - groove * 0.4 * (1.0 - smoothstep(0.005, 0.015, fw));
   } else if (layer == 6) {
     // snow: soft drifts, blue in their hollows, wind-carved ripples near by
     float drift = g.x * 0.6 + g.y * 0.4;
