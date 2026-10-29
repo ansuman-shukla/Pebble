@@ -134,7 +134,8 @@ def body_motion(
     load: float,
     talking: bool,
 ) -> BodyMotion:
-    """`gait` is how they moved this tick (None when they didn't); `talking` that they spoke just now."""
+    """`gait` is how they moved this tick (None when they didn't); `talking` that they spoke just now (shown while
+    their body is otherwise idle)."""
     motion = _motion(alive, asleep, action, args, gait, load, talking)
     return BodyMotion(motion=motion, posture=POSTURES.get(motion, "standing"))
 
@@ -159,4 +160,4 @@ def _motion(
         return _TASKS.get(str(args.get("task")), "idle")
     if action in _ACTIONS:
         return _ACTIONS[action]
-    return "talk" if talking and action in (None, "wait") else "idle"
+    return "talk" if talking else "idle"
