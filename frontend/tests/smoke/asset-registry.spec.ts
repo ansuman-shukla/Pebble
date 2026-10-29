@@ -196,12 +196,12 @@ test('animal recolours name colours that exist in the asset palette', () => {
   }
 });
 
-test('the 15 citizens are split 6 town, 5 band A, 4 band B with unique looks', () => {
+test('the 22 citizens are split 11 town, 6 band A, 5 band B with unique looks', () => {
   const ids = CITIZEN_LOOKS.map((look) => look.id);
-  expect(new Set(ids).size).toBe(15);
+  expect(new Set(ids).size).toBe(22);
   const count = (region: string) =>
     CITIZEN_LOOKS.filter((look) => look.region === region).length;
-  expect([count('town'), count('band_a'), count('band_b')]).toEqual([6, 5, 4]);
+  expect([count('town'), count('band_a'), count('band_b')]).toEqual([11, 6, 5]);
 });
 
 test('every citizen look builds a rigged humanoid', () => {
