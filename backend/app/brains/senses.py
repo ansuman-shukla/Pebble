@@ -3,9 +3,11 @@ weighs (how hungry, what time of day, what food is around and how far). Nothing 
 """
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, get_args
 
-from app.world_api.models import Nearness, Perception, ResourceName, Seen, SelfView, TimeOfDay
+from pydantic import JsonValue
+
+from app.world_api.models import Compass, Nearness, Perception, ResourceName, Seen, SelfView, TimeOfDay
 
 Phase = Literal["night", "morning", "day", "dusk"]
 Distance = Literal["here", "near", "close", "off", "far"]
@@ -162,6 +164,19 @@ def water_here(perception: Perception) -> bool:
 
 def water_in_view(perception: Perception) -> bool:
     return any(thing.kind == "water" for thing in perception.things)
+
+
+def water_way(perception: Perception) -> Compass | None:
+    """Which way the nearest fresh water in view lies ("close by to the north" -> north); None if none is in view."""
+    water = next((thing for thing in perception.things if thing.kind == "water"), None)
+    if water is None:
+        return None
+    return next((way for way in get_args(Compass) if water.where.endswith(f"to the {way}")), None)
+
+
+def compass_word(note: JsonValue) -> Compass | None:
+    """A direction a brain noted down, read back."""
+    return next((way for way in get_args(Compass) if way == note), None)
 
 
 def danger(perception: Perception) -> Seen | None:

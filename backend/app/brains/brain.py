@@ -26,6 +26,7 @@ from app.brains.senses import (
     beside,
     carried_food,
     carries,
+    compass_word,
     danger,
     fire_here,
     fire_in_view,
@@ -33,6 +34,7 @@ from app.brains.senses import (
     phase,
     water_here,
     water_in_view,
+    water_way,
 )
 from app.core.rng import Rng
 from app.world_api.facade import ActionHandle, WorldApi
@@ -143,6 +145,9 @@ class UtilityBrain:
         now = phase(p)
         ctx = Context(self.api, self.profile, p, needs, now, self.chance, self.pick)
         options = [Option(1, "idle", lambda: self.api.wait(15))]
+        way = water_way(p)
+        if way is not None and self.profile.region != "town" and at_home(p):
+            self.api.notes["water_way"] = way  # which way the camp's water lies from home, for when it can't be seen
         behind_walls = self.profile.region == "town" and at(p, self.profile.home_area)  # walls keep animals out
         threat = danger(p)
         if threat is not None and not behind_walls and fire_here(p) not in ("burning", "low"):  # fire too
@@ -170,6 +175,10 @@ class UtilityBrain:
             return Option(score, "drink", self.api.drink)
         if self.profile.region == "town":
             return Option(score, "go drink", lambda: self.api.walk_to_place(WELL))
+        way = compass_word(self.api.notes.get("water_way"))
+        if way is not None and not water_in_view(p) and at(p, self.profile.home_area):
+            # the camp's water out of sight (dark falls early under trees): a few steps the way it lies from home
+            return Option(score, "go towards the water", lambda: self.api.walk_towards(way, "a few steps"))
         if water_in_view(p) or self.api.notes.get("last") != "go drink":
             # the water may be in sight without being among the things noticed first; if not, the walk fails
             return Option(score, "go drink", lambda: self.api.walk_to_thing("water"))

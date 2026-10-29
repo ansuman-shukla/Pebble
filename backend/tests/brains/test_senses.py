@@ -12,6 +12,7 @@ from app.brains.senses import (
     resources_in_view,
     water_here,
     water_in_view,
+    water_way,
 )
 from app.world_api.models import Nearness, Perception, ResourceName, Seen, SelfView, ThingKind, TimeOfDay
 
@@ -69,3 +70,13 @@ def test_water_fire_and_plants_are_read_from_their_kinds_not_their_words() -> No
         Resource("roots", "here", False),
         Resource("wood", "far", True),
     ]
+
+
+def test_the_way_to_the_water_is_its_compass_word() -> None:
+    def water(where: str, kind: ThingKind = "water") -> Seen:
+        return Seen(label="a river", where=where, nearness="close by", kind=kind)
+
+    assert water_way(_seeing(water("close by to the north-east"))) == "north-east"  # not just "north"
+    assert water_way(_seeing(water("some way off to the west"))) == "west"
+    assert water_way(_seeing(water("close by to the south", "sea"))) is None  # the sea isn't drinking water
+    assert water_way(_seeing(water("right beside you"))) is None
