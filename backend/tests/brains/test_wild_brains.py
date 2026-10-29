@@ -7,12 +7,14 @@ import pytest
 
 from app.brains.brain import UtilityBrain
 from app.brains.profile import BrainProfile
+from app.brains.senses import water_way
 from app.sim import fire as fires
 from app.sim.items import RESOURCE_INDEX
 from app.sim.simulation import Simulation
 from app.sim.state import Fire
 from app.sim.vec import step_towards
 from app.world_api.facade import WorldApi
+from app.world_api.models import Compass
 from tests.sim_helpers import add_animal, make_spec, put_in_the_wild, skip_to, wild_cell, without_animals
 
 HOME_A = "band_a_camp:shelter-n"
@@ -197,34 +199,72 @@ def test_a_forager_walks_to_the_fallen_wood_it_saw_not_the_camp_woodpile(new_sim
     assert any(text.startswith("You gather") and text.endswith("wood.") for text in _gathers(sim, brain, 60))
 
 
-@pytest.mark.parametrize("sun", [-5.5, -15.0])  # deep dusk; the dead of night
-def test_a_band_finds_its_water_after_dark_the_way_it_lay_by_day(
-    new_sim: Callable[..., Simulation], sun: float
-) -> None:
-    sim = without_animals(new_sim())
-    child = sim.add_citizen(make_spec("pip", age=7, site="band_b_camp", at=(-1.0, -3.0), home=HOME_B, region="band_b"))
-    api = WorldApi(sim, child.id)
-    skip_to(sim, child.position, night=False)
-    brain = _brain(sim, child.id, region="band_b", role="child")
-    brain.decide()  # by day the river is in view from camp, close by to the north
-    while child.action is not None:
-        sim.step()
-    while sim.core.altitude(child.position) > sun:  # on into the dark
+def _drinks_in_the_dark(sim: Simulation, brain: UtilityBrain, sun: float) -> bool:
+    """Skip on into the dark (the sun at `sun`°) and make the citizen thirsty: does it drink within the hour?"""
+    citizen = sim.citizen(brain.profile.citizen_id)
+    while sim.core.altitude(citizen.position) > sun:
         sim.state.tick += 1
-    assert not any(thing.kind == "water" for thing in api.look_around().things)  # too dark to see it now
+    assert not any(thing.kind == "water" for thing in brain.api.look_around().things)  # too dark to see it now
     sim.drain()
-    child.body.thirst = 70  # thirsty before bed
+    citizen.body.thirst = 70  # thirsty before bed
     drank = False
     for _ in range(60):
         brain.tick()
         sim.step()
         drank |= any(
             event.type == "action_finished"
-            and event.actor_id == child.id
+            and event.actor_id == citizen.id
             and event.payload.model_dump()["action"] == "drink"
             for event in sim.drain()
         )
-    assert drank and child.body.thirst < 30
+    return drank and citizen.body.thirst < 30
+
+
+@pytest.mark.parametrize("sun", [-5.5, -15.0])  # deep dusk; the dead of night
+def test_a_band_finds_its_water_after_dark_the_way_it_lay_by_day(
+    new_sim: Callable[..., Simulation], sun: float
+) -> None:
+    sim = without_animals(new_sim())
+    child = sim.add_citizen(make_spec("pip", age=7, site="band_b_camp", at=(-1.0, -3.0), home=HOME_B, region="band_b"))
+    skip_to(sim, child.position, night=False)
+    brain = _brain(sim, child.id, region="band_b", role="child")
+    brain.decide()  # by day the river is in view from home
+    while child.action is not None:
+        sim.step()
+    assert _drinks_in_the_dark(sim, brain, sun)
+
+
+def test_a_band_notes_the_way_to_its_water_only_at_home(new_sim: Callable[..., Simulation]) -> None:
+    sim = without_animals(new_sim())
+    child = sim.add_citizen(make_spec("pip", age=7, site="band_b_camp", at=(-1.0, -3.0), home=HOME_B, region="band_b"))
+    home = child.cell
+    skip_to(sim, child.position, night=False)
+    brain = _brain(sim, child.id, region="band_b", role="child")
+    seen_from_home = water_way(brain.api.look_around())
+    assert seen_from_home is not None
+    brain.decide()
+    assert brain.api.notes["water_way"] == seen_from_home
+
+    def elsewhere(cell: int) -> tuple[str, Compass | None]:
+        put_in_the_wild(sim, child.id, cell)
+        seen = brain.api.look_around()
+        return seen.place, water_way(seen)
+
+    rings = {home}
+    for _ in range(4):
+        rings |= {n for cell in rings for n in sim.world.neighbours[cell]}
+    looks = {cell: elsewhere(cell) for cell in sorted(rings)}
+    other_ways = [cell for cell, (place, way) in looks.items() if way not in (None, seen_from_home)]
+    in_camp = next(c for c in other_ways if looks[c][0].startswith("at Band B camp"))  # in camp, not at home
+    out_of_camp = next(c for c in other_ways if not looks[c][0].startswith(("at your home", "at Band B camp")))
+    for cell in (in_camp, out_of_camp):  # by day, from there the water (or other water) lies another way
+        put_in_the_wild(sim, child.id, cell)
+        brain.decide()
+        while child.action is not None:
+            sim.step()
+        assert brain.api.notes["water_way"] == seen_from_home  # from there, it would be the wrong way from home
+    put_in_the_wild(sim, child.id, home)
+    assert _drinks_in_the_dark(sim, brain, -15.0)
 
 
 def test_a_full_forager_at_camp_looks_around_after_one_rest(

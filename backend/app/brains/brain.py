@@ -32,6 +32,7 @@ from app.brains.senses import (
     fire_here,
     fire_in_view,
     is_name,
+    near,
     phase,
     water_here,
     water_in_view,
@@ -99,6 +100,9 @@ class UtilityBrain:
             notes["greeted"] = []  # a new day: greet people again
             notes["chores"] = []
             notes.pop("full", None)  # carrying words are rough: a little eaten may not change them, so try again
+        way = water_way(perception)
+        if way is not None and self.profile.region != "town" and at_home(perception):
+            notes["water_way"] = way  # which way the camp's water lies from home (only from there), for the dark
         options = self.options(perception)
         best = max(options, key=lambda option: option.score)
         if best.score < 60 and self.socialise(perception):
@@ -149,9 +153,6 @@ class UtilityBrain:
         now = phase(p)
         ctx = Context(self.api, self.profile, p, needs, now, self.chance, self.pick)
         options = [Option(1, "idle", lambda: self.api.wait(15))]
-        way = water_way(p)
-        if way is not None and self.profile.region != "town" and at_home(p):
-            self.api.notes["water_way"] = way  # which way the camp's water lies from home, for when it can't be seen
         behind_walls = self.profile.region == "town" and at(p, self.profile.home_area)  # walls keep animals out
         threat = danger(p)
         if threat is not None and not behind_walls and fire_here(p) not in ("burning", "low"):  # fire too
@@ -180,8 +181,10 @@ class UtilityBrain:
         if self.profile.region == "town":
             return Option(score, "go drink", lambda: self.api.walk_to_place(WELL))
         way = compass_word(self.api.notes.get("water_way"))
-        if way is not None and not water_in_view(p) and at(p, self.profile.home_area):
-            # the camp's water out of sight (dark falls early under trees): a few steps the way it lies from home
+        on_the_way = self.api.notes.get("last") == "go towards the water" and near(p, self.profile.home_area)
+        if way is not None and not water_in_view(p) and (at_home(p) or on_the_way):
+            # the camp's water out of sight (dark falls early under trees): set out from home the way it lies from
+            # there, a few steps at a time, until it comes into view
             return Option(score, "go towards the water", lambda: self.api.walk_towards(way, "a few steps"))
         if water_in_view(p) or self.api.notes.get("last") != "go drink":
             # the water may be in sight without being among the things noticed first; if not, the walk fails
