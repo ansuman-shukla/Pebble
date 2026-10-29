@@ -515,31 +515,59 @@ Jump is a sim-decided gesture (children at play, a hunter after a kill, greeting
 sim has no obstacles to vault. ≤ 15 props drawn (one per near citizen).
 
 ### 4.6 Animals: kinds, behaviour and vocabulary (`sim/animals.py`, `lib/live/animal-motion.ts`)
-Speeds in m/s; flight distance from people / from predators.
+Speeds in m/s. "Sustained" is the speed after the burst; "always senses" is the gap at which prey notices any
+stalker; "cover" is how long a fleeing animal needs to reach safety (burrow, cliff, water).
 
-| Kind | walk / trot / run (burst s) | Flee from | Behaviour | Activities drawn |
-|---|---|---|---|---|
-| deer | 1.0 / 3.0 / 9 (20) | 40 / 80 m | herd; waterhole at dawn and dusk; herd alarm | idle, grazing, alert, walking, trotting, fleeing, drinking, sleeping, dead, remains |
-| elk | 1.1 / 3.0 / 8 (20) | 45 / 80 | as deer (taiga) | as deer |
-| antelope | 1.1 / 3.5 / 11 (20) | 50 / 100 | as deer (savanna) | as deer |
-| rabbit, hare | 0.5 / 2.0 / 7 (8) | 15 / 30 | runs 30 m then freezes | idle, grazing, alert, fleeing (hop), frozen, sleeping, dead, remains |
-| boar | 0.8 / 2.5 / 6 (15) | 30 / 60 | may turn on a hunter (D70) | as deer + attacking |
-| goat | 0.8 / 2.0 / 5 (20) | 40 / 60 | hills herd | as deer |
-| duck | 0.4 walk, 0.5 swim / – / swim 1.5 | 20 / 30 | floats, paddles away (no flight in v1) | floating, swimming, walking, fleeing, sleeping |
-| fox | 0.9 / 2.5 / 8 (15) | 30 / – | hunts rabbits and ducks | prowling, stalking, chasing, pouncing, feeding, fleeing, sleeping |
-| wolf | 1.2 / 3.0 / 9 (120 endurance) | – | pack of 2-4, night hunts, den | prowling, alert, stalking, chasing, pouncing, attacking (bite), feeding, sleeping |
-| bear, polar bear | 1.0 / 2.5 / 8 (10) | – | defends its den by day, rears up | prowling, attacking (rear + bite), feeding, sleeping |
-| lion | 1.0 / 2.5 / 10 (15) | – | must start within ~25 m | prowling, stalking, chasing, pouncing, attacking, feeding, sleeping |
-| shark | 1.0 / – / 5 | – | deep water only | swimming, swimming fast, attacking |
-| fish | 0.3 / – / 2 | – / 5 | shoals | swimming, swimming fast |
+| Kind | walk / sustained / run (burst s) | Flee from people / predators | Always senses / cover | Behaviour | Activities drawn |
+|---|---|---|---|---|---|
+| deer | 1.0 / 5.0 / 11 (20) | 40 / 80 m | 20 m / – | herd; waterhole at dawn and dusk; herd alarm | idle, grazing, alert, walking, trotting, fleeing, drinking, sleeping, dead, remains |
+| elk | 1.1 / 5.0 / 10 (20) | 45 / 80 | 20 m / – (fights back: strike ×0.6) | as deer (taiga) | as deer |
+| antelope | 1.1 / 6.0 / 13 (20) | 50 / 100 | 20 m / – | as deer (savanna) | as deer |
+| rabbit, hare | 0.5 / 4.5 / 9 (8) | 15 / 30 | 8 m / 10 s (burrow) | runs to cover, then freezes | idle, grazing, alert, fleeing (hop), frozen, sleeping, dead, remains |
+| boar | 0.8 / 4.5 / 8 (15) | 30 / 60 | 12 m / – (fights back: strike ×0.4) | may turn on a hunter (D70) | as deer + attacking |
+| goat | 0.8 / 4.5 / 7 (20) | 40 / 60 | 15 m / 15 s (cliff) | hills herd | as deer |
+| duck | 0.4 walk, 0.5 swim / 0.8 / 2 (10) | 20 / 30 | 6 m / 3 s (water) | floats, paddles away (no flight in v1) | floating, swimming, walking, fleeing, sleeping |
+| fox | 0.9 / 4.0 / 9 (10) | 30 / – | – | stalks from 30 m, pounces from 12 m; rabbits, ducks | prowling, stalking, chasing, pouncing, feeding, fleeing, sleeping |
+| wolf | 1.2 / 4.5 / 10 (30) | – | – | pack of 2-4, night hunts, den; stalks from 60 m, pounces from 30 m | prowling, alert, stalking, chasing, pouncing, attacking (bite), feeding, sleeping |
+| bear, polar bear | 1.0 / 4.0 / 11 or 10 (10) | – | – | defends its den by day, rears up; stalks from 40 m, pounces from 15 m; boar (polar: hare), carcasses, berries | prowling, attacking (rear + bite), feeding, sleeping |
+| lion | 1.0 / 3.0 / 12 (15) | – | – | stalks from 60 m, pounces from 25 m | prowling, stalking, chasing, pouncing, attacking, feeding, sleeping |
+| shark | 1.0 / – / 5 | – | – | deep water only | swimming, swimming fast, attacking |
+| fish | 0.3 / – / 2 | – / 5 | – | shoals | swimming, swimming fast |
 
 - **Alert before flight:** a person within 2× flee distance → `alert` (head up, facing them). **Herd alarm:** when one
   member flees, every member of its group within 60 m flees on the same bearing ±15°. Stalking hunters aren't
   noticed at the flee distance.
-- **Predator phases:** prowl → stalking (0.6 × walk until within pounce range: lion 25 m, wolf 30, bear 15, fox 10)
-  → prey senses it (30 % per tick within 60 m, 100 % within 20 m) and flees → chasing. Solved inside the tick: caught
-  iff gap ≤ (v_pred − v_prey) × min(burst_pred, 60 s); on a catch the predator pounces at the catch point and D68/D70's
-  kill chance decides. Wolves catch over two ticks. A missed chase rests 60 min.
+- **The hunt** (solved in 10 s sub-steps inside the tick, A1, rolls on the `animals.hunt` stream):
+  1. *Stalk:* a hungry predator that sees prey starts at its stalk distance and closes at 0.6 × walk.
+  2. *Sensing:* each sub-step the prey notices with 15 % (gap 30-60 m), 30 % (gap ≤ 30 m) and always inside its
+     "always senses" gap.
+  3. *Pounce:* an **unseen predator inside its pounce range pounces at once**: caught.
+  4. *Race:* a noticed predator chases: a 1-D race where each side runs its burst speed for its burst seconds, then its
+     sustained speed, for at most 60 s (wolves 120 s, over two ticks) or until the prey reaches cover. Caught iff at
+     some moment predator distance ≥ starting gap + prey distance; G* below is the largest starting gap that is caught.
+  5. *Strike:* a caught prey dies with the predator's strike chance (lion, fox 0.6; wolf, bears 0.5) × the prey's
+     fight-back factor; otherwise it breaks free and flees. A missed hunt rests 60 min.
+- **Worked odds** (from these numbers; A1's unit test reproduces them within ±0.03; attempts per night assume up to 4
+  hunts by a hungry predator group between dusk and dawn):
+
+| Predator → prey | G* | P(caught) | P(strike) | **Kill per attempt** | Kill per night (4 tries) |
+|---|---|---|---|---|---|
+| lion → antelope / deer | 0 / 15 m | 0.31 | 0.60 | **0.19** | 0.56 |
+| lion → boar | 60 m | 1.00 | 0.24 | **0.24** | 0.67 |
+| wolf → deer | 30 m | 0.44 | 0.50 | **0.22** | 0.63 |
+| wolf → elk | 50 m | 0.72 | 0.30 | **0.22** | 0.62 |
+| wolf → goat | 45 m | 0.61 | 0.50 | **0.31** | 0.77 |
+| wolf → boar | 112 m | 1.00 | 0.20 | **0.20** | 0.59 |
+| wolf → rabbit | 19 m | 0.44 | 0.50 | **0.22** | 0.63 |
+| bear → boar | 30 m | 0.72 | 0.20 | **0.14** | 0.46 |
+| fox → rabbit | 9 m | 0.24 | 0.70 | **0.17** | 0.52 |
+| fox → duck | 21 m | 0.49 | 0.70 | **0.34** | 0.81 |
+| polar bear → hare | 19 m | 0.35 | 0.50 | **0.18** | 0.54 |
+
+  Target: kill per attempt 0.15-0.35 (real predators' range), so each predator group pinned near a settlement kills
+  about every other night: with 6 such groups (lion and wolves near band A, wolves and a bear near band B, wolves and
+  a fox near the town) that is ≈ 3 kill sequences a night within 1 km of people. Bears can't run down deer (G* 0) and
+  live off boar, carcasses and berries.
 - **Kills leave remains:** a predator kill → `feeding` 60-120 min; then half the species' meat (rounded down) drops as
   ground `meat` (scavenging is a real choice) and the body becomes `remains` (bone-scatter prop) after 1 game day until
   its slot respawns (D66). A hunter's kill becomes `remains` at once. People ≤ 15 m from a feeding predator are a
