@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import { Vector3 } from 'three';
 
-import type { WorldView } from '../../src/lib/client/types.gen';
+import type { TownView, WorldView } from '../../src/lib/client/types.gen';
 import { assetSize, kindScale, PROPS } from '../../src/lib/world/assets';
 import { BIOME_PROPS } from '../../src/lib/world/biome-props';
 import {
@@ -11,12 +11,13 @@ import {
   decodeWorld,
 } from '../../src/lib/world/globe';
 import { createScatter, MAX_PROP_SLOPE_DEG } from '../../src/lib/world/scatter';
+import { TOWN_URL } from './explore-helpers';
 import { WORLD_URL } from './globe-helpers';
 
 /*
  * The real generated world (GET /api/v1/world on the backend) only names kinds the frontend can draw, the
- * backend footprints of its camps and landmarks match the drawn size (asset size x kindScale), and its biome
- * props keep off cliffs.
+ * backend footprints of its camps and landmarks (and of the town's placements, GET /api/v1/town) match the drawn
+ * size (asset size x kindScale), and its biome props keep off cliffs.
  */
 
 /** Footprints are authored to 0.1 m. */
@@ -61,6 +62,27 @@ test('site footprints match the drawn size of their kind', async ({
       FOOTPRINT_TOLERANCE,
     );
     expect(Math.abs(fz - z), `${placement.kind} z`).toBeLessThanOrEqual(
+      FOOTPRINT_TOLERANCE,
+    );
+  }
+});
+
+test('town footprints match the drawn size of their kind', async ({
+  request,
+}) => {
+  const response = await request.get(TOWN_URL);
+  expect(response.ok()).toBe(true);
+  const town = (await response.json()) as TownView;
+  expect(town.placements.some((p) => p.kind === 'loom')).toBe(true);
+  for (const placement of town.placements) {
+    const size = assetSize(PROPS[placement.kind as keyof typeof PROPS]);
+    const turned = placement.rotation_deg % 180 !== 0;
+    const [x, z] = turned ? [size.z, size.x] : [size.x, size.z];
+    const { x: fx, z: fz } = placement.footprint; // already turned by rotation_deg
+    expect(Math.abs(fx - x), `${placement.id} x`).toBeLessThanOrEqual(
+      FOOTPRINT_TOLERANCE,
+    );
+    expect(Math.abs(fz - z), `${placement.id} z`).toBeLessThanOrEqual(
       FOOTPRINT_TOLERANCE,
     );
   }
