@@ -35,7 +35,7 @@ counters (D56, `sim/items.py RESOURCES`) are removed. Two sources, one table (`s
 
 | Node kind | Item | Cap | Per session | Minutes | Regrow (+1 every) | Drawn stages | Needs | Spots |
 |---|---|---|---|---|---|---|---|---|
-| berry_bush | berries | 12 | 4-6 | 20 | 6 h (full in 3 d) | fruit pieces = round(9 × stock/cap) | – | 2 |
+| berry_bush | berries | 12 | 4-6 | 20 | 6 h (full in 3 d) | fruit pieces = round(8 × stock/cap) | – | 2 |
 | root_patch | roots | 8 | 2-4 | 30 | 15 h (5 d) | leafy / thin / dug earth | – | 2 |
 | reed_bed | reeds | 20 | 5-8 | 20 | 4.8 h (4 d) | reeds shown = ⌈5 × stock/cap⌉ | – | 3 |
 | deadwood | wood | 6 | 2-3 | 20 | 8 h (2 d) | pile level = stock/cap | – | 2 |
