@@ -739,6 +739,32 @@ test('in real time a walker walks its streamed route at its own pace, facing the
   expect(errors).toEqual([]);
 });
 
+test('in orbit the camera rises to at least 150 m when the clock goes into time-lapse', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  const world = await openLive(page, errors, '?mockLive=1', 1);
+  const altitude = async () =>
+    Number(await world.getAttribute('data-camera-distance')) - R;
+  await page.keyboard.press('KeyC');
+  await expect(world).toHaveAttribute('data-camera-mode', 'orbit');
+  await expect.poll(altitude, { timeout: 10_000 }).toBeGreaterThan(2500);
+  // turn away from the player (zooming in onto it hands over to follow), then all the way down
+  await page.mouse.move(640, 400);
+  await page.mouse.down();
+  await page.mouse.move(640, 150, { steps: 10 });
+  await page.mouse.up();
+  for (let k = 0; k < 15; k++) await page.mouse.wheel(0, -400);
+  await expect.poll(altitude, { timeout: 10_000 }).toBeLessThan(125);
+  await page.getByRole('button', { name: '×10', exact: true }).click();
+  await page.waitForTimeout(1_000);
+  expect(await altitude()).toBeLessThan(125); // ×10 is no time-lapse
+  await page.getByRole('button', { name: '×60', exact: true }).click();
+  await expect.poll(altitude).toBeGreaterThan(149);
+  await expect(world).toHaveAttribute('data-camera-mode', 'orbit');
+  expect(errors).toEqual([]);
+});
+
 test('a new run (1012) resyncs at once; no run yet (4404) waits and retries', async ({
   page,
 }) => {

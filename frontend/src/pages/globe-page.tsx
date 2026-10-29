@@ -120,7 +120,7 @@ import {
   streamChannels,
 } from '@/lib/world/river-courses';
 import { createScatter, type Scatter } from '@/lib/world/scatter';
-import { clockRate } from '@/lib/world/visual-rate';
+import { clockRate, isTimeLapse } from '@/lib/world/visual-rate';
 import type { WalkTown } from '@/lib/world/walk-charts';
 
 /*
@@ -496,6 +496,7 @@ const GlobeScene = memo(function GlobeScene({
         cameraMode={cameraMode}
         onCameraModeChange={onCameraModeChange}
         travel={travel}
+        timeLapse={isTimeLapse(clockRate(live.speed, live.paused))}
         focusRef={focusRef}
         onPlayerMove={onPlayerMove}
         onReady={onWalkReady}
