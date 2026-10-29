@@ -8,6 +8,7 @@
  *   followed chips stay whole (others cluster above them). At most MAX_CHIPS chips and MAX_BUBBLES speech bubbles,
  *   nearest first.
  */
+import type { ChipIcon, LabelContent, NeedRing } from '@/lib/world/label-store';
 
 /** A label on screen, in CSS pixels: anchored at its bottom centre. */
 export interface LabelBox {
@@ -217,6 +218,47 @@ export function layoutChips(
     if (!placed && chips.length < MAX_CHIPS) chips.push(chip);
   }
   return chips;
+}
+
+/** What a cluster chip shows: its words, one icon and the worst need ring among its members. */
+export interface ClusterFace {
+  words: string;
+  icon?: ChipIcon;
+  ring?: NeedRing;
+}
+
+const RING_RANK: Record<NeedRing, number> = { need: 1, hurt: 2 };
+
+/**
+ * A cluster chip's face: "3 · asleep" when all do the same, else "3 people" (farther, just the count); the icon
+ * they share, or a neutral one when they do different things; a ring when any of them needs one, hurt over need.
+ */
+export function clusterFace(
+  members: readonly LabelContent[],
+  view: ChipView,
+): ClusterFace {
+  const count = members.length;
+  const doing = new Set(members.map((member) => member.detail));
+  const [detail] = doing;
+  const icons = new Set(members.map((member) => member.icon));
+  const [icon] = icons;
+  const ring = members
+    .map((member) => member.ring)
+    .reduce<NeedRing | undefined>(
+      (worst, next) =>
+        next && (!worst || RING_RANK[next] > RING_RANK[worst]) ? next : worst,
+      undefined,
+    );
+  return {
+    words:
+      view === 'cluster-icon'
+        ? String(count)
+        : doing.size === 1 && detail
+          ? `${count} · ${detail}`
+          : `${count} people`,
+    icon: icons.size === 1 ? icon : 'people',
+    ring,
+  };
 }
 
 /** A speech bubble's anchor on screen and its measured size. */

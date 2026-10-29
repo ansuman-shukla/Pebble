@@ -13,6 +13,7 @@ import {
   PersonStanding,
   Skull,
   Sprout,
+  Users,
   Utensils,
   Wind,
 } from 'lucide-react';
@@ -24,6 +25,7 @@ import {
   type ChipAnchor,
   type ChipSize,
   type ChipView,
+  clusterFace,
   type LabelBox,
   layoutBubbles,
   layoutChips,
@@ -179,6 +181,7 @@ const CHIP_ICONS: Record<ChipIcon, LucideIcon> = {
   fire: Flame,
   talk: MessageCircle,
   dead: Skull,
+  people: Users,
 };
 
 /** Rough sizes (px) of a chip or bubble saying `text` in a view, until it is measured saying it. */
@@ -203,21 +206,6 @@ function estimate(text: string, view: ChipView | 'speech'): ChipSize {
       return { width, height: lines * BUBBLE_LINE_PX + 8 };
     }
   }
-}
-
-/** What a cluster chip says: "3 · asleep" when all do the same, else "3 people"; farther, just the count. */
-function clusterWords(
-  members: readonly string[],
-  view: ChipView,
-  chips: Map<string, LabelContent>,
-) {
-  const count = members.length;
-  if (view === 'cluster-icon') return String(count);
-  const doing = new Set(members.map((id) => chips.get(id)?.detail));
-  const [detail] = doing;
-  return doing.size === 1 && detail
-    ? `${count} · ${detail}`
-    : `${count} people`;
 }
 
 /** Projects `subject`'s anchor: its screen spot (CSS px) and distance, or null when it has none or is off screen. */
@@ -288,10 +276,15 @@ export function ChipProjector({
       const last = sizes.current.get(key);
       return last?.text === text ? last.size : estimate(text, view);
     };
+    const faceOf = (members: readonly string[], view: ChipView) =>
+      clusterFace(
+        members.map((id) => chipOf.get(id)!),
+        view,
+      );
     /** What a chip says in a view: its name and doing, a cluster's words, nothing for an icon. */
     const chipText = (members: readonly string[], view: ChipView) => {
       const leader = chipOf.get(members[0])!;
-      if (members.length > 1) return clusterWords(members, view, chipOf);
+      if (members.length > 1) return faceOf(members, view).words;
       return view === 'full' ? `${leader.text} · ${leader.detail ?? ''}` : '';
     };
 
@@ -330,13 +323,14 @@ export function ChipProjector({
       const chip = leading.get(subject);
       element.style.display = chip ? '' : 'none';
       if (!chip) continue;
+      const cluster = chip.members.length > 1;
+      const face = cluster ? faceOf(chip.members, chip.view) : content;
       element.dataset.view = chip.view;
       element.dataset.members = chip.members.join(' ');
+      element.dataset.icon = face.icon ?? '';
+      element.dataset.ring = face.ring ?? '';
       const text = chipText(chip.members, chip.view);
-      setText(
-        element.querySelector('[data-chip-count]'),
-        chip.members.length > 1 ? text : '',
-      );
+      setText(element.querySelector('[data-chip-count]'), cluster ? text : '');
       place(element, chip.x, chip.bottom);
       drawn.push({ element, key: `${content.id}:${chip.view}`, text });
     }
@@ -359,11 +353,6 @@ export function ChipProjector({
   return null;
 }
 
-const RING_CLASS = {
-  need: 'ring-2 ring-orange-400',
-  hurt: 'ring-2 ring-red-500',
-};
-
 function Chip({ content }: { content: LabelContent }) {
   const Icon = content.icon && CHIP_ICONS[content.icon];
   return (
@@ -372,9 +361,16 @@ function Chip({ content }: { content: LabelContent }) {
         <span
           data-chip-icon={content.icon}
           data-chip-ring={content.ring}
-          className={`flex size-5 shrink-0 items-center justify-center rounded-full bg-black/40 ${content.ring ? RING_CLASS[content.ring] : ''}`}
+          className="flex size-5 shrink-0 items-center justify-center rounded-full bg-black/40 group-data-[ring=hurt]:ring-2 group-data-[ring=hurt]:ring-red-500 group-data-[ring=need]:ring-2 group-data-[ring=need]:ring-orange-400"
         >
-          <Icon className="size-3.5" aria-hidden />
+          <Icon
+            className="size-3.5 group-data-[icon=people]:hidden"
+            aria-hidden
+          />
+          <Users
+            className="hidden size-3.5 group-data-[icon=people]:block"
+            aria-hidden
+          />
         </span>
       )}
       <span className="block max-w-56 truncate group-data-[view=cluster]:hidden group-data-[view=cluster-icon]:hidden group-data-[view=icon]:hidden">

@@ -41,7 +41,9 @@ export type ChipIcon =
   | 'fish'
   | 'fire'
   | 'talk'
-  | 'dead';
+  | 'dead'
+  /** A cluster of people doing different things. */
+  | 'people';
 
 /** A ring around the chip's icon: someone hungry or thirsty, or hurt. */
 export type NeedRing = 'need' | 'hurt';

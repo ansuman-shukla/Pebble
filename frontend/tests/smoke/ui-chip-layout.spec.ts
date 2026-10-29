@@ -5,6 +5,7 @@ import {
   type ChipAnchor,
   type ChipSizer,
   type ChipView,
+  clusterFace,
   ICON_M,
   layoutBubbles,
   layoutChips,
@@ -12,6 +13,7 @@ import {
   MAX_CHIPS,
   type PlacedChip,
 } from '../../src/lib/world/label-layout';
+import type { LabelContent } from '../../src/lib/world/label-store';
 
 /* Chip layout (no browser): tiers by distance, clusters instead of towers, pinned chips whole, caps. */
 
@@ -351,4 +353,55 @@ test('the sizer is asked for each cluster as it grows, with its members', () => 
     'full c',
     'cluster a+b+c',
   ]);
+});
+
+const member = (change: Partial<LabelContent>): LabelContent => ({
+  id: 'npc-x',
+  subject: 'x',
+  kind: 'name',
+  text: 'X',
+  detail: 'asleep',
+  icon: 'sleep',
+  ...change,
+});
+
+test('a cluster doing one thing shows it and its icon; a mixed one says how many with a neutral icon', () => {
+  const sleepers = [member({}), member({}), member({})];
+  expect(clusterFace(sleepers, 'cluster')).toEqual({
+    words: '3 · asleep',
+    icon: 'sleep',
+    ring: undefined,
+  });
+  expect(clusterFace(sleepers, 'cluster-icon').words).toBe('3');
+  const mixed = [
+    member({}),
+    member({ detail: 'gathering roots', icon: 'gather' }),
+  ];
+  expect(clusterFace(mixed, 'cluster')).toMatchObject({
+    words: '2 people',
+    icon: 'people',
+  });
+  // the same icon with different words still shares the icon
+  const walkers = [
+    member({ detail: 'walking north', icon: 'walk' }),
+    member({ detail: 'walking to Genzo', icon: 'walk' }),
+  ];
+  expect(clusterFace(walkers, 'cluster')).toMatchObject({
+    words: '2 people',
+    icon: 'walk',
+  });
+});
+
+test('a cluster rings with the worst need among its members, whoever leads it', () => {
+  const ringOf = (...rings: LabelContent['ring'][]) =>
+    clusterFace(
+      rings.map((ring) => member({ ring })),
+      'cluster',
+    ).ring;
+  expect(ringOf(undefined, undefined)).toBeUndefined();
+  expect(ringOf(undefined, 'need')).toBe('need');
+  expect(ringOf('need', undefined)).toBe('need');
+  expect(ringOf(undefined, 'hurt', 'need')).toBe('hurt');
+  expect(ringOf('need', 'hurt')).toBe('hurt');
+  expect(ringOf('hurt', 'need')).toBe('hurt');
 });

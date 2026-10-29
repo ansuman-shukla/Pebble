@@ -1,7 +1,13 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
 import { FULL_M, ICON_M } from '../../src/lib/world/label-layout';
-import { cameraOf, drawn, goToPerson, openHeld } from './ui-helpers';
+import {
+  cameraOf,
+  drawn,
+  goToPerson,
+  type MockLiveWindow,
+  openHeld,
+} from './ui-helpers';
 
 /* The globe's chips in the browser: tiers by distance, icons, clusters that never cover each other. */
 
@@ -70,5 +76,83 @@ test('near citizens get full chips, farther ones icon chips, none past 150 m', a
   expect(tiers & 1, 'a full chip near the camera').toBe(1);
   const tak = chips.find((chip) => chip.members.includes('tak'))!;
   expect(tak.icon).not.toBeNull();
+  expect(errors).toEqual([]);
+});
+
+type Element = {
+  dataset: Record<string, string | undefined>;
+  querySelector(selector: string): {
+    getAttribute(name: string): string | null;
+  } | null;
+};
+
+/** The visible chips: who leads, who they stand for, the icon and ring drawn, and each member's own icon. */
+async function chipsOn(page: Page) {
+  const all = await page.locator('[data-label^="npc-"]').evaluateAll((nodes) =>
+    nodes.map((node) => {
+      const element = node as unknown as Element;
+      return {
+        id: element.dataset.label!.slice('npc-'.length),
+        visible:
+          element.dataset.members !== undefined &&
+          (node as unknown as { style: { display: string } }).style.display !==
+            'none',
+        members: element.dataset.members?.split(' ') ?? [],
+        icon: element.dataset.icon,
+        ring: element.dataset.ring,
+        own: element
+          .querySelector('[data-chip-icon]')
+          ?.getAttribute('data-chip-icon'),
+      };
+    }),
+  );
+  const ownIcon = new Map(all.map((chip) => [chip.id, chip.own]));
+  return all
+    .filter((chip) => chip.visible)
+    .map(({ id, members, icon, ring }) => ({
+      leader: id,
+      members,
+      icon,
+      ring,
+      icons: members.map((member) => ownIcon.get(member)),
+    }));
+}
+
+test('a mixed cluster shows a neutral icon and the worst need ring among its members', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  const world = await openHeld(page, errors);
+  // band A's camp at 08:00: people doing different things by the fire pit cluster
+  await goToPerson(page, world, 'tak');
+  let cluster: Awaited<ReturnType<typeof chipsOn>>[number] | undefined;
+  await expect
+    .poll(async () => {
+      cluster = (await chipsOn(page)).find((chip) => chip.members.length > 1);
+      return cluster !== undefined;
+    })
+    .toBe(true);
+  const { leader, members, icons } = cluster!;
+  const mixed = new Set(icons).size > 1;
+  expect(cluster!.icon).toBe(mixed ? 'people' : icons[0]);
+  expect(cluster!.ring).toBe('');
+
+  // a member who is not the leader gets hungry, then another is hurt: the cluster rings, hurt over hungry
+  const follower = members.find((id: string) => id !== leader)!;
+  const feel = (actor: string, words: string[]) =>
+    page.evaluate(
+      ([actor, words]) =>
+        (globalThis as unknown as MockLiveWindow).__pebbleMockLive.feel(
+          actor as string,
+          words as string[],
+        ),
+      [actor, words] as const,
+    );
+  const ringOfCluster = async () =>
+    (await chipsOn(page)).find((chip) => chip.members.includes(follower))?.ring;
+  await feel(follower, ['hungry']);
+  await expect.poll(ringOfCluster).toBe('need');
+  await feel(leader, ['weak and aching']);
+  await expect.poll(ringOfCluster).toBe('hurt');
   expect(errors).toEqual([]);
 });
