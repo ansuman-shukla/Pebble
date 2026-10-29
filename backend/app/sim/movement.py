@@ -2,7 +2,6 @@
 walker's pace; each step leaves a stride (where they went and where they go next) for spectators to draw.
 """
 
-from app.observability.events import RoutePoint
 from app.sim.acting import VERB, begin, settled
 from app.sim.clock import SECONDS_PER_TICK
 from app.sim.core import WALK_AHEAD_TICKS, SimCore, Stride, TimedPoint
@@ -161,22 +160,3 @@ def _distinct(core: SimCore, points: list[TimedPoint], after: Vec3 | None = None
         if last is None or core.distance_m(point[0], last) >= SAME_SPOT_M:
             kept.append(point)
     return tuple(kept)
-
-
-def streamed_route(core: SimCore, citizen: Citizen) -> tuple[list[RoutePoint], float]:
-    """How a citizen who moved this tick is drawn: the path from where they stood when the tick began, through
-    where they are now, on along their plan while they keep at it, timed in game seconds from the tick's start;
-    and their ground speed where it starts (metres per game second)."""
-    stride = core.strides.get(citizen.id)
-    if stride is None:
-        raise ValueError(f"{citizen.id} moved without a stride")
-    if len(stride.walked) < 2:  # moved less than a millimetre: drawn standing
-        return [], 0.0
-    going_on = citizen.action is not None and citizen.action.number == stride.action
-    world, cell = core.world, citizen.cell
-    points: list[RoutePoint] = []
-    for unit, seconds in (*stride.walked, *(stride.ahead if going_on else ())):
-        cell = world.nearest_cell(unit, cell)
-        points.append(RoutePoint(unit=unit, height_m=world.ground_height(unit, cell), t_s=seconds))
-    (start, began), (then, reached) = stride.walked[0], stride.walked[1]
-    return points, world.distance_m(start, then) / (reached - began)

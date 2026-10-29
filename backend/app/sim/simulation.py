@@ -9,18 +9,16 @@ import numpy as np
 
 from app.core.rng import Rng
 from app.observability.events import (
-    AnimalPose,
     CitizenSpawned,
     Died,
     EventDraft,
     ItemLocation,
     ItemMoved,
-    Moved,
     NeedChanged,
     Perceived,
     TickSummary,
 )
-from app.sim import actions, ecology, movement, resting
+from app.sim import actions, ecology, feed_animals, feed_citizens, resting
 from app.sim.acting import refuse
 from app.sim.bodies import COLLAPSE_WAKE_ENERGY, HOT_BIOMES, Crossing, update_body
 from app.sim.citizens import CitizenSpec
@@ -283,7 +281,7 @@ class Simulation:
         core.hurt.clear()
         core.strides.clear()
         before = {citizen.id: citizen.position for citizen in core.living()}
-        poses = {a.id: (a.position, a.heading_deg, a.activity) for a in core.state.animals.values() if a.alive}
+        poses = feed_animals.poses(core)
         walk_targets = {citizen.id: actions.walking_to(citizen) for citizen in core.living()}
 
         # followers move last, after the people they follow have taken this minute's steps
@@ -326,29 +324,12 @@ class Simulation:
             citizen.threats = stalkers[citizen.id]
             self._visit(citizen)
 
-        moved: dict[str, Moved] = {}
-        for citizen in core.citizens():
-            if citizen.id in before and citizen.position != before[citizen.id]:
-                route, speed_mps = movement.streamed_route(core, citizen)
-                moved[citizen.id] = Moved(
-                    position=citizen.position,
-                    height_m=citizen.height_m,
-                    cell=citizen.cell,
-                    heading_deg=citizen.heading_deg,
-                    route=route,
-                    speed_mps=speed_mps,
-                )
-        bodies = {
-            citizen.id: (citizen.body.hunger, citizen.body.thirst, citizen.body.energy, citizen.body.health)
-            for citizen in core.living()
-        }
-        animal_poses = {
-            animal.id: _pose(animal)
-            for animal in (core.state.animals[animal_id] for animal_id in sorted(core.state.animals))
-            if (animal.alive or animal.id in poses)  # one that died this tick may have moved first
-            and (animal.position, animal.heading_deg, animal.activity) != poses.get(animal.id)
-        }
-        core.emit("tick_summary", TickSummary(moved=moved, bodies=bodies, animals=animal_poses))
+        summary = TickSummary(
+            moved=feed_citizens.moves(core, before),
+            bodies=feed_citizens.bodies(core),
+            animals=feed_animals.changed(core, poses),
+        )
+        core.emit("tick_summary", summary)
 
     def run(self, ticks: int) -> None:
         for _ in range(ticks):
@@ -393,16 +374,6 @@ class Simulation:
             place = self.core.world.places[place_id]
             if self.core.distance_m(citizen.position, place.centre) <= place.radius_m:
                 self.core.learn_place(citizen, place_id, "visited")
-
-
-def _pose(animal: Animal) -> AnimalPose:
-    return AnimalPose(
-        position=animal.position,
-        height_m=animal.height_m,
-        cell=animal.cell,
-        heading_deg=animal.heading_deg,
-        activity=animal.activity,
-    )
 
 
 def _groups(sightings: list[tuple[Animal, float]]) -> dict[str, tuple[Animal, float, int]]:
