@@ -2,8 +2,8 @@
  * Doors. Polyfork rigs door leaves as named nodes pivoting on their hinge. The castle gatehouse's stand open in
  * the walkable world: the colliders JSON is built with the doors shut, so the same swing is applied to the leaf
  * parts. Every other pair of leaves (`door-l`, `door-r`, 10 §5.5) is drawn shut and swings open while someone
- * on the move is in its doorway or just in front of it (passing, going in, coming home); they stay solid for the
- * walker.
+ * on the move is in its doorway or just in front of it, going in or coming out (not walking along the front);
+ * they stay solid for the walker.
  */
 import { Box3, Matrix4, type Object3D, Vector3 } from 'three';
 
@@ -141,13 +141,17 @@ export function leafMove(leaf: DoorSwing, amount: number, target: Matrix4) {
   return target.multiplyMatrices(leaf.hinge, turn).multiply(unhinge);
 }
 
-/** Whether feet at `local` (model space of the building) hold its doors open. */
-export function holdsDoor(local: Vector3, doorway: Doorway) {
+/**
+ * Whether feet at `local` (model space of the building), last stepping along `heading` (model space), hold its
+ * doors open: in the doorway zone and going in or out, mostly along the doorway's z, not walking along the front.
+ */
+export function holdsDoor(local: Vector3, heading: Vector3, doorway: Doorway) {
   const ahead = local.z - doorway.centre.z;
   return (
     Math.abs(local.x - doorway.centre.x) <= DOORWAY_HALF_WIDTH &&
     ahead >= -DOORWAY_INSIDE &&
-    ahead <= DOORWAY_FRONT
+    ahead <= DOORWAY_FRONT &&
+    Math.abs(heading.z) >= Math.abs(heading.x)
   );
 }
 
@@ -173,6 +177,8 @@ export class Passers {
   private readonly movedAt = new Map<string, number>();
   private lookedAt = -Infinity;
   readonly passing = new Map<string, Vector3>();
+  /** Each mover's last step (world metres), kept after they stop: which way they were going. */
+  readonly steps = new Map<string, Vector3>();
 
   update(people: ReadonlyMap<string, Vector3>, now: number) {
     if (now - this.lookedAt < PASSING_LOOK && now >= this.lookedAt) return;
@@ -182,6 +188,8 @@ export class Passers {
       const last = this.last.get(id);
       if (!last) this.last.set(id, feet.clone());
       else if (last.distanceTo(feet) > PASSING_STEP) {
+        const step = this.steps.get(id) ?? new Vector3();
+        this.steps.set(id, step.subVectors(feet, last));
         last.copy(feet);
         this.movedAt.set(id, now);
       }
@@ -192,6 +200,7 @@ export class Passers {
       if (!people.has(id)) {
         this.last.delete(id);
         this.movedAt.delete(id);
+        this.steps.delete(id);
       }
   }
 }

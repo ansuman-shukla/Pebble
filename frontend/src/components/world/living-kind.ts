@@ -26,9 +26,9 @@ import { visualRate } from '@/lib/world/visual-rate';
 /*
  * The instances of one kind of placement and what moves their parts (10 §5.3), through a PartMoves texture per
  * part: the model's loop plays for the nearest instances (the mill wheel always turns; plants, cloth and ropes
- * sway on wind time, at most ×3, mechanisms, flames and water on clip time), door leaves swing open
- * while someone passes through the doorway, and parts hide while they shouldn't show: a cold fire's `flame` and
- * `fuel`, and dressing a stream turned off (`dressPart`, prop-motion.ts).
+ * sway on wind time, at most ×3, mechanisms, flames and water on clip time), door leaves swing open while
+ * someone goes in or out through the doorway, and parts hide while they shouldn't show: a cold fire's `flame`
+ * and `fuel`, and dressing a stream turned off (`dressPart`, prop-motion.ts).
  */
 
 /** Kinds lying flat on the ground: their shadows would be invisible, so they skip the shadow pass. */
@@ -65,6 +65,7 @@ const HIDDEN = new Matrix4().makeScale(0, 0, 0);
 const REST = new Matrix4();
 const move = new Matrix4();
 const feet = new Vector3();
+const heading = new Vector3();
 const turn = new Quaternion();
 const unused = new Vector3();
 
@@ -223,10 +224,12 @@ export class LivingKind {
       passers.update(propWorld.people, now);
       this.at.forEach((at, index) => {
         let open = false;
-        for (const person of passers.passing.values()) {
+        for (const [id, person] of passers.passing) {
           if (person.distanceTo(at) > DOOR_NEAR) continue;
           feet.copy(person).applyMatrix4(this.toLocal[index]);
-          if (holdsDoor(feet, doorway)) {
+          heading.copy(passers.steps.get(id)!);
+          heading.transformDirection(this.toLocal[index]);
+          if (holdsDoor(feet, heading, doorway)) {
             open = true;
             break;
           }

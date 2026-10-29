@@ -100,23 +100,31 @@ test.beforeEach(() => {
   propWorld.dressing = new Map();
 });
 
-test('a door swings open for someone walking in and shuts after; standing still at it keeps it shut', async () => {
+test('a door swings open for someone walking in and shuts after; standing at it or passing along the front keeps it shut', async () => {
   const houses = await living('townhouse', [
     ['house-a', 0, 0],
     ['house-b', 20, 0],
+    ['house-d', 40, 0],
   ]);
   const walker = new Vector3(0, 0, 6);
   const idler = new Vector3(20, 0, 2);
+  const stroller = new Vector3(36, 0, 2);
   propWorld.people = new Map([
     ['walker', walker],
     ['idler', idler],
+    ['stroller', stroller],
   ]);
   run([houses], 0.5);
-  // the walker heads for house-a's door (z 1.15); the idler stands in front of house-b's
+  // the walker heads for house-a's door (z 1.15); the idler stands in front of house-b's; the stroller walks
+  // along house-d's front, across its doorway
+  let strolledOpen = false;
   for (let step = 0; step < 60; step++) {
     walker.z -= 0.05;
+    stroller.x += 0.13;
     run([houses], 1 / 30);
+    strolledOpen ||= propViews.openDoors.has('house-d');
   }
+  expect(strolledOpen).toBe(false);
   expect([...propViews.openDoors]).toContain('house-a');
   run([houses], 1);
   expect(propViews.openDoors.has('house-a')).toBe(true);

@@ -42,10 +42,11 @@ test('a doorway lies between its leaves, each opening inwards towards its free e
   expect(doorwayOf(house(), 'castle-gatehouse-4ed5c6')).toBeNull();
 });
 
-test('feet in the doorway or just in front hold it open, not inside or off to the side', () => {
+test('feet going in or out in the doorway or just in front hold it open, not inside or off to the side', () => {
   const doorway = doorwayOf(house(), 'machiya-townhouse-8ef64e')!;
-  const holds = (x: number, z: number) =>
-    holdsDoor(new Vector3(x, 0, z), doorway);
+  const inwards = new Vector3(0.1, 0, -0.3);
+  const holds = (x: number, z: number, heading = inwards) =>
+    holdsDoor(new Vector3(x, 0, z), heading, doorway);
   expect(holds(0, 1.15)).toBe(true);
   expect(holds(1.4, 3.6)).toBe(true);
   expect(holds(-1.4, 0.6)).toBe(true);
@@ -54,6 +55,11 @@ test('feet in the doorway or just in front hold it open, not inside or off to th
   expect(holds(-1.6, 2)).toBe(false);
   // inside the house: asleep by the door doesn't hold it open
   expect(holds(0, 0.5)).toBe(false);
+  // coming out holds it; walking along the front, even right across the doorway, doesn't
+  expect(holds(0, 2, new Vector3(-0.2, 0, 0.3))).toBe(true);
+  expect(holds(0, 2, new Vector3(0.3, 0, 0.3))).toBe(true);
+  expect(holds(0, 1.5, new Vector3(0.35, 0, 0.1))).toBe(false);
+  expect(holds(0.2, 2, new Vector3(-0.35, 0, -0.2))).toBe(false);
 });
 
 test('a door swings fully open or shut in its swing time, and no further', () => {
@@ -85,16 +91,24 @@ test('people on the move pass; standing ones stop passing a moment after they st
   passers.update(people, 0.3);
   expect([...passers.passing.keys()]).toEqual(['walker']);
   expect(passers.passing.get('walker')).toBe(walker);
+  // which way they went: their last step, kept after they stop
+  expect(passers.steps.get('walker')!.toArray()).toEqual([0.4, 0, 0]);
+  expect(passers.steps.has('worker')).toBe(false);
+  walker.set(0.4, 0, -0.5);
+  passers.update(people, 0.6);
+  expect(passers.steps.get('walker')!.toArray()).toEqual([0, 0, -0.5]);
   // the walker stops: still passing for 1.5 s, then not
-  passers.update(people, 1.7);
-  expect([...passers.passing.keys()]).toEqual(['walker']);
   passers.update(people, 2);
+  expect([...passers.passing.keys()]).toEqual(['walker']);
+  expect(passers.steps.get('walker')!.toArray()).toEqual([0, 0, -0.5]);
+  passers.update(people, 2.3);
   expect([...passers.passing.keys()]).toEqual([]);
   // someone who leaves the page is forgotten; back again, they start standing
   people.delete('walker');
-  passers.update(people, 2.3);
+  passers.update(people, 2.6);
+  expect(passers.steps.has('walker')).toBe(false);
   walker.set(9, 0, 9);
   people.set('walker', walker);
-  passers.update(people, 2.6);
+  passers.update(people, 2.9);
   expect([...passers.passing.keys()]).toEqual([]);
 });
