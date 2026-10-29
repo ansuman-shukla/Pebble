@@ -307,7 +307,33 @@
                       "animal_spawned",
                       "fire_changed",
                       "intervention",
-                      "snapshot"
+                      "snapshot",
+                      "node_changed",
+                      "tree_felled",
+                      "trespassed",
+                      "stole",
+                      "bought",
+                      "sold",
+                      "crafted",
+                      "spoiled",
+                      "tool_broke",
+                      "tax_assessed",
+                      "tax_paid",
+                      "tax_overdue",
+                      "ledger",
+                      "prices_changed",
+                      "accused",
+                      "seized",
+                      "released",
+                      "confined",
+                      "judged",
+                      "sentence_served",
+                      "standing_changed",
+                      "leader_changed",
+                      "bell_rang",
+                      "tended",
+                      "gestured",
+                      "goal_set"
                     ],
                     "type": "string"
                   }
@@ -804,7 +830,33 @@
                       "animal_spawned",
                       "fire_changed",
                       "intervention",
-                      "snapshot"
+                      "snapshot",
+                      "node_changed",
+                      "tree_felled",
+                      "trespassed",
+                      "stole",
+                      "bought",
+                      "sold",
+                      "crafted",
+                      "spoiled",
+                      "tool_broke",
+                      "tax_assessed",
+                      "tax_paid",
+                      "tax_overdue",
+                      "ledger",
+                      "prices_changed",
+                      "accused",
+                      "seized",
+                      "released",
+                      "confined",
+                      "judged",
+                      "sentence_served",
+                      "standing_changed",
+                      "leader_changed",
+                      "bell_rang",
+                      "tended",
+                      "gestured",
+                      "goal_set"
                     ],
                     "type": "string"
                   }
@@ -1263,6 +1315,42 @@
               "dead"
             ],
             "title": "Activity"
+          },
+          "route": {
+            "items": {
+              "$ref": "#/components/schemas/RoutePoint"
+            },
+            "type": "array",
+            "title": "Route"
+          },
+          "speed_mps": {
+            "type": "number",
+            "title": "Speed Mps"
+          },
+          "gait": {
+            "type": "string",
+            "enum": [
+              "walk",
+              "trot",
+              "run",
+              "stalk",
+              "swim"
+            ],
+            "title": "Gait"
+          },
+          "goal": {
+            "type": "string",
+            "title": "Goal"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Target"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -1272,7 +1360,12 @@
           "group",
           "position",
           "heading_deg",
-          "activity"
+          "activity",
+          "route",
+          "speed_mps",
+          "gait",
+          "goal",
+          "target"
         ],
         "title": "AnimalEntity"
       },
@@ -1442,6 +1535,141 @@
               }
             ],
             "title": "Cause Of Death"
+          },
+          "motion": {
+            "type": "string",
+            "enum": [
+              "idle",
+              "walk",
+              "jog",
+              "run",
+              "carry_walk",
+              "stalk",
+              "sit",
+              "sit_ground",
+              "lie",
+              "inside",
+              "gather_low",
+              "gather_high",
+              "pick_up",
+              "chop",
+              "mine",
+              "pan",
+              "farm",
+              "fish",
+              "craft",
+              "eat",
+              "drink",
+              "talk",
+              "trade",
+              "gesture",
+              "attack",
+              "tend",
+              "pray",
+              "ring_bell"
+            ],
+            "title": "Motion"
+          },
+          "posture": {
+            "type": "string",
+            "enum": [
+              "standing",
+              "crouching",
+              "sitting",
+              "sitting_ground",
+              "lying",
+              "inside"
+            ],
+            "title": "Posture"
+          },
+          "slot_heading": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slot Heading"
+          },
+          "goal": {
+            "type": "string",
+            "title": "Goal"
+          },
+          "driver": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "hunger",
+                  "thirst",
+                  "rest",
+                  "danger",
+                  "duty",
+                  "ambition",
+                  "social",
+                  "night"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Driver"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Target"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "needs": {
+            "$ref": "#/components/schemas/Needs"
+          },
+          "carrying": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Carrying"
+          },
+          "coins": {
+            "type": "integer",
+            "title": "Coins"
+          },
+          "rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank"
+          },
+          "standing": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standing"
+          },
+          "titles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Titles"
           }
         },
         "type": "object",
@@ -1463,7 +1691,19 @@
           "action",
           "action_label",
           "state",
-          "cause_of_death"
+          "cause_of_death",
+          "motion",
+          "posture",
+          "slot_heading",
+          "goal",
+          "driver",
+          "target",
+          "needs",
+          "carrying",
+          "coins",
+          "rank",
+          "standing",
+          "titles"
         ],
         "title": "CitizenEntity"
       },
@@ -2057,6 +2297,10 @@
             "type": "string",
             "title": "Time"
           },
+          "tick_elapsed_s": {
+            "type": "number",
+            "title": "Tick Elapsed S"
+          },
           "citizens": {
             "items": {
               "$ref": "#/components/schemas/CitizenEntity"
@@ -2085,6 +2329,7 @@
           "tick",
           "day",
           "time",
+          "tick_elapsed_s",
           "citizens",
           "animals",
           "fires"
@@ -2164,7 +2409,33 @@
               "animal_spawned",
               "fire_changed",
               "intervention",
-              "snapshot"
+              "snapshot",
+              "node_changed",
+              "tree_felled",
+              "trespassed",
+              "stole",
+              "bought",
+              "sold",
+              "crafted",
+              "spoiled",
+              "tool_broke",
+              "tax_assessed",
+              "tax_paid",
+              "tax_overdue",
+              "ledger",
+              "prices_changed",
+              "accused",
+              "seized",
+              "released",
+              "confined",
+              "judged",
+              "sentence_served",
+              "standing_changed",
+              "leader_changed",
+              "bell_rang",
+              "tended",
+              "gestured",
+              "goal_set"
             ],
             "title": "Type"
           },
@@ -2903,6 +3174,30 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Payload"
+          },
+          "line": {
+            "type": "string",
+            "title": "Line"
+          },
+          "importance": {
+            "type": "integer",
+            "enum": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "title": "Importance"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Position"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -2910,7 +3205,10 @@
           "id",
           "type",
           "actor_id",
-          "payload"
+          "payload",
+          "line",
+          "importance",
+          "position"
         ],
         "title": "LiveEventDetail"
       },
@@ -2948,6 +3246,10 @@
             "type": "boolean",
             "title": "Paused"
           },
+          "tick_elapsed_s": {
+            "type": "number",
+            "title": "Tick Elapsed S"
+          },
           "citizens": {
             "items": {
               "$ref": "#/components/schemas/CitizenEntity"
@@ -2979,6 +3281,7 @@
           "time",
           "speed",
           "paused",
+          "tick_elapsed_s",
           "citizens",
           "animals",
           "fires"
@@ -3047,6 +3350,35 @@
           "word"
         ],
         "title": "NeedReading"
+      },
+      "Needs": {
+        "properties": {
+          "hunger": {
+            "type": "number",
+            "title": "Hunger"
+          },
+          "thirst": {
+            "type": "number",
+            "title": "Thirst"
+          },
+          "energy": {
+            "type": "number",
+            "title": "Energy"
+          },
+          "health": {
+            "type": "number",
+            "title": "Health"
+          }
+        },
+        "type": "object",
+        "required": [
+          "hunger",
+          "thirst",
+          "energy",
+          "health"
+        ],
+        "title": "Needs",
+        "description": "0-100: hunger and thirst grow, energy and health run down."
       },
       "NeedsSeries": {
         "properties": {
@@ -3497,6 +3829,72 @@
         ],
         "title": "StatsView"
       },
+      "Target": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "person",
+              "animal",
+              "node",
+              "store",
+              "structure",
+              "fire",
+              "stack",
+              "place",
+              "direction"
+            ],
+            "title": "Kind"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 3,
+                "minItems": 3
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "name"
+        ],
+        "title": "Target",
+        "description": "What an action is about, for spectators (a person, an animal, a node, a store, a place...)."
+      },
       "Thread": {
         "properties": {
           "id": {
@@ -3618,7 +4016,33 @@
               "animal_spawned",
               "fire_changed",
               "intervention",
-              "snapshot"
+              "snapshot",
+              "node_changed",
+              "tree_felled",
+              "trespassed",
+              "stole",
+              "bought",
+              "sold",
+              "crafted",
+              "spoiled",
+              "tool_broke",
+              "tax_assessed",
+              "tax_paid",
+              "tax_overdue",
+              "ledger",
+              "prices_changed",
+              "accused",
+              "seized",
+              "released",
+              "confined",
+              "judged",
+              "sentence_served",
+              "standing_changed",
+              "leader_changed",
+              "bell_rang",
+              "tended",
+              "gestured",
+              "goal_set"
             ],
             "title": "Type"
           },

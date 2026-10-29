@@ -1,8 +1,7 @@
 /*
  * The spectator's event feed (10-world-v1 §5.4): every live event as one line with an importance 0-3 (0 hidden),
  * newest first, repeats merged ("Tek fished ×3"), filtered to People, Danger or Economy. The line, importance and
- * position come from the backend's line registry (F1's `line`/`importance`/`position`); until an event carries
- * them, the few types the feed delivers today get a plain line here.
+ * position come from the backend's line registry (`observability/lines.py`).
  */
 import { Vector3 } from 'three';
 
@@ -83,62 +82,9 @@ export const FEED_KEEP = 60;
 /** A repeat merges into an entry among this many newest. */
 const MERGE_WITHIN = 6;
 
-type Detail = LiveEventMessage['event'] & {
-  line?: string;
-  importance?: number;
-  position?: { unit: [number, number, number] } | null;
-};
-
-/** Who the feed can name: citizens by name, animals by kind (both by id). */
+/** Who the feed knows as animals (by id). */
 export interface FeedSubjects {
-  names: ReadonlyMap<string, string>;
   animals: ReadonlyMap<string, LiveAnimal['kind']>;
-}
-
-/** "A boar", "An elk", "A polar bear". */
-function anAnimal(kind: LiveAnimal['kind']) {
-  const words = kind.replaceAll('_', ' ');
-  return `${/^[aeiou]/.test(words) ? 'An' : 'A'} ${words}`;
-}
-
-/** The line and importance of today's feed events that don't carry their own yet. */
-function fallback(
-  event: Detail,
-  { names, animals }: FeedSubjects,
-): { line: string; importance: number } {
-  const who = (event.actor_id && names.get(event.actor_id)) ?? 'Someone';
-  const animal = event.actor_id ? animals.get(event.actor_id) : undefined;
-  const { payload } = event;
-  switch (event.type) {
-    case 'died':
-      if (animal)
-        return {
-          line:
-            payload.cause === 'hunted'
-              ? `${anAnimal(animal)} was hunted`
-              : typeof payload.cause === 'string'
-                ? `${anAnimal(animal)} died (${payload.cause})`
-                : `${anAnimal(animal)} died`,
-          importance: 2,
-        };
-      return {
-        line:
-          typeof payload.cause === 'string'
-            ? `${who} died (${payload.cause})`
-            : `${who} died`,
-        importance: 3,
-      };
-    case 'said':
-      return { line: `${who}: “${String(payload.words)}”`, importance: 1 };
-    case 'action_started':
-    case 'action_finished':
-      return { line: '', importance: 0 };
-    default:
-      return {
-        line: `${who}: ${event.type.replaceAll('_', ' ')}`,
-        importance: 1,
-      };
-  }
 }
 
 /** One feed entry for a live event, or null when it is hidden (importance 0). */
@@ -146,10 +92,8 @@ export function feedEntry(
   message: LiveEventMessage,
   subjects: FeedSubjects,
 ): FeedEntry | null {
-  const event = message.event as Detail;
-  const plain = fallback(event, subjects);
-  const importance = event.importance ?? plain.importance;
-  if (importance <= 0) return null;
+  const { event } = message;
+  if (event.importance <= 0) return null;
   return {
     id: event.id,
     ids: [event.id],
@@ -158,8 +102,8 @@ export function feedEntry(
     type: event.type,
     actorId: event.actor_id,
     animal: event.actor_id !== null && subjects.animals.has(event.actor_id),
-    line: event.line ?? plain.line,
-    importance,
+    line: event.line,
+    importance: event.importance,
     position: event.position?.unit ?? null,
     count: 1,
   };

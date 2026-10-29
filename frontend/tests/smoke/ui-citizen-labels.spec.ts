@@ -29,6 +29,18 @@ function citizen(overrides: Partial<LiveCitizen> = {}): LiveCitizen {
     action_label: 'tending the rice paddies',
     state: [],
     cause_of_death: null,
+    motion: 'farm',
+    posture: 'standing',
+    slot_heading: null,
+    goal: '',
+    driver: null,
+    target: null,
+    needs: { hunger: 10, thirst: 10, energy: 90, health: 100 },
+    carrying: {},
+    coins: 0,
+    rank: null,
+    standing: null,
+    titles: [],
     ...overrides,
   };
 }

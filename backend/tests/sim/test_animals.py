@@ -181,7 +181,10 @@ def test_a_hungry_wolf_attacks_a_lone_person_at_night(new_sim: Callable[..., Sim
     events = sim.drain()
     bites = _injuries(events)
     assert bites and bites[0].actor_id == victim_id
-    assert bites[0].payload.model_dump()["cause"] == "animal attack"
+    wolf = next(a for a in sim.state.animals.values() if a.kind == "wolf")
+    assert {(e.payload.model_dump()["cause"], e.payload.model_dump()["attacker"]) for e in bites} == {
+        ("animal attack", wolf.id)
+    }
     low, high = SPECIES["wolf"].bite
     assert all(low <= e.payload.model_dump()["amount"] <= high for e in bites)
     assert victim.body.health == pytest.approx(100.0 - sum(e.payload.model_dump()["amount"] for e in bites), abs=0.1)
@@ -197,8 +200,8 @@ def test_repeated_attacks_can_kill(new_sim: Callable[..., Simulation]) -> None:
     sim.run(5)
     assert not victim.body.alive and victim.body.cause_of_death == "animal attack"
     died = [e for e in sim.drain() if e.type == "died" and e.actor_id == victim_id]
-    assert len(died) == 1 and died[0].payload.model_dump()["cause"] == "animal attack"
     wolf = next(a for a in sim.state.animals.values() if a.kind == "wolf")
+    assert len(died) == 1 and died[0].payload.model_dump() == {"cause": "animal attack", "attacker": wolf.id}
     assert wolf.hunger < 1.0 and wolf.target is None  # it has eaten
 
 
@@ -209,7 +212,7 @@ def test_a_blow_bigger_than_the_health_left_kills(new_sim: Callable[..., Simulat
     sim.core.injure(victim, 6.0, "animal attack", "a wolf attacks you")
     assert not victim.body.alive and victim.body.health == 0.0
     injured = [e.payload.model_dump() for e in sim.drain() if e.type == "injured"]
-    assert injured == [{"amount": 5.01, "cause": "animal attack"}]
+    assert injured == [{"amount": 5.01, "cause": "animal attack", "attacker": None}]
 
 
 @pytest.mark.parametrize("safety", ["day", "fire", "group", "town", "fed"])

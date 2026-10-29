@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from app.db.models import Event
+from app.observability.lines import Resident, namer
 from app.services.citizens import PersonRef, timeline_entry
 from app.services.places import PlaceIndex
 from app.sim.world import SimWorld
@@ -15,6 +16,13 @@ PEOPLE = {
     "you": PersonRef(id="you", name="Genzo", role="farmer"),
     "kid": PersonRef(id="kid", name="Hana", role="child"),
 }
+NAMES = namer(
+    {
+        "me": Resident("Aiko", "farmhouse-1", 26),
+        "you": Resident("Genzo", "farmhouse-1", 28),
+        "kid": Resident("Hana", "farmhouse-1", 9),
+    }
+)
 
 
 def _event(kind: str, payload: dict[str, Any], actor: str = "me") -> Event:
@@ -46,7 +54,41 @@ CASES: list[tuple[str, dict[str, Any], str, str, dict[int, str]]] = [
     ("need_changed", {"need": "hunger", "level": "hungry", "value": 61, "worse": True}, "me", "feels hungry", {}),
     ("need_changed", {"need": "hunger", "level": "fed", "value": 20, "worse": False}, "me", "feels fed again", {}),
     ("injured", {"amount": 12.4, "cause": "a fall"}, "me", "is hurt: a fall", {}),
+    ("injured", {"amount": 9.0, "cause": "violence", "attacker": "you"}, "me", "is struck by Genzo", {}),
+    ("injured", {"amount": 9.0, "cause": "animal attack", "attacker": "wolf:2"}, "me", "is attacked by a wolf", {}),
     ("died", {"cause": "starvation"}, "me", "dies: starvation", {}),
+    ("died", {"cause": "violence", "attacker": "you"}, "me", "is killed by Genzo", {}),
+    ("died", {"cause": "animal attack", "attacker": "bear:1"}, "me", "is killed by a bear", {}),
+    # world v1 events read as the feed tells them (the line registry), without the name in front; names not ids
+    (
+        "bought",
+        {"item": "rice", "count": 4, "lots": 2, "coins": 8, "stall": "stall", "merchant": "you"},
+        "me",
+        "buys 4 rice for 8 mon",
+        {},
+    ),
+    ("gestured", {"kind": "wave", "to": "kid", "seen_by": ["kid"]}, "me", "waves to Hana", {}),
+    (
+        "standing_changed",
+        {"group": "band_a", "before": 0, "after": 3, "word": "nothing said", "cause": "sale"},
+        "me",
+        "is now neither trusted nor distrusted by band A (sale)",
+        {},
+    ),
+    (
+        "node_changed",
+        {"node": "node-412", "kind": "berry_bush", "item": "berries", "before": 12, "after": 7, "stage": "half"},
+        "me",
+        "gathers berries from a berry bush",
+        {},
+    ),
+    (
+        "tax_paid",
+        {"household": "farmhouse-1", "rice": 12, "coins": 0, "owed_rice": 0, "owed_coins": 24},
+        "me",
+        "pays 12 rice of tax for Genzo's house",
+        {},
+    ),
     ("knowledge_changed", {"about": "person", "ref": "you", "level": "known"}, "me", "gets to know Genzo", {}),
     ("knowledge_changed", {"about": "place", "ref": "temple", "level": "rough"}, "me", "hears of the temple", {}),
     (
@@ -194,7 +236,7 @@ CASES: list[tuple[str, dict[str, Any], str, str, dict[int, str]]] = [
 def test_summary(
     sim_world: SimWorld, kind: str, payload: dict[str, Any], actor: str, summary: str, labels: dict[int, str]
 ) -> None:
-    entry = timeline_entry(_event(kind, payload, actor), "me", PEOPLE, PlaceIndex(sim_world), labels)
+    entry = timeline_entry(_event(kind, payload, actor), "me", PEOPLE, PlaceIndex(sim_world), labels, NAMES)
     assert entry.summary == summary
     assert (entry.day, entry.time) == (1, "09:00")
 
@@ -202,13 +244,19 @@ def test_summary(
 def test_details_and_related_people(sim_world: SimWorld) -> None:
     places = PlaceIndex(sim_world)
     shout = _event("said", {"words": "Hey!", "volume": "shout", "heard_by": ["you", "kid"]})
-    entry = timeline_entry(shout, "me", PEOPLE, places, {})
+    entry = timeline_entry(shout, "me", PEOPLE, places, {}, NAMES)
     assert (entry.summary, entry.detail, entry.related) == ('shouts "Hey!"', "heard by Genzo and Hana", ["you", "kid"])
     heard = timeline_entry(
-        _event("said", {"words": "Hi", "volume": "normal", "heard_by": ["me"]}, "you"), "me", PEOPLE, places, {}
+        _event("said", {"words": "Hi", "volume": "normal", "heard_by": ["me"]}, "you"), "me", PEOPLE, places, {}, NAMES
     )
     assert heard.related == ["you"] and heard.detail is None
     ended = _event("action_finished", {"number": 1, "action": "eat", "outcome": "done", "text": "You eat."})
-    assert timeline_entry(ended, "me", PEOPLE, places, {1: "berries"}).detail == "You eat."
-    hurt = timeline_entry(_event("injured", {"amount": 12.4, "cause": "a fall"}), "me", PEOPLE, places, {})
+    assert timeline_entry(ended, "me", PEOPLE, places, {1: "berries"}, NAMES).detail == "You eat."
+    hurt = timeline_entry(_event("injured", {"amount": 12.4, "cause": "a fall"}), "me", PEOPLE, places, {}, NAMES)
     assert hurt.detail == "lost 12 health"
+    struck = _event("injured", {"amount": 9.0, "cause": "violence", "attacker": "you"})
+    assert timeline_entry(struck, "me", PEOPLE, places, {}, NAMES).related == ["you"]  # attackers who are people
+    bitten = _event("injured", {"amount": 9.0, "cause": "animal attack", "attacker": "wolf:2"})
+    assert timeline_entry(bitten, "me", PEOPLE, places, {}, NAMES).related == []
+    killed = _event("died", {"cause": "animal attack", "attacker": "wolf:2"})
+    assert timeline_entry(killed, "me", PEOPLE, places, {}, NAMES).related == []
