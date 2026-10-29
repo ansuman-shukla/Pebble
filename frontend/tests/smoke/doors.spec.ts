@@ -83,16 +83,22 @@ test('people on the move pass; standing ones stop passing a moment after they st
   ]);
   passers.update(people, 0);
   expect([...passers.passing.keys()]).toEqual([]);
-  walker.set(0.4, 0, 0);
+  // the worker shuffles a few centimetres, again and again: still standing
   worker.set(5.05, 0, 5);
-  // looks within 0.25 s change nothing
-  passers.update(people, 0.1);
+  passers.update(people, 0.02);
+  worker.set(5, 0, 5.05);
+  passers.update(people, 0.04);
   expect([...passers.passing.keys()]).toEqual([]);
+  // one frame later the walker is 0.15 m on: passing at once
+  walker.set(0.15, 0, 0);
+  passers.update(people, 0.06);
+  expect([...passers.passing.keys()]).toEqual(['walker']);
+  walker.set(0.4, 0, 0);
   passers.update(people, 0.3);
   expect([...passers.passing.keys()]).toEqual(['walker']);
   expect(passers.passing.get('walker')).toBe(walker);
   // which way they went: their last step, kept after they stop
-  expect(passers.steps.get('walker')!.toArray()).toEqual([0.4, 0, 0]);
+  expect(passers.steps.get('walker')!.toArray()).toEqual([0.25, 0, 0]);
   expect(passers.steps.has('worker')).toBe(false);
   walker.set(0.4, 0, -0.5);
   passers.update(people, 0.6);

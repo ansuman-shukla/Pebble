@@ -231,9 +231,9 @@ export class LivingKind {
 
   private swingDoors(now: number, seconds: number) {
     const doorway = this.model.doorway!;
+    passers.update(propWorld.people, now);
     if (now - this.lookedAtDoors >= DOOR_LOOK || now < this.lookedAtDoors) {
       this.lookedAtDoors = now;
-      passers.update(propWorld.people, now);
       this.at.forEach((at, index) => {
         let open = false;
         for (const [id, person] of passers.passing) {

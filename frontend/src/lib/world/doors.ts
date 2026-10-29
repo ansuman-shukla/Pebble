@@ -161,28 +161,23 @@ export function swingToward(amount: number, open: boolean, seconds: number) {
   return open ? Math.min(1, amount + step) : Math.max(0, amount - step);
 }
 
-/** Feet that moved this far (metres) ... */
+/** Feet that moved this far (metres) since they last moved are passing; they count this long after they stop. */
 const PASSING_STEP = 0.1;
-/** ... since the last look, this many seconds ago or more, are passing; they count this long after they stop. */
-const PASSING_LOOK = 0.25;
 const PASSING_LINGER = 1.5;
 
 /**
  * Who is passing by: doors open for people on the move (walking past, going in or coming out), not for someone
- * standing or working in front of them. `update` with every drawn person's feet; repeated calls within
- * PASSING_LOOK seconds change nothing.
+ * standing or working in front of them. `update` with every drawn person's feet, every frame: a quick walker's
+ * steps stay short, so they say which way he goes.
  */
 export class Passers {
   private readonly last = new Map<string, Vector3>();
   private readonly movedAt = new Map<string, number>();
-  private lookedAt = -Infinity;
   readonly passing = new Map<string, Vector3>();
   /** Each mover's last step (world metres), kept after they stop: which way they were going. */
   readonly steps = new Map<string, Vector3>();
 
   update(people: ReadonlyMap<string, Vector3>, now: number) {
-    if (now - this.lookedAt < PASSING_LOOK && now >= this.lookedAt) return;
-    this.lookedAt = now;
     this.passing.clear();
     for (const [id, feet] of people) {
       const last = this.last.get(id);
