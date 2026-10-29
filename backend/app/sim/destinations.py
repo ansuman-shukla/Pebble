@@ -130,12 +130,14 @@ def beside(core: SimCore, citizen: Citizen, walk: ActionState, person: Citizen) 
 
 
 def _stand_beside(core: SimCore, citizen: Citizen, person: Citizen) -> None:
+    """A pace from them on the side they came from, else the nearest free spot round them at that pace (a group walking
+    up to one person stands round them), facing them."""
     stride = core.strides.get(citizen.id)
     came_from = stride.walked[0][0] if stride is not None else citizen.position
     side = citizen.position if core.distance_m(citizen.position, person.position) > 0.01 else came_from
     if core.distance_m(side, person.position) > 0.01:
-        spot = step_towards(person.position, bearing_deg(person.position, side), BESIDE_M, core.world.radius_m)
-        if slots.walkable(core, spot):
+        spot = slots.free_round(core, citizen, person.position, BESIDE_M, bearing_deg(person.position, side))
+        if spot is not None:
             slots.step_to(core, citizen, spot)
     if citizen.id in core.strides:  # facing them (a turn is told with a move)
         citizen.heading_deg = round((180.0 - bearing_deg(citizen.position, person.position)) % 360.0, 2)

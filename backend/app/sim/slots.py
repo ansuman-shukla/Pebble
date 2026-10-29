@@ -50,6 +50,7 @@ SEAT_M = 4.0  # rest takes a free seat this close
 ALREADY_THERE_M = 1.0  # a walk to a spot this close is no walk (movement's "You are already there")
 RING_M = (1.0, 1.8, 2.6, 3.4)  # the ring fallback's radii, 8 bearings each
 RING_BEARINGS = 8
+BESIDE_TURNS = (0.0, 30.0, -30.0, 60.0, -60.0, 90.0, -90.0, 120.0, -120.0, 150.0, -150.0, 180.0)  # free_round
 STEP_MPS = 5000 / 3600  # stepping to a slot or aside: walking pace
 STRAIGHT_M = 1.5  # a step this short goes straight; longer ones follow the planner's route
 MIN_STEP_S = 0.5
@@ -414,6 +415,17 @@ def ring_spot(core: SimCore, citizen: Citizen, centre: Vec3, with_centre: bool) 
             )
             if walkable(core, spot) and _clear(core, spot, spots):
                 return spot
+    return None
+
+
+def free_round(core: SimCore, citizen: Citizen, centre: Vec3, radius: float, bearing: float) -> Vec3 | None:
+    """The walkable spot `radius` m from `centre` nearest the bearing (then 30 degrees either way, alternately, round
+    to the far side) clear of every body and claim but the citizen's own; None when the ring is full."""
+    spots = _taken(core, citizen.id)
+    for turn in BESIDE_TURNS:
+        spot = step_towards(centre, (bearing + turn) % 360.0, radius, core.world.radius_m)
+        if walkable(core, spot) and _clear(core, spot, spots):
+            return spot
     return None
 
 
