@@ -3,10 +3,11 @@ import math
 import numpy as np
 import pytest
 
-from app.sim.navigation import Planner, Route, walk_along
+from app.sim.navigation import SLOPE_MAX, Planner, Route, slope_factor, walk_along
 from app.sim.vec import Vec3, angle
 from app.sim.world import SimWorld
 from app.world.biomes import BIOME_IDS
+from app.world.roads import NONE
 from tests.sim_helpers import nearest_cell_of
 
 GATE_PASSAGE_X = 1.3  # the main gatehouse leaves x in [-1.3, 1.3] open at z = 100
@@ -123,13 +124,44 @@ def test_long_walks_outside_avoid_water_and_are_cheapest(sim_world: SimWorld, pl
     assert cost == pytest.approx(planner.outer.costs_to(first, {goal_cell})[goal_cell])
 
 
-def test_forest_costs_more_than_grass(sim_world: SimWorld, planner: Planner) -> None:
-    grass = int(np.flatnonzero((sim_world.biomes == BIOME_IDS["grassland"]) & ~sim_world.in_town)[0])
-    forest = int(np.flatnonzero(sim_world.biomes == BIOME_IDS["broadleaf_forest"])[0])
+def test_forest_costs_more_than_grass_and_climbs_more_than_the_flat(sim_world: SimWorld, planner: Planner) -> None:
+    off_road = (sim_world.road_kinds == NONE) & ~sim_world.in_town
+    grass = int(np.flatnonzero((sim_world.biomes == BIOME_IDS["grassland"]) & off_road)[0])
+    forest = int(np.flatnonzero((sim_world.biomes == BIOME_IDS["broadleaf_forest"]) & off_road)[0])
     for cell, factor in ((grass, 1.0), (forest, 1.5)):
         for other, edge in planner.outer.edges[cell]:
             length = angle(sim_world.unit(cell), sim_world.unit(other)) * sim_world.radius_m
-            assert edge == pytest.approx(length * (factor + planner.outer.cost[other]) / 2)
+            rise = sim_world.heights[other] - sim_world.heights[cell]
+            flat = length * (factor + planner.outer.cost[other]) / 2
+            assert edge == pytest.approx(flat * slope_factor(rise, length))
+            back = dict(planner.outer.edges[other])[cell]  # the same edge the other way
+            assert back == pytest.approx(flat * slope_factor(-rise, length))
+
+
+def test_tobler_slows_climbs_and_steep_descents_up_to_a_cap() -> None:
+    assert slope_factor(0.0, 100.0) == 1.0
+    assert slope_factor(10.0, 100.0) == pytest.approx(1.419, abs=1e-3)  # +10 %
+    assert slope_factor(20.0, 100.0) == pytest.approx(2.014, abs=1e-3)  # +20 %
+    assert slope_factor(-5.0, 100.0) == pytest.approx(0.839, abs=1e-3)  # the easiest grade
+    assert slope_factor(-20.0, 100.0) == pytest.approx(1.419, abs=1e-3)  # steep down is slow again (as +10 %)
+    assert slope_factor(31.0, 100.0) < SLOPE_MAX == slope_factor(32.0, 100.0)  # capped past about +31 %
+    assert slope_factor(150.0, 100.0) == slope_factor(-150.0, 100.0) == SLOPE_MAX == 3.0
+    assert slope_factor(5.0, 0.0) == 1.0
+
+
+def test_route_legs_cost_their_climb_but_never_less_than_flat_ground(sim_world: SimWorld, planner: Planner) -> None:
+    start = sim_world.town.to_unit(0.0, 120.0)
+    camp = next(site for site in sim_world.sites if site.id == "standing_stones")
+    route = planner.plan(start, tuple(camp.anchor.position))  # type: ignore[arg-type]
+    back = planner.plan(tuple(camp.anchor.position), start)  # type: ignore[arg-type]
+    assert route is not None and back is not None
+    assert min(route.costs) == 1.0  # roads and gentle descents: as fast as flat grass, no faster
+    climbs = [cost for cost in route.costs if cost > 1.6]  # steeper than any terrain off a mountain
+    assert climbs
+    costs = [sum(r.costs[k] * angle(r.points[k], r.points[k + 1]) for k in range(len(r.costs))) for r in (route, back)]
+    assert costs[0] != pytest.approx(costs[1], rel=0.01)  # up one way, down the other
+    with pytest.raises(ValueError):
+        Route(points=route.points[:2], costs=(0.8,))
 
 
 def test_no_route_into_the_sea_or_to_water_cells(sim_world: SimWorld, planner: Planner) -> None:
