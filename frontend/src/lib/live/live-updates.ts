@@ -13,7 +13,7 @@ export type LiveLink = 'connecting' | 'live' | 'down';
 export const REFRESH_MS = 1_000;
 const RETRY_FIRST_MS = 500;
 const RETRY_MAX_MS = 15_000;
-const NEW_RUN_RETRY_MS = 50;
+const RESYNC_RETRY_MS = 50;
 const IDLE_CLOSE_MS = 1_000;
 
 export interface LiveUpdatesDeps {
@@ -84,8 +84,8 @@ export class LiveUpdates {
       this.socket = null;
       this.setLink('down');
       const delay =
-        code === LIVE_CLOSE.newRun
-          ? NEW_RUN_RETRY_MS
+        code === LIVE_CLOSE.resync
+          ? RESYNC_RETRY_MS
           : Math.min(RETRY_FIRST_MS * 2 ** this.attempt++, RETRY_MAX_MS);
       this.retry = setTimeout(() => this.connect(), delay);
     };

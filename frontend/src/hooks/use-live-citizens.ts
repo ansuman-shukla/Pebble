@@ -53,7 +53,7 @@ export interface LiveFeed {
 const RETRY_FIRST_MS = 500;
 const RETRY_MAX_MS = 15_000;
 /** A newer run started: reconnect right away. */
-const NEW_RUN_RETRY_MS = 50;
+const RESYNC_RETRY_MS = 50;
 
 type Action =
   | { type: 'entities'; view: EntitiesAnswer }
@@ -122,10 +122,10 @@ export function useLiveCitizens(
       };
       socket.onclose = ({ code }) => {
         if (disposed) return;
-        if (code === LIVE_CLOSE.newRun) {
+        if (code === LIVE_CLOSE.resync) {
           attempt = 0;
           setStatus('reconnecting');
-          retry = window.setTimeout(open, NEW_RUN_RETRY_MS);
+          retry = window.setTimeout(open, RESYNC_RETRY_MS);
           return;
         }
         setStatus(code === LIVE_CLOSE.noRun ? 'no-run' : 'reconnecting');

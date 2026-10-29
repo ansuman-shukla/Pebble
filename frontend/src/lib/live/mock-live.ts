@@ -623,7 +623,7 @@ export class MockLiveServer {
     this.states = this.freshStates();
     this.wild = new MockWild(this.world);
     this.feelings.clear();
-    this.dropConnections(LIVE_CLOSE.newRun);
+    this.dropConnections(LIVE_CLOSE.resync);
   }
 
   detach(socket: MockSocket, code: number) {
