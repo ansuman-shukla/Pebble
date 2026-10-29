@@ -56,7 +56,7 @@ function smokeMaterial() {
   const material = new MeshLambertMaterial({
     color: '#9a9590',
     transparent: true,
-    opacity: 0.4,
+    opacity: 0.7,
     depthWrite: false,
   });
   material.onBeforeCompile = (shader) => {
@@ -73,7 +73,8 @@ function smokeMaterial() {
       )
       .replace(
         '#include <opaque_fragment>',
-        '#include <opaque_fragment>\ngl_FragColor.a *= vPuffAlpha;',
+        // soft edges: a puff thins towards its outline
+        '#include <opaque_fragment>\nfloat puffFacing = abs(dot(normal, normalize(vViewPosition)));\ngl_FragColor.a *= vPuffAlpha * smoothstep(0.0, 0.6, puffFacing);',
       );
   };
   material.customProgramCacheKey = () => 'fire-smoke';
