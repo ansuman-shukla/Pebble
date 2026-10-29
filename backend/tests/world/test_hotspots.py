@@ -1,11 +1,14 @@
 """Hotspots, rings, the band B move, fixed features and dens (10-world-v1 §1.2)."""
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
 from app.world.flora import Flora, generate_flora
 from app.world.generate import GeneratedWorld, generate_world
-from app.world.hotspots import place_hotspots, road_distance_m
+from app.world.hotspots import WATER_MOVE_M, place_hotspots, road_distance_m
+from app.world.paths import reachable
 from app.world.spec import BIOME_NAMES, HotspotsSpec, WorldSpec, load_site_kinds, load_world_spec
 from app.world.sphere import angle_between, bearing_deg, lat_lon, unit_from_lat_lon
 from app.world.surface import Surface, surface_from_view
@@ -79,8 +82,6 @@ def test_there_are_the_fourteen_hotspots_of_the_table(world: GeneratedWorld) -> 
 def test_every_hotspot_is_on_land_of_its_biome_reachable_spaced_and_in_its_ring(
     world: GeneratedWorld, spec: WorldSpec, surface: Surface
 ) -> None:
-    from app.world.paths import reachable
-
     from_town = reachable(surface.grid, surface.walk, surface.site("town").cell)
     rings = spec.hotspots.rings
     for authored, hotspot in zip(spec.hotspots.hotspots, world.places.hotspots, strict=True):
@@ -223,18 +224,37 @@ def _with_hotspot(spec: HotspotsSpec, hotspot_id: str, **update: object) -> Hots
 
 
 @pytest.mark.parametrize(
-    ("update", "message"),
+    ("hotspot_id", "update", "message"),
     [
-        ({"biomes": ["taiga"]}, r"lies in (beach|grassland), not in \['taiga'\]"),
-        ({"ring": "middle"}, "lies 220 m from town, outside its middle ring"),
-        ({"at": (37.0, 12.0)}, "lies in the town chart"),
+        ("painted_cave_flint", {"biomes": ["taiga"]}, r"lies in (grassland|hills), not in \['taiga'\]"),
+        ("north_woods", {"ring": "far"}, r"lies \d+ m from town, outside its far ring"),
+        ("north_woods", {"at": (38.0, 12.0)}, "lies in the town chart"),
+        ("north_woods", {"at": (77.53, 11.64)}, "can't be reached on foot from the town"),  # the north cap's ice
     ],
 )
 def test_generation_refuses_a_hotspot_with_no_spot_keeping_the_rules(
-    spec: WorldSpec, surface: Surface, update: dict[str, object], message: str
+    spec: WorldSpec, surface: Surface, hotspot_id: str, update: dict[str, object], message: str
 ) -> None:
-    with pytest.raises(ValueError, match=f"gulf_shore has no spot within 150 m .*: at it, it {message}"):
-        place_hotspots(_with_hotspot(spec.hotspots, "gulf_shore", **update), surface)
+    with pytest.raises(ValueError, match=f"{hotspot_id} has no spot within 150 m .*: at it, it {message}"):
+        place_hotspots(_with_hotspot(spec.hotspots, hotspot_id, **update), surface)
+
+
+def test_a_hotspot_whose_features_need_water_follows_the_nearest_water(spec: WorldSpec, surface: Surface) -> None:
+    target = (4.0, 96.0)  # in band A's middle ring, over 150 m from any river
+    hotspots = place_hotspots(_with_hotspot(spec.hotspots, "river_marsh", at=target), surface)
+
+    marsh = _placed(hotspots, "river_marsh")
+    centre = np.array(marsh.centre)
+    assert 150 < surface.distance_m(unit_from_lat_lon(*target), centre) <= WATER_MOVE_M
+    assert (surface.river & (surface.distances_m(centre) <= marsh.radius_m)).sum() >= 2
+    assert spec.hotspots.rings.home_m < marsh.distance_m <= spec.hotspots.rings.middle_m
+
+
+def test_a_hotspot_whose_water_is_nowhere_in_reach_is_refused(spec: WorldSpec, surface: Surface) -> None:
+    dry = replace(surface, river=np.zeros_like(surface.river))
+
+    with pytest.raises(ValueError, match="river_marsh has no spot within 2000 m .*: at it, it has room for 0 of 2"):
+        place_hotspots(spec.hotspots, dry)
 
 
 def _placed(hotspots: list[Hotspot], hotspot_id: str) -> Hotspot:

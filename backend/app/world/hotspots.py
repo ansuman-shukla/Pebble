@@ -25,6 +25,8 @@ from app.world.terrain import BoolArray, polyline_distance
 from app.world.view import Feature, Ground, Hotspot, Road
 
 MAX_MOVE_M = 150.0  # a hotspot may lie this far from its target to keep the rules (10 §1.2)
+WATER_MOVE_M = 2000.0  # a hotspot whose features need water follows the nearest water this far instead (D122)
+WATER_FEATURES = frozenset({"fishing_spot", "gold_pool", "iron_sand_bar"})
 FEATURE_SPACING_M = 20.0  # features of one kind in a hotspot keep this far apart
 DEN_BESIDE_M = (40.0, 60.0)  # a den beside a road lies this far off it
 DEN_EDGE_M = 35.0  # a den at a hotspot's edge lies this far outside its radius (bushes 30-50 m away)
@@ -43,10 +45,11 @@ def ring_of(distance_m: float, rings: RingSpec) -> Ring | None:
 
 
 def place_hotspots(spec: HotspotsSpec, surface: Surface) -> list[Hotspot]:
-    """Each hotspot at its target, or at the nearest cell within MAX_MOVE_M where it keeps every rule: on land of
-    one of its biomes, outside the town chart, reachable on foot from the town, in its ring, `min_spacing_m` from
-    the hotspots before it, with room for its fixed features. Raises when no such spot exists. A painted hotspot
-    then gives its land its authored biome (in `surface.biomes`, the generated world's array)."""
+    """Each hotspot at its target, or at the nearest cell within MAX_MOVE_M (WATER_MOVE_M when its features need
+    water) where it keeps every rule: on land of one of its biomes, outside the town chart, reachable on foot from
+    the town, in its ring, `min_spacing_m` from the hotspots before it, with room for its fixed features. Raises
+    when no such spot exists. A painted hotspot then gives its land its authored biome (in `surface.biomes`, the
+    generated world's array)."""
     from_town = reachable(surface.grid, surface.walk, surface.site("town").cell)
     hotspots: list[Hotspot] = []
     for hotspot_spec in spec.hotspots:
@@ -62,17 +65,18 @@ def _hotspot(
     spec: HotspotSpec, hotspots: HotspotsSpec, surface: Surface, from_town: BoolArray, placed: list[Hotspot]
 ) -> Hotspot:
     target = unit_from_lat_lon(*spec.at)
+    reach_m = WATER_MOVE_M if any(feature.kind in WATER_FEATURES for feature in spec.features) else MAX_MOVE_M
+    at_target = _candidate(spec, surface, target)
+    problem = _problem(at_target, spec, hotspots, surface, from_town, placed)
+    if problem is None:
+        return at_target
     distance = surface.distances_m(target)
-    near = np.flatnonzero(distance <= MAX_MOVE_M)
-    candidates = [target, *surface.grid.positions[near[np.argsort(distance[near], kind="stable")]]]
-    first_problem = ""
-    for centre in candidates:
-        hotspot = _candidate(spec, surface, np.asarray(centre, dtype=np.float64))
-        problem = _problem(hotspot, spec, hotspots, surface, from_town, placed)
-        if problem is None:
+    near = np.flatnonzero(distance <= reach_m)
+    for cell in near[np.argsort(distance[near], kind="stable")].tolist():
+        hotspot = _candidate(spec, surface, surface.cell_unit(cell))
+        if _problem(hotspot, spec, hotspots, surface, from_town, placed) is None:
             return hotspot
-        first_problem = first_problem or problem
-    raise ValueError(f"hotspot {spec.id} has no spot within {MAX_MOVE_M:.0f} m of {spec.at}: at it, {first_problem}")
+    raise ValueError(f"hotspot {spec.id} has no spot within {reach_m:.0f} m of {spec.at}: at it, {problem}")
 
 
 def _candidate(spec: HotspotSpec, surface: Surface, centre: FloatArray) -> Hotspot:

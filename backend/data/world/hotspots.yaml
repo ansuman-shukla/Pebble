@@ -1,7 +1,8 @@
 # Hotspots (10-world-v1 §1.2): named clusters of nodes in three rings around each settlement. `at` is the target
 # [lat, lon] (the bible's table where it gives one); generation puts each hotspot at its target or the nearest cell
-# within 150 m where it keeps every rule: on land of one of its biomes, outside the town chart, reachable on foot,
-# in its ring, min_spacing_m from the hotspots above it, with room for its features. `flora` counts are exact
+# within 150 m (2 km when its features need water: it follows the nearest water) where it keeps every rule: on land
+# of one of its biomes, outside the town chart, reachable on foot, in its ring, min_spacing_m from the hotspots above
+# it, with room for its features. `flora` counts are exact
 # (natural flora of those kinds stays out of the hotspot);
 # `features` are fixed nodes placed by rule; `paint` gives its land an authored biome like a site's; `called` is the
 # name mid-sentence ("the path from Band A camp to the River marsh").
