@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Literal
 
+from app.sim.locomotion import load_bodies
 from app.sim.state import AgeTraits, Body
 
 Need = Literal["hunger", "thirst", "energy", "health"]
@@ -79,22 +80,25 @@ def _clamp(value: float) -> float:
     return min(100.0, max(0.0, value))
 
 
-def update_body(body: Body, traits: AgeTraits, activity: str | None, hot: bool) -> BodyChange:
+def update_body(body: Body, traits: AgeTraits, activity: str | None, hot: bool, running: bool = False) -> BodyChange:
     """One tick of needs for a living body; returns threshold crossings since the last report (eating and drinking
-    between ticks included), death and collapse."""
+    between ticks included), death and collapse. A minute of running (10-world-v1 §4.1) costs extra energy and makes
+    twice as thirsty."""
     if not body.alive:
         raise ValueError("dead bodies don't change")
     before = dict(zip(NEEDS, body.levels, strict=True))
     rate = traits.need_rate * (ASLEEP_RATE if body.asleep else ACTIVE_RATE if activity in ACTIVE_ACTIONS else 1.0)
     body.hunger = _clamp(body.hunger + HUNGER_PER_HOUR * rate * _PER_TICK)
-    body.thirst = _clamp(body.thirst + THIRST_PER_HOUR * rate * (HEAT_THIRST_RATE if hot else 1.0) * _PER_TICK)
+    run = load_bodies().run
+    thirst_rate = rate * (HEAT_THIRST_RATE if hot else 1.0) * (run.thirst_rate if running else 1.0)
+    body.thirst = _clamp(body.thirst + THIRST_PER_HOUR * thirst_rate * _PER_TICK)
     if body.asleep:
         energy_rate = ENERGY_ASLEEP_PER_HOUR
     elif activity in RESTING_ACTIONS:
         energy_rate = ENERGY_RESTING_PER_HOUR
     else:
         energy_rate = ENERGY_AWAKE_PER_HOUR
-    body.energy = _clamp(body.energy + energy_rate * _PER_TICK)
+    body.energy = _clamp(body.energy + energy_rate * _PER_TICK - (run.energy_per_minute if running else 0.0))
 
     damage = 0.0
     if body.hunger >= THRESHOLDS["hunger"][1]:

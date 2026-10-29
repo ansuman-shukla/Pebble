@@ -12,7 +12,6 @@ from app.sim import wild
 from app.sim.clock import SECONDS_PER_TICK
 from app.sim.core import WALK_AHEAD_TICKS
 from app.sim.feed_citizens import streamed_route
-from app.sim.movement import WALK_M_PER_TICK
 from app.sim.navigation import Route
 from app.sim.simulation import Simulation
 from app.sim.vec import Vec3, step_towards
@@ -20,7 +19,8 @@ from app.world_api.facade import WorldApi
 from tests.sim_helpers import add_animal, drawn_on, make_spec, put_in_the_wild, skip_to, wild_cell, without_animals
 
 STEP_M = 0.1
-FLAT_WALK_MPS = 5000 / 3600  # 5 km/h
+FLAT_WALK_MPS = 1.4  # an adult walking on flat open ground by day (bodies.yaml)
+WALK_M_PER_TICK = FLAT_WALK_MPS * SECONDS_PER_TICK
 DRAWN_M = 0.01  # how close the drawn spot must be to the simulated one
 
 
@@ -143,6 +143,7 @@ def test_a_hair_of_a_move_is_one_spot(new_sim: Callable[..., Simulation]) -> Non
     sim = without_animals(new_sim())
     citizen = sim.add_citizen(make_spec(home=None))
     put_in_the_wild(sim, citizen.id, wild_cell(sim))
+    skip_to(sim, citizen.position, night=False)  # walking at the day pace
     radius = sim.world.radius_m
     WorldApi(sim, citizen.id).walk_towards("north", "a long walk")
     walk = citizen.action
@@ -194,6 +195,7 @@ def test_the_times_follow_each_legs_walking_cost(new_sim: Callable[..., Simulati
     sim = without_animals(new_sim())
     citizen = sim.add_citizen(make_spec(home=None))
     put_in_the_wild(sim, citizen.id, wild_cell(sim))
+    skip_to(sim, citizen.position, night=False)  # walking at the day pace
     WorldApi(sim, citizen.id).walk_towards("north", "a long walk")
     walk = citizen.action
     assert walk is not None
@@ -257,8 +259,8 @@ def test_a_hunter_creeping_up_is_streamed_at_the_stalking_pace(
 def test_a_hunter_who_strikes_is_streamed_only_up_to_the_strike(
     new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # 64 m off: a minute's creep (50 m) brings the deer within the strike (15 m), short of the usual 12 m stop
-    sim, api, _ = _hunter(new_sim, 64.0)
+    # 62 m off: a minute's creep (48 m) brings the deer within the strike (15 m), short of the usual 12 m stop
+    sim, api, _ = _hunter(new_sim, 62.0)
     monkeypatch.setattr(wild, "hunt_chance", lambda *_: 1.0)
     hunter = sim.citizen("hunter")
     api.hunt("the deer")
