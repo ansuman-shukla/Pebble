@@ -120,7 +120,8 @@ export type PropKind =
   | 'coin_pouch'
   | 'camp_drying_rack'
   | 'sleeping_mat'
-  | 'field_barricade';
+  | 'field_barricade'
+  | 'loom';
 
 export const PROPS: Record<PropKind, string> = {
   castle_keep: 'tenshu-keep-2ff636',
@@ -229,6 +230,8 @@ export const PROPS: Record<PropKind, string> = {
   camp_drying_rack: 'drying-net-rack-93ec3b',
   sleeping_mat: 'straw-pile-ebd54d',
   field_barricade: 'field-barricade-a646b9',
+  // no loom in the catalogue: a wooden frame stands in until a procedural loom is drawn (D131)
+  loom: 'horse-tether-rail-b26462',
 };
 
 export type HandPropKind =

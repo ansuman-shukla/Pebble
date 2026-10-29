@@ -51,6 +51,14 @@ ox_cart: {footprint: [2, 4], walk: solid}
 river_boat: {footprint: [1.5, 6], walk: solid}
 bucket: {footprint: [0.4, 0.3], walk: none}
 
+# stores, stations and furniture (World v1; sizes from findings/2026-10-29-asset-pack-v1.md)
+market_stall: {footprint: [1.96, 1.13], walk: solid}
+forge: {footprint: [5.08, 4.03], walk: solid}
+anvil: {footprint: [0.81, 0.76], walk: solid}
+chest: {footprint: [0.79, 0.79], walk: solid} # a household chest (the keep's is the treasury)
+field_barricade: {footprint: [2, 0.84], walk: solid} # the gaol pen
+loom: {footprint: [2, 1], walk: solid} # no loom asset: drawn as a stand-in frame (D131)
+
 # plants
 cherry_tree: {footprint: [6, 6], walk: solid, blockers: [[-0.3, -0.3, 0.3, 0.3]]}
 maple_tree: {footprint: [4.5, 4], walk: solid, blockers: [[-0.3, -0.3, 0.3, 0.3]]}
