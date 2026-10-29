@@ -12,7 +12,13 @@ import {
   movingLooks,
 } from '@/components/world/kind-parts';
 import type { TownPlacement } from '@/lib/client/types.gen';
-import { holdsDoor, leafMove, Passers, swingToward } from '@/lib/world/doors';
+import {
+  type DoorSwing,
+  holdsDoor,
+  leafMove,
+  Passers,
+  swingToward,
+} from '@/lib/world/doors';
 import {
   ClipBudget,
   clipPhase,
@@ -98,6 +104,8 @@ export class LivingKind {
   private readonly hidden: Uint8Array;
   private readonly hasFire: boolean;
   private readonly toLocal: Matrix4[] = [];
+  /** The slots of the swinging door leaves and how each swings. */
+  private readonly leaves: { slot: Slot; leaf: DoorSwing }[] = [];
   private played: readonly number[] = [];
   private lookedAtDoors = -Infinity;
   private lookedAtParts = -Infinity;
@@ -151,6 +159,10 @@ export class LivingKind {
       return instances;
     });
     this.hidden = new Uint8Array(count * this.slots.length);
+    for (const slot of this.slots) {
+      const leaf = model.doorway?.leaves.find(({ node }) => node === slot.node);
+      if (leaf) this.leaves.push({ slot, leaf });
+    }
     this.hasFire = this.slots.some((slot) => slot.fire);
   }
 
@@ -237,15 +249,11 @@ export class LivingKind {
         this.doorOpen[index] = open ? 1 : 0;
       });
     }
-    const leaves = this.slots.flatMap((slot) => {
-      const leaf = doorway.leaves.find(({ node }) => node === slot.node);
-      return leaf ? [{ slot, leaf }] : [];
-    });
     this.doorAmounts.forEach((amount, index) => {
       const next = swingToward(amount, this.doorOpen[index] === 1, seconds);
       if (next === amount) return;
       this.doorAmounts[index] = next;
-      for (const { slot, leaf } of leaves)
+      for (const { slot, leaf } of this.leaves)
         slot.moves.set(index, slot.part, leafMove(leaf, next, move));
       const id = this.placements[index].id;
       if (next > 0) propViews.openDoors.add(id);
