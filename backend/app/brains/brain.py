@@ -36,15 +36,12 @@ from app.brains.senses import (
 )
 from app.core.rng import Rng
 from app.world_api.facade import ActionHandle, WorldApi
-from app.world_api.models import Nearness, Perception
+from app.world_api.models import Perception
 
 STOREHOUSES = "the storehouses"
 WELL = "the well"
 FIRE = "the fire pit"
 GREET_CHANCE = 0.5
-# who surely hears a normal greeting (03: speech carries ~30 m, while "close by" reaches 50 m); brains don't shout
-# greetings, as a shout carries 150 m and stops everyone's work and sleep there
-EARSHOT: frozenset[Nearness] = frozenset({"right beside you", "a few paces"})
 EAT_ORDER = ("berries", "nuts", "roots", "rice", "dried meat")  # what spoils first goes first; dried meat keeps
 RAW = ("meat", "fish")  # roasted by a fire, else eaten raw only when there's nothing else (it can make you sick)
 
@@ -228,13 +225,17 @@ class UtilityBrain:
     # --- greetings ---
 
     def socialise(self, p: Perception) -> bool:
-        """Reply to someone who greeted you by name, or greet a known person close by (once a day each), when they're
-        near enough to hear it."""
+        """Reply to someone who greeted you by name, or greet a known person a few paces off (once a day each), when
+        they're near enough to hear it.
+
+        Only people a few paces off surely hear a normal voice (03: speech carries ~30 m, "close by" reaches 50 m).
+        Brains don't shout greetings: a shout carries 150 m and stops everyone's work and sleep there (D97).
+        """
         greeted = self.api.notes.setdefault("greeted", [])
         if not isinstance(greeted, list):
             raise TypeError("greeted must be a list")
         name = self.profile.name
-        within_earshot = {person.label for person in p.people if person.nearness in EARSHOT}
+        within_earshot = {person.label for person in p.people if beside(person)}
         for heard in p.heard:
             if is_name(heard.who) and name.lower() in heard.words.lower() and heard.who not in greeted:
                 if heard.who not in within_earshot:
