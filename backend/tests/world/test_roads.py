@@ -70,7 +70,7 @@ def test_gate_roads_start_with_a_lead_from_the_gate_to_the_chart_edge(world: Gen
 
 
 def test_the_west_road_leaves_the_west_gate_over_a_bridge_past_the_lords_woods_to_band_b(
-    world: GeneratedWorld,
+    world: GeneratedWorld, surface: Surface
 ) -> None:
     road = _road(world, "west_road")
     camp = next(site for site in world.sites if site.id == "band_b_camp")
@@ -80,6 +80,10 @@ def test_the_west_road_leaves_the_west_gate_over_a_bridge_past_the_lords_woods_t
     assert road.kind == "road" and road.stops[0] == "west_gate"
     assert road.cells[-1] == camp.cell and woods.cell in road.cells
     assert bridges[0].cell is None  # over the town's stream, on the lead
+    assert not surface.river[road.cells[0]]  # the cell route starts across the river, not back in it
+    lead_end = np.array(road.lead[-1])
+    for bridge in bridges[1:]:
+        assert angle_between(np.array([bridge.position]), lead_end)[0] * surface.radius_m > 80
 
 
 def test_every_river_crossing_of_a_road_or_path_is_a_bridge(world: GeneratedWorld, surface: Surface) -> None:

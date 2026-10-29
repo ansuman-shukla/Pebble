@@ -132,6 +132,10 @@ def test_dens_lie_where_the_table_puts_them(world: GeneratedWorld, surface: Surf
     )
     assert 40 <= west[0] <= 60
     assert 40 <= trail[0] <= 60
+    for hotspot_id in ("lords_woods", "bridge_meadows"):  # in the hotspot, beside its stretch of the way
+        hotspot = _hotspot(world, hotspot_id)
+        den = np.array(_feature(world, f"{hotspot_id}:den").position)
+        assert _metres(world, np.array(hotspot.centre), den) <= hotspot.radius_m, hotspot_id
 
     bushes = flora.units[[places.flora_nodes[kind] == "berry_bush" for kind in flora.kind]]
     for hotspot_id in ("elder_grove", "b_wood"):
@@ -140,6 +144,10 @@ def test_dens_lie_where_the_table_puts_them(world: GeneratedWorld, surface: Surf
         assert 30 <= nearest[0] <= 50, hotspot_id
     elder = np.array(_feature(world, "elder_grove:den").position)
     assert (angle_between(bushes, elder) * world.spec.radius_m < 40).any()  # bushes inside its defence ring
+
+    for hotspot_id in ("elder_grove", "b_wood"):  # at the edge on the side away from the ways in
+        den = np.array(_feature(world, f"{hotspot_id}:den").position)
+        assert road_distance_m(den, places.roads, surface)[0] >= 60, hotspot_id
 
     lion = _feature(world, "a_savanna:den")
     camp_a = _site_unit(world, "band_a_camp")
@@ -197,7 +205,8 @@ def test_claimed_hotspots_show_a_marker_where_their_owners_way_enters(world: Gen
     }
     for hotspot_id, marker in markers.items():
         hotspot = _hotspot(world, hotspot_id or "")
-        assert _metres(world, np.array(hotspot.centre), np.array(marker.position)) <= hotspot.radius_m
+        from_centre = _metres(world, np.array(hotspot.centre), np.array(marker.position))
+        assert hotspot.radius_m - 45 <= from_centre <= hotspot.radius_m  # at the edge, where the way comes in
         assert any(marker.cell in road.cells for road in world.places.roads if hotspot.id in road.stops)
 
 
@@ -249,3 +258,20 @@ def test_a_hotspot_whose_target_is_taken_keeps_its_distance(spec: WorldSpec, sur
     shore, woods = _placed(hotspots, "gulf_shore"), _placed(hotspots, "north_woods")
     gap = surface.distance_m(np.array(shore.centre), np.array(woods.centre))
     assert spec.hotspots.min_spacing_m <= gap <= 150
+
+
+def test_sea_fishing_spots_sit_where_the_drawn_sea_meets_the_shore(world: GeneratedWorld, surface: Surface) -> None:
+    spots = [feature for feature in world.places.features if feature.water == "sea"]
+    assert len(spots) == 6
+    for spot in spots:
+        point = np.array(spot.position)
+        best = np.inf
+        for land in np.flatnonzero(surface.walk & (surface.distances_m(point) < 60)):
+            for sea in surface.grid.neighbours[land]:
+                if sea < 0 or not surface.ocean[sea]:
+                    continue
+                high, low = surface.heights[land], surface.heights[sea]
+                t = float(np.clip(high / (high - low), 0.05, 0.95))
+                shore = surface.grid.positions[land] * (1 - t) + surface.grid.positions[sea] * t
+                best = min(best, surface.distance_m(point, shore / np.linalg.norm(shore)))
+        assert best < 0.01, spot.id

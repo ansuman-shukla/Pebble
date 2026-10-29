@@ -13,7 +13,7 @@ from app.world.spec import BIOME_NAMES, CAMPS, WorldSpec, load_site_kinds, load_
 from app.world.sphere import angle_between, tangent_frame
 from app.world.surface import Surface, surface_from_view
 from app.world.terrain import polyline_distance
-from app.world.view import WorldView, decode_array
+from app.world.view import WorldView, decode_array, encode_array
 
 
 @pytest.fixture(scope="module")
@@ -194,3 +194,56 @@ def test_every_kind_grows_only_in_its_biomes(view: WorldView, spec: WorldSpec, f
     seen = Counter((BIOME_NAMES[biome], kinds[kind]) for biome, kind in zip(biomes, flora.kind, strict=True))
     strays = {pair: count for pair, count in seen.items() if pair not in natural}
     assert sum(strays.values()) <= 0.002 * len(flora), strays  # placed nodes take their biome's kind
+
+
+def test_nothing_grows_seaward_of_the_drawn_shore(flora: Flora, surface: Surface) -> None:
+    owners = _owners(surface, flora)
+    triangles = surface.grid.triangles
+    by_sea = np.flatnonzero(np.append(surface.ocean, False)[surface.padded_neighbours[owners]].any(axis=1))
+    for index in by_sea.tolist():
+        point, owner = flora.units[index], int(owners[index])
+        for corners in triangles[(triangles == owner).any(axis=1)]:
+            a, b, c = surface.grid.positions[corners]
+            normal = np.cross(b - a, c - a)
+            hit = point * (a @ normal) / (point @ normal)
+            wa = float(np.cross(c - b, hit - b) @ normal / (normal @ normal))
+            wb = float(np.cross(a - c, hit - c) @ normal / (normal @ normal))
+            weights = np.array([wa, wb, 1 - wa - wb])
+            if weights.min() >= -1e-9:
+                if surface.ocean[corners].any():
+                    assert float(weights @ surface.heights[corners]) >= 0.3 - 1e-6, index
+                break
+    assert len(by_sea) > 100
+
+
+def test_an_edge_dens_grove_puts_its_first_bush_36_m_off_even_when_sparse(
+    view: WorldView, spec: WorldSpec, flora: Flora, surface: Surface
+) -> None:
+    sparse = view.model_copy(deep=True)
+    for hotspot in sparse.places.hotspots:
+        if hotspot.id == "b_wood":
+            hotspot.flora["berry_bush"] = 2  # two bushes in a 130 m wood would seldom stand near its den
+    for table, world_view in ((flora, view), (generate_flora(sparse, spec), sparse)):
+        bushes = _nodes(world_view, table) == "berry_bush"
+        for hotspot in world_view.places.hotspots:
+            if hotspot.id not in ("elder_grove", "b_wood"):
+                continue
+            grove = bushes & (_metres(surface, table, np.array(hotspot.centre)) <= hotspot.radius_m)
+            den = next(feature for feature in world_view.places.features if feature.id == f"{hotspot.id}:den")
+            nearest = np.sort(_metres(surface, table, np.array(den.position))[grove])
+            assert 33 <= nearest[0] <= 39, hotspot.id
+
+
+def test_camps_keep_their_worn_ground_clear_even_in_a_forest(view: WorldView, spec: WorldSpec) -> None:
+    forested = decode_array(view.biomes, "u1").copy()
+    surface = surface_from_view(view, spec.roads.town_chart_half_m)
+    for camp in CAMPS:
+        near = surface.distances_m(surface.site_unit(camp)) < 80
+        forested[near & surface.walk] = BIOME_IDS["broadleaf_forest"]
+    wooded = view.model_copy(update={"biomes": encode_array(forested, "u1")})
+    flora = generate_flora(wooded, spec)
+    trees = np.array(view.places.flora_nodes)[flora.kind] == "tree"
+    for camp in CAMPS:
+        distance = _metres(surface, flora, surface.site_unit(camp))
+        assert distance.min() >= 12, camp
+        assert ((distance < 40) & trees).sum() >= 5, camp  # the forest reaches the clearing
