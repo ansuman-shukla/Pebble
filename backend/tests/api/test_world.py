@@ -1,3 +1,4 @@
+import hashlib
 from collections.abc import Iterator, Mapping
 
 import numpy as np
@@ -8,6 +9,7 @@ from sqlmodel import Session
 from app.api.deps import get_session, get_world_generator
 from app.core.config import settings
 from app.main import app
+from app.services import places as places_service
 from app.world.flora import generate_flora
 from app.world.generate import GENERATOR, generate_view
 from app.world.spec import BIOME_NAMES, SITE_IDS, WorldSpec, load_world_spec
@@ -134,10 +136,34 @@ def test_flora_is_served_packed_cached_and_revalidated(client: TestClient, count
     assert response.content == generate_flora(world, load_world_spec()).pack()
     assert len(response.content) % 9 == 0 and len(response.content) > 9 * 40_000
     etag = response.headers["etag"]
-    assert "max-age" in response.headers["cache-control"]
+    assert etag == f'"{hashlib.sha256(response.content).hexdigest()[:32]}"'
+    assert response.headers["cache-control"] == "no-cache"
     again = client.get(f"{WORLD_URL}/flora", headers={"If-None-Match": etag})
     assert again.status_code == 304 and again.content == b""
+    assert again.headers["etag"] == etag and again.headers["cache-control"] == "no-cache"
     assert counting.calls == 1
+
+
+@pytest.mark.usefixtures("counting")
+def test_new_flora_code_on_the_same_world_is_new_bytes_under_a_new_etag(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    old = client.get(f"{WORLD_URL}/flora")
+    monkeypatch.setattr(places_service, "_layouts", {})  # a new api process with new flora code
+    monkeypatch.setattr(places_service, "generate_flora", lambda *_: _Packed(bytes(9)))
+
+    new = client.get(f"{WORLD_URL}/flora", headers={"If-None-Match": old.headers["etag"]})
+
+    assert new.status_code == 200 and new.content == bytes(9)
+    assert new.headers["etag"] != old.headers["etag"]
+
+
+class _Packed:
+    def __init__(self, data: bytes) -> None:
+        self.data = data
+
+    def pack(self) -> bytes:
+        return self.data
 
 
 def test_world_schema_names_the_places_models(client: TestClient) -> None:

@@ -8,7 +8,7 @@ from app.world.view import WorldPlaces, WorldView
 
 router = APIRouter(prefix="/world", tags=["world"])
 
-_CACHE = "public, max-age=3600"
+_REVALIDATE = "no-cache"  # keep it, but ask each time (a 304 is cheap)
 
 
 @router.get("", response_model=WorldView)
@@ -33,8 +33,7 @@ def read_flora(request: Request, session: SessionDep, generator: WorldGeneratorD
     """Every usable tree, bush, root patch, reed bed and deadwood pile, packed (layout in `app.world.flora`):
     `cell u32[n] | east i8[n] | north i8[n] | kind u8[n] | scale u8[n] | yaw u8[n]`, little-endian, n = bytes / 9."""
     layout = world_layout(session, generator)
-    etag = f'"{layout.key.generator_version}-{layout.key.spec_hash[:16]}"'
-    headers = {"Cache-Control": _CACHE, "ETag": etag}
-    if request.headers.get("if-none-match") == etag:
+    headers = {"Cache-Control": _REVALIDATE, "ETag": layout.flora_etag}
+    if request.headers.get("if-none-match") == layout.flora_etag:
         return Response(status_code=304, headers=headers)
     return Response(content=layout.flora, media_type="application/octet-stream", headers=headers)
