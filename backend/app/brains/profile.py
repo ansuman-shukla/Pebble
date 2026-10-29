@@ -11,6 +11,7 @@ Routine = Literal[
     "weaver",
     "town_child",
     "townsperson",
+    "monk",
     "band_leader",
     "healer",
     "hunter",
@@ -20,10 +21,14 @@ Routine = Literal[
 ROLE_ROUTINES: tuple[tuple[str, Routine], ...] = (  # first keyword found in the role picks the routine
     ("lord", "lord"),
     ("samurai", "samurai"),
+    ("ashigaru", "samurai"),  # stub until the night watch: the samurai's rounds of the gates
     ("merchant", "merchant"),
     ("weaver", "weaver"),
     ("farmer's child", "town_child"),
     ("farmer", "farmer"),
+    ("smith", "townsperson"),  # stubs until their trades: errands between the well and the market
+    ("digger", "townsperson"),
+    ("monk", "monk"),
     ("leader", "band_leader"),
     ("healer", "healer"),
     ("hunter", "hunter"),

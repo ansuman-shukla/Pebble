@@ -205,6 +205,16 @@ WORK_TASKS: tuple[WorkTask, ...] = (
         label="holding court",
         done="You hear petitions and settle a quarrel over a boundary stone.",
     ),
+    WorkTask(
+        "pray",
+        frozenset({"pray", "prayers", "chant", "sutras", "worship"}),
+        45,
+        None,
+        places=("temple",),
+        nowhere="There is no temple here.",
+        label="praying at the temple",
+        done="You chant the sutras and sweep the temple steps.",
+    ),
 )
 WORK_BY_NAME = {task.name: task for task in WORK_TASKS}
 

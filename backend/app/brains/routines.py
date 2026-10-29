@@ -42,6 +42,7 @@ STOREHOUSES = "the storehouses"
 WELL = "the well"
 MARKET = "the market"
 CASTLE = "the castle"
+TEMPLE = "the temple"
 POSTS = ("the main gate", "the west gate", "the castle", "the training ground")  # the samurai's rounds
 FOODS = ("roots", "nuts", "berries")  # wild food, most filling first
 OUTING_FOOD = 150.0  # bands head back to camp carrying about this much (a day and a half of food)
@@ -244,6 +245,13 @@ def town_child(ctx: Context) -> list[Option]:
     return [_go(ctx, (MARKET, WELL, FIELDS)[ctx.pick(3)])]
 
 
+def monk(ctx: Context) -> list[Option]:
+    """Prays at the temple by day (the bell, alms and tending come with their own systems)."""
+    if not _daytime(ctx):
+        return []
+    return [_work_at(ctx, TEMPLE, "pray")]
+
+
 def townsperson(ctx: Context) -> list[Option]:
     if not _daytime(ctx):
         return []
@@ -436,5 +444,6 @@ ROUTINES: dict[Routine, Callable[[Context], list[Option]]] = {
     "weaver": weaver,
     "town_child": town_child,
     "townsperson": townsperson,
+    "monk": monk,
     **{routine: _forager(routine) for routine in FORAGERS},
 }
