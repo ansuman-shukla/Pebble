@@ -12,7 +12,13 @@
  * Pages pick the quality with `?ground=`: `flat` (layer colours only, the A/B baseline) or `low` (one pattern, no
  * bump).
  */
-import { Color, MeshStandardMaterial, type Vector3 } from 'three';
+import {
+  Color,
+  MeshStandardMaterial,
+  type PerspectiveCamera,
+  Vector2,
+  type Vector3,
+} from 'three';
 
 import {
   type GroundBreakup,
@@ -206,6 +212,7 @@ varying vec4 vGround0;
 varying vec4 vGround1;
 uniform float groundFacets;
 uniform vec2 groundFacetsFade;
+uniform float groundPixel;
 #ifdef GROUND_HOLE
 uniform vec3 groundHoleUp;
 uniform float groundHoleCos;
@@ -301,7 +308,10 @@ float groundRelief = 0.0;
 #ifndef GROUND_FLAT
   float dist = length(vViewPosition);
   vec3 p = vGroundPlanet;
-  float fw = length(fwidth(p));
+  // a pixel's footprint (metres) from the view distance and the smooth normal's tilt: like length(fwidth(p)) but
+  // continuous across the mesh's triangles, so no fade steps along their edges
+  float facing = max(abs(dot(normalize(vNormal), vViewPosition)) / dist, 0.05);
+  float fw = dist * groundPixel * sqrt(1.0 + 1.0 / (facing * facing));
   if (dist < GROUND_MACRO_END) {
     float extra;
     vec4 g = groundNoises(p, extra);
@@ -379,8 +389,18 @@ export function groundMaterial({
   material.defines = defines;
   const constant = weightsArray(weights ?? {});
   const chunk = styleChunk(style);
+  // the angle a pixel spans (radians), for the footprint
+  const pixel = { value: 0.002 };
+  const buffer = new Vector2();
+  material.onBeforeRender = (renderer, _scene, camera) => {
+    const { fov } = camera as PerspectiveCamera;
+    pixel.value =
+      (2 * Math.tan((fov * Math.PI) / 360)) /
+      renderer.getDrawingBufferSize(buffer).y;
+  };
   material.onBeforeCompile = (shader) => {
     shader.uniforms.groundFacets = { value: FACETS };
+    shader.uniforms.groundPixel = pixel;
     shader.uniforms.groundFacetsFade = { value: FACETS_FADE };
     shader.uniforms.groundConst0 = { value: constant.slice(0, 4) };
     shader.uniforms.groundConst1 = { value: constant.slice(4, 8) };
