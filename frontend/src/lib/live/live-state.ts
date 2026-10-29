@@ -1,6 +1,7 @@
 /*
- * What the client knows of the live world: the latest frame of citizens, animals, fires and the clock, and the
- * recent speech. Pure: the hook feeds it the entities answer and every feed message.
+ * What the client knows of the live world: the latest frame of citizens, animals, fires and the clock, the recent
+ * speech, and the recent gestures and blows bodies show (cues). Pure: the hook feeds it the entities answer and every
+ * feed message.
  */
 import {
   type LiveAnimal,
@@ -9,6 +10,7 @@ import {
   type LiveMessage,
   TICK_SECONDS,
 } from './live-contract';
+import { GESTURES, type GestureKind } from './motion';
 
 /** How long a speech bubble stays up, ms. */
 export const SPEECH_MS = 4000;
@@ -19,6 +21,18 @@ export interface Speech {
   id: string;
   actorId: string;
   words: string;
+  /** Client time (ms, performance.now) it arrived. */
+  at: number;
+}
+
+/** At most this many recent cues are kept. */
+const CUES_KEEP = 30;
+
+/** Something a body shows once: a gesture (`gestured`) or a blow taken (`injured`: the hit reaction). */
+export interface Cue {
+  id: string;
+  actorId: string;
+  kind: GestureKind | 'hit';
   /** Client time (ms, performance.now) it arrived. */
   at: number;
 }
@@ -42,6 +56,7 @@ export interface LiveState {
   animals: LiveAnimal[];
   fires: LiveFire[];
   speech: Speech[];
+  cues: Cue[];
 }
 
 export const EMPTY_LIVE: LiveState = {
@@ -56,6 +71,7 @@ export const EMPTY_LIVE: LiveState = {
   animals: [],
   fires: [],
   speech: [],
+  cues: [],
 };
 
 export interface EntitiesAnswer {
@@ -88,7 +104,26 @@ export function applyEntities(
     animals: view.animals,
     fires: view.fires,
     speech: sameRun ? state.speech : [],
+    cues: sameRun ? state.cues : [],
   };
+}
+
+const isGesture = (kind: unknown): kind is GestureKind =>
+  GESTURES.includes(kind as GestureKind);
+
+/** The cue an event shows on its actor's body, if any. */
+function cueOf(
+  event: Extract<LiveMessage, { type: 'event' }>['event'],
+  now: number,
+): Cue | null {
+  if (!event.actor_id) return null;
+  const kind =
+    event.type === 'injured'
+      ? 'hit'
+      : event.type === 'gestured' && isGesture(event.payload.kind)
+        ? event.payload.kind
+        : null;
+  return kind && { id: event.id, actorId: event.actor_id, kind, at: now };
 }
 
 export function applyMessage(
@@ -99,7 +134,11 @@ export function applyMessage(
   const sameRun = message.run_id === state.runId;
   if (message.type === 'event') {
     const { event } = message;
-    if (!sameRun || event.type !== 'said' || !event.actor_id) return state;
+    if (!sameRun) return state;
+    const cue = cueOf(event, now);
+    if (cue && !state.cues.some(({ id }) => id === cue.id))
+      return { ...state, cues: [...state.cues, cue].slice(-CUES_KEEP) };
+    if (event.type !== 'said' || !event.actor_id) return state;
     const words = event.payload.words;
     if (
       typeof words !== 'string' ||
@@ -133,6 +172,7 @@ export function applyMessage(
     animals: message.animals,
     fires: message.fires,
     speech: sameRun ? state.speech : [],
+    cues: sameRun ? state.cues : [],
   };
 }
 

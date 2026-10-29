@@ -2,7 +2,10 @@
  * Bodies at rest on the ground: sitting on it (resting) and lying on the back (asleep, dead). Polyfork has no clip
  * for either (its `Sitting` is a chair sit), so the posture is layered on top of the clip each frame:
  *
+ *   seated:   the chair clip on a seat: lifted so the hips rest at the seat's height, the knees lowered to reach
+ *             down towards the ground (a child's feet dangle)
  *   sitting:  the chair clip's upper body and thighs, knees straightened (legs out in front), the hips set down
+ *   kneeling: the clip's upper body on upright thighs, the shins flat on the ground behind
  *   lying:    a still standing frame (Idle, frozen) with straight legs, turned onto its back about the hips (the dead)
  *   sleeping: lying, but the right knee drawn up (its foot flat on the ground) and the head turned aside, so a
  *             sleeper doesn't look dead
@@ -23,7 +26,8 @@ import {
   Vector3,
 } from 'three';
 
-export type Posture = 'standing' | 'sitting' | 'sleeping' | 'lying';
+export type Posture =
+  'standing' | 'seated' | 'sitting' | 'kneeling' | 'sleeping' | 'lying';
 
 const onBack = (posture: Posture) =>
   posture === 'sleeping' || posture === 'lying';
@@ -48,6 +52,21 @@ const SIT_BENDS: Record<string, number> = {
   Foot: 0,
 };
 /**
+ * Kneeling: thighs upright (leaning a little ahead), shins flat on the ground behind, feet stretched back. Not seiza
+ * (sitting on the heels): a long robe's hem, skinned partly to the hips, would stay where it hangs standing and
+ * reach far under the folded legs.
+ */
+const KNEEL_BENDS: Record<string, number> = {
+  UpLeg: -15 * DEG,
+  Leg: 105 * DEG,
+  Foot: 80 * DEG,
+};
+/** How each posture on the ground bends the legs from straight (on the back they lie straight). */
+const LEG_BENDS: Partial<Record<Posture, Record<string, number>>> = {
+  sitting: SIT_BENDS,
+  kneeling: KNEEL_BENDS,
+};
+/**
  * A sleeper's drawn-up right leg, lying on its back: the thigh rises `thigh` from the line of the straight leg and
  * the shin slopes back down `shin` from it to the foot, whose sole lies flat on the ground (radians).
  */
@@ -61,6 +80,18 @@ const SLEEP_KNEE: Knee = { thigh: 35 * DEG, shin: 60 * DEG };
 const STEEPEST_SHIN = 80 * DEG;
 /** A sleeper's head turns this far to its side (radians, about the head's up axis). */
 const SLEEP_HEAD = 25 * DEG;
+/**
+ * How high a seat is (m) when the feed doesn't say (`slot_height_m`, not on the feed yet): a bench's (a camp's log
+ * seat is 0.4, the loom's stool 0.3).
+ */
+export const SEAT_HEIGHT = 0.45;
+/**
+ * Where Polyfork's chair sit (`Sitting`) puts the underside of the hips, as a share of the rig's hip height at rest
+ * (0.44-0.50 measured over adults and children).
+ */
+const CHAIR_SEAT = 0.47;
+/** A seated body's knees come down (or up, on a low seat) at most this far to keep the feet on the ground (radians). */
+const SEAT_KNEE_DROP = 25 * DEG;
 const X = new Vector3(1, 0, 0);
 const UP = new Vector3(0, 1, 0);
 
@@ -125,14 +156,20 @@ const drawKnee = (rest: Rest, { thigh, shin }: Knee) => {
  * sit out in front; on the back the legs straighten (a sleeper's knee drawn up, its head turned aside) and the hips
  * go back where the rig keeps them (no sway).
  */
-export function holdPosture(rest: Rest, posture: Posture, knee?: Knee | null) {
+export function holdPosture(
+  rest: Rest,
+  posture: Posture,
+  knee?: Knee | null,
+  lift = 0,
+) {
   if (posture === 'standing') return;
+  if (posture === 'seated') {
+    lowerKnees(rest, lift);
+    return;
+  }
+  const bends = LEG_BENDS[posture];
   for (const name of LEGS)
-    turnLeg(
-      rest,
-      name,
-      posture === 'sitting' ? SIT_BENDS[name.replace(/^(Left|Right)/, '')] : 0,
-    );
+    turnLeg(rest, name, bends?.[name.replace(/^(Left|Right)/, '')] ?? 0);
   if (!onBack(posture)) return;
   rest.hips.position.copy(rest.hipsAt);
   rest.hips.quaternion.copy(rest.hipsTurn);
@@ -143,13 +180,38 @@ export function holdPosture(rest: Rest, posture: Posture, knee?: Knee | null) {
     .multiply(bend.setFromAxisAngle(UP, SLEEP_HEAD));
 }
 
-/** Tools in hand are hidden while sitting; on the back a hat, a straw cape or a stole are hidden too. */
+/**
+ * A seated body lifted `lift` m above the chair clip's own seat lowers its knees (thighs sloping down, shins as the
+ * clip has them) so its feet come down by as much, as far as SEAT_KNEE_DROP allows; one set lower (a negative lift:
+ * a low stool) raises them so its feet come up by as much.
+ */
+function lowerKnees(rest: Rest, lift: number) {
+  if (lift === 0) return;
+  for (const side of ['Left', 'Right']) {
+    const thigh = rest.legs.get(`${side}UpLeg`)!.bone;
+    const shin = rest.legs.get(`${side}Leg`)!.bone;
+    const length = shin.position.length() * thigh.getWorldScale(scaleOf).y;
+    const drop =
+      Math.sign(lift) *
+      Math.min(Math.asin(Math.min(Math.abs(lift) / length, 1)), SEAT_KNEE_DROP);
+    thigh.quaternion.multiply(bend.setFromAxisAngle(X, drop));
+    shin.quaternion.multiply(bend.setFromAxisAngle(X, -drop));
+  }
+}
+
+const scaleOf = new Vector3();
+
+/**
+ * Tools in hand are hidden while sitting; on the back or kneeling a hat, a straw cape or a stole are hidden too (a
+ * kneeler's cape would reach the ground behind it, and the hat comes off to pray).
+ */
 export function showWorn(character: Object3D, posture: Posture) {
-  const hidden = onBack(posture)
-    ? HIDDEN_ON_BACK
-    : posture === 'sitting'
-      ? IN_HAND
-      : null;
+  const hidden =
+    onBack(posture) || posture === 'kneeling'
+      ? HIDDEN_ON_BACK
+      : posture === 'standing'
+        ? null
+        : IN_HAND;
   character.traverse((object) => {
     if (HIDDEN_ON_BACK.has(object.name))
       object.visible = !hidden?.has(object.name);
@@ -175,8 +237,33 @@ const shown = (object: Object3D) => {
   return true;
 };
 
-/** The lowest point and the reach of the posed body's skin, in the frame `posed` sits in. */
-function measure(posed: Object3D, character: Object3D) {
+/** The bones a kneeler rests on: skin that follows only them sets how low it goes. */
+const SHINS = new Set(
+  ['Left', 'Right'].flatMap((side) =>
+    ['Leg', 'Foot', 'ToeBase'].map((bone) => `${side}${bone}`),
+  ),
+);
+
+/** How much of vertex `i`'s skin follows `bones` (0-1). */
+function weightOn(mesh: SkinnedMesh, i: number, bones: ReadonlySet<string>) {
+  const { skinIndex, skinWeight } = mesh.geometry.attributes;
+  let weight = 0;
+  for (let k = 0; k < 4; k++)
+    if (bones.has(mesh.skeleton.bones[skinIndex.getComponent(i, k)].name))
+      weight += skinWeight.getComponent(i, k);
+  return weight;
+}
+
+/**
+ * The lowest point and the reach of the posed body's skin, in the frame `posed` sits in; with `restsOn`, the lowest
+ * point of the skin that (nearly) only follows those bones (a kneeler's shins: a long robe's hem, skinned partly to the hips,
+ * hangs where it would standing and goes into the ground like cloth spread on it, instead of holding the body up).
+ */
+function measure(
+  posed: Object3D,
+  character: Object3D,
+  restsOn?: ReadonlySet<string>,
+) {
   posed.updateMatrixWorld(true);
   const vertex = new Vector3();
   const reach = { low: Infinity, back: 0, front: 0, half: 0 };
@@ -189,7 +276,8 @@ function measure(posed: Object3D, character: Object3D) {
       mesh.getVertexPosition(i, vertex);
       mesh.localToWorld(vertex);
       posed.parent?.worldToLocal(vertex);
-      reach.low = Math.min(reach.low, vertex.y);
+      if (!restsOn || weightOn(mesh, i, restsOn) > 0.9)
+        reach.low = Math.min(reach.low, vertex.y);
       reach.back = Math.min(reach.back, vertex.z);
       reach.front = Math.max(reach.front, vertex.z);
       reach.half = Math.max(reach.half, Math.abs(vertex.x));
@@ -244,8 +332,11 @@ export function settle(
   character: Object3D,
   rest: Rest,
   posture: Posture,
+  /** A seat's height (m), seated. */
+  height = SEAT_HEIGHT,
 ): Footprint {
   const lying = onBack(posture);
+  if (posture === 'seated') return seat(posed, character, rest, height);
   posed.position.set(0, 0, 0);
   posed.rotation.set(lying ? -Math.PI / 2 : 0, 0, 0);
   character.position.set(0, lying ? -rest.hipsAt.y : 0, 0);
@@ -256,7 +347,11 @@ export function settle(
     knee = kneeToGround(posed, rest, measure(posed, character).low);
     drawKnee(rest, knee);
   }
-  const { low, back, front, half } = measure(posed, character);
+  const { low, back, front, half } = measure(
+    posed,
+    character,
+    posture === 'kneeling' ? SHINS : undefined,
+  );
   posed.position.y = -low;
   posed.updateMatrixWorld(true);
   return {
@@ -266,6 +361,32 @@ export function settle(
     half,
     hips: boneAt(posed, rest.hips).y,
     knee,
+  };
+}
+
+/**
+ * A seated body: lifted or lowered (never tilted) so the chair clip's seat comes to the seat's `height` (an adult's
+ * own chair is up to 0.03 m higher than a bench, 0.15 m higher than the loom's stool); `lowerKnees` keeps its feet
+ * on the ground.
+ */
+function seat(
+  posed: Object3D,
+  character: Object3D,
+  rest: Rest,
+  height: number,
+): Footprint {
+  const lift = height - CHAIR_SEAT * rest.hipsAt.y;
+  posed.position.set(0, lift, 0);
+  posed.rotation.set(0, 0, 0);
+  character.position.set(0, 0, 0);
+  posed.updateMatrixWorld(true);
+  return {
+    lift,
+    back: 0,
+    front: 0,
+    half: 0,
+    hips: boneAt(posed, rest.hips).y,
+    knee: null,
   };
 }
 
@@ -295,20 +416,22 @@ export function groundTilt(print: Footprint, under: Under, out: Quaternion) {
 }
 
 /**
- * What a resting body's shape hangs on: its posture, the action its clips fade into (a stand-in while the posture's
- * own clip is still loading) and whether that cross-fade is under way.
+ * What a resting body's shape hangs on: its posture (and its seat's height), the action its clips fade into (a
+ * stand-in while the posture's own clip is still loading) and whether that cross-fade is under way.
  */
 export interface Shape {
   posture: Posture;
+  seat: number;
   action: AnimationAction | null;
   fading: boolean;
 }
 
-/** The shape of a body playing `action` among `actions` (every clip of its mixer) in `posture`. */
+/** The shape of a body playing `action` among `actions` (every clip of its mixer) in `posture` (on a `seat` m high). */
 export function shapeOf(
   posture: Posture,
   action: AnimationAction | null,
   actions: Iterable<AnimationAction>,
+  seat = SEAT_HEIGHT,
 ): Shape {
   let fading = action !== null && action.getEffectiveWeight() < 1;
   for (const other of actions)
@@ -318,11 +441,11 @@ export function shapeOf(
       other.getEffectiveWeight() > 0
     )
       fading = true;
-  return { posture, action, fading };
+  return { posture, seat, action, fading };
 }
 
 /**
- * Whether a resting body must be measured again: its posture or its clip changed (the posture's clip arrived and
+ * Whether a resting body must be measured again: its posture, its seat or its clip changed (the posture's clip arrived and
  * replaced the stand-in), or the clips are cross-fading, or were until this frame. A settled body is not.
  */
 export function reshaped(was: Shape | null, now: Shape) {
@@ -330,6 +453,7 @@ export function reshaped(was: Shape | null, now: Shape) {
   return (
     was === null ||
     was.posture !== now.posture ||
+    was.seat !== now.seat ||
     was.action !== now.action ||
     was.fading ||
     now.fading
@@ -366,7 +490,7 @@ export function layToRest(
   const { character, rest, tilt, posed, ground } = body;
   const was = state.shape;
   state.shape = shape;
-  holdPosture(rest, shape.posture, state.print?.knee);
+  holdPosture(rest, shape.posture, state.print?.knee, state.print?.lift);
   if (shape.posture !== (was?.posture ?? 'standing'))
     showWorn(character, shape.posture);
   if (shape.posture === 'standing') {
@@ -379,8 +503,12 @@ export function layToRest(
     return;
   }
   if (state.print === null || reshaped(was, shape))
-    state.print = settle(posed, character, rest, shape.posture);
+    state.print = settle(posed, character, rest, shape.posture, shape.seat);
   const { print } = state;
+  if (shape.posture === 'seated') {
+    tilt.quaternion.identity();
+    return;
+  }
   under.back = ground(print.back, 0);
   under.front = ground(print.front, 0);
   under.left = ground(0, -print.half);

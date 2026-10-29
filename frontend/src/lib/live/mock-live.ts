@@ -23,6 +23,7 @@ import {
   tickMs,
 } from './live-contract';
 import { MockWild } from './mock-wild';
+import type { FedBody } from './motion';
 import type {
   CitizenEntity,
   LiveEventDetail,
@@ -616,6 +617,8 @@ export class MockLiveServer {
   private pending: LiveEventMessage[] = [];
   /** Body words a test gave someone (`feel`); everyone else feels fine. */
   private feelings = new Map<string, string[]>();
+  /** What a test made someone do (`perform`), over their plan. */
+  private performing = new Map<string, Partial<LiveCitizen> & FedBody>();
   /** Homes and plans a test scene gives some (`crowdCamp`); everyone else lives their own. */
   private scene: Record<string, Pick<MockPerson, 'home' | 'plan'>> = {};
   /** Connections so far (tests read it to see a reconnect). */
@@ -709,6 +712,34 @@ export class MockLiveServer {
     for (const socket of this.sockets) socket.deliver(frame);
   }
 
+  /**
+   * Someone does `doing` (tests and close-ups: any activity, motion, posture, seat heading; `null` lets them go back
+   * to their plan): standing where they are, or, doing something on the move (walking, running, hunting), walking on
+   * along their plan drawn that way. A snapshot carries it at once.
+   */
+  perform(actor: string, doing: (Partial<LiveCitizen> & FedBody) | null) {
+    if (doing) this.performing.set(actor, doing);
+    else this.performing.delete(actor);
+    const frame = this.frame('snapshot');
+    for (const socket of this.sockets) socket.deliver(frame);
+  }
+
+  /** An event of any type goes out right now (tests: a gesture, a blow), with anything queued. */
+  sendNow(
+    type: string,
+    actor: string,
+    payload: Record<string, unknown>,
+    told: Pick<LiveEventDetail, 'line' | 'importance'> = {
+      line: type,
+      importance: 0,
+    },
+  ) {
+    this.queueEvent(type, actor, payload, told);
+    const events = this.pending.splice(0);
+    for (const socket of this.sockets)
+      events.forEach((event) => socket.deliver(event));
+  }
+
   /** Queues an event of any type for the next tick, like the engine's own (tests: a death, a sale), told as the
    * backend's line registry would tell it; it happens where its citizen actor stands unless `told` says where. */
   queueEvent(
@@ -763,6 +794,7 @@ export class MockLiveServer {
     this.states = this.freshStates();
     this.wild = new MockWild(this.world);
     this.feelings.clear();
+    this.performing.clear();
     this.dropConnections(LIVE_CLOSE.resync);
   }
 
@@ -816,7 +848,8 @@ export class MockLiveServer {
   }
 
   private advance(state: PersonState, night: boolean) {
-    if (night) return;
+    const performed = this.performing.get(state.person.id)?.activity;
+    if (night || (performed && !MOVING.has(performed))) return;
     const { plan } = state.person;
     const step = plan[state.step];
     if ('walk' in step) {
@@ -943,11 +976,19 @@ export class MockLiveServer {
         role: look.role,
         region: look.region,
         ...this.spectator(state, activity, route.length > 1),
+        ...this.performed(person.id),
       };
     });
   }
 
   /** The feed's spectator fields (10-world-v1 §6.4) for what someone is doing. */
+  /** What a test made someone do, its posture told from its motion (as the backend tells it) unless given. */
+  private performed(id: string): Partial<LiveCitizen> & FedBody {
+    const doing = this.performing.get(id);
+    if (!doing?.motion) return doing ?? {};
+    return { posture: POSTURES[doing.motion] ?? 'standing', ...doing };
+  }
+
   private spectator(
     state: PersonState,
     activity: Activity,
@@ -1021,6 +1062,13 @@ export class MockLiveServer {
     }));
   }
 }
+
+/** Doings on the move: someone performing one walks on along their plan. */
+const MOVING: ReadonlySet<Activity> = new Set([
+  'walking',
+  'running',
+  'hunting',
+]);
 
 const stepTicks = (step: Step) => ('walk' in step ? 0 : step.ticks);
 

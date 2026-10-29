@@ -12,9 +12,9 @@ import {
   tickMs,
 } from '../../src/lib/live/live-contract';
 import { LANE_M } from '../../src/lib/live/drawn-track';
+import { motionClips, type Motion } from '../../src/lib/live/motion';
 import { KEEP_M } from '../../src/lib/live/separation';
 import type { MockStartHook } from '../../src/lib/live/mock-live';
-import { npcLook } from '../../src/lib/live/npc-activity';
 import { citizenPath, pointAt } from '../../src/lib/live/walk-path';
 import {
   anchorMapping,
@@ -76,7 +76,12 @@ interface Npc {
   clipClock: number;
   /** How the body is posed: standing, sitting or lying. */
   posture: string;
+  /** What the body is shown doing (`motion.ts`). */
+  motion: Motion;
 }
+
+/** The clips of a body drawn walking: a gait, or standing once it arrived. */
+const GAIT_CLIPS = ['Walk', 'Walk formal', 'Run', 'Idle'];
 
 type Dataset = { dataset: Record<string, string | undefined> };
 type MockLiveWindow = {
@@ -120,6 +125,7 @@ async function npcs(page: Page): Promise<Npc[]> {
     facing: new Vector3(...(data.npcFacing ?? '0,0,0').split(',').map(Number)),
     clipClock: Number(data.npcClipClock),
     posture: data.npcPosture ?? '',
+    motion: (data.npcMotion ?? 'idle') as Motion,
   }));
 }
 
@@ -267,18 +273,17 @@ test('the 22 citizens glide between ticks, stand on the ground and play their ac
   );
   expect(gliding).toEqual([]);
 
-  // each loaded citizen plays its activity's clip (walkers: the gait, or standing once arrived); a new
-  // activity's clip takes a moment to fetch, so this settles over a few polls
+  // each loaded citizen plays its motion's clip (walkers: the gait, or standing once arrived); a new motion's clip
+  // takes a moment to fetch, so this settles over a few polls
   const mismatches = (all: Npc[]) =>
     all
       .filter((npc) => npc.loaded && npc.clip)
       .filter((npc) =>
         npc.activity === 'walking'
-          ? !['Walk', 'Idle'].includes(npc.clip)
-          : npc.clip !==
-            npcLook({ activity: npc.activity, action_label: npc.label }).clip,
+          ? !GAIT_CLIPS.includes(npc.clip)
+          : !motionClips(npc.motion).some((clip) => clip === npc.clip),
       )
-      .map((npc) => `${npc.id} ${npc.activity} ${npc.label}: ${npc.clip}`);
+      .map((npc) => `${npc.id} ${npc.activity} ${npc.motion}: ${npc.clip}`);
   await expect.poll(async () => mismatches(await npcs(page))).toEqual([]);
   const near = (await npcs(page)).filter((npc) => npc.loaded && npc.clip);
   expect(near.length).toBeGreaterThanOrEqual(6);
@@ -818,7 +823,8 @@ test('in real time a walker walks its streamed route at its own pace, facing the
   // facing the way it walks, with the gait
   const going = last.npc.position.clone().sub(first.npc.position).normalize();
   expect(last.npc.facing.dot(going)).toBeGreaterThan(0.95);
-  expect(last.npc.clip).toBe('Walk');
+  // the lord and his samurai walk formally
+  expect(['Walk', 'Walk formal']).toContain(last.npc.clip);
   expect(errors).toEqual([]);
 });
 
@@ -1075,11 +1081,9 @@ test('the real feed: the 22 citizens stand where the engine says, on the ground,
       (await npcs(page))
         .filter((npc) => npc.loaded && npc.clip && npc.activity !== 'walking')
         .filter(
-          (npc) =>
-            npc.clip !==
-            npcLook({ activity: npc.activity, action_label: npc.label }).clip,
+          (npc) => !motionClips(npc.motion).some((clip) => clip === npc.clip),
         )
-        .map((npc) => `${npc.id} ${npc.activity} ${npc.label}: ${npc.clip}`),
+        .map((npc) => `${npc.id} ${npc.activity} ${npc.motion}: ${npc.clip}`),
     )
     .toEqual([]);
 
