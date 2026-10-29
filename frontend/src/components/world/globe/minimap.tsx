@@ -16,7 +16,7 @@ import {
   FIRE_COLOR,
   MAP_PX,
   type MapPoint,
-  mapPixel,
+  mapPixelOf,
   mapPoint,
   METRES_PER_PX,
   REGION_COLORS,
@@ -177,11 +177,7 @@ export function Minimap({
       }
       const context = canvas.current?.getContext('2d');
       if (!context) return;
-      const local = new Vector3();
-      const pixel = (world: Vector3) => {
-        site.mapping.toLocal(world, local);
-        return mapPixel(local.x, local.z);
-      };
+      const pixel = (world: Vector3) => mapPixelOf(site.mapping, world);
       const unit = (position: { unit: number[] }) =>
         scratch
           .set(position.unit[0], position.unit[1], position.unit[2])
