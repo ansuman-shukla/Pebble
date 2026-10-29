@@ -32,6 +32,20 @@ def angle_between(units: FloatArray, target: FloatArray) -> FloatArray:
     return np.arctan2(np.linalg.norm(np.cross(units, target), axis=-1), units @ target)
 
 
+def bearing_deg(origin: FloatArray, targets: FloatArray) -> FloatArray:
+    """Compass bearing (0 = north, 90 = east) from one unit vector to each of (n, 3) unit vectors."""
+    frame = tangent_frame(origin)
+    return np.degrees(np.arctan2(targets @ frame.east, targets @ frame.north)) % 360
+
+
+def destination(origin: FloatArray, bearing: float, angle: float) -> FloatArray:
+    """The unit vector `angle` radians along the great circle leaving `origin` at the compass bearing (degrees)."""
+    frame = tangent_frame(origin)
+    heading = np.radians(bearing)
+    direction = frame.north * np.cos(heading) + frame.east * np.sin(heading)
+    return np.asarray(frame.up * np.cos(angle) + direction * np.sin(angle), dtype=np.float64)
+
+
 @dataclass(frozen=True)
 class TangentFrame:
     up: FloatArray
@@ -50,6 +64,15 @@ def tangent_frame(up: FloatArray) -> TangentFrame:
         east = np.cross(_Z, up)
     east /= np.linalg.norm(east)
     return TangentFrame(up=up, east=east, north=np.cross(up, east))
+
+
+def tangent_frames(ups: FloatArray) -> tuple[FloatArray, FloatArray]:
+    """(east, north) of tangent_frame for each of (n, 3) unit vectors, vectorised."""
+    east = np.cross(_Y, ups)
+    near_pole = np.linalg.norm(east, axis=-1) < _POLE_EPS
+    east[near_pole] = np.cross(_Z, ups[near_pole])
+    east /= np.linalg.norm(east, axis=-1, keepdims=True)
+    return east, np.cross(ups, east)
 
 
 def local_to_globe(frame: TangentFrame, radius_m: float, height_m: float, x: FloatArray, z: FloatArray) -> FloatArray:

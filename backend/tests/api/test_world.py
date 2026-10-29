@@ -1,3 +1,4 @@
+import hashlib
 from collections.abc import Iterator, Mapping
 
 import numpy as np
@@ -8,11 +9,13 @@ from sqlmodel import Session
 from app.api.deps import get_session, get_world_generator
 from app.core.config import settings
 from app.main import app
+from app.services import places as places_service
+from app.world.flora import generate_flora
 from app.world.generate import GENERATOR, generate_view
-from app.world.spec import BIOME_NAMES, SITE_IDS, WorldSpec
+from app.world.spec import BIOME_NAMES, SITE_IDS, WorldSpec, load_world_spec
 from app.world.store import WorldGenerator
 from app.world.town import KindSpec
-from app.world.view import WorldView, decode_array
+from app.world.view import WorldPlaces, WorldView, decode_array
 
 WORLD_URL = f"{settings.API_V1_STR}/world"
 
@@ -60,6 +63,7 @@ def test_world_is_served_with_the_contract_fields(world_response: dict[str, obje
         "rivers",
         "land_loop",
         "sites",
+        "places",
     }
     world = WorldView.model_validate(world_response)
     assert world.generator_version == GENERATOR.version
@@ -109,4 +113,61 @@ def test_world_schema_names_the_world_models(client: TestClient) -> None:
     schemas = client.get(f"{settings.API_V1_STR}/openapi.json").json()["components"]["schemas"]
 
     for name in ("WorldView", "Site", "Anchor", "River", "TownPlacement"):
+        assert name in schemas, name
+
+
+def test_places_are_served_from_the_stored_world(client: TestClient, counting: CountingGenerator) -> None:
+    world = WorldView.model_validate(client.get(WORLD_URL).json())
+    response = client.get(f"{WORLD_URL}/places")
+
+    assert response.status_code == 200
+    places = WorldPlaces.model_validate(response.json())
+    assert places == world.places
+    assert len(places.hotspots) == 14 and places.flora_kinds[0] == "oak_tree"
+    assert counting.calls == 1
+
+
+def test_flora_is_served_packed_cached_and_revalidated(client: TestClient, counting: CountingGenerator) -> None:
+    world = WorldView.model_validate(client.get(WORLD_URL).json())
+    response = client.get(f"{WORLD_URL}/flora")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/octet-stream"
+    assert response.content == generate_flora(world, load_world_spec()).pack()
+    assert len(response.content) % 9 == 0 and len(response.content) > 9 * 40_000
+    etag = response.headers["etag"]
+    assert etag == f'"{hashlib.sha256(response.content).hexdigest()[:32]}"'
+    assert response.headers["cache-control"] == "no-cache"
+    again = client.get(f"{WORLD_URL}/flora", headers={"If-None-Match": etag})
+    assert again.status_code == 304 and again.content == b""
+    assert again.headers["etag"] == etag and again.headers["cache-control"] == "no-cache"
+    assert counting.calls == 1
+
+
+@pytest.mark.usefixtures("counting")
+def test_new_flora_code_on_the_same_world_is_new_bytes_under_a_new_etag(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    old = client.get(f"{WORLD_URL}/flora")
+    monkeypatch.setattr(places_service, "_layouts", {})  # a new api process with new flora code
+    monkeypatch.setattr(places_service, "generate_flora", lambda *_: _Packed(bytes(9)))
+
+    new = client.get(f"{WORLD_URL}/flora", headers={"If-None-Match": old.headers["etag"]})
+
+    assert new.status_code == 200 and new.content == bytes(9)
+    assert new.headers["etag"] != old.headers["etag"]
+
+
+class _Packed:
+    def __init__(self, data: bytes) -> None:
+        self.data = data
+
+    def pack(self) -> bytes:
+        return self.data
+
+
+def test_world_schema_names_the_places_models(client: TestClient) -> None:
+    schemas = client.get(f"{settings.API_V1_STR}/openapi.json").json()["components"]["schemas"]
+
+    for name in ("WorldPlaces", "Hotspot", "Feature", "Road", "Bridge", "Ground"):
         assert name in schemas, name

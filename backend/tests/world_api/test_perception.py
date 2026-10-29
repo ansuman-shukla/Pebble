@@ -19,6 +19,7 @@ from app.sim.perception import (
 from app.sim.simulation import Simulation
 from app.sim.state import Citizen
 from app.sim.vec import Vec3, step_towards
+from app.sim.world import WATER_BIOMES
 from app.world_api.facade import WorldApi, run_until_done
 from app.world_api.models import Perception, Seen, ThingKind
 from tests.sim_helpers import WELL, make_spec
@@ -319,6 +320,8 @@ def _situation(sim: Simulation, rng: Rng, index: int) -> Citizen:
         cells = [cell for cell in range(len(world.biomes)) if sim.core.planner.outer.allowed[cell]]
         origin = world.unit(cells[rng.randint(0, len(cells) - 1)])
     position = _near(sim, origin, rng.random() * 360, rng.random() * 40)
+    if world.biome(world.nearest_cell(position)) in WATER_BIOMES:  # off a coast: nobody stands in the sea
+        position = origin
     others = [f"c{index}-{n}" for n in range(rng.randint(0, 3))]
     observer = _put(sim, sim.add_citizen(make_spec(f"o{index}", knows_people=others[::2], home="main-w-3")), position)
     for number, other in enumerate(others):

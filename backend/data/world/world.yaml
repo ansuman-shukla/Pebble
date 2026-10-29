@@ -133,7 +133,7 @@ sites:
   - id: band_b_camp
     kind: camp
     name: Band B camp
-    at: [-6.3, -152.6]
+    at: [26.1, -34.05] # about (25, -35): 1.4 km west of the town, 3 h behind it, 80 m from its river (10 §1.2)
     terrain: {type: plateau, radius_m: 50, blend_m: 40}
     placements: *camp
 

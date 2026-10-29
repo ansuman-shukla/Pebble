@@ -486,6 +486,15 @@ export function createMockWorld({
     rivers,
     land_loop: loop,
     sites,
+    places: {
+      hotspots: [],
+      grounds: [],
+      features: [],
+      roads: [],
+      bridges: [],
+      flora_kinds: [],
+      flora_nodes: [],
+    },
   };
 }
 

@@ -11,7 +11,7 @@ from app.observability.replay import from_snapshot
 from app.sim.simulation import Simulation
 from app.sim.snapshot import take_snapshot
 from app.world_api.facade import WorldApi, run_until_done
-from tests.sim_helpers import HOME, compass_towards, local_hour, make_spec, nearest_cell_of
+from tests.sim_helpers import HOME, compass_towards, local_hour, make_spec, nearest_cell_of, without_animals
 
 FORESTS = ("broadleaf_forest", "taiga")
 
@@ -36,7 +36,7 @@ def test_gate_to_well_and_drink(new_sim: Callable[..., Simulation]) -> None:
 
 
 def test_walk_to_a_forest_gather_and_eat_berries(new_sim: Callable[..., Simulation]) -> None:
-    sim = new_sim()
+    sim = without_animals(new_sim())  # game coming into view would stop the walk
     citizen = sim.add_citizen(make_spec(at=(-20.0, 52.5)))
     api = WorldApi(sim, citizen.id)
     forest = nearest_cell_of(sim.world, FORESTS, citizen.position)
@@ -125,7 +125,7 @@ def test_walk_home_and_sleep_through_the_night(new_sim: Callable[..., Simulation
 
 
 def test_a_band_rests_round_its_fire_each_on_their_own_seat(new_sim: Callable[..., Simulation]) -> None:
-    sim = new_sim()
+    sim = without_animals(new_sim())  # game coming into view would stop a rest
     pit = sim.world.structures["band_a_camp:fire-pit"].centre
     starts = [(9.0, 1.0), (-8.0, 4.0), (1.0, -9.0), (2.5, 8.0), (-6.0, -7.0)]
     band = [

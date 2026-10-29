@@ -9,9 +9,36 @@ from app.world.spec import BIOME_NAMES, BiomeThresholds, ClimateSpec
 from app.world.sphere import FloatArray
 from app.world.terrain import BoolArray
 
-BIOME_IDS = {name: index for index, name in enumerate(BIOME_NAMES)}
+BIOME_IDS: dict[str, int] = {name: index for index, name in enumerate(BIOME_NAMES)}
 WATER_BIOMES = frozenset({BIOME_IDS["deep_ocean"], BIOME_IDS["shallow_ocean"], BIOME_IDS["lake"]})
 UInt8Array = NDArray[np.uint8]
+
+# Walking cost per metre by biome (01-world: forest ×1.5, hills ×2, snow ×3, water impassable).
+TERRAIN_COST: dict[str, float] = {
+    "beach": 1.0,
+    "grassland": 1.0,
+    "savanna": 1.0,
+    "tundra": 1.2,
+    "broadleaf_forest": 1.5,
+    "taiga": 1.5,
+    "wetland": 1.5,
+    "hills": 2.0,
+    "volcanic": 2.0,
+    "mountain": 2.5,
+    "snow": 3.0,
+    "ice": 3.0,
+}
+RIVER_FORD_COST = 1.5  # rivers are fordable: at least this slow
+
+if set(TERRAIN_COST) | {BIOME_NAMES[biome] for biome in WATER_BIOMES} != set(BIOME_NAMES):
+    raise ValueError("every biome needs a walking cost or must be water")
+
+
+def walk_costs(biomes: UInt8Array, river: BoolArray) -> FloatArray:
+    """Walking cost per metre of every cell: its biome's, at least the ford cost on a river, inf on water."""
+    cost_by_biome = np.array([TERRAIN_COST.get(name, np.inf) for name in BIOME_NAMES])
+    costs = cost_by_biome[biomes]
+    return np.asarray(np.where(river, np.maximum(costs, RIVER_FORD_COST), costs), dtype=np.float64)
 
 
 def hop_distance(grid: Grid, sources: BoolArray) -> FloatArray:

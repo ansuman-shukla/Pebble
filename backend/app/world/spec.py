@@ -14,23 +14,6 @@ from app.world.town import KindSpec, PlacementSpec, load_kinds
 
 WORLD_SPEC_DIR = WORLD_DATA_DIR / "world"
 
-BIOME_NAMES: tuple[str, ...] = (
-    "deep_ocean",
-    "shallow_ocean",
-    "beach",
-    "grassland",
-    "broadleaf_forest",
-    "taiga",
-    "wetland",
-    "hills",
-    "mountain",
-    "savanna",
-    "tundra",
-    "snow",
-    "ice",
-    "lake",
-    "volcanic",
-)
 BiomeName = Literal[
     "deep_ocean",
     "shallow_ocean",
@@ -48,6 +31,23 @@ BiomeName = Literal[
     "lake",
     "volcanic",
 ]
+BIOME_NAMES: tuple[BiomeName, ...] = (
+    "deep_ocean",
+    "shallow_ocean",
+    "beach",
+    "grassland",
+    "broadleaf_forest",
+    "taiga",
+    "wetland",
+    "hills",
+    "mountain",
+    "savanna",
+    "tundra",
+    "snow",
+    "ice",
+    "lake",
+    "volcanic",
+)
 SiteKind = Literal["town", "camp", "landmark"]
 SITE_IDS: tuple[str, ...] = (
     "town",
@@ -233,6 +233,205 @@ class SiteSpec(_Spec):
         return self
 
 
+Settlement = Literal["town", "band_a_camp", "band_b_camp"]
+CAMPS: tuple[Settlement, ...] = ("band_a_camp", "band_b_camp")
+Group = Literal["town", "band_a", "band_b"]
+Ring = Literal["home", "middle", "far"]
+FloraNode = Literal["tree", "nut_tree", "berry_bush", "root_patch", "reed_bed", "deadwood"]
+ROADS_STOP = "roads"
+TRAIL_STOP = "trail"
+FeatureKind = Literal["fishing_spot", "flint_seam", "obsidian_field", "iron_sand_bar", "gold_pool", "waterhole"]
+Water = Literal["sea", "river", "lake"]
+
+
+class FeatureSpec(_Spec):
+    """Fixed nodes the generator places inside a hotspot by rule (10 §1.1)."""
+
+    kind: FeatureKind
+    count: int = Field(default=1, ge=1)
+    water: Water | None = None  # fishing spots: which water they fish
+    river: str | None = None  # iron sand: the named river it lies on
+    cap: int | None = Field(default=None, gt=0)  # stock cap when it differs from the kind's (flint seams)
+
+    @model_validator(mode="after")
+    def _check_fields(self) -> "FeatureSpec":
+        if (self.kind == "fishing_spot") != (self.water is not None):
+            raise ValueError(f"{self.kind}: give `water` for fishing spots and only for them")
+        if (self.kind == "iron_sand_bar") != (self.river is not None):
+            raise ValueError(f"{self.kind}: give `river` for iron sand bars and only for them")
+        return self
+
+
+class DenSpec(_Spec):
+    """Where a predator's den lies: beside a road through the hotspot, at its edge, or toward a bearing from a site."""
+
+    animal: str
+    place: Literal["beside", "edge", "bearing"]
+    road: str | None = None  # beside: the route it lies off (40-60 m)
+    site: Settlement | None = None  # bearing: measured from this site's anchor
+    bearing_deg: float | None = None
+    distance_m: float | None = Field(default=None, gt=0)
+    biomes: list[BiomeName] = []  # bearing: the den's habitat
+
+    @model_validator(mode="after")
+    def _check_fields(self) -> "DenSpec":
+        beside, bearing = self.place == "beside", self.place == "bearing"
+        if beside != (self.road is not None):
+            raise ValueError("a den beside a road names the road, and only then")
+        if bearing != (self.site is not None and self.bearing_deg is not None and self.distance_m is not None):
+            raise ValueError("a den toward a bearing gives site, bearing_deg and distance_m, and only then")
+        if bearing != bool(self.biomes):
+            raise ValueError("a den toward a bearing lists its habitat biomes, and only then")
+        return self
+
+
+class HotspotSpec(_Spec):
+    """A named cluster of nodes (10 §1.2): a target centre (generation may move it up to 150 m to keep the rules),
+    ring and contents."""
+
+    id: str
+    name: str
+    called: str  # mid-sentence: "the Elder grove"
+    at: LatLon
+    radius_m: float = Field(gt=0)
+    of: Settlement  # the settlement whose rings it lies in
+    ring: Ring
+    biomes: list[BiomeName] = Field(min_length=1)  # biomes its centre may lie in (all its land when painted)
+    paint: BiomeName | None = None  # authored biome over its land within radius_m
+    claim: Group | None = None
+    danger: str
+    thirst: float = Field(default=1.0, gt=0)  # thirst factor while inside (the obsidian field's heat)
+    woodland: float = Field(default=1.0, gt=0)  # tree density factor inside (woodlots)
+    flora: dict[FloraNode, int] = {}  # exact counts placed inside; natural flora of these kinds stays out
+    features: list[FeatureSpec] = []
+    den: DenSpec | None = None
+    hunting: list[str] = []  # animal kinds whose hunting ground it is
+
+
+class GroundSpec(_Spec):
+    """A hunting ground around a settlement (band B's grass)."""
+
+    id: str
+    name: str
+    site: Settlement
+    radius_m: float = Field(gt=0)
+    hunting: list[str] = Field(min_length=1)
+
+
+class RingSpec(_Spec):
+    home_m: float = Field(gt=0)  # home ring: up to this far from the settlement's anchor
+    middle_m: float = Field(gt=0)  # middle ring: home_m .. middle_m
+    far_m: float = Field(gt=0)  # far ring: beyond this
+
+
+class LeanBeltSpec(_Spec):
+    """Natural food thinned just past each camp's home ring, so its plenty lies at the middle ring's hotspots."""
+
+    outer_m: float = Field(gt=0)  # from the home ring's edge out to this far from the camp
+    share: float = Field(ge=0, le=1)  # of the biome's natural density of these kinds
+    nodes: list[FloraNode] = Field(min_length=1)
+
+
+class HotspotsSpec(_Spec):
+    min_spacing_m: float = Field(gt=0)
+    rings: RingSpec
+    home_ring_flora: dict[FloraNode, int]  # exact counts of these kinds within each camp's home ring
+    lean_belt: LeanBeltSpec
+    hotspots: list[HotspotSpec]
+    grounds: list[GroundSpec] = []
+
+    @model_validator(mode="after")
+    def _check_paint(self) -> "HotspotsSpec":
+        for hotspot in self.hotspots:
+            if hotspot.paint is not None and hotspot.biomes != [hotspot.paint]:
+                raise ValueError(f"{hotspot.id}: a painted hotspot lies in its paint only")
+        return self
+
+    @model_validator(mode="after")
+    def _check_ids(self) -> "HotspotsSpec":
+        ids = [hotspot.id for hotspot in self.hotspots] + [ground.id for ground in self.grounds]
+        if len(set(ids)) != len(ids):
+            raise ValueError("duplicate hotspot or ground ids")
+        return self
+
+
+class GateSpec(_Spec):
+    """A town gate roads leave from: its lead runs in town-local metres from the gate to the chart's edge."""
+
+    id: str
+    lead: list[tuple[float, float]] = Field(min_length=2)
+    bridges: list[tuple[float, float]] = []  # lead points where it crosses town water on a bridge
+
+
+class RouteSpec(_Spec):
+    id: str
+    kind: Literal["road", "path"]
+    name: str  # as perception says it: "the road from the castle town to the Elder grove"
+    # gate, site or hotspot ids; ROADS_STOP = the nearest cell of an earlier road (a spur), TRAIL_STOP = of the trail
+    stops: list[str] = Field(min_length=2)
+
+
+class TrailSpec(_Spec):
+    """The land loop drawn and walked as a path."""
+
+    id: str
+    name: str
+
+
+class RoadsSpec(_Spec):
+    town_chart_half_m: float = Field(gt=0)  # the town chart's half-width: no road or flora cell inside
+    reuse_discount: float = Field(gt=0, le=1)  # cost factor of cells earlier routes took, so later ones merge
+    trip_share: float = Field(gt=0, le=1)  # least share of road/path cells on a trip between two places (D121)
+    signpost_spacing_m: float = Field(gt=0)  # junctions closer than this to a signpost share it
+    gates: list[GateSpec]
+    routes: list[RouteSpec]  # most important first: roads, then the trail, then paths
+    trail: TrailSpec
+
+    @model_validator(mode="after")
+    def _check_order(self) -> "RoadsSpec":
+        kinds = [route.kind for route in self.routes]
+        if kinds != sorted(kinds, key=lambda kind: kind == "path"):
+            raise ValueError("list every road before the first path")
+        ids = [route.id for route in self.routes] + [self.trail.id]
+        if len(set(ids)) != len(ids):
+            raise ValueError("duplicate route ids")
+        return self
+
+
+class FloraKindSpec(_Spec):
+    id: str  # also the drawn kind
+    node: FloraNode
+    scale: tuple[float, float]  # drawn scale range
+
+
+class FloraSpec(_Spec):
+    """Usable flora by biome (10 §1.1). Kind order is the u8 code in `/world/flora`: append only."""
+
+    kinds: list[FloraKindSpec] = Field(min_length=1, max_length=256)
+    per_cell: dict[BiomeName, dict[str, float]]  # expected count of each kind per cell of the biome
+    river_per_cell: dict[str, float]  # extra kinds per river cell in one of river_biomes (reed beds)
+    river_biomes: list[BiomeName]
+
+    @model_validator(mode="after")
+    def _check_kinds(self) -> "FloraSpec":
+        ids = [kind.id for kind in self.kinds]
+        if len(set(ids)) != len(ids):
+            raise ValueError("duplicate flora kinds")
+        used = {kind for table in [*self.per_cell.values(), self.river_per_cell] for kind in table}
+        if not used <= set(ids):
+            raise ValueError(f"unknown flora kinds {sorted(used - set(ids))}")
+        return self
+
+    def kind_of(self, node: FloraNode, biome: BiomeName) -> str:
+        """The drawn kind of a placed node in a biome: the biome's commonest kind of that node, else the first."""
+        table = self.per_cell.get(biome, {})
+        nodes = {kind.id: kind.node for kind in self.kinds}
+        candidates = sorted((-count, kind) for kind, count in table.items() if nodes[kind] == node)
+        if candidates:
+            return candidates[0][1]
+        return next(kind.id for kind in self.kinds if kind.node == node)
+
+
 class WorldSpec(_Spec):
     seed: int
     radius_m: float = Field(gt=0)
@@ -248,6 +447,9 @@ class WorldSpec(_Spec):
     rivers: list[AuthoredRiver]
     loop_gate: str  # the site id the land loop must pass through
     sites: list[SiteSpec]
+    hotspots: HotspotsSpec  # data/world/hotspots.yaml
+    roads: RoadsSpec  # data/world/roads.yaml
+    flora: FloraSpec  # data/world/flora.yaml
 
     @model_validator(mode="after")
     def _check_sites(self) -> "WorldSpec":
@@ -258,6 +460,27 @@ class WorldSpec(_Spec):
             raise ValueError(f"unknown loop gate site {self.loop_gate!r}")
         if len({river.id for river in self.rivers}) != len(self.rivers):
             raise ValueError("duplicate river ids")
+        return self
+
+    @model_validator(mode="after")
+    def _check_places(self) -> "WorldSpec":
+        hotspot_ids = {hotspot.id for hotspot in self.hotspots.hotspots}
+        stops = hotspot_ids | set(SITE_IDS) | {gate.id for gate in self.roads.gates} | {ROADS_STOP, TRAIL_STOP}
+        for route in self.roads.routes:
+            unknown = set(route.stops) - stops
+            if unknown:
+                raise ValueError(f"route {route.id} has unknown stops {sorted(unknown)}")
+        routes = {route.id for route in self.roads.routes} | {self.roads.trail.id}
+        river_names = {river.name for river in self.rivers}
+        for hotspot in self.hotspots.hotspots:
+            if hotspot.den is not None and hotspot.den.road is not None and hotspot.den.road not in routes:
+                raise ValueError(f"{hotspot.id}: its den lies beside an unknown route {hotspot.den.road!r}")
+            for feature in hotspot.features:
+                if feature.river is not None and feature.river not in river_names:
+                    raise ValueError(f"{hotspot.id}: unknown river {feature.river!r}")
+            unknown_nodes = set(hotspot.flora) - {kind.node for kind in self.flora.kinds}
+            if unknown_nodes:
+                raise ValueError(f"{hotspot.id}: no flora kind grows as {sorted(unknown_nodes)}")
         return self
 
     def site(self, site_id: str) -> SiteSpec:
@@ -273,7 +496,12 @@ def _read_yaml(name: str) -> object:
 
 @cache
 def load_world_spec() -> WorldSpec:
-    return WorldSpec.model_validate(_read_yaml("world.yaml"))
+    """world.yaml plus the hotspots, roads and flora it is laid out with (one spec, one hash)."""
+    raw = _read_yaml("world.yaml")
+    if not isinstance(raw, dict):
+        raise ValueError("world.yaml must be a mapping")
+    layout = {name: _read_yaml(f"{name}.yaml") for name in ("hotspots", "roads", "flora")}
+    return WorldSpec.model_validate({**raw, **layout})
 
 
 @cache

@@ -2,6 +2,7 @@
 
 import heapq
 from collections import deque
+from collections.abc import Collection
 
 import numpy as np
 
@@ -14,16 +15,27 @@ def cheapest_path(grid: Grid, allowed: BoolArray, cost: FloatArray, start: int, 
     """Dijkstra over allowed cells; entering a cell costs `cost[cell]`. Raises when the goal can't be reached."""
     if not (allowed[start] and allowed[goal]):
         raise ValueError(f"path ends must be allowed cells: {start} -> {goal}")
+    return cheapest_path_to_any(grid, allowed, cost, start, {goal})
+
+
+def cheapest_path_to_any(
+    grid: Grid, allowed: BoolArray, cost: FloatArray, start: int, goals: Collection[int]
+) -> list[int]:
+    """The cheapest path from the start to whichever goal cell is cheapest to reach (see cheapest_path)."""
+    if not allowed[start]:
+        raise ValueError(f"path start must be an allowed cell: {start}")
     best = {start: 0.0}
     came_from: dict[int, int] = {}
     heap = [(0.0, start)]
     neighbours = grid.neighbours
+    goal = -1
     while heap:
         spent, cell = heapq.heappop(heap)
-        if cell == goal:
-            break
         if spent > best[cell]:
             continue
+        if cell in goals:
+            goal = cell
+            break
         for other in neighbours[cell].tolist():
             if other < 0 or not allowed[other]:
                 continue
@@ -32,8 +44,8 @@ def cheapest_path(grid: Grid, allowed: BoolArray, cost: FloatArray, start: int, 
                 best[other] = total
                 came_from[other] = cell
                 heapq.heappush(heap, (total, other))
-    if goal not in best:
-        raise ValueError(f"no walkable path from cell {start} to cell {goal}")
+    if goal < 0:
+        raise ValueError(f"no walkable path from cell {start} to any of {len(goals)} goal cells")
     path = [goal]
     while path[-1] != start:
         path.append(came_from[path[-1]])

@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AdminChangeClockData, AdminChangeClockErrors, AdminChangeClockResponses, CitizensReadCitizenData, CitizensReadCitizenErrors, CitizensReadCitizenNeedsData, CitizensReadCitizenNeedsErrors, CitizensReadCitizenNeedsResponses, CitizensReadCitizenResponses, CitizensReadCitizensData, CitizensReadCitizensErrors, CitizensReadCitizensResponses, CitizensReadCitizenTimelineData, CitizensReadCitizenTimelineErrors, CitizensReadCitizenTimelineResponses, ClockReadGameClockData, ClockReadGameClockErrors, ClockReadGameClockResponses, ConversationsReadConversationsData, ConversationsReadConversationsErrors, ConversationsReadConversationsResponses, EntitiesReadEntitiesData, EntitiesReadEntitiesErrors, EntitiesReadEntitiesResponses, EventsReadEventsData, EventsReadEventsErrors, EventsReadEventsResponses, HealthReadHealthData, HealthReadHealthResponses, LiveLiveSchemaData, LiveLiveSchemaErrors, LiveLiveSchemaResponses, StatsReadStatsData, StatsReadStatsErrors, StatsReadStatsResponses, TownReadTownData, TownReadTownResponses, WorldReadWorldData, WorldReadWorldResponses } from './types.gen';
+import type { AdminChangeClockData, AdminChangeClockErrors, AdminChangeClockResponses, CitizensReadCitizenData, CitizensReadCitizenErrors, CitizensReadCitizenNeedsData, CitizensReadCitizenNeedsErrors, CitizensReadCitizenNeedsResponses, CitizensReadCitizenResponses, CitizensReadCitizensData, CitizensReadCitizensErrors, CitizensReadCitizensResponses, CitizensReadCitizenTimelineData, CitizensReadCitizenTimelineErrors, CitizensReadCitizenTimelineResponses, ClockReadGameClockData, ClockReadGameClockErrors, ClockReadGameClockResponses, ConversationsReadConversationsData, ConversationsReadConversationsErrors, ConversationsReadConversationsResponses, EntitiesReadEntitiesData, EntitiesReadEntitiesErrors, EntitiesReadEntitiesResponses, EventsReadEventsData, EventsReadEventsErrors, EventsReadEventsResponses, HealthReadHealthData, HealthReadHealthResponses, LiveLiveSchemaData, LiveLiveSchemaErrors, LiveLiveSchemaResponses, StatsReadStatsData, StatsReadStatsErrors, StatsReadStatsResponses, TownReadTownData, TownReadTownResponses, WorldReadFloraData, WorldReadFloraResponses, WorldReadPlacesData, WorldReadPlacesResponses, WorldReadWorldData, WorldReadWorldResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -116,6 +116,21 @@ export const townReadTown = <ThrowOnError extends boolean = false>(options?: Opt
 /**
  * Read World
  *
- * The planet: grid, heights, biomes, rivers, land loop and sites (stored JSON, generated on first request).
+ * The planet: grid, heights, biomes, rivers, land loop, sites and places (stored, generated on first request).
  */
 export const worldReadWorld = <ThrowOnError extends boolean = false>(options?: Options<WorldReadWorldData, ThrowOnError>): RequestResult<WorldReadWorldResponses, unknown, ThrowOnError> => (options?.client ?? client).get<WorldReadWorldResponses, unknown, ThrowOnError>({ url: '/api/v1/world', ...options });
+
+/**
+ * Read Places
+ *
+ * Hotspots, hunting grounds, fixed features (nodes, dens, signposts, markers), roads, bridges and flora kinds.
+ */
+export const worldReadPlaces = <ThrowOnError extends boolean = false>(options?: Options<WorldReadPlacesData, ThrowOnError>): RequestResult<WorldReadPlacesResponses, unknown, ThrowOnError> => (options?.client ?? client).get<WorldReadPlacesResponses, unknown, ThrowOnError>({ url: '/api/v1/world/places', ...options });
+
+/**
+ * Read Flora
+ *
+ * Every usable tree, bush, root patch, reed bed and deadwood pile, packed (layout in `app.world.flora`):
+ * `cell u32[n] | east i8[n] | north i8[n] | kind u8[n] | scale u8[n] | yaw u8[n]`, little-endian, n = bytes / 9.
+ */
+export const worldReadFlora = <ThrowOnError extends boolean = false>(options?: Options<WorldReadFloraData, ThrowOnError>): RequestResult<WorldReadFloraResponses, unknown, ThrowOnError> => (options?.client ?? client).get<WorldReadFloraResponses, unknown, ThrowOnError>({ url: '/api/v1/world/flora', ...options });

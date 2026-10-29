@@ -1,0 +1,38 @@
+# Usable flora (10-world-v1 §1.1): every tree, nut tree, berry bush, root patch, reed bed and deadwood pile on the
+# planet, generated from the seed and served by GET /api/v1/world/flora. The kind order is the u8 code in that
+# table: append only. Densities are expected counts per cell (~1 400 m²); the tree densities follow the client's
+# old scatter so the forests keep their look.
+
+kinds:
+  - {id: oak_tree, node: tree, scale: [0.85, 1.35]}
+  - {id: birch_tree, node: tree, scale: [0.85, 1.25]}
+  - {id: pine_tree, node: tree, scale: [0.8, 1.3]}
+  - {id: young_pine, node: tree, scale: [0.7, 1.2]}
+  - {id: snowy_spruce, node: tree, scale: [0.8, 1.2]}
+  - {id: acacia_tree, node: tree, scale: [0.8, 1.3]}
+  - {id: dwarf_pine, node: tree, scale: [0.5, 1.0]}
+  - {id: tree_fern, node: tree, scale: [0.8, 1.2]}
+  - {id: nut_oak, node: nut_tree, scale: [0.95, 1.35]}
+  - {id: berry_bush, node: berry_bush, scale: [0.8, 1.2]}
+  - {id: root_patch, node: root_patch, scale: [0.8, 1.2]}
+  - {id: reed_bed, node: reed_bed, scale: [0.8, 1.2]}
+  - {id: fallen_log, node: deadwood, scale: [0.9, 1.2]}
+  - {id: driftwood, node: deadwood, scale: [0.8, 1.2]}
+  - {id: dead_tree, node: deadwood, scale: [0.8, 1.2]}
+
+per_cell:
+  beach: {driftwood: 0.6}
+  grassland: {oak_tree: 0.4, nut_oak: 0.03, berry_bush: 0.05, root_patch: 0.05, fallen_log: 0.05}
+  broadleaf_forest: {oak_tree: 4.5, birch_tree: 2.7, nut_oak: 0.15, berry_bush: 0.25, root_patch: 0.05, fallen_log: 0.3}
+  taiga: {pine_tree: 7, young_pine: 3, snowy_spruce: 0.5, berry_bush: 0.2, fallen_log: 0.3}
+  wetland: {birch_tree: 1, tree_fern: 0.6, reed_bed: 1.5, root_patch: 0.5, berry_bush: 0.3, dead_tree: 0.4}
+  hills: {oak_tree: 0.3, berry_bush: 0.05, root_patch: 0.03}
+  mountain: {dwarf_pine: 0.6, snowy_spruce: 0.3}
+  savanna: {acacia_tree: 0.8, root_patch: 0.1, dead_tree: 0.15}
+  tundra: {dwarf_pine: 1.5, berry_bush: 0.1}
+  snow: {snowy_spruce: 1.5}
+  volcanic: {dead_tree: 0.3}
+
+# reeds along every river through living ground (on top of the biome's own)
+river_per_cell: {reed_bed: 0.6}
+river_biomes: [beach, grassland, broadleaf_forest, taiga, wetland, hills, savanna]

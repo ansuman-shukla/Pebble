@@ -18,7 +18,7 @@ from sqlmodel import Session
 
 from app.sim.items import RESOURCE_CAPS, RESOURCE_INDEX, RESOURCES, RIVER_FISH, RIVER_REEDS
 from app.sim.vec import Vec3, angle, as_vec, dot, normalize
-from app.world.biomes import BIOME_IDS
+from app.world.biomes import BIOME_IDS, walk_costs
 from app.world.generate import GENERATOR
 from app.world.geometry import Point
 from app.world.grid import Grid, build_grid
@@ -33,23 +33,7 @@ BoolArray = NDArray[np.bool_]
 FloatArray = NDArray[np.float64]
 UInt8Array = NDArray[np.uint8]
 
-# Walking cost per metre by biome (01-world: forest ×1.5, hills ×2, snow ×3, water impassable).
-TERRAIN_COST: dict[str, float] = {
-    "beach": 1.0,
-    "grassland": 1.0,
-    "savanna": 1.0,
-    "tundra": 1.2,
-    "broadleaf_forest": 1.5,
-    "taiga": 1.5,
-    "wetland": 1.5,
-    "hills": 2.0,
-    "volcanic": 2.0,
-    "mountain": 2.5,
-    "snow": 3.0,
-    "ice": 3.0,
-}
 WATER_BIOMES = ("deep_ocean", "shallow_ocean", "lake")
-RIVER_FORD_COST = 1.5  # rivers are fordable: at least this slow
 SITE_RADIUS_M: dict[str, float] = {"town": 230.0, "camp": 60.0, "landmark": 80.0}
 HOME_KINDS = frozenset({"townhouse", "farmhouse", "castle_keep", "lean_to"})
 STRUCTURE_LABELS: dict[str, str] = {  # town placements
@@ -69,9 +53,6 @@ STRUCTURE_NAMES: dict[str, str] = {  # structures with a name of their own (by p
     "castle-gate": "the castle gate",
 }
 _DOOR_SEARCH_CELLS = 12
-
-if set(TERRAIN_COST) | set(WATER_BIOMES) != set(BIOME_NAMES):
-    raise ValueError("every biome needs a walking cost or must be water")
 
 
 class _Spec(BaseModel):
@@ -303,9 +284,7 @@ def build_sim_world(
         x, z = chart.to_local(as_vec(grid.positions[cell]))
         in_town[cell] = chart.contains(x, z)
 
-    cost_by_biome = np.array([TERRAIN_COST.get(name, math.inf) for name in BIOME_NAMES])
-    terrain_cost = cost_by_biome[biomes]
-    terrain_cost = np.where(river, np.maximum(terrain_cost, RIVER_FORD_COST), terrain_cost)
+    terrain_cost = walk_costs(biomes, river)
 
     caps = np.zeros((grid.cell_count, len(RESOURCES)), dtype=np.uint8)
     for biome_name, biome_caps in RESOURCE_CAPS.items():

@@ -1,0 +1,41 @@
+# Roads and paths (10-world-v1 §1.3). Routes are found on the cell graph over walking cost, most important first;
+# every cell a route takes costs reuse_discount × for the routes after it, so later routes merge into trunks.
+# Roads are 3 m gravel ruts, paths 1.5 m trodden earth; a road or path over a river is a bridge.
+#
+# Gates: a road leaving the town starts at a gate and follows its lead (town-local metres, x east, z south) to the
+# town chart's edge; the cell route starts at the walkable cell nearest the lead's end. `bridges` are lead points
+# on a bridge over town water (the west lead crosses the Mill river's stream; the bridge is in data/town/town.yaml).
+
+town_chart_half_m: 160 # data/town/town.yaml extent (a test keeps them equal)
+reuse_discount: 0.35
+# after the listed routes, desire paths: a trip between two places (hotspots, camps) over 400 m apart whose cheapest
+# walk keeps less than this share on roads and paths becomes a path itself, shortest trips first (D121)
+trip_share: 0.6
+signpost_spacing_m: 60
+
+gates:
+  - id: main_gate
+    lead: [[0, 100], [0, 160]]
+  - id: west_gate
+    lead: [[-100, 76], [-104, 76], [-104, 104], [-160, 104]]
+    bridges: [[-156, 104]]
+
+routes:
+  - {id: west_road, kind: road, name: the road from the castle town to Band B camp, stops: [west_gate, lords_woods, band_b_camp]}
+  - {id: falls_road, kind: road, name: the road from the castle town to the Falls pool, stops: [main_gate, elder_grove, falls_pool]}
+  - {id: marsh_road, kind: road, name: the road from the castle town to the South marsh, stops: [main_gate, south_marsh]}
+  - {id: shore_road, kind: road, name: the road from the castle town to the Gulf shore, stops: [main_gate, gulf_shore]}
+  - {id: north_road, kind: road, name: the road from the castle town to the North woods, stops: [main_gate, north_woods]}
+  - {id: stones_road, kind: road, name: the road from the castle town to the Standing stones, stops: [west_gate, standing_stones]}
+  - {id: obsidian_spur, kind: road, name: the road to the Obsidian field, stops: [obsidian_field, roads]}
+  - {id: a_savanna_path, kind: path, name: the path from Band A camp to the A savanna, stops: [band_a_camp, a_savanna]}
+  - {id: a_cave_path, kind: path, name: the path from Band A camp to the painted cave, stops: [band_a_camp, painted_cave_flint]}
+  - {id: a_marsh_path, kind: path, name: the path from Band A camp to the River marsh, stops: [band_a_camp, river_marsh]}
+  - {id: a_meadows_path, kind: path, name: the path from Band A camp to the Bridge meadows, stops: [band_a_camp, bridge_meadows]}
+  - {id: a_wall_path, kind: path, name: the path from Band A camp to the Eastern wall scar, stops: [band_a_camp, eastern_wall_scar]}
+  - {id: a_trail_path, kind: path, name: the path from Band A camp to the great trail, stops: [band_a_camp, trail]}
+  - {id: b_wood_path, kind: path, name: the path from Band B camp to B wood, stops: [band_b_camp, b_wood]}
+  - {id: b_shore_path, kind: path, name: the path from Band B camp to B shore, stops: [band_b_camp, b_shore]}
+  - {id: b_trail_path, kind: path, name: the path from Band B camp to the great trail, stops: [band_b_camp, trail]}
+
+trail: {id: great_trail, name: the great trail}

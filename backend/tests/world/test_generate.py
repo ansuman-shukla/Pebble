@@ -1,9 +1,11 @@
 import hashlib
+from collections import Counter
 
 import numpy as np
 import pytest
 
 from app.world.biomes import BIOME_IDS, WATER_BIOMES, hop_distance, mean_spacing_m, walkable
+from app.world.flora import generate_flora
 from app.world.generate import GENERATOR_VERSION, GeneratedWorld, generate_world
 from app.world.hydrology import components
 from app.world.paths import reachable
@@ -49,11 +51,20 @@ def test_same_seed_and_spec_give_identical_worlds(spec: WorldSpec, world: Genera
     assert again.view().model_dump() == world.view().model_dump()
 
 
-def test_another_seed_gives_another_world(spec: WorldSpec, world: GeneratedWorld) -> None:
-    other = generate_world(spec.model_copy(update={"seed": spec.seed + 1}), load_site_kinds())
+@pytest.mark.parametrize("seed", [20261029, 7])
+def test_another_seed_gives_another_full_world(spec: WorldSpec, world: GeneratedWorld, seed: int) -> None:
+    other_spec = spec.model_copy(update={"seed": seed})
+    other = generate_world(other_spec, load_site_kinds())
 
     assert not np.array_equal(other.heights, world.heights)
     assert _digest(other) != _digest(world)
+    assert [hotspot.id for hotspot in other.places.hotspots] == [hotspot.id for hotspot in spec.hotspots.hotspots]
+    features = Counter((feature.hotspot, feature.kind) for feature in other.places.features)
+    for hotspot in spec.hotspots.hotspots:
+        for feature in hotspot.features:
+            assert features[(hotspot.id, feature.kind)] == feature.count, (hotspot.id, feature.kind)
+        assert features[(hotspot.id, "den")] == (hotspot.den is not None), hotspot.id
+    assert len(generate_flora(other.view(), other_spec)) > 40_000
 
 
 def test_world_view_carries_the_generator_version_and_sizes(world: GeneratedWorld) -> None:
@@ -218,7 +229,8 @@ def test_sites_match_the_world_description(world: GeneratedWorld) -> None:
 
     for camp in ("band_a_camp", "band_b_camp"):
         assert near_water[cells[camp]] <= 120, camp
-        assert _distance_m(world, cells[camp], cells["town"]) >= 1500
+    assert _distance_m(world, cells["band_a_camp"], cells["town"]) >= 2500
+    assert 1200 <= _distance_m(world, cells["band_b_camp"], cells["town"]) <= 1700  # 10-world-v1 §1.2
     assert _distance_m(world, cells["band_a_camp"], cells["band_b_camp"]) >= 1500
     assert _distance_m(world, cells["painted_cave"], cells["band_a_camp"]) <= 600
     assert world.biomes[cells["elder_tree"]] == BIOME_IDS["broadleaf_forest"]
