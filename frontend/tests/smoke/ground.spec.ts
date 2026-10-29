@@ -324,6 +324,8 @@ interface BlendSample {
   second: number;
   /** The two layers' ids mixed by the first one's share: jumps wherever the blend jumps. */
   mixed: number;
+  /** The first layer's share (0.5..1). */
+  share: number;
 }
 
 /** A path through the blend's inputs: weights and fields go linearly from `from` to `to`. */
@@ -360,13 +362,13 @@ void main() {
   int first;
   int second;
   float t = groundBlend(w, f.x, f.y, 0.04, first, second);
-  color = vec4(float(first) / 7.0, float(second) / 7.0, mix(float(second), float(first), t) / 7.0, 1.0);
+  color = vec4(float(first) / 7.0, float(second) / 7.0, mix(float(second), float(first), t) / 7.0, t);
 }`;
   const pixels = await page.evaluate<number[]>(`(() => {
     const canvas = document.createElement('canvas');
     canvas.width = ${SAMPLES};
     canvas.height = 1;
-    const gl = canvas.getContext('webgl2');
+    const gl = canvas.getContext('webgl2', { premultipliedAlpha: false });
     const compile = (type, source) => {
       const s = gl.createShader(type);
       gl.shaderSource(s, source);
@@ -393,6 +395,7 @@ void main() {
     first: Math.round((pixels[k * 4] / 255) * 7),
     second: Math.round((pixels[k * 4 + 1] / 255) * 7),
     mixed: (pixels[k * 4 + 2] / 255) * 7,
+    share: pixels[k * 4 + 3] / 255,
   }));
 }
 
@@ -440,16 +443,32 @@ test.describe('ground blend', () => {
     expect(largestStep(close)).toBeLessThan(0.2);
   });
 
+  test('two layers sharing the ground evenly split it into patches, not a mix', async ({
+    page,
+  }) => {
+    // level mountain: rock and grass half and half
+    const samples = await blendAlong(page, [], {
+      from: { weights: { grass: 0.5, rock: 0.5 }, f0: 0.35, f1: 0.5 },
+      to: { weights: { grass: 0.5, rock: 0.5 }, f0: 0.65, f1: 0.5 },
+    });
+    const firsts = new Set(samples.map((s) => s.first));
+    expect([...firsts].sort()).toEqual([layer('grass'), layer('rock')].sort());
+    // only a narrow band along the patches' edges blends the two
+    const crisp = samples.filter((s) => s.share > 0.99).length;
+    expect(crisp / SAMPLES).toBeGreaterThan(0.75);
+  });
+
   test("a patch's edge shows no third layer between the two", async ({
     page,
   }) => {
-    // tundra-like ground (grass and gravel) crossing the edge of a dirt patch
+    // tundra-like ground (grass and gravel) crossing the edge of a dirt patch where the fields barely lift any
+    // layer: split half and half at the edge, grass and dirt (0.3 each) would sink below the gravel (0.4)
     const samples = await blendAlong(
       page,
-      [{ from: 'grass', to: 'dirt', field: 0, cut: 0.6, amount: 1 }],
+      [{ from: 'grass', to: 'dirt', field: 0, cut: 0.48, amount: 1 }],
       {
-        from: { weights: { grass: 0.6, gravel: 0.4 }, f0: 0.55, f1: 0.55 },
-        to: { weights: { grass: 0.6, gravel: 0.4 }, f0: 0.67, f1: 0.55 },
+        from: { weights: { grass: 0.6, gravel: 0.4 }, f0: 0.46, f1: 0.5 },
+        to: { weights: { grass: 0.6, gravel: 0.4 }, f0: 0.54, f1: 0.5 },
       },
     );
     expect(samples[0].first).toBe(layer('grass'));
