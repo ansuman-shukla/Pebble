@@ -4,15 +4,16 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 import type { TownArea } from '@/lib/client/types.gen';
 import type { Point, WalkWater } from '@/lib/world/collision';
+import { groundMaterial, groundQuality } from '@/lib/world/ground-shader';
 import { groundShape, TOWN_WATER_Y } from '@/lib/world/ground-shape';
 import { FLAT_MAPPING, type LocalMapping } from '@/lib/world/local-mapping';
 import { mapGeometry } from '@/lib/world/map-geometry';
 import { waterMaterial } from '@/lib/world/water-material';
 
 /*
- * The town ground: grass with holes where water is (an island inside a moat ring is land again), water
- * surfaces a little below it with bank walls around every edge so the sky never shows through, and the areas
- * (streets, plazas, courtyards, fields) as coloured polygons just above the grass. Built in local metres and
+ * The town ground: grass (on the ground shader) with holes where water is (an island inside a moat ring is land
+ * again), water surfaces a little below it with bank walls around every edge so the sky never shows through, and the
+ * areas (streets, plazas, courtyards, fields) as coloured polygons just above the grass. Built in local metres and
  * carried through the mapping (flat on the town page, wrapped onto the planet on the globe).
  */
 
@@ -143,6 +144,16 @@ export function TownGround({
 
   const surfaceMaterial = useMemo(() => waterMaterial('pool'), []);
   useEffect(() => () => surfaceMaterial.dispose(), [surfaceMaterial]);
+  const grassMaterial = useMemo(
+    () =>
+      groundMaterial({
+        quality: groundQuality(window.location.search),
+        weights: { grass: 1 },
+        tint: grassColor,
+      }),
+    [grassColor],
+  );
+  useEffect(() => () => grassMaterial.dispose(), [grassMaterial]);
 
   const areaKinds = useMemo(
     () => [...new Set(areas.map((area) => area.kind))],
@@ -165,9 +176,7 @@ export function TownGround({
 
   return (
     <>
-      <mesh geometry={grass} receiveShadow>
-        <meshStandardMaterial color={grassColor} />
-      </mesh>
+      <mesh geometry={grass} material={grassMaterial} receiveShadow />
       <mesh geometry={surface} material={surfaceMaterial} receiveShadow />
       <mesh geometry={banks} receiveShadow>
         <meshStandardMaterial color={BANK} side={DoubleSide} />

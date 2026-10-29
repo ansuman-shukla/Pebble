@@ -1,0 +1,508 @@
+/*
+ * One ground material for the planet's terrain and the sites' own ground (zero textures). Every vertex carries 8
+ * layer weights (`ground0` = grass, forest floor, dirt, gravel; `ground1` = sand, rock, snow, mud; RGBA8, summing
+ * to 1) and its grass tint (the vertex colour). Per fragment, in planet-space metres (no UVs, no seams, no tiling):
+ * - two noise fields break layers into patches (grass into dirt and gravel, rock into scree, ...: the style's
+ *   breakup rules), then a height blend of the weights and the fields picks the top two layers with crisp, ragged
+ *   1-3 m edges;
+ * - only those two layers draw their pattern (ground-style.ts), and the pattern's relief bumps the normal;
+ * - level of detail by view distance: full < 40 m (the bump fading as the pixels outgrow it), no bump 40-300 m,
+ *   layer colours and a tone > 300 m, and the per-vertex layer colours alone > 1.5 km.
+ * A mesh without the weight attributes (the town's grass) passes constant weights; its tint is the material colour.
+ * Pages pick the quality with `?ground=`: `flat` (layer colours only, the A/B baseline) or `low` (one pattern, no
+ * bump).
+ */
+import {
+  Color,
+  MeshStandardMaterial,
+  type PerspectiveCamera,
+  Vector2,
+  type Vector3,
+} from 'three';
+
+import {
+  type GroundBreakup,
+  GROUND_STYLE,
+  type GroundStyle,
+} from './ground-style';
+
+export const GROUND_LAYERS = [
+  'grass',
+  'forest_floor',
+  'dirt',
+  'gravel',
+  'sand',
+  'rock',
+  'snow',
+  'mud',
+] as const;
+export type GroundLayer = (typeof GROUND_LAYERS)[number];
+export type GroundWeights = Partial<Record<GroundLayer, number>>;
+
+export type GroundQuality = 'full' | 'low' | 'flat';
+
+/** The quality a page's query (`location.search`) asks for with `?ground=` (anything else: full). */
+export function groundQuality(search: string): GroundQuality {
+  const asked = new URLSearchParams(search).get('ground');
+  return asked === 'flat' || asked === 'low' ? asked : 'full';
+}
+
+/** A cone of directions where the ground draws nothing (a site lays its own ground there). */
+interface GroundHole {
+  up: Vector3;
+  /** cos of the cone's angular radius. */
+  cos: number;
+}
+
+export interface GroundMaterialOptions {
+  quality?: GroundQuality;
+  hole?: GroundHole | null;
+  /** Constant layer weights for a mesh without `ground0`/`ground1` (missing layers are 0; the rest is grass). */
+  weights?: GroundWeights;
+  /** The grass tint where the mesh has no vertex colours. */
+  tint?: string;
+}
+
+/** How much of each face's own flat normal shows through the smooth normals: a hint of the low-poly facets. */
+const FACETS = 0.35;
+/** The facets fade out between these view distances (metres), where faces shrink to a few pixels. */
+const FACETS_FADE: [number, number] = [250, 1200];
+
+const glslFloat = (value: number) => value.toFixed(4);
+const glslColor = (hex: string) => {
+  const { r, g, b } = new Color(hex);
+  return `vec3(${[r, g, b].map(glslFloat).join(', ')})`;
+};
+
+/** Layer weights in attribute order, the unnamed rest on grass. */
+export function weightsArray(weights: GroundWeights) {
+  const values = GROUND_LAYERS.map((layer) => weights[layer] ?? 0);
+  const named = values.slice(1).reduce((sum, value) => sum + value, 0);
+  if (weights.grass === undefined) values[0] = Math.max(0, 1 - named);
+  return values;
+}
+
+const layerIndex = (layer: GroundLayer) => GROUND_LAYERS.indexOf(layer);
+
+/*
+ * The breakup rules as GLSL: each moves a share of its layer's weight (w, for the colours) to another layer. The
+ * heights the pick reads (h) swap the two at full strength instead, so no third layer shows through as a ring
+ * where a patch's edge splits its layer half and half.
+ */
+function breakupGlsl(rules: GroundBreakup[]) {
+  const moves = rules.map(({ from, to, field, cut, amount }) => {
+    const [a, b] = [layerIndex(from), layerIndex(to)];
+    return `{ float s = smoothstep(${glslFloat(cut)}, ${glslFloat(cut)} + edge, f${field}); float m = w[${a}] * s * ${glslFloat(amount)}; w[${a}] -= m; w[${b}] += m; float hm = h[${a}] * ${glslFloat(amount)}; h[${a}] -= hm * max(0.0, 2.0 * s - 1.0); h[${b}] += hm * min(1.0, 2.0 * s); }`;
+  });
+  return `void groundBreakup(inout float w[8], inout float h[8], float f0, float f1, float edge) {\n${moves.join('\n')}\n}`;
+}
+
+/*
+ * Where each layer stands in the plane of the two breakup fields (degrees): a layer's height rises with the fields
+ * along its direction, so layers that often share ground (grass and rock, grass and dirt, rock and snow) lie far
+ * apart and split it into crisp patches instead of ties.
+ */
+const PICK_PHASE: Record<GroundLayer, number> = {
+  grass: 0,
+  forest_floor: 150,
+  dirt: 110,
+  gravel: 250,
+  sand: 200,
+  rock: 180,
+  snow: 30,
+  mud: 300,
+};
+/** How far the fields lift a layer's height: weights 0.2 apart still share the ground. */
+const PICK_SPREAD = 1.5;
+/** Width of the height band where the top two layers blend. */
+const PICK_BAND = 0.1;
+
+/*
+ * The two layers that draw their pattern: the top two by height (the weights h after the breakup, lifted by the
+ * fields), the first one's share t (0.5..1) and the gap between their heights (0 along the edge where they
+ * swap). Each layer's height rises from -1 with its weight, so a layer fades in rather than pops; the top two share
+ * a band and the second fades out as the third catches up, so the blend never jumps where the pick changes.
+ */
+const GROUND_PICK = /* glsl */ `
+const vec2 GROUND_PHASE[8] = vec2[8](${GROUND_LAYERS.map((layer) => {
+  const angle = (PICK_PHASE[layer] * Math.PI) / 180;
+  return `vec2(${glslFloat(Math.cos(angle) * PICK_SPREAD)}, ${glslFloat(Math.sin(angle) * PICK_SPREAD)})`;
+}).join(', ')});
+float groundPick(float hw[8], float f0, float f1, out int first, out int second, out float gap) {
+  first = 0;
+  second = 0;
+  float h1 = -9.0;
+  float h2 = -9.0;
+  float h3 = -9.0;
+  vec2 f = vec2(f0, f1) - 0.5;
+  for (int i = 0; i < 8; i++) {
+    float h = mix(-1.0, hw[i] + dot(GROUND_PHASE[i], f), smoothstep(0.0, 0.03, hw[i]));
+    if (h > h1) {
+      h3 = h2;
+      h2 = h1;
+      second = first;
+      h1 = h;
+      first = i;
+    } else if (h > h2) {
+      h3 = h2;
+      h2 = h;
+      second = i;
+    } else if (h > h3) h3 = h;
+  }
+  gap = h1 - h2;
+  float a1 = min(h1 - h2 + ${glslFloat(PICK_BAND / 2)}, h1 - h3);
+  float a2 = min(max(h2 - h1 + ${glslFloat(PICK_BAND / 2)}, 0.0), h2 - h3);
+  return a1 + a2 > 0.0 ? a1 / (a1 + a2) : 1.0;
+}
+`;
+
+/*
+ * The breakup, then the pick: `float groundBlend(inout float w[8], float f0, float f1, float edge, out int first,
+ * out int second, out float gap)` returns the first layer's share and leaves the broken-up weights in w.
+ */
+export const groundBlendGlsl = (rules: GroundBreakup[]) => /* glsl */ `
+${breakupGlsl(rules)}
+${GROUND_PICK}
+float groundBlend(inout float w[8], float f0, float f1, float edge, out int first, out int second, out float gap) {
+  float hw[8] = w;
+  groundBreakup(w, hw, f0, f1, edge);
+  return groundPick(hw, f0, f1, first, second, gap);
+}
+`;
+
+/** The style as GLSL: colour constants, base colours, roughness, bump and breakup per layer, and the patterns. */
+function styleChunk(style: GroundStyle) {
+  const layers = GROUND_LAYERS.map((layer) => style.layers[layer]);
+  const colors = GROUND_LAYERS.flatMap((layer) =>
+    Object.entries(style.layers[layer].colors).map(
+      ([name, hex]) => `const vec3 ${layer}_${name} = ${glslColor(hex)};`,
+    ),
+  );
+  const list = (values: string[], type: string) =>
+    `${type}[8](${values.join(', ')})`;
+  return {
+    constants: [
+      `const vec3 grass_reference = ${glslColor(style.grassReference)};`,
+      ...colors,
+      `const vec3 GROUND_BASE[8] = ${list(
+        layers.map(({ base }) => glslColor(base)),
+        'vec3',
+      )};`,
+      `const float GROUND_ROUGHNESS[8] = ${list(
+        layers.map(({ roughness }) => glslFloat(roughness)),
+        'float',
+      )};`,
+      `const float GROUND_DEPTH[8] = ${list(
+        layers.map(({ bump }) => glslFloat(bump)),
+        'float',
+      )};`,
+    ].join('\n'),
+    functions: [groundBlendGlsl(style.breakup), style.patterns].join('\n'),
+  };
+}
+
+const VERTEX_COMMON = /* glsl */ `
+varying vec3 vGroundPlanet;
+varying vec4 vGround0;
+varying vec4 vGround1;
+#ifdef GROUND_CONST
+uniform vec4 groundConst0;
+uniform vec4 groundConst1;
+#else
+attribute vec4 ground0;
+attribute vec4 ground1;
+#endif
+`;
+
+const VERTEX_MAIN = /* glsl */ `
+vGroundPlanet = position;
+#ifdef GROUND_CONST
+vGround0 = groundConst0;
+vGround1 = groundConst1;
+#else
+vGround0 = ground0;
+vGround1 = ground1;
+#endif
+`;
+
+/** Width of a breakup patch's soft edge in field units: crisp, a few decimetres (widened to a pixel and a half). */
+const BREAKUP_EDGE = 0.04;
+/** Pixel footprints (metres) over which the bump fades out: past them its detail would shade as pixel blocks. */
+const BUMP_FOOTPRINT: [number, number] = [0.015, 0.05];
+
+const FRAGMENT_COMMON = /* glsl */ `
+varying vec3 vGroundPlanet;
+varying vec4 vGround0;
+varying vec4 vGround1;
+uniform float groundFacets;
+uniform vec2 groundFacetsFade;
+uniform float groundPixel;
+#ifdef GROUND_HOLE
+uniform vec3 groundHoleUp;
+uniform float groundHoleCos;
+#endif
+`;
+
+/* The noises and the helpers the patterns and the blend read. */
+const GROUND_HELPERS = /* glsl */ `
+uint groundPcg(uint v) {
+  uint state = v * 747796405u + 2891336453u;
+  uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+  return (word >> 22u) ^ word;
+}
+float groundHash(ivec3 c) {
+  uint h = (uint(c.x) * 0x8da6b343u) ^ (uint(c.y) * 0xd8163841u) ^ (uint(c.z) * 0xcb1ab31fu);
+  return float(groundPcg(h)) * (1.0 / 4294967295.0);
+}
+float gNoise(vec3 p) {
+  vec3 i = floor(p);
+  vec3 f = p - i;
+  vec3 u = f * f * (3.0 - 2.0 * f);
+  ivec3 c = ivec3(i);
+  float a = mix(groundHash(c), groundHash(c + ivec3(1, 0, 0)), u.x);
+  float b = mix(groundHash(c + ivec3(0, 1, 0)), groundHash(c + ivec3(1, 1, 0)), u.x);
+  float d = mix(groundHash(c + ivec3(0, 0, 1)), groundHash(c + ivec3(1, 0, 1)), u.x);
+  float e = mix(groundHash(c + ivec3(0, 1, 1)), groundHash(c + ivec3(1, 1, 1)), u.x);
+  return mix(mix(a, b, u.y), mix(d, e, u.y), u.z);
+}
+/*
+ * Cells (Worley noise over the 8 nearest lattice points): x = distance to the nearest feature point, y = to the
+ * second nearest, z = the nearest cell's id in 0..1. y − x is small along the cells' borders. The points keep to
+ * the middle half of their cells so 8 lattice points always hold the nearest (and the second nearest wherever
+ * y − x is small): wider jitter missed some, which drew straight seams along the lattice.
+ */
+vec3 gCells(vec3 p) {
+  vec3 base = floor(p - 0.5);
+  float f1 = 9.0;
+  float f2 = 9.0;
+  float id = 0.0;
+  for (int k = 0; k < 8; k++) {
+    ivec3 c = ivec3(base) + ivec3(k & 1, (k >> 1) & 1, k >> 2);
+    uint h = groundPcg((uint(c.x) * 0x8da6b343u) ^ (uint(c.y) * 0xd8163841u) ^ (uint(c.z) * 0xcb1ab31fu));
+    vec3 jitter = vec3(uvec3(h, h >> 10u, h >> 20u) & 1023u) * (1.0 / 1023.0);
+    float d = length(vec3(c) + 0.25 + 0.5 * jitter - p);
+    if (d < f1) {
+      f2 = f1;
+      f1 = d;
+      id = float(h >> 8u) * (1.0 / 16777215.0);
+    } else if (d < f2) f2 = d;
+  }
+  return vec3(f1, f2, id);
+}
+float gFine(vec3 p, float freq, float fw) {
+  return mix(gNoise(p * freq), 0.5, smoothstep(0.35, 0.8, fw * freq));
+}
+/*
+ * The shared noises: 15 m drifts, 3 m patches, 1 m grain, 11 m drifts (and a 4 m one only the fields use), each
+ * fading to 0.5 where a pixel (fw metres) can't resolve it, so far patches never crawl.
+ */
+vec4 groundNoises(vec3 p, float fw, out float extra) {
+  vec4 freq = vec4(0.065, 0.31, 1.13, 0.09);
+  vec4 n = vec4(gNoise(p * freq.x), gNoise(p * freq.y + 17.0), gNoise(p * freq.z + 31.0), gNoise(p * freq.w + 41.0));
+  extra = mix(gNoise(p * 0.43 + 53.0), 0.5, smoothstep(0.35, 0.8, fw * 0.43));
+  return mix(n, vec4(0.5), smoothstep(vec4(0.35), vec4(0.8), fw * freq));
+}
+/* A grass tint shifts the grass colours by its ratio to the style's reference tint, kept within bounds. */
+vec3 groundTintShift(vec3 tint) {
+  return mix(vec3(1.0), clamp(tint / grass_reference, vec3(0.6), vec3(1.5)), 0.75);
+}
+vec3 groundMacro(float w[8], vec3 grassTint) {
+  vec3 c = vec3(0.0);
+  for (int i = 0; i < 8; i++) c += w[i] * GROUND_BASE[i];
+  return c + w[0] * GROUND_BASE[0] * (groundTintShift(grassTint) - 1.0);
+}
+/* A layer's average colour (grass shifted by the tint). */
+vec3 groundBase(int layer, vec3 grassTint) {
+  return layer == 0 ? GROUND_BASE[0] * groundTintShift(grassTint) : GROUND_BASE[layer];
+}
+/*
+ * Bumps a view-space normal by a height field h (metres) over the fragment's view position. The slope is capped
+ * so detail a few pixels across never tilts whole pixel quads.
+ */
+vec3 groundBump(vec3 position, vec3 normal, float h) {
+  vec3 dx = dFdx(position);
+  vec3 dy = dFdy(position);
+  vec3 r1 = cross(dy, normal);
+  vec3 r2 = cross(normal, dx);
+  float det = dot(dx, r1);
+  float hx = clamp(dFdx(h), -0.5 * length(dx), 0.5 * length(dx));
+  float hy = clamp(dFdy(h), -0.5 * length(dy), 0.5 * length(dy));
+  vec3 grad = sign(det) * (hx * r1 + hy * r2);
+  return normalize(abs(det) * normal - grad);
+}
+`;
+
+/*
+ * The style's patterns with every constant and helper they read, for a shader of its own: `vec4 groundLook(int
+ * layer, vec3 p, vec3 tint, float fw, vec4 g, inout float roughness)` and `vec4 groundNoises(vec3 p, float fw, out
+ * float extra)` for its g.
+ */
+export const groundLookGlsl = () =>
+  [
+    styleChunk(GROUND_STYLE).constants,
+    GROUND_HELPERS,
+    GROUND_STYLE.patterns,
+  ].join('\n');
+
+/*
+ * Sets diffuseColor (from the grass tint already in it), groundRoughness, groundRelief (metres) and groundGap (the
+ * top two layers' height gap).
+ */
+const FRAGMENT_COLOR = /* glsl */ `
+float groundRoughness;
+float groundRelief = 0.0;
+float groundGap = 9.0;
+{
+  vec3 tint = diffuseColor.rgb;
+  float w[8] = float[8](vGround0.x, vGround0.y, vGround0.z, vGround0.w, vGround1.x, vGround1.y, vGround1.z, vGround1.w);
+  vec3 macro = groundMacro(w, tint);
+  vec3 color = macro;
+  groundRoughness = 0.0;
+  for (int i = 0; i < 8; i++) groundRoughness += w[i] * GROUND_ROUGHNESS[i];
+#ifndef GROUND_FLAT
+  float dist = length(vViewPosition);
+  vec3 p = vGroundPlanet;
+  // a pixel's footprint (metres) from the view distance and the smooth normal's tilt: like length(fwidth(p)) but
+  // continuous across the mesh's triangles, so no fade steps along their edges
+  float facing = max(abs(dot(normalize(vNormal), vViewPosition)) / dist, 0.05);
+  float fw = dist * groundPixel * sqrt(1.0 + 1.0 / (facing * facing));
+  if (dist < GROUND_MACRO_END) {
+    float extra;
+    vec4 g = groundNoises(p, fw, extra);
+    // the breakup fields: drifts, patches and ragged 1 m edges
+    float f0 = g.x * 0.42 + g.y * 0.38 + g.z * 0.2;
+    float f1 = g.w * 0.5 + extra * 0.32 + (1.0 - g.z) * 0.18;
+    // patch edges widen by what the fields change across a pixel, not by the footprint's long axis: that blurred
+    // patches seen at grazing angles into smudges
+    float edge = ${BREAKUP_EDGE} + 1.5 * max(fwidth(f0), fwidth(f1));
+    int first;
+    int second;
+    float t = groundBlend(w, f0, f1, edge, first, second, groundGap);
+    // past the patterns the top two layers' own colours, so they part along the fields, not the mesh's triangles
+    vec3 near = mix(groundBase(second, tint), groundBase(first, tint), t);
+    if (dist < GROUND_PATTERN_END) {
+#ifdef GROUND_LOW
+      t = 1.0;
+#endif
+      float firstRoughness = GROUND_ROUGHNESS[first];
+      float secondRoughness = GROUND_ROUGHNESS[second];
+      vec4 look = groundLook(first, p, tint, fw, g, firstRoughness);
+      vec4 other = t < 0.999 ? groundLook(second, p, tint, fw, g, secondRoughness) : look;
+      vec3 pattern = mix(other.rgb, look.rgb, t);
+      // relief about each layer's mean level (0.5), so a layer's edge is no step
+      groundRelief = mix((other.a - 0.5) * GROUND_DEPTH[second], (look.a - 0.5) * GROUND_DEPTH[first], t);
+      // the bump fades out with distance and as a pixel's footprint outgrows the relief's detail
+      groundRelief *= (1.0 - smoothstep(${glslFloat(BUMP_FOOTPRINT[0])}, ${glslFloat(BUMP_FOOTPRINT[1])}, fw)) * (1.0 - smoothstep(30.0, 40.0, dist));
+      groundRoughness = mix(secondRoughness, firstRoughness, t);
+      near = mix(pattern, near, smoothstep(GROUND_PATTERN_END * 0.8, GROUND_PATTERN_END, dist));
+    }
+    float tone = 0.92 + 0.16 * g.x;
+    color = mix(near * tone, macro, smoothstep(GROUND_MACRO_END * 0.8, GROUND_MACRO_END, dist));
+  }
+#endif
+  diffuseColor.rgb = color;
+}
+`;
+
+const FRAGMENT_NORMAL = /* glsl */ `
+{
+  vec3 facet = normalize(cross(dFdx(vViewPosition), dFdy(vViewPosition)));
+  float fade = 1.0 - smoothstep(groundFacetsFade.x, groundFacetsFade.y, length(vViewPosition));
+  normal = normalize(mix(normal, facet, groundFacets * fade));
+}
+`;
+
+const FRAGMENT_BUMP = /* glsl */ `
+#ifdef GROUND_BUMP
+// the bump fades out within a few pixels of a layer's edge, where the two layers' reliefs meet as a step (a wide
+// gap is no edge, however fast it changes: a layer's weight rising from 0 lifts the second's height steeply)
+float groundEdge = groundGap / max(fwidth(groundGap), 1e-4);
+normal = groundBump(-vViewPosition, normal, groundRelief * max(smoothstep(1.0, 6.0, groundEdge), smoothstep(0.1, 0.3, groundGap)));
+#endif
+`;
+
+/** View distances (metres) where the patterns end and where only the per-vertex colours remain. */
+const PATTERN_END = { full: 300, low: 150 };
+const MACRO_END = 1500;
+
+/** The ground material (MeshStandardMaterial: lit, shadowed and fogged like everything else). */
+export function groundMaterial({
+  quality = 'full',
+  hole = null,
+  weights,
+  tint,
+}: GroundMaterialOptions = {}) {
+  const material = new MeshStandardMaterial({
+    color: tint ?? '#ffffff',
+    vertexColors: tint === undefined,
+    roughness: 1,
+  });
+  const defines: Record<string, string> = {
+    GROUND_PATTERN_END: glslFloat(
+      PATTERN_END[quality === 'low' ? 'low' : 'full'],
+    ),
+    GROUND_MACRO_END: glslFloat(MACRO_END),
+  };
+  if (quality === 'flat') defines.GROUND_FLAT = '';
+  if (quality === 'low') defines.GROUND_LOW = '';
+  if (quality === 'full') defines.GROUND_BUMP = '';
+  if (weights) defines.GROUND_CONST = '';
+  if (hole) defines.GROUND_HOLE = '';
+  material.defines = defines;
+  const constant = weightsArray(weights ?? {});
+  const chunk = styleChunk(GROUND_STYLE);
+  // the angle a pixel spans (radians), for the footprint
+  const pixel = { value: 0.002 };
+  const buffer = new Vector2();
+  material.onBeforeRender = (renderer, _scene, camera) => {
+    const { fov } = camera as PerspectiveCamera;
+    pixel.value =
+      (2 * Math.tan((fov * Math.PI) / 360)) /
+      renderer.getDrawingBufferSize(buffer).y;
+  };
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.groundFacets = { value: FACETS };
+    shader.uniforms.groundPixel = pixel;
+    shader.uniforms.groundFacetsFade = { value: FACETS_FADE };
+    shader.uniforms.groundConst0 = { value: constant.slice(0, 4) };
+    shader.uniforms.groundConst1 = { value: constant.slice(4, 8) };
+    if (hole) {
+      shader.uniforms.groundHoleUp = { value: hole.up };
+      shader.uniforms.groundHoleCos = { value: hole.cos };
+    }
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>\n${VERTEX_COMMON}`)
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>\n${VERTEX_MAIN}`,
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>\n${chunk.constants}\n${FRAGMENT_COMMON}\n${GROUND_HELPERS}\n${chunk.functions}`,
+      )
+      .replace(
+        'void main() {',
+        'void main() {\n#ifdef GROUND_HOLE\nif (dot(normalize(vGroundPlanet), groundHoleUp) > groundHoleCos) discard;\n#endif',
+      )
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>\n${FRAGMENT_COLOR}`,
+      )
+      .replace(
+        '#include <roughnessmap_fragment>',
+        '#include <roughnessmap_fragment>\nroughnessFactor = groundRoughness;',
+      )
+      .replace(
+        '#include <normal_fragment_begin>',
+        `#include <normal_fragment_begin>\n${FRAGMENT_NORMAL}`,
+      )
+      .replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>\n${FRAGMENT_BUMP}`,
+      );
+  };
+  material.customProgramCacheKey = () =>
+    `ground-${quality}-${weights ? 'const' : 'vertex'}-${hole ? 'hole' : 'whole'}-${tint === undefined}`;
+  return material;
+}
