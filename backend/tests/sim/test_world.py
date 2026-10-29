@@ -7,8 +7,8 @@ from sqlmodel import Session
 from app.sim.items import ITEMS, RESOURCE_INDEX, RIVER_REEDS, amount_words
 from app.sim.navigation import Planner
 from app.sim.vec import angle, bearing_deg, lat_lon_deg, slerp, step_towards
-from app.sim.world import TERRAIN_COST, SimWorld, load_sim_world
-from app.world.biomes import BIOME_IDS
+from app.sim.world import SimWorld, load_sim_world
+from app.world.biomes import BIOME_IDS, TERRAIN_COST
 from app.world.generate import GENERATOR
 from app.world.town import load_town
 
