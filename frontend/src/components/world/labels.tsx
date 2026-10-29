@@ -369,8 +369,14 @@ function Chip({ content }: { content: LabelContent }) {
   );
 }
 
-/** Outside the Canvas, layered over it: the chips and speech bubbles (ChipProjector places them). */
-export function ChipOverlay({ store }: { store: LabelStore }) {
+/** Outside the Canvas, layered over it: the chips and speech bubbles (ChipProjector places them); a click on a chip picks its subject. */
+export function ChipOverlay({
+  store,
+  onPick,
+}: {
+  store: LabelStore;
+  onPick: (subject: string) => void;
+}) {
   const entries = useSyncExternalStore(store.subscribe, store.getSnapshot);
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -381,6 +387,11 @@ export function ChipOverlay({ store }: { store: LabelStore }) {
           data-label-kind={content.kind}
           data-view="full"
           style={{ display: 'none' }}
+          onClick={
+            content.kind === 'speech'
+              ? undefined
+              : () => onPick(content.subject)
+          }
           ref={(element) => {
             if (!element) return;
             store.elements.set(content.id, element);
@@ -391,7 +402,7 @@ export function ChipOverlay({ store }: { store: LabelStore }) {
           className={
             content.kind === 'speech'
               ? 'absolute top-0 left-0 z-10 w-max max-w-56 rounded-lg bg-white/95 px-2 py-1 text-xs text-black shadow'
-              : 'group absolute top-0 left-0 flex h-6 items-center gap-1 rounded-full bg-black/60 p-0.5 pr-2 text-[11px] whitespace-nowrap text-white data-[view=icon]:pr-0.5'
+              : 'group pointer-events-auto absolute top-0 left-0 flex h-6 cursor-pointer items-center gap-1 rounded-full bg-black/60 p-0.5 pr-2 text-[11px] whitespace-nowrap text-white data-[view=icon]:pr-0.5'
           }
         >
           {content.kind === 'speech' ? (

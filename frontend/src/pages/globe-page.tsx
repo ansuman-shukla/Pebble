@@ -1,5 +1,6 @@
 import { Canvas } from '@react-three/fiber';
 import {
+  type CSSProperties,
   memo,
   type RefObject,
   Suspense,
@@ -48,6 +49,11 @@ import type {
   GlobePlayerState,
 } from '@/components/world/globe/globe-player';
 import { GlobeWalker } from '@/components/world/globe/globe-walker';
+import {
+  CitizenPicker,
+  Inspector,
+  type PickAt,
+} from '@/components/world/globe/inspector';
 import { ReplayBadge } from '@/components/world/globe/replay-badge';
 import {
   CitizenLabels,
@@ -62,7 +68,7 @@ import {
   CAMERA_MODES,
   type CameraMode,
 } from '@/components/world/player/camera-mode';
-import { useKeys } from '@/components/world/player/use-keys';
+import { notForScene, useKeys } from '@/components/world/player/use-keys';
 import {
   type RenderStats,
   RenderStatsProbe,
@@ -76,6 +82,8 @@ import {
 import { useTown } from '@/hooks/use-town';
 import { useWorld } from '@/hooks/use-world';
 import type { TownView, WorldView } from '@/lib/client/types.gen';
+import { CLOCK_SPEEDS } from '@/lib/live/clock-speeds';
+import type { LiveCitizen } from '@/lib/live/live-contract';
 import { feedMinutes } from '@/lib/live/live-state';
 import { ShownDoings } from '@/lib/live/shown-doings';
 import { BIOME_PROPS } from '@/lib/world/biome-props';
@@ -126,7 +134,8 @@ const TOWN_CLEARING = 300;
 const SITE_CLEARING = 45;
 /** The readout names a camp or landmark within this many metres of its anchor (the town: its clearing). */
 const SITE_NEARBY = 100;
-const NOBODY: readonly string[] = [];
+/** How often the footer and the clock re-read where the camera looks (ms). */
+const PLACE_MS = 250;
 /** Labels lift away from the planet's centre. */
 const PLANET_UP: UpAt = (at, out) => out.copy(at).normalize();
 
@@ -215,15 +224,70 @@ function buildPlanet(view: WorldView, town: TownView): Planet {
   };
 }
 
-/** The site the player stands at, if any. */
-function siteAt(planet: Planet, move: GlobeMove): PlanetSite | null {
-  const here = new Vector3(move.x, move.y, move.z).normalize();
+/** The site at a world point, if any. */
+function siteAt(
+  planet: Planet,
+  point: { x: number; y: number; z: number },
+): PlanetSite | null {
+  const here = new Vector3(point.x, point.y, point.z).normalize();
   const radius = planet.terrain.globe.radius;
   return (
     planet.sites.find(
       (site) => here.angleTo(site.direction) * radius < site.reach,
     ) ?? null
   );
+}
+
+/** Where the camera looks: the place the footer describes and whose local time the clock shows (audit F19, F20). */
+interface CameraPlace {
+  lat: number;
+  lon: number;
+  biome: string;
+  site: PlanetSite | null;
+  /** Town local metres on the town's ground disc. */
+  town: { x: number; z: number } | null;
+  /** The longitude its local time is told at: a site's anchor (one time across the site), else the spot's. */
+  clockLon: number;
+}
+
+function placeAt(planet: Planet, point: Vector3): CameraPlace {
+  const direction = point.clone().normalize();
+  const { lat, lon } = latLonFromDirection(direction);
+  const local = planet.town.mapping.toLocal(point, new Vector3());
+  const site = siteAt(planet, point);
+  return {
+    lat,
+    lon,
+    biome: planet.view.biome_names[planet.terrain.biomeAt(direction)],
+    site,
+    clockLon: site ? latLonFromDirection(site.direction).lon : lon,
+    town:
+      Math.hypot(local.x, local.z) < TOWN_GROUND_RADIUS
+        ? { x: local.x, z: local.z }
+        : null,
+  };
+}
+
+const samePlace = (a: CameraPlace | null, b: CameraPlace) =>
+  a !== null &&
+  a.site === b.site &&
+  a.biome === b.biome &&
+  a.lat.toFixed(2) === b.lat.toFixed(2) &&
+  a.lon.toFixed(2) === b.lon.toFixed(2) &&
+  a.town?.x.toFixed(0) === b.town?.x.toFixed(0) &&
+  a.town?.z.toFixed(0) === b.town?.z.toFixed(0);
+
+/** The camera's place, re-read every PLACE_MS from the point it looks at. */
+function useCameraPlace(planet: Planet, focusRef: RefObject<Vector3>) {
+  const [place, setPlace] = useState<CameraPlace | null>(null);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const next = placeAt(planet, focusRef.current);
+      setPlace((current) => (samePlace(current, next) ? current : next));
+    }, PLACE_MS);
+    return () => window.clearInterval(timer);
+  }, [planet, focusRef]);
+  return place;
 }
 
 /** The town spawn mapped onto the planet, or `?at=lat,lon[,bearing]`. */
@@ -270,6 +334,9 @@ type GlobeSceneProps = {
   animalViews: AnimalViews;
   fireViews: FireViews;
   followId: string | null;
+  /** Selected and followed: their chips stay whole. */
+  pinned: readonly string[];
+  pickRef: RefObject<PickAt | null>;
   subjectRef: RefObject<GlobePlayerState>;
   start: Start;
   dropRef: RefObject<DropApi | null>;
@@ -303,6 +370,8 @@ const GlobeScene = memo(function GlobeScene({
   animalViews,
   fireViews,
   followId,
+  pinned,
+  pickRef,
   subjectRef,
   start,
   dropRef,
@@ -422,7 +491,8 @@ const GlobeScene = memo(function GlobeScene({
         onPlayerMove={onPlayerMove}
         onReady={onWalkReady}
       />
-      <ChipProjector store={labels} pinned={followId ? [followId] : NOBODY} />
+      <ChipProjector store={labels} pinned={pinned} />
+      <CitizenPicker views={npcViews} pickRef={pickRef} />
       <RenderStatsProbe
         key={cameraMode}
         active={ready}
@@ -457,6 +527,39 @@ const DROP_MESSAGES: Record<
 const MESSAGE_MS = 4000;
 /** A press that moves less than this (px) is a click, not a drag. */
 const CLICK_SLOP = 6;
+/** Where the toolbar ends on two lines (px), until measured, and the space between it and the panels below. */
+const TOOLBAR_BOTTOM = 84;
+const TOOLBAR_GAP = 12;
+
+/** Where an element ends (px from its offset parent's top), followed as it resizes; `initial` until measured. */
+function useBottomEdge(ref: RefObject<HTMLElement | null>, initial: number) {
+  const [bottom, setBottom] = useState(initial);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() =>
+      setBottom(element.offsetTop + element.offsetHeight),
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref]);
+  return bottom;
+}
+
+/** The citizen drawn nearest to `point` (the first in the list while nobody is drawn yet). */
+function nearestDrawn(
+  citizens: readonly LiveCitizen[],
+  views: NpcViews,
+  point: Vector3,
+) {
+  let nearest = citizens[0].id;
+  let best = Infinity;
+  for (const { id } of citizens) {
+    const distance = views.get(id)?.pose.position.distanceTo(point) ?? Infinity;
+    if (distance < best) [nearest, best] = [id, distance];
+  }
+  return nearest;
+}
 
 function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   const [params] = useSearchParams();
@@ -481,6 +584,9 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   const goTo = useMemo(() => goToSites(planet, town), [planet, town]);
   const dropRef = useRef<DropApi | null>(null);
   const [dropping, setDropping] = useState(false);
+  // the toolbar wraps onto more lines in narrow windows (and with the drop hint): panels hang below its real end
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const toolbarBottom = useBottomEdge(toolbarRef, TOOLBAR_BOTTOM);
   const [message, setMessage] = useState<string | null>(null);
   const press = useRef<{ x: number; y: number } | null>(null);
   /** Where the pin hovers while dropping (client pixels) and what is under it. */
@@ -535,13 +641,6 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
     },
     [settle],
   );
-  const goToSite = useCallback(
-    (id: string) => {
-      const api = dropRef.current;
-      settle(api ? api.goTo(id) : { ok: false, reason: 'loading' });
-    },
-    [settle],
-  );
   const labels = useLabelStore(PLANET_UP);
   const [startTime] = useState(
     () => parseTime(params.get('time')) ?? START_MINUTES,
@@ -551,16 +650,15 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   const replayTick = parseReplayTick(params.get('tick'));
   const replay = useReplayCitizens(replayTick);
   // the engine's citizens live on the real world; the mock world has only the mock feed
-  const feed = useLiveCitizens(view, {
-    source:
-      replayTick !== null
-        ? 'off'
-        : params.has('mockLive')
-          ? 'mock'
-          : params.has('mock')
-            ? 'off'
-            : 'backend',
-  });
+  const source =
+    replayTick !== null
+      ? 'off'
+      : params.has('mockLive')
+        ? 'mock'
+        : params.has('mock')
+          ? 'off'
+          : 'backend';
+  const feed = useLiveCitizens(view, { source });
   const live = replay ?? feed.state;
   const feedLive =
     live.runId !== null && (replay !== null || feed.status === 'live');
@@ -580,6 +678,14 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   );
   const [peopleOpen, setPeopleOpen] = useState(false);
   const followed = live.citizens.find((citizen) => citizen.id === followId);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = live.citizens.find((citizen) => citizen.id === selectedId);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const pinned = useMemo(
+    () => [...new Set([selectedId, followId])].filter((id) => id !== null),
+    [selectedId, followId],
+  );
+  const pickRef = useRef<PickAt | null>(null);
   const focusRef = useRef(start.position.clone());
   const [player, setPlayer] = useState<GlobeMove | null>(null);
   const [minutes, setMinutes] = useState(startTime);
@@ -625,6 +731,15 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
     setPendingFollow(null);
     follow(pendingFollow);
   }
+  // going somewhere stops following (audit F18)
+  const goToSite = useCallback(
+    (id: string) => {
+      const api = dropRef.current;
+      setFollowId(null);
+      settle(api ? api.goTo(id) : { ok: false, reason: 'loading' });
+    },
+    [settle],
+  );
   const goToCitizen = useCallback(
     (id: string) => {
       const view = npcViews.get(id);
@@ -640,21 +755,63 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
     [npcViews, settle],
   );
 
+  // the spectator keys (10-world-v1 §5.4): Tab cycles the selection, F follows it, G goes to it, Space pauses,
+  // 1-4 pick the clock's speeds, I shows or hides the inspector, Esc lets go of everything
+  const clockLive = feed.status !== 'off';
+  const { paused: livePaused, citizens } = live;
+  const { setClock } = feed;
   useKeys(
-    useCallback((code: string) => {
-      if (code === 'KeyT') setTravel((on) => !on);
-      if (code === 'Escape') {
-        setDropping(false);
-        setFollowId(null);
-      }
-    }, []),
+    useCallback(
+      (code: string) => {
+        if (code === 'KeyT') setTravel((on) => !on);
+        if (code === 'Escape') {
+          setDropping(false);
+          setFollowId(null);
+          setSelectedId(null);
+        }
+        if (code === 'KeyF' && selectedId) follow(selectedId);
+        if (code === 'KeyG' && selectedId) goToCitizen(selectedId);
+        if (code === 'KeyI') setInspectorOpen((open) => !open);
+        if (clockLive && code === 'Space') setClock({ paused: !livePaused });
+        const speed = CLOCK_SPEEDS[Number(code.replace('Digit', '')) - 1];
+        if (clockLive && code.startsWith('Digit') && speed)
+          setClock(speed.change);
+      },
+      [selectedId, follow, goToCitizen, clockLive, livePaused, setClock],
+    ),
   );
+  // Tab and Space belong to the scene here, not to focus moves or page scrolls; Tab (Shift+Tab back) cycles,
+  // starting with nobody selected from the citizen drawn nearest where the camera looks (the followed one, if any)
+  useEffect(() => {
+    const claim = (event: KeyboardEvent) => {
+      if (event.code !== 'Tab' && event.code !== 'Space') return;
+      if (notForScene(event)) return;
+      event.preventDefault();
+      if (event.code !== 'Tab' || citizens.length === 0) return;
+      const step = event.shiftKey ? -1 : 1;
+      setSelectedId((current) => {
+        const at = citizens.findIndex((citizen) => citizen.id === current);
+        if (at !== -1)
+          return citizens[(at + step + citizens.length) % citizens.length].id;
+        return nearestDrawn(citizens, npcViews, focusRef.current);
+      });
+      setInspectorOpen(true);
+    };
+    window.addEventListener('keydown', claim);
+    return () => window.removeEventListener('keydown', claim);
+  }, [citizens, npcViews]);
 
-  const localTime = player
-    ? localMinutes(minutes, planet.town.lon, player.lon)
+  // the footer and the clock describe where the camera looks, not where the hidden avatar stands (F19, F20)
+  const place = useCameraPlace(planet, focusRef);
+  const localTime = place
+    ? localMinutes(minutes, planet.town.lon, place.clockLon)
     : null;
   const biome = player ? view.biome_names[player.biome] : null;
   const site = player ? siteAt(planet, player) : null;
+  const siteClock =
+    place && localTime !== null && place.site?.id !== 'town'
+      ? { name: place.site?.name ?? 'here', time: formatTime(localTime) }
+      : null;
 
   return (
     <div
@@ -662,6 +819,8 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
       data-testid="world"
       data-world-ready={ready}
       data-follow={followId ?? undefined}
+      data-selected={selectedId ?? undefined}
+      data-camera-site={place?.site?.id}
       data-live-status={feed.status}
       data-live-connects={feed.connects}
       data-live-tick={live.tick}
@@ -701,7 +860,12 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
               .join(';')
           : undefined
       }
-      style={dropping && hover ? { cursor: 'none' } : undefined}
+      style={
+        {
+          '--toolbar-bottom': `${toolbarBottom + TOOLBAR_GAP}px`,
+          cursor: dropping && hover ? 'none' : undefined,
+        } as CSSProperties
+      }
       onPointerMove={(event) => {
         if (dropping && event.target instanceof HTMLCanvasElement)
           hoverAt(event.clientX, event.clientY);
@@ -714,14 +878,20 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
       onPointerUp={(event) => {
         const from = press.current;
         press.current = null;
-        if (
-          dropping &&
-          from &&
+        const click =
+          from !== null &&
           event.target instanceof HTMLCanvasElement &&
           Math.hypot(event.clientX - from.x, event.clientY - from.y) <
-            CLICK_SLOP
-        )
-          dropAtScreen(event.clientX, event.clientY);
+            CLICK_SLOP;
+        if (!click) return;
+        if (dropping) dropAtScreen(event.clientX, event.clientY);
+        else {
+          // a click on a body selects them, a click elsewhere lets go
+          setSelectedId(
+            pickRef.current?.(event.clientX, event.clientY) ?? null,
+          );
+          setInspectorOpen(true);
+        }
       }}
       onDragOver={(event) => {
         if (event.dataTransfer.types.includes(PEGMAN_DRAG)) {
@@ -749,6 +919,8 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
         animalViews={animalViews}
         fireViews={fireViews}
         followId={followId}
+        pinned={pinned}
+        pickRef={pickRef}
         subjectRef={subjectRef}
         start={start}
         dropRef={dropRef}
@@ -768,7 +940,13 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
         onStats={setStats}
         onWaterfalls={markWaterfalls}
       />
-      <ChipOverlay store={labels} />
+      <ChipOverlay
+        store={labels}
+        onPick={(id) => {
+          setSelectedId(id);
+          setInspectorOpen(true);
+        }}
+      />
       <CitizenLabels
         store={labels}
         citizens={live.citizens}
@@ -785,7 +963,10 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
           </span>
         </div>
       )}
-      <div className="absolute top-3 left-3 flex flex-wrap items-center gap-2 rounded-lg bg-white/80 p-2 text-sm shadow">
+      <div
+        ref={toolbarRef}
+        className="absolute top-3 left-3 flex flex-wrap items-center gap-2 rounded-lg bg-white/80 p-2 text-sm shadow"
+      >
         {CAMERA_MODES.map((mode) => (
           <Button
             key={mode}
@@ -852,6 +1033,12 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
           {cameraMode === 'fly' && ', Q/E down/up'}
           {dropping && '. Click land to drop there, Esc cancels'}
         </span>
+        {(clockLive || replay) && (
+          <span className="basis-full" data-testid="spectator-keys">
+            Tab select, F follow, G go to, I inspector
+            {clockLive && ', Space pause, 1-4 speed'}, Esc let go
+          </span>
+        )}
       </div>
       <div className="absolute right-3 bottom-3 flex flex-col items-end gap-2">
         {replay && <ReplayBadge state={replay} />}
@@ -860,6 +1047,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
             state={live}
             status={feed.status}
             onChange={feed.setClock}
+            site={siteClock}
           />
         )}
         {followed && (
@@ -882,28 +1070,49 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
         <PeoplePanel
           citizens={live.citizens}
           followId={followId}
+          selectedId={selectedId}
+          onSelect={(id) => {
+            setSelectedId(id);
+            setInspectorOpen(true);
+          }}
           onFollow={follow}
           onGoTo={goToCitizen}
+        />
+      )}
+      {selected && inspectorOpen && (
+        <Inspector
+          citizen={selected}
+          details={source === 'backend' || replayTick !== null}
+          at={replayTick}
+          following={selected.id === followId}
+          onFollow={() =>
+            selected.id === followId ? setFollowId(null) : follow(selected.id)
+          }
+          onGoTo={() => goToCitizen(selected.id)}
+          onClose={() => setSelectedId(null)}
         />
       )}
       {hover && <DropPin {...hover} />}
       {message && (
         <div
           role="status"
-          className="absolute top-16 left-1/2 -translate-x-1/2 rounded-lg bg-white/90 px-3 py-2 text-sm shadow"
+          className="absolute top-(--toolbar-bottom) left-1/2 -translate-x-1/2 rounded-lg bg-white/90 px-3 py-2 text-sm shadow"
         >
           {message}
         </div>
       )}
-      {player && (
-        <div className="absolute bottom-3 left-3 rounded-lg bg-white/80 px-2 py-1 font-mono text-xs shadow">
+      {place && (
+        <div
+          className="absolute bottom-3 left-3 rounded-lg bg-white/80 px-2 py-1 font-mono text-xs shadow"
+          data-testid="camera-place"
+        >
           {localTime !== null && formatTime(localTime)} ·{' '}
-          {Math.abs(player.lat).toFixed(2)}°{player.lat >= 0 ? 'N' : 'S'}{' '}
-          {Math.abs(player.lon).toFixed(2)}°{player.lon >= 0 ? 'E' : 'W'} ·{' '}
-          {biome?.replace('_', ' ')}
-          {site && ` · ${site.name}`}
-          {player.town &&
-            ` · town ${player.town.x.toFixed(0)}, ${player.town.z.toFixed(0)}`}
+          {Math.abs(place.lat).toFixed(2)}°{place.lat >= 0 ? 'N' : 'S'}{' '}
+          {Math.abs(place.lon).toFixed(2)}°{place.lon >= 0 ? 'E' : 'W'} ·{' '}
+          {place.biome.replace('_', ' ')}
+          {place.site && ` · ${place.site.name}`}
+          {place.town &&
+            ` · town ${place.town.x.toFixed(0)}, ${place.town.z.toFixed(0)}`}
         </div>
       )}
     </div>

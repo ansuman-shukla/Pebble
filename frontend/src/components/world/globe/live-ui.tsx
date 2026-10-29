@@ -10,6 +10,7 @@ import type { Vector3 } from 'three';
 import type { NpcViews } from './globe-npcs';
 import { Button } from '@/components/ui/button';
 import type { ClockChange, LiveStatus } from '@/hooks/use-live-citizens';
+import { CLOCK_SPEEDS } from '@/lib/live/clock-speeds';
 import type { LiveCitizen } from '@/lib/live/live-contract';
 import { type LiveState, type Speech, speedWords } from '@/lib/live/live-state';
 import { activityWords } from '@/lib/live/npc-activity';
@@ -19,7 +20,8 @@ import { citizenLabels } from '@/lib/world/citizen-labels';
 import type { LabelStore } from '@/lib/world/label-store';
 
 /*
- * The live feed's controls over the globe: the clock with its speed buttons, the People panel (follow / go to),
+ * The live feed's controls over the globe: the clock with its speed buttons (and the local time where the camera
+ * is), the People panel (select, follow, go to),
  * the citizens' labels and, hidden, the per-citizen data attributes the browser tests read.
  */
 
@@ -34,34 +36,6 @@ function stateWords(citizen: LiveCitizen) {
   return citizen.state.length ? citizen.state.join(', ') : 'fine';
 }
 
-/** The clock's speeds: game seconds per real second (D65). */
-const SPEEDS: {
-  label: string;
-  title: string;
-  change: Required<ClockChange>;
-}[] = [
-  {
-    label: '×1',
-    title: 'real time: citizens walk at your pace',
-    change: { speed: 1, paused: false },
-  },
-  {
-    label: '×10',
-    title: 'ten times faster: a tick every 6 s',
-    change: { speed: 10, paused: false },
-  },
-  {
-    label: '×60',
-    title: 'a game hour per real minute',
-    change: { speed: 60, paused: false },
-  },
-  {
-    label: '×600',
-    title: 'time-lapse: a game day in 2.4 minutes',
-    change: { speed: 600, paused: false },
-  },
-];
-
 const STATUS_WORDS: Record<LiveStatus, string> = {
   connecting: 'connecting…',
   live: 'live',
@@ -74,10 +48,13 @@ export function LiveClock({
   state,
   status,
   onChange,
+  site,
 }: {
   state: LiveState;
   status: LiveStatus;
   onChange: (change: ClockChange) => void;
+  /** The local time where the camera is, when that's not the town ("Band B camp", "04:10"). */
+  site: { name: string; time: string } | null;
 }) {
   return (
     <div
@@ -86,7 +63,13 @@ export function LiveClock({
     >
       <span className="px-1 font-mono" data-testid="live-time">
         day {state.day} · {state.time}
+        {site && <span className="text-muted-foreground"> town</span>}
       </span>
+      {site && (
+        <span className="px-1 font-mono" data-testid="site-time">
+          {site.name} {site.time}
+        </span>
+      )}
       <span className="text-muted-foreground px-1" data-testid="live-speed">
         {speedWords(state)}
       </span>
@@ -101,7 +84,7 @@ export function LiveClock({
       >
         pause
       </Button>
-      {SPEEDS.map(({ label, title, change }) => {
+      {CLOCK_SPEEDS.map(({ label, title, change }) => {
         const active = !state.paused && state.speed === change.speed;
         return (
           <Button
@@ -129,11 +112,15 @@ export function LiveClock({
 export function PeoplePanel({
   citizens,
   followId,
+  selectedId,
+  onSelect,
   onFollow,
   onGoTo,
 }: {
   citizens: LiveCitizen[];
   followId: string | null;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
   onFollow: (id: string) => void;
   onGoTo: (id: string) => void;
 }) {
@@ -141,7 +128,7 @@ export function PeoplePanel({
     <div
       role="region"
       aria-label="People"
-      className="absolute top-16 right-3 max-h-[calc(100%-9rem)] w-96 overflow-y-auto rounded-lg bg-white/90 p-1 text-xs shadow-lg"
+      className="absolute top-(--toolbar-bottom) right-3 max-h-[calc(100%-var(--toolbar-bottom)-5rem)] w-96 overflow-y-auto rounded-lg bg-white/90 p-1 text-xs shadow-lg"
     >
       <ul>
         {citizens.map((citizen) => (
@@ -149,13 +136,14 @@ export function PeoplePanel({
             key={citizen.id}
             data-person={citizen.id}
             aria-current={citizen.id === followId}
-            className="flex items-center gap-2 rounded-md px-2 py-0.5 hover:bg-black/5 aria-[current=true]:bg-black/10"
+            aria-selected={citizen.id === selectedId}
+            className="flex items-center gap-2 rounded-md px-2 py-0.5 hover:bg-black/5 aria-[current=true]:bg-black/10 aria-[selected=true]:ring-1 aria-[selected=true]:ring-black/30"
           >
             <button
               type="button"
               className="min-w-0 flex-1 text-left"
               onClick={(event) => {
-                onFollow(citizen.id);
+                onSelect(citizen.id);
                 event.currentTarget.blur();
               }}
             >
