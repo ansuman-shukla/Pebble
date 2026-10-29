@@ -204,3 +204,18 @@ def test_a_page_opened_mid_tick_learns_how_far_into_the_tick_the_world_is(
         loop.run_ticks(1, headless=True)
         tick = LiveState.model_validate(_until_tick(ws, 2)[-1])
     assert tick.tick == 2 and tick.tick_elapsed_s < 5.0  # a tick as it happens: just begun
+
+
+def test_a_clock_change_keeps_what_passed_of_the_tick_at_the_old_speed(
+    client: TestClient, committed_run: EngineLoop
+) -> None:
+    loop = committed_run
+    loop.store.clock = lambda: datetime.now(UTC) - timedelta(seconds=20)  # tick 1 was written 20 s ago (at ×1)
+    loop.run_ticks(1, headless=True)
+    with client.websocket_connect(f"{API}/live?run_id={loop.run.id}") as ws:
+        assert 19.0 < LiveState.model_validate(_receive(ws)).tick_elapsed_s < 30.0
+        queue_command(loop.store.session, loop.run.id, "clock", {"speed": 6})
+        loop.apply_commands()
+        changed = LiveState.model_validate(_receive(ws))
+    assert (changed.tick, changed.speed) == (1, 6.0)
+    assert 19.0 < changed.tick_elapsed_s < 30.0  # 20 s passed at ×1, not 20 s at ×6 (past the tick's end)
