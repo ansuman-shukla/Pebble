@@ -2,10 +2,10 @@
  * Where a live citizen is drawn, frame by frame, and what it is shown doing: on the timed path its latest tick
  * streamed (`walk-path.ts`), one tick behind the sim, joined where the last path left it. Normally the new path starts
  * right there (the feed streams each move from where the mover stood when the tick began), so nothing jumps; a walker
- * drawn short of it (a page opened mid-tick) walks the rest of its old path first; a drawn spot a little past it (a
+ * drawn short of it (a tick that came early) walks the rest of its old path first; a drawn spot a little past it (a
  * tick that came late) eases onto the path, and one far off (a hidden tab) is a resync: the body fades out where it
- * was and back in on its path instead of jumping. A walker first seen mid-tick starts that far along its path (the
- * feed says how far into the tick the world is), so only a tick that comes early leaves it a little short.
+ * was and back in on its path instead of jumping. A walker first seen mid-tick (a page opened then) starts as far
+ * along its path as the tick has gone (the feed's `tick_elapsed_s`), so it isn't drawn short.
  *
  *   opacity 1 ──fade out at the old spot──▶ 0 ──fade in on the path──▶ 1      (FADE_S real seconds in all)
  *
