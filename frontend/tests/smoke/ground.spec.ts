@@ -17,9 +17,12 @@ import {
 import {
   GROUND_LAYERS,
   type GroundLayer,
+  type GroundWeights,
+  groundBlendGlsl,
   groundQuality,
   weightsArray,
 } from '../../src/lib/world/ground-shader';
+import type { GroundBreakup } from '../../src/lib/world/ground-style';
 import { openGlobe, WORLD_URL } from './globe-helpers';
 
 /*
@@ -313,6 +316,146 @@ test.describe('ground layers of the real world', () => {
     expect(failures).toEqual([]);
     for (const kind of ['lake', 'beach', 'snow', 'forest'])
       expect(counts[kind], kind).toBeGreaterThan(50);
+  });
+});
+
+interface BlendSample {
+  first: number;
+  second: number;
+  /** The two layers' ids mixed by the first one's share: jumps wherever the blend jumps. */
+  mixed: number;
+}
+
+/** A path through the blend's inputs: weights and fields go linearly from `from` to `to`. */
+interface BlendPath {
+  from: { weights: GroundWeights; f0: number; f1: number };
+  to: { weights: GroundWeights; f0: number; f1: number };
+}
+
+const SAMPLES = 1024;
+
+/*
+ * Runs the shader's own breakup and pick (`groundBlendGlsl`) on the GPU at SAMPLES points along a path and reads
+ * back which two layers draw and their mix. Browser code goes in as a string: the test TypeScript has no DOM types.
+ */
+async function blendAlong(
+  page: Page,
+  rules: GroundBreakup[],
+  { from, to }: BlendPath,
+): Promise<BlendSample[]> {
+  const shader = `#version 300 es
+precision highp float;
+precision highp int;
+uniform float wFrom[8];
+uniform float wTo[8];
+uniform vec2 fFrom;
+uniform vec2 fTo;
+out vec4 color;
+${groundBlendGlsl(rules)}
+void main() {
+  float x = (gl_FragCoord.x - 0.5) / ${SAMPLES - 1}.0;
+  float w[8];
+  for (int i = 0; i < 8; i++) w[i] = mix(wFrom[i], wTo[i], x);
+  vec2 f = mix(fFrom, fTo, x);
+  int first;
+  int second;
+  float t = groundBlend(w, f.x, f.y, 0.5, 0.04, first, second);
+  color = vec4(float(first) / 7.0, float(second) / 7.0, mix(float(second), float(first), t) / 7.0, 1.0);
+}`;
+  const pixels = await page.evaluate<number[]>(`(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = ${SAMPLES};
+    canvas.height = 1;
+    const gl = canvas.getContext('webgl2');
+    const compile = (type, source) => {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, source);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+      return s;
+    };
+    const program = gl.createProgram();
+    gl.attachShader(program, compile(gl.VERTEX_SHADER, '#version 300 es\\nvoid main() { gl_Position = vec4(vec2(gl_VertexID & 1, gl_VertexID >> 1) * 4.0 - 1.0, 0.0, 1.0); }'));
+    gl.attachShader(program, compile(gl.FRAGMENT_SHADER, ${JSON.stringify(shader)}));
+    gl.linkProgram(program);
+    gl.useProgram(program);
+    const set = (name, value) => (value.length === 8 ? gl.uniform1fv : gl.uniform2fv).call(gl, gl.getUniformLocation(program, name), value);
+    set('wFrom', ${JSON.stringify(weightsArray(from.weights))});
+    set('wTo', ${JSON.stringify(weightsArray(to.weights))});
+    set('fFrom', [${from.f0}, ${from.f1}]);
+    set('fTo', [${to.f0}, ${to.f1}]);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    const out = new Uint8Array(${SAMPLES} * 4);
+    gl.readPixels(0, 0, ${SAMPLES}, 1, gl.RGBA, gl.UNSIGNED_BYTE, out);
+    return [...out];
+  })()`);
+  return Array.from({ length: SAMPLES }, (_, k) => ({
+    first: Math.round((pixels[k * 4] / 255) * 7),
+    second: Math.round((pixels[k * 4 + 1] / 255) * 7),
+    mixed: (pixels[k * 4 + 2] / 255) * 7,
+  }));
+}
+
+/** The largest change of the mix between neighbouring samples (in layer ids). */
+const largestStep = (samples: BlendSample[]) =>
+  Math.max(
+    ...samples.slice(1).map((s, k) => Math.abs(s.mixed - samples[k].mixed)),
+  );
+
+test.describe('ground blend', () => {
+  test('the blend of the top two layers never jumps where the pick changes', async ({
+    page,
+  }) => {
+    // grass leads by a hair, so it shares the band with the second; dirt and sand trade second place midway
+    const samples = await blendAlong(page, [], {
+      from: {
+        weights: { grass: 0.36, dirt: 0.34, sand: 0.3 },
+        f0: 0.5,
+        f1: 0.5,
+      },
+      to: { weights: { grass: 0.36, dirt: 0.3, sand: 0.34 }, f0: 0.5, f1: 0.5 },
+    });
+    expect(samples[0]).toMatchObject({
+      first: layer('grass'),
+      second: layer('dirt'),
+    });
+    expect(samples.at(-1)).toMatchObject({
+      first: layer('grass'),
+      second: layer('sand'),
+    });
+    // a smooth sweep moves the mix by hundredths of a layer per sample (8-bit readback: steps of 7/255); the
+    // second place changing hands mid-blend would jump it by half a layer
+    expect(largestStep(samples)).toBeLessThan(0.2);
+    // grass and dirt trade first place with sand close behind
+    const close = await blendAlong(page, [], {
+      from: {
+        weights: { grass: 0.35, dirt: 0.31, sand: 0.3 },
+        f0: 0.5,
+        f1: 0.5,
+      },
+      to: { weights: { grass: 0.31, dirt: 0.35, sand: 0.3 }, f0: 0.5, f1: 0.5 },
+    });
+    expect(close[0].first).toBe(layer('grass'));
+    expect(close.at(-1)!.first).toBe(layer('dirt'));
+    expect(largestStep(close)).toBeLessThan(0.2);
+  });
+
+  test("a patch's edge shows no third layer between the two", async ({
+    page,
+  }) => {
+    // tundra-like ground (grass and gravel) crossing the edge of a dirt patch
+    const samples = await blendAlong(
+      page,
+      [{ from: 'grass', to: 'dirt', field: 0, cut: 0.6, amount: 1 }],
+      {
+        from: { weights: { grass: 0.6, gravel: 0.4 }, f0: 0.55, f1: 0.55 },
+        to: { weights: { grass: 0.6, gravel: 0.4 }, f0: 0.67, f1: 0.55 },
+      },
+    );
+    expect(samples[0].first).toBe(layer('grass'));
+    expect(samples.at(-1)!.first).toBe(layer('dirt'));
+    expect(samples.filter((s) => s.first === layer('gravel'))).toEqual([]);
+    expect(largestStep(samples)).toBeLessThan(0.2);
   });
 });
 

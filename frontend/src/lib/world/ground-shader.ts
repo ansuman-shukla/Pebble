@@ -14,7 +14,11 @@
  */
 import { Color, MeshStandardMaterial, type Vector3 } from 'three';
 
-import { GROUND_STYLE, type GroundStyle } from './ground-style';
+import {
+  type GroundBreakup,
+  GROUND_STYLE,
+  type GroundStyle,
+} from './ground-style';
 
 export const GROUND_LAYERS = [
   'grass',
@@ -73,9 +77,71 @@ export function weightsArray(weights: GroundWeights) {
   return values;
 }
 
+const layerIndex = (layer: GroundLayer) => GROUND_LAYERS.indexOf(layer);
+
+/*
+ * The breakup rules as GLSL: each moves a share of its layer's weight (w, for the colours) to another layer. The
+ * heights the pick reads (h) swap the two at full strength instead, so no third layer shows through as a ring
+ * where a patch's edge splits its layer half and half.
+ */
+function breakupGlsl(rules: GroundBreakup[]) {
+  const moves = rules.map(({ from, to, field, cut, amount }) => {
+    const [a, b] = [layerIndex(from), layerIndex(to)];
+    return `{ float s = smoothstep(${glslFloat(cut)}, ${glslFloat(cut)} + edge, f${field}); float m = w[${a}] * s * ${glslFloat(amount)}; w[${a}] -= m; w[${b}] += m; float hm = h[${a}] * ${glslFloat(amount)}; h[${a}] -= hm * max(0.0, 2.0 * s - 1.0); h[${b}] += hm * min(1.0, 2.0 * s); }`;
+  });
+  return `void groundBreakup(inout float w[8], inout float h[8], float f0, float f1, float edge) {\n${moves.join('\n')}\n}`;
+}
+
+/*
+ * The two layers that draw their pattern: the top two by height (the weights h after the breakup, the fields and
+ * a grain), and the first one's share t (0.5..1). Each layer's height rises from -1 with its weight, so a layer
+ * fades in rather than pops; the top two share a 0.16 wide band and the second fades out as the third catches up,
+ * so the blend never jumps where the pick changes.
+ */
+const GROUND_PICK = /* glsl */ `
+float groundPick(float hw[8], float f0, float f1, float grain, out int first, out int second) {
+  first = 0;
+  second = 0;
+  float h1 = -9.0;
+  float h2 = -9.0;
+  float h3 = -9.0;
+  for (int i = 0; i < 8; i++) {
+    float mixer = fract(float(i) * 0.618);
+    float h = mix(-1.0, hw[i] + 0.9 * (mix(f0, f1, mixer) - 0.5) + 0.25 * (grain - 0.5), smoothstep(0.0, 0.03, hw[i]));
+    if (h > h1) {
+      h3 = h2;
+      h2 = h1;
+      second = first;
+      h1 = h;
+      first = i;
+    } else if (h > h2) {
+      h3 = h2;
+      h2 = h;
+      second = i;
+    } else if (h > h3) h3 = h;
+  }
+  float a1 = min(h1 - h2 + 0.08, h1 - h3);
+  float a2 = min(max(h2 - h1 + 0.08, 0.0), h2 - h3);
+  return a1 + a2 > 0.0 ? a1 / (a1 + a2) : 1.0;
+}
+`;
+
+/*
+ * The breakup, then the pick: `float groundBlend(inout float w[8], float f0, float f1, float grain, float edge,
+ * out int first, out int second)` returns the first layer's share and leaves the broken-up weights in w.
+ */
+export const groundBlendGlsl = (rules: GroundBreakup[]) => /* glsl */ `
+${breakupGlsl(rules)}
+${GROUND_PICK}
+float groundBlend(inout float w[8], float f0, float f1, float grain, float edge, out int first, out int second) {
+  float hw[8] = w;
+  groundBreakup(w, hw, f0, f1, edge);
+  return groundPick(hw, f0, f1, grain, first, second);
+}
+`;
+
 /** The style as GLSL: colour constants, base colours, roughness, bump and breakup per layer, and the patterns. */
 function styleChunk(style: GroundStyle) {
-  const index = (layer: GroundLayer) => GROUND_LAYERS.indexOf(layer);
   const layers = GROUND_LAYERS.map((layer) => style.layers[layer]);
   const colors = GROUND_LAYERS.flatMap((layer) =>
     Object.entries(style.layers[layer].colors).map(
@@ -84,10 +150,6 @@ function styleChunk(style: GroundStyle) {
   );
   const list = (values: string[], type: string) =>
     `${type}[8](${values.join(', ')})`;
-  const breakup = style.breakup.map(
-    ({ from, to, field, cut, amount }) =>
-      `{ float m = w[${index(from)}] * smoothstep(${glslFloat(cut)}, ${glslFloat(cut)} + edge, f${field}) * ${glslFloat(amount)}; w[${index(from)}] -= m; w[${index(to)}] += m; }`,
-  );
   return {
     constants: [
       `const vec3 grass_reference = ${glslColor(style.grassReference)};`,
@@ -105,10 +167,7 @@ function styleChunk(style: GroundStyle) {
         'float',
       )};`,
     ].join('\n'),
-    functions: [
-      `void groundBreakup(inout float w[8], float f0, float f1, float edge) {\n${breakup.join('\n')}\n}`,
-      style.patterns,
-    ].join('\n'),
+    functions: [groundBlendGlsl(style.breakup), style.patterns].join('\n'),
   };
 }
 
@@ -247,34 +306,16 @@ float groundRelief = 0.0;
     // the breakup fields: drifts, patches and ragged 1 m edges
     float f0 = g.x * 0.42 + g.y * 0.38 + g.z * 0.2;
     float f1 = g.w * 0.5 + extra * 0.32 + (1.0 - g.z) * 0.18;
-    groundBreakup(w, f0, f1, ${BREAKUP_EDGE} + fw * 0.5);
+    int first;
+    int second;
+    float t = groundBlend(w, f0, f1, g.z, ${BREAKUP_EDGE} + fw * 0.5, first, second);
     vec3 near = groundMacro(w, tint);
     if (dist < GROUND_PATTERN_END) {
-      int first = 0;
-      int second = 0;
-      float h1 = -9.0;
-      float h2 = -9.0;
-      for (int i = 0; i < 8; i++) {
-        float mixer = fract(float(i) * 0.618);
-        float h = w[i] > 0.002 ? w[i] + 0.9 * (mix(f0, f1, mixer) - 0.5) + 0.25 * (g.z - 0.5) : -9.0;
-        if (h > h1) {
-          h2 = h1;
-          second = first;
-          h1 = h;
-          first = i;
-        } else if (h > h2) {
-          h2 = h;
-          second = i;
-        }
-      }
-      vec4 look = groundLook(first, p, tint, fw, g);
 #ifdef GROUND_LOW
-      float t = 1.0;
-      vec4 other = look;
-#else
-      float t = clamp(0.5 + (h1 - h2) / 0.16, 0.5, 1.0);
-      vec4 other = h2 > -9.0 ? groundLook(second, p, tint, fw, g) : look;
+      t = 1.0;
 #endif
+      vec4 look = groundLook(first, p, tint, fw, g);
+      vec4 other = t < 0.999 ? groundLook(second, p, tint, fw, g) : look;
       vec3 pattern = mix(other.rgb, look.rgb, t);
       groundRelief = mix(other.a * GROUND_DEPTH[second], look.a * GROUND_DEPTH[first], t);
       groundRoughness = mix(GROUND_ROUGHNESS[second], GROUND_ROUGHNESS[first], t);

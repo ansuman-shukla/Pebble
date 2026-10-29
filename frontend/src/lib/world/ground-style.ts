@@ -29,7 +29,7 @@ interface GroundLayerStyle {
 }
 
 /** Where a layer gives way to another in noise patches (field 0 or 1 above `cut`, up to `amount` of it). */
-interface GroundBreakup {
+export interface GroundBreakup {
   from: GroundLayer;
   to: GroundLayer;
   field: 0 | 1;
