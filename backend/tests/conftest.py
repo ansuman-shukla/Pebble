@@ -2,7 +2,7 @@
 
 import os
 
-from tests.database_name import suite_database_name
+from tests.database_name import BASE, suite_database_name
 
 # before app.core.config builds settings, so every engine points here
 os.environ["POSTGRES_DB"] = suite_database_name(override=os.environ.get("PEBBLE_TEST_DB"))
@@ -31,10 +31,17 @@ MIGRATIONS = Path(__file__).resolve().parents[1] / "app" / "alembic"
 SETUP_LOCK = 20261028  # advisory lock id: concurrent test runs (other worktrees) set the database up one at a time
 
 
+def _require_test_database(database: str | None) -> None:
+    if database != TEST_DATABASE or not database.startswith(BASE):
+        raise RuntimeError(f"refusing to truncate {database!r}: only the suite's database {TEST_DATABASE!r}")
+
+
 def truncate_all(db_engine: Engine) -> None:
-    """Empty every app table (the schema and Alembic's version stay)."""
+    """Empty every app table (the schema and Alembic's version stay); refuses any database but the suite's own."""
+    _require_test_database(db_engine.url.database)
     tables = ", ".join(f'"{table.name}"' for table in SQLModel.metadata.sorted_tables)
     with db_engine.begin() as connection:
+        _require_test_database(connection.execute(text("SELECT current_database()")).scalar_one())
         connection.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
 
 
