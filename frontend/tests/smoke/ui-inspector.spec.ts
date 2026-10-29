@@ -166,6 +166,37 @@ test('Tab and Space on a focused button work the button, not the scene', async (
   expect(errors).toEqual([]);
 });
 
+test('the hint line names the spectator keys', async ({ page }) => {
+  const errors: string[] = [];
+  await openHeld(page, errors);
+  await expect(page.getByTestId('spectator-keys')).toHaveText(
+    'Tab select, F follow, G go to, I inspector, Space pause, 1-4 speed, Esc let go',
+  );
+  expect(errors).toEqual([]);
+});
+
+test('at 1280x800 the toolbar with its key lines ends above the inspector and the People panel', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openHeld(page, errors);
+  await page.keyboard.press('Tab');
+  await page.getByRole('button', { name: 'people', exact: true }).click();
+  const keys = (await page.getByTestId('spectator-keys').boundingBox())!;
+  for (const panel of [
+    inspector(page),
+    page.getByRole('region', { name: 'People' }),
+  ]) {
+    await expect(panel).toBeVisible();
+    expect((await panel.boundingBox())!.y).toBeGreaterThan(
+      keys.y + keys.height,
+    );
+  }
+  await page.screenshot({ path: test.info().outputPath('toolbar-1280.png') });
+  expect(errors).toEqual([]);
+});
+
 test('going to a site stops following (F18); footer and clock tell the camera place and its time (F19, F20)', async ({
   page,
 }) => {

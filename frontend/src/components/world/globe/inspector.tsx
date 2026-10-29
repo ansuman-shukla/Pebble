@@ -189,7 +189,7 @@ export function Inspector({
       role="region"
       aria-label="Inspector"
       data-inspect={citizen.id}
-      className="absolute top-16 left-3 flex max-h-[calc(100%-8rem)] w-80 flex-col gap-3 overflow-y-auto rounded-lg bg-white/90 p-3 text-xs shadow-lg"
+      className="absolute top-24 left-3 flex max-h-[calc(100%-10rem)] w-80 flex-col gap-3 overflow-y-auto rounded-lg bg-white/90 p-3 text-xs shadow-lg"
     >
       <header className="flex items-start gap-2">
         <div className="min-w-0 flex-1">

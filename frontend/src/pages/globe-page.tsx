@@ -990,6 +990,12 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
           {cameraMode === 'fly' && ', Q/E down/up'}
           {dropping && '. Click land to drop there, Esc cancels'}
         </span>
+        {clockLive && (
+          <span className="basis-full" data-testid="spectator-keys">
+            Tab select, F follow, G go to, I inspector, Space pause, 1-4 speed,
+            Esc let go
+          </span>
+        )}
       </div>
       <div className="absolute right-3 bottom-3 flex flex-col items-end gap-2">
         {replay && <ReplayBadge state={replay} />}
@@ -1047,7 +1053,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
       {message && (
         <div
           role="status"
-          className="absolute top-16 left-1/2 -translate-x-1/2 rounded-lg bg-white/90 px-3 py-2 text-sm shadow"
+          className="absolute top-24 left-1/2 -translate-x-1/2 rounded-lg bg-white/90 px-3 py-2 text-sm shadow"
         >
           {message}
         </div>
