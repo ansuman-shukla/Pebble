@@ -464,7 +464,9 @@ thief.
 ### 4.3 Personal space and slots (`sim/slots.py`: the one claim registry)
 - A body is a 0.3 m disc. **No two standing/sitting/lying bodies end an action closer than 0.8 m** (0.6 m on a bench,
   0.9 m between sleeping mats). Walkers may pass through each other in the sim; the client draws walkers 0.35 m to
-  the right of their route (keep-right lanes).
+  the right of their route (keep-right lanes) and keeps every drawn body at least 0.7 m from the others (D192,
+  `lib/live/separation.ts`): walkers and runners look ahead and step aside as they meet, people the feed puts on one
+  spot stand round it, seated, sitting and lying bodies never move, and a clear body eases back onto its spot.
 - **Slot** = `id, owner (structure or node), kind ∈ {seat, mat, inside, work, stand, queue}, position, heading_deg,
   posture, height_m`. `slots.py` owns claiming, freeing, occupancy words and the ring fallback for **all** spots:
   places supply node spots (§1.1), bodies supply structure slots. Claims live in the state (snapshotted). Choice:
@@ -810,4 +812,4 @@ request by replay (D62) plus the daily `ledger`.
 | Skill-level effects, marriage and births, seasons, weather, wildfire, boats | later versions (09) |
 | Line-of-sight occlusion (D76) | perception without occlusion stays v1 |
 | The spectator avatar as a sim actor (audit F17) | animals and citizens ignoring the avatar is honest until the player version (v1.1+) |
-| Local avoidance; animal path planning around trees and rocks (audit F22) | 1-minute ticks can't do local avoidance; slots, spacing and keep-right lanes remove the visible merging |
+| Animal path planning around trees and rocks (audit F22) | animals keep straight steps (D67); people's local avoidance is drawn by the client (D192), since 1-minute ticks can't do it in the sim |

@@ -31,6 +31,14 @@ import {
   shownDoing,
   type Track,
 } from '@/lib/live/drawn-track';
+import {
+  type Crowd,
+  type CrowdBody,
+  giveOf,
+  newCrowdBody,
+  separate,
+  standsUntilBack,
+} from '@/lib/live/separation';
 import type { ShownDoings } from '@/lib/live/shown-doings';
 import { groundSpeed, headingAt, walking } from '@/lib/live/walk-path';
 import {
@@ -66,8 +74,9 @@ import { createCharacter } from '@/vendor/polyfork/humanoid.mjs';
  * ground (the town's plateau on its disc, else the terrain); sitters and sleepers rest on it, tilted to the ground
  * under them (`rest-posture.ts`). The gait is paced to the drawn ground speed and every clip plays sped up with the
  * clock (a fast-forwarded film, `visualRate`), up to ×10: past that legs would blur, so they keep that cadence and
- * the body glides. Models load only within NEAR metres of the camera (and hide again past it); clips load per
- * activity as first needed.
+ * the body glides. Drawn bodies are kept apart (`separation.ts`): walkers part as they meet and people drawn on one
+ * spot stand round it, sitters and sleepers never move. Models load only within NEAR metres of the camera (and hide
+ * again past it); clips load per activity as first needed.
  */
 
 /** Full models within this distance of the camera (they hide past HIDE). */
@@ -266,12 +275,18 @@ interface PlaceContext {
   town: WalkTown;
   scratch: { direction: Vector3; local: Vector3; going: Vector3 };
   heading: number;
+  /** Everyone drawn, and this citizen among them, to keep the bodies apart. */
+  crowd: Crowd;
+  self: CrowdBody;
   /** Game seconds per real second (0 paused). */
   rate: number;
   delta: number;
 }
 
-/** Walks the citizen on along its path, onto the ground, turning the way it walks (its heading standing). */
+/**
+ * Walks the citizen on along its path, in its lane, clear of the others, onto the ground, turning the way it walks
+ * (its heading standing).
+ */
 function placeAlong(
   track: Track,
   view: NpcView,
@@ -280,13 +295,22 @@ function placeAlong(
 ) {
   const { terrain, town, scratch, heading, rate, delta } = context;
   const radius = terrain.globe.radius;
-  const direction = keepRight(
+  const inLane = keepRight(
     track,
     delta,
     moveOn(track, delta, rate, scratch.direction),
     radius,
   );
   const onward = walking(track.path);
+  const direction = separate(
+    context.crowd,
+    context.self,
+    inLane,
+    // by the posture it is to take: someone about to sit is never pushed, and eases back before sitting
+    giveOf(npcLook(shownDoing(track)).pose, onward),
+    delta * visualRate(rate),
+    radius,
+  );
   const ground = groundUnder(terrain, town, direction, scratch.local);
   const { east, south, up } = tangentFrame(direction);
   const going = onward ? headingAt(track.path, scratch.going) : null;
@@ -345,6 +369,7 @@ function Npc({
   replay,
   tickElapsed,
   peopleRef,
+  crowd,
   views,
   followId,
   subjectRef,
@@ -361,6 +386,7 @@ function Npc({
   /** Game seconds into the current tick now (a citizen first seen mid-tick is drawn that far along). */
   tickElapsed: () => number;
   peopleRef: RefObject<Map<string, Vector3>>;
+  crowd: Crowd;
   views: NpcViews;
   followId: string | null;
   subjectRef: RefObject<GlobePlayerState>;
@@ -375,6 +401,7 @@ function Npc({
   );
   const trackRef = useRef<Track>(firstTrack);
   const viewRef = useRef<NpcView>(newView(citizen));
+  const [self] = useState(() => newCrowdBody(citizen.id));
   // what the body is shown doing: the frame's activity, or a moving one while it walks there (drawn-track)
   const [doing, setDoing] = useState(() => shownDoing(firstTrack));
   // the ground around the drawn body, for laying a sitter or a sleeper along it
@@ -403,9 +430,16 @@ function Npc({
   );
   const pose = useMemo(() => npcLook(doing), [doing]);
 
-  // the activity shown changes when a frame comes or the drawn body gets where the frame says it is
+  // the activity shown changes when a frame comes or the drawn body gets where the frame says it is; someone sitting
+  // or lying down while drawn stepped aside stands until back on their spot (separation.ts), never sliding seated
   const showDoing = () => {
-    const now = shownDoing(trackRef.current);
+    const next = shownDoing(trackRef.current);
+    const now =
+      next !== doing &&
+      pose.pose === 'standing' &&
+      standsUntilBack(self, npcLook(next).pose !== 'standing')
+        ? doing
+        : next;
     viewRef.current.activity = now.activity;
     if (now !== doing) setDoing(now);
   };
@@ -418,6 +452,13 @@ function Npc({
   });
   useLayoutEffect(() => onFrame(citizen), [citizen]);
   useEffect(() => doings.show(citizen.id, doing), [doings, citizen.id, doing]);
+
+  useEffect(() => {
+    crowd.add(self);
+    return () => {
+      crowd.delete(self);
+    };
+  }, [crowd, self]);
 
   useEffect(() => {
     const id = citizen.id;
@@ -438,6 +479,8 @@ function Npc({
       town,
       scratch,
       heading: citizen.heading_deg,
+      crowd,
+      self,
       rate,
       delta: Math.min(frameDelta, MAX_FRAME),
     });
@@ -517,6 +560,7 @@ export function GlobeNpcs({
   /** The followed citizen's pose, for the follow camera. */
   subjectRef: RefObject<GlobePlayerState>;
 }) {
+  const [crowd] = useState<Crowd>(() => new Set());
   // read when a citizen is first drawn (not during later renders)
   const elapsed = () =>
     tickElapsed({ tickClock, speed, paused }, performance.now());
@@ -535,6 +579,7 @@ export function GlobeNpcs({
           replay={replay}
           tickElapsed={elapsed}
           peopleRef={peopleRef}
+          crowd={crowd}
           views={views}
           followId={followId}
           subjectRef={subjectRef}

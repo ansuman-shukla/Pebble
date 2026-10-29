@@ -12,6 +12,7 @@ import {
   tickMs,
 } from '../../src/lib/live/live-contract';
 import { LANE_M } from '../../src/lib/live/drawn-track';
+import { KEEP_M } from '../../src/lib/live/separation';
 import type { MockStartHook } from '../../src/lib/live/mock-live';
 import { npcLook } from '../../src/lib/live/npc-activity';
 import { citizenPath, pointAt } from '../../src/lib/live/walk-path';
@@ -83,6 +84,7 @@ type MockLiveWindow = {
     dropConnections(code?: number): void;
     sayNow(actor: string, words: string): void;
     restartRun(): void;
+    crowdCamp(): void;
     setClock(change: { speed?: number; paused?: boolean }): void;
     skip(ticks: number): void;
     entities(): EntitiesView;
@@ -319,6 +321,36 @@ function walkedPart({ route, position }: CitizenEntity) {
   ).map((unit) => new Vector3(...unit));
 }
 
+/** How close a walker or runner comes before it pushes others aside (m): a runner's second of look-ahead and more. */
+const PASSING_M = 5;
+
+/**
+ * How far the drawing may part a body from where the engine has it (D192): KEEP_M for each body that can push it,
+ * nothing with nobody about (a crowd of n spreads over about KEEP_M √n). Pushers are those the engine puts within
+ * KEEP_M of it, and walkers drawn passing by (a walker of its own is pushed by anyone drawn by).
+ */
+function parted(
+  citizen: CitizenEntity,
+  now: CitizenEntity[],
+  npc: Npc,
+  shown: Npc[],
+) {
+  const unit = new Vector3(...citizen.position.unit);
+  const crowding = now.filter(
+    (other) =>
+      other.id !== citizen.id &&
+      unit.angleTo(new Vector3(...other.position.unit)) * R < KEEP_M,
+  ).length;
+  const moving = MOVING.includes(npc.activity);
+  const passing = shown.filter(
+    (other) =>
+      other.id !== npc.id &&
+      (moving || MOVING.includes(other.activity)) &&
+      other.position.distanceTo(npc.position) < PASSING_M,
+  ).length;
+  return KEEP_M * Math.sqrt(crowding + passing);
+}
+
 /** Metres from a drawn spot to the nearest of what a citizen walked in the given ticks. */
 const offWalked = (position: Vector3, ticks: CitizenEntity[]) =>
   Math.min(...ticks.map((citizen) => offPath(position, walkedPart(citizen))));
@@ -533,6 +565,55 @@ test('the chips of citizens standing close together cluster instead of covering 
   );
   expect(boxes.length).toBeGreaterThanOrEqual(1);
   expect(covered).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('in the crowded band A camp of the first dawn no two drawn bodies come within 0.5 m over a minute', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  const world = await openLive(page, errors, '?mockLive=1', 10);
+  // four talk and eat on one spot by the fire; Tak and Ana walk through them head-on, a tick (6 s) each way
+  await page.evaluate(() =>
+    (globalThis as unknown as MockLiveWindow).__pebbleMockLive.crowdCamp(),
+  );
+  await expect(world).toHaveAttribute('data-live-connects', '2');
+  const camp = ['oru', 'mena', 'lio', 'bo', 'tak', 'ana'];
+  await expect
+    .poll(async () => (await npcOf(page, 'tak')).activity)
+    .toBe('walking');
+  const samples = (await trackNpcs(page, 60_000)).map((all) =>
+    all.filter((npc) => camp.includes(npc.id)),
+  );
+  const close = samples.flatMap((all, k) =>
+    all.flatMap((a, i) =>
+      all
+        .slice(i + 1)
+        .filter((b) => a.position.distanceTo(b.position) < 0.5)
+        .map(
+          (b) =>
+            `${(k / 10).toFixed(1)} s: ${a.id}-${b.id} ${a.position.distanceTo(b.position).toFixed(2)} m`,
+        ),
+    ),
+  );
+  expect(close).toEqual([]);
+  // the walkers did walk through the crowd: across the camp and past the fire, close by
+  const of = (all: Npc[], id: string) => all.find((npc) => npc.id === id)!;
+  for (const id of ['tak', 'ana']) {
+    const passing = samples.map((all) =>
+      of(all, id).position.distanceTo(of(all, 'oru').position),
+    );
+    expect(Math.max(...passing)).toBeGreaterThan(10);
+    expect(Math.min(...passing)).toBeLessThan(1.5);
+  }
+  // the four on one spot stand round it: apart and close by
+  const last = samples.at(-1)!;
+  const four = ['oru', 'mena', 'lio', 'bo'].map((id) => of(last, id).position);
+  for (const [i, a] of four.entries())
+    for (const b of four.slice(i + 1)) {
+      expect(a.distanceTo(b)).toBeGreaterThanOrEqual(0.6);
+      expect(a.distanceTo(b)).toBeLessThan(2.5);
+    }
   expect(errors).toEqual([]);
 });
 
@@ -896,7 +977,7 @@ test('the real feed: the 22 citizens stand where the engine says, on the ground,
           const direction = npc.position.clone().normalize();
           const above = npc.position.length() - (R + groundUnder(direction));
           return [
-            ...(off < lateM
+            ...(off < lateM + parted(citizen, now, npc, shown)
               ? []
               : [`${citizen.id}: ${off.toFixed(2)} m off its walk`]),
             ...(Math.abs(above) < 0.5
@@ -910,7 +991,8 @@ test('the real feed: the 22 citizens stand where the engine says, on the ground,
     .toEqual([]);
 
   // the engine ticks on and the drawn citizens follow it: at the page's tick, everyone who stood still since the
-  // tick before is exactly where the engine has them, and everyone does what the engine says
+  // tick before is exactly where the engine has them (unless the engine has others on their spot: then just clear of
+  // them), and everyone does what the engine says
   await expect.poll(tick, { timeout: nextTick }).toBeGreaterThan(startTick);
   await expect
     .poll(
@@ -938,7 +1020,7 @@ test('the real feed: the 22 citizens stand where the engine says, on the ground,
             ...(npc.activity === citizen.activity || onTheWay
               ? []
               : [`${citizen.id}: ${npc.activity} ≠ ${citizen.activity}`]),
-            ...(drift < (still ? 0.5 : lateM)
+            ...(drift < (still ? 0.5 : lateM) + parted(citizen, now, npc, shown)
               ? []
               : [`${citizen.id}: ${drift.toFixed(2)} m off`]),
           ];
@@ -971,7 +1053,7 @@ test('the real feed: the 22 citizens stand where the engine says, on the ground,
                 citizen,
                 previous.find((old) => old.id === citizen.id)!,
               ]);
-              if (metres > 0.5)
+              if (metres > 0.5 + parted(citizen, now, npc, shown))
                 off.push(`${citizen.id}: ${metres.toFixed(2)} m`);
             }
             await page.waitForTimeout(100);
