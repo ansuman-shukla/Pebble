@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { Matrix4, Vector3 } from 'three';
+import { type DataTexture, Matrix4, type PointsMaterial, Vector3 } from 'three';
 
 import { propViews, propWorld } from '../../src/lib/world/prop-motion';
 import {
@@ -7,6 +7,7 @@ import {
   SMOULDER,
   SmokeCloud,
   smokiness,
+  sparkGlow,
   type SmokingFire,
 } from '../../src/lib/world/smoke';
 
@@ -28,6 +29,13 @@ test('a puff rises, grows, fades in quickly and out slowly', () => {
   expect(puffAt(0.15).alpha).toBeCloseTo(0.85, 6);
   expect(puffAt(0.5)).toEqual({ rise: 0.5, size: 0.8, alpha: 0.5 });
   expect(puffAt(1).alpha).toBe(0);
+});
+
+test('a spark flares up at once and dies away as it rises', () => {
+  expect(sparkGlow(0)).toBe(0);
+  expect(sparkGlow(0.1)).toBeCloseTo(0.9, 6);
+  expect(sparkGlow(0.5)).toBeCloseTo(0.5, 6);
+  expect(sparkGlow(1)).toBe(0);
 });
 
 const R = 2000;
@@ -53,6 +61,20 @@ test('the cloud carries every fire within 300 m in two objects, puffs drifting u
   expect(cloud.puffs.visible).toBe(true);
   expect(cloud.sparks.geometry.drawRange.count).toBe(8);
   expect([propViews.puffs, propViews.sparks]).toEqual([10, 8]);
+  // round glowing sparks, each as bright as its age: a sprite bright at the centre and dark at the rim
+  const glows = cloud.sparks.geometry.getAttribute('color');
+  const ages = Array.from({ length: 8 }, (_, i) => glows.getX(i));
+  expect(new Set(ages.map((glow) => glow.toFixed(3))).size).toBeGreaterThan(4);
+  for (const glow of ages) {
+    expect(glow).toBeGreaterThanOrEqual(0);
+    expect(glow).toBeLessThanOrEqual(1);
+  }
+  const sprite = (cloud.sparks.material as PointsMaterial).map as DataTexture;
+  const { data, width } = sprite.image;
+  const alphaAt = (x: number, y: number) => data![(y * width + x) * 4 + 3];
+  expect(alphaAt(width / 2, width / 2)).toBeGreaterThan(200);
+  expect(alphaAt(0, 0)).toBe(0);
+  expect(alphaAt(0, width / 2)).toBeLessThan(10);
   const matrix = new Matrix4();
   const at = new Vector3();
   for (let i = 0; i < cloud.puffs.count; i++) {
@@ -75,6 +97,7 @@ test('the cloud carries every fire within 300 m in two objects, puffs drifting u
   cloud.frame(camera, fires);
   expect(cloud.puffs.count).toBe(0);
   expect(cloud.puffs.visible).toBe(false);
+
   cloud.dispose();
   expect([propViews.puffs, propViews.sparks]).toEqual([0, 0]);
 });

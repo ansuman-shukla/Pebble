@@ -3,6 +3,7 @@ import {
   BufferAttribute,
   BufferGeometry,
   Color,
+  DataTexture,
   IcosahedronGeometry,
   InstancedBufferAttribute,
   InstancedMesh,
@@ -11,6 +12,7 @@ import {
   Points,
   PointsMaterial,
   Quaternion,
+  RGBAFormat,
   Vector3,
 } from 'three';
 
@@ -20,8 +22,9 @@ import { windUniforms } from './wind';
 /*
  * Smoke and sparks over the live fires (10 §5.3; components/world/globe/fire-smoke.tsx draws them): one instanced
  * mesh of puffs for every fire within SMOKE_REACH that burns or went out less than SMOULDER game minutes ago
- * (thinning as it cools), and one cloud of sparks over the burning ones. Both rise along the local up, the smoke
- * drifting with the wind, at natural speed × visualRate (the prop clock), so two draw calls carry every fire.
+ * (thinning as it cools), and one cloud of sparks over the burning ones (round glows that fade as they rise).
+ * Both rise along the local up, the smoke drifting with the wind, at natural speed × visualRate (the prop clock),
+ * so two draw calls carry every fire.
  */
 
 /** Fires within this distance of the camera smoke. */
@@ -37,6 +40,8 @@ const PUFF_RISE = 4;
 const PUFF_DRIFT = 1.6;
 const SPARK_LIFE = 1.4;
 const SPARK_RISE = 1.8;
+/** Pixels across the spark sprite. */
+const SPARK_SPRITE = 32;
 const PUFF_LIFT = 0.4;
 /** Metres a puff strays sideways by the time it is gone. */
 const PUFF_WANDER = 0.6;
@@ -79,6 +84,29 @@ function smokeMaterial() {
   };
   material.customProgramCacheKey = () => 'fire-smoke';
   return material;
+}
+
+/** How bright a spark is at `age` (0 born … 1 gone): it flares up at once and dies away as it rises. */
+export const sparkGlow = (age: number) => Math.min(age / 0.1, 1) * (1 - age);
+
+/** A round spark: white at the centre fading to nothing at the rim (added light: black is see-through). */
+function sparkSprite() {
+  const pixels = new Uint8Array(SPARK_SPRITE * SPARK_SPRITE * 4);
+  const half = SPARK_SPRITE / 2;
+  for (let y = 0; y < SPARK_SPRITE; y++)
+    for (let x = 0; x < SPARK_SPRITE; x++) {
+      const out = Math.hypot(x + 0.5 - half, y + 0.5 - half) / half;
+      const glow = Math.round(255 * Math.max(0, 1 - out) ** 2);
+      pixels.set([glow, glow, glow, glow], (y * SPARK_SPRITE + x) * 4);
+    }
+  const texture = new DataTexture(
+    pixels,
+    SPARK_SPRITE,
+    SPARK_SPRITE,
+    RGBAFormat,
+  );
+  texture.needsUpdate = true;
+  return texture;
 }
 
 /** How thick a fire's smoke is: 1 while it burns (by strength), thinning to 0 SMOULDER minutes after it went out. */
@@ -129,6 +157,7 @@ export class SmokeCloud {
   readonly sparks: Points;
   private readonly alpha: InstancedBufferAttribute;
   private readonly sparkPositions: BufferAttribute;
+  private readonly sparkGlows: BufferAttribute;
   /** Each fire as last seen: lit or not, and when it went out (game minutes). */
   private readonly seen = new Map<string, { lit: boolean; outAt: number }>();
 
@@ -151,13 +180,20 @@ export class SmokeCloud {
       new Float32Array(MAX_FIRES * SPARKS_PER_FIRE * 3),
       3,
     );
+    this.sparkGlows = new BufferAttribute(
+      new Float32Array(MAX_FIRES * SPARKS_PER_FIRE * 3),
+      3,
+    );
     const sparkGeometry = new BufferGeometry();
     sparkGeometry.setAttribute('position', this.sparkPositions);
+    sparkGeometry.setAttribute('color', this.sparkGlows);
     this.sparks = new Points(
       sparkGeometry,
       new PointsMaterial({
         color: new Color('#ffb347'),
-        size: 0.07,
+        size: 0.12,
+        map: sparkSprite(),
+        vertexColors: true,
         blending: AdditiveBlending,
         transparent: true,
         depthWrite: false,
@@ -169,7 +205,7 @@ export class SmokeCloud {
 
   /** Moves the smoke of `fires` (by id) as seen from `camera` to the prop clock's time. */
   frame(camera: Vector3, fires: ReadonlyMap<string, SmokingFire>) {
-    const { puffs, alpha, sparks, sparkPositions } = this;
+    const { puffs, alpha, sparks, sparkPositions, sparkGlows } = this;
     const time = propWorld.clipTime;
     const wind = windUniforms.windDirection.value;
     const strength = windUniforms.windStrength.value;
@@ -231,6 +267,8 @@ export class SmokeCloud {
           .addScaledVector(up, 0.2 + age * SPARK_RISE)
           .add(swirlAt(turn + age * 3, 0.25 * age));
         sparkPositions.setXYZ(sparkCount, at.x, at.y, at.z);
+        const glow = sparkGlow(age);
+        sparkGlows.setXYZ(sparkCount, glow, glow, glow);
         sparkCount++;
       }
     }
@@ -241,6 +279,7 @@ export class SmokeCloud {
     sparks.geometry.setDrawRange(0, sparkCount);
     sparks.visible = sparkCount > 0;
     sparkPositions.needsUpdate = true;
+    sparkGlows.needsUpdate = true;
     propViews.puffs = puffCount;
     propViews.sparks = sparkCount;
   }
@@ -250,7 +289,9 @@ export class SmokeCloud {
     (this.puffs.material as MeshLambertMaterial).dispose();
     this.puffs.dispose();
     this.sparks.geometry.dispose();
-    (this.sparks.material as PointsMaterial).dispose();
+    const sparkLook = this.sparks.material as PointsMaterial;
+    sparkLook.map?.dispose();
+    sparkLook.dispose();
     propViews.puffs = 0;
     propViews.sparks = 0;
   }
