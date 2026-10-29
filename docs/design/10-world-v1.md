@@ -176,7 +176,8 @@ inside the town chart; ≤ 15 m of a lit fire; ≥ 2 others within 10 m (D68). N
 - **Closed supply: 3 000 mon**, never minted or destroyed in v1. Start: lord's treasury (keep chest) 2 015, merchant
   500, every other adult town citizen 60 (8 × 60), the child 5, bands 0. Invariant tested every tick: coins in
   inventories + stores + ground = 3 000.
-- Bands see and use coins like anyone (no money-concept learning in v1).
+- Bands see and use coins like anyone (no money-concept learning in v1). They start with none, so their scripted
+  trips sell first and spend only what they earned (their nets in §2.7 are ≥ 0).
 
 ### 2.2 Goods: value, source, sink (`data/economy.yaml`, mon per unit)
 One table, used as the stall's base price, scripted judgement and scoreboard wealth. Bands judge by their own column
@@ -267,14 +268,14 @@ witnesses}` (witnesses = citizens who had the thief in view that tick). The owne
 | Holder | In (from whom) | Out (to whom) | Net |
 |---|---|---|---|
 | Treasury | dues 20 (Fumiko, Tetsu, Daisuke, Goro) + field dues 36 (Genzo, Tokuji) + granary rice 19.5 (stall) = **75.5** | Goro 25, Tetsu 30, cloth 6 and gold 18 (stall) = **79** | −3.5 |
-| Stall (Fumiko) | rice 70 (Goro 20, Tetsu 20, Daisuke 16, band A 6, band B 8), iron sand 10, wood 2, hides 7.5, cloth 6, gold 18, sickles 5, obsidian 3 = **121.5** | rice 67.5 (Genzo 27, Tokuji 21, treasury 19.5), iron sand 7.5, wood 1.9, gold 13.5, cloth 4.5, hides 5.5, tools 3.7, obsidian 2.7, dried meat 2, dues 5 = **113.8** | +7.7 |
+| Stall (Fumiko) | rice 70 (Goro 20, Tetsu 20, Daisuke 16, band A 6, band B 8), iron sand 10, wood 2, hides 7.5, cloth 6, gold 18, sickles 5, obsidian 3 = **121.5** | rice 67.5 (Genzo 27, Tokuji 21, treasury 19.5), iron sand 7.5, wood 1.9, gold 13.5, cloth 4.5, hides 7.3 (band A 5.5, band B 1.8), tools 3.7, obsidian 2.7, dried meat 4, dues 5 = **117.6** | +3.9 |
 | Genzo's household | rice 27, cloth 4.5 = **31.5** | field dues 24, hides 7.5 (packs), sickle 5 = **36.5** | −5 |
 | Tokuji | rice 21 | field dues 12 | +9 |
 | Goro | wage 25 | rice 20, dues 5 | 0 |
 | Tetsu | orders 30, tools to the stall 3.7 = **33.7** | rice 20, iron sand 10, wood 2, dues 5 = **37** | −3.3 |
 | Daisuke | iron sand 7.5, wood 1.9, gold 9 = **18.4** | rice 16, dues 5 = **21** | −2.6 |
-| Band A | hides 5.5, dried meat 2 = **7.5** | rice 6, obsidian 3 = **9** | −1.5 |
-| Band B | gold 4.5, obsidian 2.7 = **7.2** | rice 8 | −0.8 |
+| Band A | hides 5.5 (2 a trip), dried meat 4 (4 lots a trip) = **9.5** | rice 6, obsidian 3 = **9** | +0.5 |
+| Band B | gold 4.5, obsidian 2.7 (4 shards a trek), hide 1.8 (1 a trek) = **9** | rice 8 | +1 |
 
   The loop: treasury → wages, orders, gold and cloth → stall and producers → rice, iron sand, hides, gold → farmers,
   digger, bands → dues and the lord's granary sales → treasury. Gold leaves the loop into the lord's hoard (≈ 0.9 a
@@ -395,8 +396,8 @@ apron/headband/straw hat; Bo/Vesa = existing band outfits.
 
 | Contact | Who | Rule (scripted) |
 |---|---|---|
-| Trade | band A ↔ stall | every 4th day band A's leader + one adult with ≥ 2 hides or ≥ 4 strips of dried meat leave in their early afternoon (town 07:00), sell at the stall, buy rice and obsidian (a tool or cloth when they can), leave town by 10:30 |
-| Obsidian | band B ↔ stall | Nim treks to the obsidian field every 6 days for 4 shards and sells them at the stall on her way back (band B's local morning = the stall's hours) |
+| Trade | band A ↔ stall | every 4th day band A's leader + one adult with 2 hides and 4 lots (8 strips) of dried meat leave in their early afternoon (town 07:00), sell at the stall, buy rice and obsidian (a tool or cloth when they can), leave town by 10:30 |
+| Obsidian | band B ↔ stall | Nim treks to the obsidian field every 6 days for 4 shards and sells them, with a hide from Barro's hunts, at the stall on her way back (band B's local morning = the stall's hours) |
 | Raids | band B → field racks | when B's camp food < 1 day for the band 2 days running: Barro, Kaz, Nim go at town night (B's evening) to the racks; Goro's watch may catch them |
 | Poaching | Kaz | no game in B's ground after 2 searches → hunts in the Lord's woods with p = 1 − H |
 | Justice | outsiders caught | judged by the lord; band leaders come to pay fines for their own |
