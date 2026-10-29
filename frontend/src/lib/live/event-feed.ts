@@ -4,6 +4,8 @@
  * position come from the backend's line registry (F1's `line`/`importance`/`position`); until an event carries
  * them, the few types the feed delivers today get a plain line here.
  */
+import { Vector3 } from 'three';
+
 import type { LiveAnimal, LiveEventMessage } from './live-contract';
 import { townClock } from '@/lib/spectator/time';
 
@@ -188,3 +190,25 @@ export function addEntry(
 export const shows = (entry: FeedEntry, filter: FeedFilter) =>
   filter === 'all' ||
   (KINDS[filter].has(entry.type) && !(entry.animal && filter === 'danger'));
+
+/** What is drawn now, by id: animals at their feet, citizens at their pose. */
+interface DrawnActors {
+  animals: ReadonlyMap<string, { position: Vector3 }>;
+  citizens: ReadonlyMap<string, { pose: { position: Vector3 } }>;
+}
+
+/**
+ * Where ▶ flies for an entry: the spot it happened, else its actor as drawn (an animal or a citizen, a direction
+ * from the planet's centre); null with nowhere to go (an actor not drawn, e.g. gone since the feed was drawn).
+ */
+export function flightTarget(
+  entry: FeedEntry,
+  { animals, citizens }: DrawnActors,
+): Vector3 | null {
+  if (entry.position) return new Vector3(...entry.position);
+  if (entry.actorId === null) return null;
+  const drawn =
+    animals.get(entry.actorId)?.position ??
+    citizens.get(entry.actorId)?.pose.position;
+  return drawn ? drawn.clone().normalize() : null;
+}

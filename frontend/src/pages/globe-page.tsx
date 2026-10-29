@@ -84,7 +84,7 @@ import { useTown } from '@/hooks/use-town';
 import { useWorld } from '@/hooks/use-world';
 import type { TownView, WorldView } from '@/lib/client/types.gen';
 import { CLOCK_SPEEDS } from '@/lib/live/clock-speeds';
-import type { FeedEntry } from '@/lib/live/event-feed';
+import { type FeedEntry, flightTarget } from '@/lib/live/event-feed';
 import type { LiveCitizen } from '@/lib/live/live-contract';
 import { feedMinutes } from '@/lib/live/live-state';
 import { ShownDoings } from '@/lib/live/shown-doings';
@@ -819,20 +819,20 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   // an entry flies to where it happened, else to its actor as drawn: a citizen or an animal
   const canFly = useCallback(
     (entry: FeedEntry) =>
-      entry.position !== null ||
-      (entry.actorId !== null &&
-        (npcViews.has(entry.actorId) || animalViews.has(entry.actorId))),
+      flightTarget(entry, { animals: animalViews, citizens: npcViews }) !==
+      null,
     [npcViews, animalViews],
   );
   const flyTo = useCallback(
     (entry: FeedEntry) => {
-      const animal = entry.actorId ? animalViews.get(entry.actorId) : null;
-      if (entry.position) goNear(new Vector3(...entry.position));
-      else if (animal) goNear(animal.position.clone().normalize());
-      else if (entry.actorId && npcViews.has(entry.actorId))
-        goToCitizen(entry.actorId);
+      // the actor may be gone since ▶ was drawn: then nothing happens (a followed citizen stays followed)
+      const target = flightTarget(entry, {
+        animals: animalViews,
+        citizens: npcViews,
+      });
+      if (target) goNear(target);
     },
-    [animalViews, npcViews, goNear, goToCitizen],
+    [animalViews, npcViews, goNear],
   );
 
   // the footer and the clock describe where the camera looks, not where the hidden avatar stands (F19, F20)
