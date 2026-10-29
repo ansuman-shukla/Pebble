@@ -5,6 +5,7 @@
  *   seated:   the chair clip on a seat: lifted so the hips rest at the seat's height, the knees lowered to reach
  *             down towards the ground (a child's feet dangle)
  *   sitting:  the chair clip's upper body and thighs, knees straightened (legs out in front), the hips set down
+ *   kneeling: the clip's upper body on upright thighs, the shins flat on the ground behind
  *   lying:    a still standing frame (Idle, frozen) with straight legs, turned onto its back about the hips (the dead)
  *   sleeping: lying, but the right knee drawn up (its foot flat on the ground) and the head turned aside, so a
  *             sleeper doesn't look dead
@@ -25,7 +26,8 @@ import {
   Vector3,
 } from 'three';
 
-export type Posture = 'standing' | 'seated' | 'sitting' | 'sleeping' | 'lying';
+export type Posture =
+  'standing' | 'seated' | 'sitting' | 'kneeling' | 'sleeping' | 'lying';
 
 const onBack = (posture: Posture) =>
   posture === 'sleeping' || posture === 'lying';
@@ -48,6 +50,21 @@ const SIT_BENDS: Record<string, number> = {
   UpLeg: -90 * DEG,
   Leg: 5 * DEG,
   Foot: 0,
+};
+/**
+ * Kneeling: thighs upright (leaning a little ahead), shins flat on the ground behind, feet stretched back. Not seiza
+ * (sitting on the heels): a long robe's hem, skinned partly to the hips, would stay where it hangs standing and
+ * reach far under the folded legs.
+ */
+const KNEEL_BENDS: Record<string, number> = {
+  UpLeg: -15 * DEG,
+  Leg: 105 * DEG,
+  Foot: 80 * DEG,
+};
+/** How each posture on the ground bends the legs from straight (on the back they lie straight). */
+const LEG_BENDS: Partial<Record<Posture, Record<string, number>>> = {
+  sitting: SIT_BENDS,
+  kneeling: KNEEL_BENDS,
 };
 /**
  * A sleeper's drawn-up right leg, lying on its back: the thigh rises `thigh` from the line of the straight leg and
@@ -150,12 +167,9 @@ export function holdPosture(
     lowerKnees(rest, lift);
     return;
   }
+  const bends = LEG_BENDS[posture];
   for (const name of LEGS)
-    turnLeg(
-      rest,
-      name,
-      posture === 'sitting' ? SIT_BENDS[name.replace(/^(Left|Right)/, '')] : 0,
-    );
+    turnLeg(rest, name, bends?.[name.replace(/^(Left|Right)/, '')] ?? 0);
   if (!onBack(posture)) return;
   rest.hips.position.copy(rest.hipsAt);
   rest.hips.quaternion.copy(rest.hipsTurn);
@@ -187,13 +201,17 @@ function lowerKnees(rest: Rest, lift: number) {
 
 const scaleOf = new Vector3();
 
-/** Tools in hand are hidden while sitting; on the back a hat, a straw cape or a stole are hidden too. */
+/**
+ * Tools in hand are hidden while sitting; on the back or kneeling a hat, a straw cape or a stole are hidden too (a
+ * kneeler's cape would reach the ground behind it, and the hat comes off to pray).
+ */
 export function showWorn(character: Object3D, posture: Posture) {
-  const hidden = onBack(posture)
-    ? HIDDEN_ON_BACK
-    : posture === 'sitting' || posture === 'seated'
-      ? IN_HAND
-      : null;
+  const hidden =
+    onBack(posture) || posture === 'kneeling'
+      ? HIDDEN_ON_BACK
+      : posture === 'standing'
+        ? null
+        : IN_HAND;
   character.traverse((object) => {
     if (HIDDEN_ON_BACK.has(object.name))
       object.visible = !hidden?.has(object.name);
@@ -219,8 +237,33 @@ const shown = (object: Object3D) => {
   return true;
 };
 
-/** The lowest point and the reach of the posed body's skin, in the frame `posed` sits in. */
-function measure(posed: Object3D, character: Object3D) {
+/** The bones a kneeler rests on: skin that follows only them sets how low it goes. */
+const SHINS = new Set(
+  ['Left', 'Right'].flatMap((side) =>
+    ['Leg', 'Foot', 'ToeBase'].map((bone) => `${side}${bone}`),
+  ),
+);
+
+/** How much of vertex `i`'s skin follows `bones` (0-1). */
+function weightOn(mesh: SkinnedMesh, i: number, bones: ReadonlySet<string>) {
+  const { skinIndex, skinWeight } = mesh.geometry.attributes;
+  let weight = 0;
+  for (let k = 0; k < 4; k++)
+    if (bones.has(mesh.skeleton.bones[skinIndex.getComponent(i, k)].name))
+      weight += skinWeight.getComponent(i, k);
+  return weight;
+}
+
+/**
+ * The lowest point and the reach of the posed body's skin, in the frame `posed` sits in; with `restsOn`, the lowest
+ * point of the skin that (nearly) only follows those bones (a kneeler's shins: a long robe's hem, skinned partly to the hips,
+ * hangs where it would standing and goes into the ground like cloth spread on it, instead of holding the body up).
+ */
+function measure(
+  posed: Object3D,
+  character: Object3D,
+  restsOn?: ReadonlySet<string>,
+) {
   posed.updateMatrixWorld(true);
   const vertex = new Vector3();
   const reach = { low: Infinity, back: 0, front: 0, half: 0 };
@@ -233,7 +276,8 @@ function measure(posed: Object3D, character: Object3D) {
       mesh.getVertexPosition(i, vertex);
       mesh.localToWorld(vertex);
       posed.parent?.worldToLocal(vertex);
-      reach.low = Math.min(reach.low, vertex.y);
+      if (!restsOn || weightOn(mesh, i, restsOn) > 0.9)
+        reach.low = Math.min(reach.low, vertex.y);
       reach.back = Math.min(reach.back, vertex.z);
       reach.front = Math.max(reach.front, vertex.z);
       reach.half = Math.max(reach.half, Math.abs(vertex.x));
@@ -301,7 +345,11 @@ export function settle(
     knee = kneeToGround(posed, rest, measure(posed, character).low);
     drawKnee(rest, knee);
   }
-  const { low, back, front, half } = measure(posed, character);
+  const { low, back, front, half } = measure(
+    posed,
+    character,
+    posture === 'kneeling' ? SHINS : undefined,
+  );
   posed.position.y = -low;
   posed.updateMatrixWorld(true);
   return {

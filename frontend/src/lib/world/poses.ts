@@ -1,6 +1,7 @@
 /*
  * Procedural motion layered over a citizen's clip (10 §4.4-4.5), for what Polyfork has no clip for: a hunter's
- * crouched creep, gestures (wave, bow, point and a 0.4 m jump), a bow in prayer, a sleeper's breathing, and the
+ * crouched creep, gestures (wave, bow, point and a 0.4 m jump), a bow in prayer with the hands together before the
+ * chest, a hand picking high or low, a sleeper's breathing, and the
  * moves between postures (lying down and getting up roll over 1.2 s, a death falls in 0.8 s with the knees giving way,
  * sitting down settles over 0.8 s). Each frame, after the mixer:
  *
@@ -138,7 +139,7 @@ function envelope(t: number, length: number, edge: number) {
 
 /** How long one gesture lasts (s) before it repeats, and the pause after it. */
 export const GESTURE_LENGTH: Record<
-  Exclude<Layer, 'stalk' | 'laden' | 'pray' | 'reach' | 'swirl'>,
+  Exclude<Layer, 'stalk' | 'laden' | 'pray' | 'reach' | 'reach_high' | 'swirl'>,
   number
 > = {
   wave: 2.2,
@@ -200,9 +201,21 @@ function bendKnees(rig: Rig, amount: number) {
   rig.hips.updateMatrixWorld(true);
 }
 
-/** A hand reaching down to the ground ahead and back up, every REACH_S seconds. */
+/** A hand reaching down to the ground ahead and back up, every REACH_S seconds (or up ahead, into a bush). */
 const REACH_S = 1.7;
 const REACH = new Vector3(-0.15, -0.75, 0.65);
+const REACH_HIGH = new Vector3(-0.2, 0.45, 0.85);
+/** Praying, the hands meet this far ahead of the chest and above it (m, the character's frame), this far apart. */
+const PRAY_HANDS = new Vector3(0, 0.02, 0.26);
+const PALM_GAP = 0.03;
+/** Which way a praying arm's elbow bends: down and out to its side. */
+const ELBOW_OUT = 0.6;
+const shoulderAt = new Vector3();
+const elbowAt = new Vector3();
+const wristAt = new Vector3();
+const target = new Vector3();
+const toward = new Vector3();
+const bendTo = new Vector3();
 /** A pan swirled in a small circle once a second. */
 const SWIRL_HZ = 1;
 const swirled = new Vector3();
@@ -236,11 +249,13 @@ export function layer(
       turnAbout(rig, rig.head, X, -15 * DEG);
       bendKnees(rig, 22 * DEG);
       return 0;
-    case 'reach': {
+    case 'reach':
+    case 'reach_high': {
       const weight = Math.sin((t / REACH_S) * Math.PI) ** 2;
       const { arm, fore, hand } = rig.arms.right;
-      aimAt(rig, arm, fore, REACH, 0.7 * weight);
-      aimAt(rig, fore, hand, REACH, 0.8 * weight);
+      const to = kind === 'reach' ? REACH : REACH_HIGH;
+      aimAt(rig, arm, fore, to, 0.7 * weight);
+      aimAt(rig, fore, hand, to, 0.8 * weight);
       return 0;
     }
     case 'swirl': {
@@ -260,10 +275,11 @@ export function layer(
       turnAbout(rig, rig.head, X, -8 * DEG);
       return 0;
     case 'pray': {
-      const bow = 22 + 6 * Math.sin((t * 2 * Math.PI) / 6);
+      const bow = 14 + 6 * Math.sin((t * 2 * Math.PI) / 6);
       turnAbout(rig, rig.spine, X, (bow / 2) * DEG);
       turnAbout(rig, rig.chest, X, (bow / 2) * DEG);
       turnAbout(rig, rig.head, X, 12 * DEG);
+      handsTogether(rig);
       return 0;
     }
     case 'wave': {
@@ -312,6 +328,44 @@ export function layer(
     case 'shake_head':
     case 'laugh':
       return 0;
+  }
+}
+
+/**
+ * Puts the hands together before the chest (gassho): each arm reaches its wrist to PALM_GAP beside a point ahead of
+ * the chest (two-bone reach: the elbow where the upper arm and forearm meet, bent down and out), whatever the clip
+ * under it sways.
+ */
+function handsTogether(rig: Rig) {
+  const { character } = rig;
+  const local = (bone: Object3D, out: Vector3) =>
+    character.worldToLocal(bone.getWorldPosition(out));
+  const middle = local(rig.chest, new Vector3()).add(PRAY_HANDS);
+  for (const side of ['left', 'right'] as const) {
+    const { arm, fore, hand } = rig.arms[side];
+    const out = side === 'left' ? 1 : -1;
+    local(arm, shoulderAt);
+    const upper = shoulderAt.distanceTo(local(fore, elbowAt));
+    const lower = elbowAt.distanceTo(local(hand, wristAt));
+    target.copy(middle).setX(middle.x + out * PALM_GAP);
+    toward.subVectors(target, shoulderAt);
+    const reach = Math.min(
+      Math.max(toward.length(), Math.abs(upper - lower) + 1e-3),
+      upper + lower - 1e-3,
+    );
+    toward.normalize();
+    // the elbow off the shoulder-to-hands line, towards down and out
+    bendTo.set(out * ELBOW_OUT, -1, 0);
+    bendTo.addScaledVector(toward, -bendTo.dot(toward)).normalize();
+    const along = (upper ** 2 + reach ** 2 - lower ** 2) / (2 * upper * reach);
+    const angle = Math.acos(Math.min(Math.max(along, -1), 1));
+    elbowAt
+      .copy(toward)
+      .multiplyScalar(Math.cos(angle))
+      .addScaledVector(bendTo, Math.sin(angle));
+    aimAt(rig, arm, fore, elbowAt, 1);
+    local(fore, elbowAt);
+    aimAt(rig, fore, hand, toward.subVectors(target, elbowAt), 1);
   }
 }
 

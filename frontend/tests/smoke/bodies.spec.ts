@@ -102,8 +102,10 @@ test.describe('the motion table', () => {
       clip: 'Planting',
       prop: { kind: 'hoe' },
     });
+    // berries are picked standing, reaching up into the bush; roots crouching, reaching to the ground
     expect(look('gather_high')).toMatchObject({
-      clip: 'Harvesting',
+      clip: 'Idle',
+      layer: 'reach_high',
       prop: { kind: 'basket', at: 'left' },
     });
     expect(look('gather_low')).toMatchObject({
@@ -191,7 +193,8 @@ test.describe('the motion table', () => {
       pose: 'inside',
     });
     expect(motionLook('pray', FARMER)).toMatchObject({
-      pose: 'sitting',
+      clip: 'Idle',
+      pose: 'kneeling',
       layer: 'pray',
     });
     expect(motionLook('ring_bell', FARMER).clip).toBe('Pushing');
@@ -497,6 +500,45 @@ test.describe('layers', () => {
     expect(at(rig.head).distanceTo(once)).toBeLessThan(1e-6);
   });
 
+  test('prayer puts the hands together before the chest, whatever the clip sways', async () => {
+    const { rig, at, pose } = await posedRig();
+    pose(null, 4.5);
+    const apart = at(rig.arms.left.hand).distanceTo(at(rig.arms.right.hand));
+    expect(apart, 'standing about, the hands hang apart').toBeGreaterThan(0.3);
+    for (const t of [0, 1.5, 4.5]) {
+      pose('pray', t);
+      const [left, right] = [at(rig.arms.left.hand), at(rig.arms.right.hand)];
+      const chest = at(rig.chest);
+      expect(left.distanceTo(right), `t ${t}: palms`).toBeLessThan(0.08);
+      const middle = left.clone().add(right).multiplyScalar(0.5);
+      expect(middle.z - chest.z, `t ${t}: ahead`).toBeGreaterThan(0.18);
+      expect(Math.abs(middle.y - chest.y), `t ${t}: chest high`).toBeLessThan(
+        0.08,
+      );
+      expect(Math.abs(middle.x - chest.x), `t ${t}: before it`).toBeLessThan(
+        0.03,
+      );
+    }
+    // and bows a little
+    pose(null, 1.5);
+    const head = at(rig.head).z;
+    pose('pray', 1.5);
+    expect(at(rig.head).z).toBeGreaterThan(head + 0.04);
+  });
+
+  test('picking high reaches the right hand up ahead, picking low down', async () => {
+    const { rig, at, pose } = await posedRig();
+    pose(null, 0.85);
+    const shoulder = at(rig.arms.right.arm);
+    const hand = at(rig.arms.right.hand);
+    pose('reach_high', 0.85);
+    const high = at(rig.arms.right.hand);
+    expect(high.y).toBeGreaterThan(shoulder.y - 0.1);
+    expect(high.z).toBeGreaterThan(hand.z + 0.25);
+    pose('reach', 0.85);
+    expect(at(rig.arms.right.hand).y).toBeLessThan(high.y - 0.4);
+  });
+
   test('a reach puts the right hand out to the ground ahead', async () => {
     const { rig, at, pose } = await posedRig('town-smith', 'Crouch');
     pose(null, 0.85);
@@ -711,7 +753,7 @@ test.describe('on the globe', () => {
       ],
       [
         { activity: 'gathering', motion: 'gather_high' },
-        { clip: 'Harvesting', prop: 'basket' },
+        { clip: 'Idle', prop: 'basket', layer: 'reach_high' },
       ],
       [
         { activity: 'gathering', motion: 'gather_low' },
@@ -766,7 +808,7 @@ test.describe('on the globe', () => {
       ],
       [
         { activity: 'working', motion: 'pray' },
-        { clip: 'Sitting', posture: 'sitting', layer: 'pray' },
+        { clip: 'Idle', posture: 'kneeling', layer: 'pray', prop: '' },
       ],
       [
         { activity: 'resting', motion: 'sit_ground' },

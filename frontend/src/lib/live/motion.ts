@@ -82,7 +82,6 @@ export type NpcClip =
   | 'Stand up'
   | 'Opening'
   | 'Crouch'
-  | 'Harvesting'
   | 'Planting'
   | 'Pick up'
   | 'Chopping wood'
@@ -114,17 +113,25 @@ export const isPlanted = (clip: string) => !GAITS.has(clip as NpcClip);
 
 /**
  * How the body rests (`rest-posture.ts` lays it): on its feet, on a seat (`seated`, hips at the seat's height), on
- * the ground (`sitting`), on its back asleep or dead, or out of sight indoors.
+ * the ground (`sitting`, legs out in front; `kneeling`, upright on the knees), on its back asleep or dead, or out
+ * of sight indoors.
  */
 export type BodyPose =
-  'standing' | 'seated' | 'sitting' | 'sleeping' | 'lying' | 'inside';
+  | 'standing'
+  | 'seated'
+  | 'sitting'
+  | 'kneeling'
+  | 'sleeping'
+  | 'lying'
+  | 'inside';
 
 /**
- * A procedural motion layered over the clip (`poses.ts`): the hunter's creep, a bow in prayer, a hand reaching to
- * the ground and back (picking, tending a fire, knapping) or swirling a pan, a gesture.
+ * A procedural motion layered over the clip (`poses.ts`): the hunter's creep, a bow in prayer with the hands together,
+ * a hand reaching to the ground and back (picking, tending a fire, knapping) or up into a bush (picking berries) or
+ * swirling a pan, a gesture.
  */
 export type Layer =
-  'stalk' | 'laden' | 'pray' | 'reach' | 'swirl' | GestureKind;
+  'stalk' | 'laden' | 'pray' | 'reach' | 'reach_high' | 'swirl' | GestureKind;
 
 /** Things held that the asset pack has no model for, drawn from code (D133's stand-ins). */
 type MadeProp = 'pan' | 'stone' | 'cup' | 'food' | 'pick' | 'rod';
@@ -196,7 +203,8 @@ const TABLE: Record<Motion, Entry> = {
   lie: { clip: 'Idle', pose: 'sleeping', still: true },
   inside: { clip: 'Opening', pose: 'inside' },
   gather_low: { clip: 'Crouch', prop: left('basket'), layer: 'reach' },
-  gather_high: { clip: 'Harvesting', prop: left('basket') },
+  // berries are picked standing, the right hand reaching up into the bush
+  gather_high: { clip: 'Idle', prop: left('basket'), layer: 'reach_high' },
   pick_up: { clip: 'Pick up' },
   chop: { clip: 'Chopping wood', prop: right('axe') },
   mine: { clip: 'Chopping wood', pace: 0.8, prop: right('pick') },
@@ -211,7 +219,8 @@ const TABLE: Record<Motion, Entry> = {
   gesture: { clip: 'Idle', layer: 'wave' },
   attack: { clip: 'Punch' },
   tend: { clip: 'Crouch', layer: 'reach' },
-  pray: { clip: 'Sitting', pose: 'sitting', layer: 'pray' },
+  // kneeling upright, bowing a little with the hands together before the chest
+  pray: { clip: 'Idle', pose: 'kneeling', layer: 'pray' },
   ring_bell: { clip: 'Pushing' },
 };
 

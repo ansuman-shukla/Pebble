@@ -743,6 +743,7 @@ function Npc({
       standing: LABEL_HEIGHT,
       seated: SITTING_LABEL_HEIGHT,
       sitting: SITTING_LABEL_HEIGHT,
+      kneeling: SITTING_LABEL_HEIGHT,
       sleeping: LYING_LABEL_HEIGHT,
       lying: LYING_LABEL_HEIGHT,
       inside: LABEL_HEIGHT,

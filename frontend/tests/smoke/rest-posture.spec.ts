@@ -49,6 +49,7 @@ const LOOKS = ['town-farmer', 'band-a-hunter', 'town-child', 'band-a-healer'];
 const CLIP: Record<Exclude<Posture, 'standing'>, string> = {
   seated: 'Sitting',
   sitting: 'Sitting',
+  kneeling: 'Idle',
   sleeping: 'Idle',
   lying: 'Idle',
 };
@@ -59,12 +60,30 @@ const shown = (object: Object3D) => {
   return true;
 };
 
-/** The lowest height of any skinned vertex above the plane y = sx·x + sz·z (in `frame`'s coordinates). */
+/** Skin that follows only the shins and feet (more than 90 % of its weight). */
+const onShins = (mesh: SkinnedMesh, i: number) => {
+  const { skinIndex, skinWeight } = mesh.geometry.attributes;
+  let weight = 0;
+  for (let k = 0; k < 4; k++)
+    if (
+      /^(Left|Right)(Leg|Foot|ToeBase)$/.test(
+        mesh.skeleton.bones[skinIndex.getComponent(i, k)].name,
+      )
+    )
+      weight += skinWeight.getComponent(i, k);
+  return weight > 0.9;
+};
+
+/**
+ * The lowest height of any skinned vertex (any that `counts`) above the plane y = sx·x + sz·z (in `frame`'s
+ * coordinates).
+ */
 function clearance(
   character: Object3D,
   frame: Object3D,
   sx: number,
   sz: number,
+  counts: (mesh: SkinnedMesh, i: number) => boolean = () => true,
 ) {
   frame.updateMatrixWorld(true);
   const vertex = new Vector3();
@@ -74,6 +93,7 @@ function clearance(
     if (!mesh.isSkinnedMesh || !shown(mesh)) return;
     mesh.skeleton.update();
     for (let i = 0; i < mesh.geometry.attributes.position.count; i++) {
+      if (!counts(mesh, i)) continue;
       mesh.getVertexPosition(i, vertex);
       frame.worldToLocal(mesh.localToWorld(vertex));
       lowest = Math.min(lowest, vertex.y - (sx * vertex.x + sz * vertex.z));
@@ -95,8 +115,9 @@ const boneHeight = (
   return at.y - (sx * at.x + sz * at.z);
 };
 
-for (const posture of ['sitting', 'sleeping', 'lying'] as const) {
-  for (const id of LOOKS) {
+for (const posture of ['sitting', 'kneeling', 'sleeping', 'lying'] as const) {
+  // the monk's robe hangs partly from the hips: a kneeler rests on its shins all the same
+  for (const id of posture === 'kneeling' ? [...LOOKS, 'town-monk'] : LOOKS) {
     test(`${id} ${posture} rests on the ground, flat and on slopes`, async () => {
       const look = CITIZEN_LOOKS.find((candidate) => candidate.id === id)!;
       const character = createCharacter(look.config);
@@ -104,7 +125,7 @@ for (const posture of ['sitting', 'sleeping', 'lying'] as const) {
       const animation = await animateHumanoid(character, {
         clips: [CLIP[posture]],
       });
-      const onBack = posture !== 'sitting';
+      const onBack = posture === 'sleeping' || posture === 'lying';
       animation.play(CLIP[posture]).paused = onBack;
       animation.update(0.4);
       holdPosture(rest, posture);
@@ -127,10 +148,14 @@ for (const posture of ['sitting', 'sleeping', 'lying'] as const) {
       );
       if (id === 'town-farmer') expect(worn.length, 'hat and cape').toBe(2);
       for (const item of worn)
-        expect(shown(item), `${item.name} shown`).toBe(!onBack);
-      // the ground is read under the body's ends: lying, the head lies behind the hips and the feet ahead
+        expect(shown(item), `${item.name} shown`).toBe(posture === 'sitting');
+      // the ground is read under the body's ends: lying, the head lies behind the hips and the feet ahead; kneeling,
+      // the knees and hands are ahead and the shins reach back
       const tall = look.config.age === 'kid' ? 0.6 : 1;
-      expect(print.front).toBeGreaterThan(0.4 * tall);
+      if (posture === 'kneeling') {
+        expect(print.front).toBeGreaterThan(0.15 * tall);
+        expect(print.back).toBeLessThan(-0.3 * tall);
+      } else expect(print.front).toBeGreaterThan(0.4 * tall);
       if (onBack) expect(print.back).toBeLessThan(-0.5 * tall);
       // a sleeper turns its head aside, the dead look straight up
       const face = new Vector3(0, 0, 1).applyQuaternion(
@@ -155,15 +180,45 @@ for (const posture of ['sitting', 'sleeping', 'lying'] as const) {
           },
           tilt.quaternion,
         );
-        const low = clearance(character, world, sx, sz);
+        // a kneeler rests on its shins (a robe's hem may go into the ground, like cloth spread on it)
+        const kneels = posture === 'kneeling';
+        const low = clearance(
+          character,
+          world,
+          sx,
+          sz,
+          kneels ? onShins : undefined,
+        );
         expect(Math.abs(low), `${ground}: lowest vertex ${low}`).toBeLessThan(
           TOUCH,
         );
+        if (kneels)
+          expect(clearance(character, world, sx, sz), 'hem').toBeGreaterThan(
+            -0.2,
+          );
         const hips = boneHeight(character, world, 'Hips', sx, sz);
         if (posture === 'sitting') {
           // on the ground (on a fold of cape or tunic at most), not on a chair of air (the clip's hips: 0.56 m)
           expect(hips, `${ground}: hips`).toBeGreaterThan(0.04);
           expect(hips, `${ground}: hips`).toBeLessThan(0.27);
+        } else if (posture === 'kneeling') {
+          // upright on the knees: the hips a thigh above them, the knees on the ground, the feet behind them
+          expect(hips, `${ground}: hips`).toBeGreaterThan(0.4 * tall);
+          expect(hips, `${ground}: hips`).toBeLessThan(0.7 * tall);
+          for (const side of ['Left', 'Right']) {
+            const knee = boneHeight(character, world, `${side}Leg`, sx, sz);
+            // on the ground (on a fold of robe at most: standing, the knees are 0.5 m up)
+            expect(knee, `${ground}: knee`).toBeLessThan(0.2);
+            const local = (name: string) =>
+              posed.worldToLocal(
+                character
+                  .getObjectByName(name)!
+                  .getWorldPosition(new Vector3()),
+              );
+            expect(
+              local(`${side}Leg`).z - local(`${side}Foot`).z,
+            ).toBeGreaterThan(0.25 * tall);
+          }
         } else {
           const flat =
             posture === 'lying'
