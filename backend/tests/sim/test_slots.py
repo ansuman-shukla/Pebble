@@ -107,6 +107,60 @@ def test_walkers_to_one_place_take_separate_stands_then_a_queue_in_reach(new_sim
     assert all(w.result is None for w in waiting)  # still waiting, now at the well itself
 
 
+def test_a_weaver_walks_home_to_the_loom_and_weaves_there(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    weaver = sim.add_citizen(make_spec("aiko", at=(-80.0, 80.0), home="farmhouse-1", skills=["weaving"]))
+    farmer = sim.add_citizen(make_spec("genzo", at=(-80.0, 80.0), home="farmhouse-1", skills=["farming"]))
+    for citizen in (farmer, weaver):  # the farmer first: the loom is the weaver's, free or not
+        assert run_until_done(sim, WorldApi(sim, citizen.id).walk_to_place("home"), 10).text == "You arrive home."
+    loom = layout(sim.core).slots["farmhouse-1-loom#seat"]
+    assert sim.world.distance_m(weaver.position, loom.position) < 0.01
+    assert weaver.heading_deg == loom.heading_deg  # facing the loom
+    assert held_slot(sim.core, farmer) == layout(sim.core).slots["farmhouse-1#door"]
+    work = WorldApi(sim, weaver.id).work("weave")
+    started = [e.payload.model_dump() for e in sim.drain() if e.type == "action_started" and e.actor_id == "aiko"]
+    assert started[-1]["args"] == {"task": "weave", "slot": loom.id, "where": "at the loom"}
+    assert run_until_done(sim, work, 61).text == "You weave a length of cloth."
+    assert WorldApi(sim, farmer.id).look_around().place.startswith("at your home")
+
+
+def test_work_needs_a_free_slot_of_its_task_in_the_place(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    seller = sim.add_citizen(make_spec("fumiko", at=(20.0, 56.0), skills=["trade"], knows_places=["market"]))
+    rival = sim.add_citizen(make_spec("rival", at=(22.0, 58.0), skills=["trade"], knows_places=["market"]))
+    stall = layout(sim.core).slots["market-stall#seller"]
+    work = WorldApi(sim, seller.id).work("trade")  # in the market, 3.7 m before the stall: walks round behind it
+    sim.drain()
+    sim.step()
+    route = _summary(sim).moved[seller.id].route
+    assert sim.world.distance_m(seller.position, stall.position) < 0.01 and work.result is None
+    assert route[-1].t_s is not None and route[-1].t_s <= 60.0
+    assert len(route) > 2  # round the stall, not through it
+    assert all(sim.world.town.walk.is_walkable(*(sim.world.town_point(p.unit) or (0, 0))) for p in route[1:-1])
+    second = run_until_done(sim, WorldApi(sim, rival.id).work("trade"), 1)
+    assert second.text == "Others are working there; there's no room for you."
+    homeless = sim.add_citizen(make_spec("tkd", at=(-80.0, 80.0), home="main-w-3", skills=["weaving"]))
+    assert run_until_done(sim, WorldApi(sim, homeless.id).walk_to_place("home"), 10).outcome == "done"
+    assert run_until_done(sim, WorldApi(sim, homeless.id).work("weave"), 1).text == "Your loom is at home."
+
+
+def test_farmers_tend_separate_rows_inside_the_paddies(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    fields = ["town", "rice-fields"]
+    farmers = [
+        sim.add_citizen(make_spec(f"f{k}", at=(-90.0, 61.0), skills=["farming"], knows_places=fields)) for k in range(3)
+    ]
+    for farmer in farmers:
+        run_until_done(sim, WorldApi(sim, farmer.id).walk_to_place("the rice fields"), 10)
+    works = [WorldApi(sim, f.id).work("farm") for f in farmers]
+    sim.step()
+    assert all(w.result is None for w in works)
+    for farmer in farmers:
+        x, z = sim.world.town_point(farmer.position) or (0.0, 0.0)
+        assert -126 < x < -114 and 46 < z < 66, (x, z)  # in paddy-5, not on the grass beside (audit F4)
+    assert _apart(sim, farmers) >= 4.0  # a row of tiles apart
+
+
 def test_rest_takes_a_free_bench_seat_nearby_else_the_ground(new_sim: Callable[..., Simulation]) -> None:
     sim = _sim(new_sim)
     people = [sim.add_citizen(make_spec(f"r{k}", at=(16.0, 53.5))) for k in range(3)]

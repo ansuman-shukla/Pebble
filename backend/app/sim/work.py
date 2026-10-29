@@ -6,13 +6,15 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from app.observability.events import ItemLocation
+from app.observability.events import ItemLocation, JsonScalar
+from app.sim import slots
 from app.sim.acting import begin, settled
 from app.sim.core import SimCore
 from app.sim.exchange import store_in_reach
 from app.sim.items import ITEMS, amount_words
 from app.sim.perception import HOME_RADIUS_M, normalize
 from app.sim.state import ActionState, Citizen
+from app.sim.vec import Vec3
 from app.world_api.models import Work
 
 FARM_GROWTH = 12  # measures of rice an hour of tending ripens
@@ -166,6 +168,7 @@ def start_work(core: SimCore, citizen: Citizen, action: Work) -> int:
     if task is None or (task.skill is not None and task.skill not in citizen.skills):
         return settled(core, citizen, "work", "failed", "You don't know how to do that.")
     store_id = None
+    area: tuple[Vec3, float] = (citizen.position, 0.0)  # where its slots may be: the place, or round the home's door
     if task.at == "storehouse":
         store_id = store_in_reach(core, citizen)
         if store_id is None:
@@ -176,11 +179,22 @@ def start_work(core: SimCore, citizen: Citizen, action: Work) -> int:
         home = core.world.structures.get(citizen.home) if citizen.home is not None else None
         if home is None or core.distance_m(citizen.position, home.door) > HOME_RADIUS_M:
             return settled(core, citizen, "work", "failed", task.nowhere)
+        area = (home.door, HOME_RADIUS_M)
     else:
         places = [core.world.places[place_id] for place_id in task.places]
-        if not any(core.distance_m(citizen.position, place.centre) <= place.radius_m for place in places):
+        here = [place for place in places if core.distance_m(citizen.position, place.centre) <= place.radius_m]
+        if not here:
             return settled(core, citizen, "work", "failed", task.nowhere)
-    work = begin(core, citizen, "work", task.label, {"task": task.name})
+        area = (here[0].centre, here[0].radius_m)
+    slot = slots.take_work_slot(core, citizen, task.name, area)  # a task with slots is done at one (loom, stall)
+    if slot == "none here":
+        return settled(core, citizen, "work", "failed", task.nowhere)
+    if slot == "all taken":
+        return settled(core, citizen, "work", "failed", "Others are working there; there's no room for you.")
+    args: dict[str, JsonScalar] = {"task": task.name}
+    if isinstance(slot, slots.Slot):
+        args |= {"slot": slot.id, "where": slot.words}
+    work = begin(core, citizen, "work", task.label, args)
     work.item, work.store_id, work.until_tick = task.name, store_id, core.state.tick + task.minutes
     return work.number
 
