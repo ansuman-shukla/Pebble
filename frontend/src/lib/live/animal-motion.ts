@@ -31,9 +31,11 @@ import {
   carriedOn,
   citizenPath,
   groundSpeed,
+  headingAt,
   joinAt,
   pointAt,
   snapMetres,
+  walking,
   walkPath,
   type WalkPath,
 } from './walk-path';
@@ -344,6 +346,25 @@ export function moveAnimal(
   track.opacity = Math.min(Math.abs(fade.elapsed - half) / half, 1);
   if (fade.elapsed >= FADE_S) track.fade = null;
   return fade.elapsed < half ? out.copy(fade.from) : out;
+}
+
+const going = new Vector3();
+
+/**
+ * The yaw (radians: 0 faces `south`, π/2 `east`) the body turns to: along the leg of its path it walks, the way it
+ * already faces (`current`) while it waits on its path (a leg that goes nowhere), else the feed's heading.
+ */
+export function wantedYaw(
+  track: AnimalTrack,
+  east: Vector3,
+  south: Vector3,
+  current: number,
+  headingDeg: number,
+) {
+  const leg = walking(track.path) ? headingAt(track.path, going) : null;
+  if (!leg) return (headingDeg * Math.PI) / 180;
+  if (leg.lengthSq() === 0) return current;
+  return Math.atan2(leg.dot(east), leg.dot(south));
 }
 
 // --- layers: what the bones and the body do on top of the clip ---

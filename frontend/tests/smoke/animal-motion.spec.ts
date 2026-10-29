@@ -31,8 +31,10 @@ import {
   slopePitch,
   strideSpeed,
   unbendBones,
+  wantedYaw,
 } from '../../src/lib/live/animal-motion';
 import { ANIMALS, type AnimalKind } from '../../src/lib/world/assets';
+import { tangentFrame } from '../../src/lib/world/globe';
 import { SPEEDS } from './animal-speeds';
 
 /*
@@ -451,4 +453,40 @@ test('a caught prey runs to where it is caught and falls there; a move without a
   expect(shownActivity(idle)).toBe('walking');
   moveAnimal(idle, 11, 1, spot);
   expect(shownActivity(idle)).toBe('feeding');
+});
+
+test('a body faces along the leg it walks, keeps its way while it waits on its path, and takes the feed’s heading standing', () => {
+  // grazing facing east, then a tick that waits 8 s and bolts 30 m north
+  const track = newAnimalTrack(
+    { ...animalFrame([0, 0], [], 'grazing'), heading_deg: 90 },
+    R,
+  );
+  const spot = new Vector3();
+  const yawAt = (current: number) => {
+    const { east, south } = tangentFrame(spot);
+    return wantedYaw(track, east, south, current, 45);
+  };
+  moveAnimal(track, 0, 1, spot);
+  expect(yawAt(1)).toBeCloseTo(Math.PI / 4, 6); // standing: the feed's heading
+  followAnimal(
+    track,
+    animalFrame(
+      [0, 30],
+      [
+        [0, 0, 0],
+        [0, 0, 8],
+        [0, 30, 10.5],
+      ],
+      'fleeing',
+      'run',
+    ),
+    R,
+    1,
+  );
+  moveAnimal(track, 4, 1, spot);
+  expect(yawAt(Math.PI / 2)).toBe(Math.PI / 2); // waiting: still the way it grazed (not south, yaw 0)
+  moveAnimal(track, 5, 1, spot);
+  expect(Math.abs(yawAt(Math.PI / 2))).toBeCloseTo(Math.PI, 2); // running north
+  moveAnimal(track, 5, 1, spot);
+  expect(yawAt(0)).toBeCloseTo(Math.PI / 4, 6); // there: the feed's heading again
 });

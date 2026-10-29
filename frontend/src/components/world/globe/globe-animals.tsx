@@ -26,9 +26,10 @@ import {
   newDrive,
   shownActivity,
   slopePitch,
+  wantedYaw,
 } from '@/lib/live/animal-motion';
 import type { LiveAnimal } from '@/lib/live/live-contract';
-import { groundSpeed, headingAt, walking } from '@/lib/live/walk-path';
+import { groundSpeed } from '@/lib/live/walk-path';
 import { ANIMALS, assetSize, assetUrl, PROPS } from '@/lib/world/assets';
 import {
   type GlobeTerrain,
@@ -164,10 +165,7 @@ function Animal({
     remains: false,
     pitch: 0,
   });
-  const scratch = useMemo(
-    () => ({ direction: new Vector3(), going: new Vector3() }),
-    [],
-  );
+  const scratch = useMemo(() => ({ direction: new Vector3() }), []);
 
   // every new frame: the move it streams, joined where the animal is drawn
   const onFrame = useEffectEvent((next: LiveAnimal) =>
@@ -200,12 +198,13 @@ function Animal({
     const height = heightOf(animal, terrain, at);
     view.position.copy(at).multiplyScalar(radius + height);
     const { east, south, up } = tangentFrame(at);
-    const going = walking(track.path)
-      ? headingAt(track.path, scratch.going)
-      : null;
-    const wanted = going
-      ? Math.atan2(going.dot(east), going.dot(south))
-      : (animal.heading_deg * Math.PI) / 180;
+    const wanted = wantedYaw(
+      track,
+      east,
+      south,
+      yaw.current,
+      animal.heading_deg,
+    );
     // turning is procedural motion: sped up with the clock like the clips (frozen paused)
     yaw.current +=
       wrapAngle(wanted - yaw.current) *
