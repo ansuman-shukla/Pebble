@@ -271,13 +271,14 @@ test('a sleeper keeps still: its hips stay put while the clip under it would swa
   for (const at of seen) expect(at.distanceTo(rest.hipsAt)).toBeLessThan(1e-6);
 });
 
-test('a resting body is measured again only when its posture or clip changed, or while the clips cross-fade', () => {
+test('a resting body is measured again only when its posture, seat or clip changed, or while the clips cross-fade', () => {
   const mixer = new AnimationMixer(new Object3D());
   const clip = (name: string) =>
     mixer.clipAction(new AnimationClip(name, 1, []));
   const [idle, sitting] = [clip('Idle'), clip('Sitting')];
   const shape = (over: Partial<Shape> = {}): Shape => ({
     posture: 'sitting',
+    seat: 0.45,
     action: sitting,
     fading: false,
     ...over,
@@ -285,6 +286,7 @@ test('a resting body is measured again only when its posture or clip changed, or
   expect(reshaped(null, shape()), 'first frame at rest').toBe(true);
   expect(reshaped(shape(), shape()), 'settled').toBe(false);
   expect(reshaped(shape({ posture: 'lying' }), shape()), 'posture').toBe(true);
+  expect(reshaped(shape({ seat: 0.3 }), shape()), 'another seat').toBe(true);
   expect(reshaped(shape({ action: idle }), shape()), 'clip arrived').toBe(true);
   expect(reshaped(shape({ action: null }), shape()), 'clips loaded').toBe(true);
   expect(reshaped(shape(), shape({ fading: true })), 'fading').toBe(true);
@@ -311,6 +313,7 @@ test('a body is fading while another clip still blends into it', () => {
   mixer.update(0.1);
   expect(shapeOf('sitting', idle, all)).toEqual({
     posture: 'sitting',
+    seat: 0.45,
     action: idle,
     fading: false, // Run was never played: its weight doesn't count
   });

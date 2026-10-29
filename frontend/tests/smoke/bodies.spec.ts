@@ -15,6 +15,7 @@ import { applyMessage, EMPTY_LIVE } from '../../src/lib/live/live-state';
 import {
   type Bearer,
   BAKED_HIP,
+  type FedPosture,
   CAPTURED_SPEED,
   fallbackMotion,
   gaitOf,
@@ -208,6 +209,61 @@ test.describe('the motion table', () => {
       expect(motionLook(motion, FARMER).clip).toBe('Idle');
   });
 
+  test("the feed's posture says where the body rests", () => {
+    const look = (
+      motion: Motion,
+      posture: FedPosture,
+      more: { dead?: boolean; seat?: number } = {},
+      bearer: Partial<Bearer> = {},
+    ) => motionLook(motion, { ...FARMER, ...bearer }, { posture, ...more });
+    // the weaver at the loom sits on its stool (the slot's height), with the chair clip
+    expect(
+      look('craft', 'sitting', { seat: 0.3 }, { look: 'town-weaver' }),
+    ).toMatchObject({ pose: 'seated', clip: 'Sitting', seat: 0.3, pace: 1 });
+    // a seat whose height the feed doesn't say is a bench's
+    expect(look('talk', 'sitting')).toMatchObject({
+      pose: 'seated',
+      clip: 'Sitting',
+      seat: SEAT_HEIGHT,
+    });
+    expect(look('sit', 'sitting', { seat: 0.4 }).seat).toBe(0.4);
+    // the smith hammering seated sits still (no hammer pace on the chair clip)
+    expect(look('craft', 'sitting', {}, { look: 'town-smith' })).toMatchObject({
+      clip: 'Sitting',
+      pace: 1,
+    });
+    expect(look('talk', 'sitting_ground')).toMatchObject({
+      pose: 'sitting',
+      clip: 'Sitting',
+      seat: null,
+    });
+    expect(look('idle', 'lying')).toMatchObject({
+      pose: 'sleeping',
+      still: true,
+    });
+    expect(look('idle', 'lying', { dead: true }).pose).toBe('lying');
+    expect(look('talk', 'inside')).toMatchObject({
+      pose: 'inside',
+      clip: 'Opening',
+    });
+    // a posture the motion already rests in keeps the motion's look: a kneel is on the ground, a crouch on the feet
+    expect(look('pray', 'sitting_ground')).toMatchObject({
+      pose: 'kneeling',
+      layer: 'pray',
+    });
+    expect(look('gather_low', 'crouching')).toMatchObject({
+      pose: 'standing',
+      clip: 'Crouch',
+    });
+    expect(look('chop', 'standing')).toMatchObject({
+      pose: 'standing',
+      clip: 'Chopping wood',
+      seat: null,
+    });
+    // without a posture (an older feed) the table says
+    expect(motionLook('craft', FARMER).pose).toBe('standing');
+  });
+
   test('a feed without motions falls back to the activity and its label', () => {
     const cases: [Parameters<typeof fallbackMotion>, Motion][] = [
       [['idle', ''], 'idle'],
@@ -396,38 +452,69 @@ const skinnedPoints = (character: Object3D, frame: Object3D) => {
   return points;
 };
 
+async function seated(id: string, height?: number) {
+  const character = createCharacter(lookOf(id).config);
+  const rest = restOf(character);
+  const animation = await animateHumanoid(character, {
+    clips: ['Sitting'],
+    planted: new Set(['Sitting']),
+  });
+  animation.play('Sitting', { fade: 0 });
+  animation.update(0.5);
+  const world = new Group();
+  const posed = new Group();
+  world.add(posed);
+  posed.add(character);
+  const print = settle(posed, character, rest, 'seated', height);
+  holdPosture(rest, 'seated', null, print.lift);
+  const under = (bones: Set<string>) =>
+    Math.min(
+      ...skinnedPoints(character, world)
+        .filter(
+          ({ bones: on, weights }) =>
+            on.reduce(
+              (sum, bone, k) => sum + (bones.has(bone) ? weights[k] : 0),
+              0,
+            ) > 0.5,
+        )
+        .map(({ at }) => at.y),
+    );
+  return {
+    character,
+    hips: under(new Set(['Hips'])),
+    feet: under(
+      new Set(['LeftFoot', 'RightFoot', 'LeftToeBase', 'RightToeBase']),
+    ),
+  };
+}
+
 test.describe('seats', () => {
   // looks without a long robe or coat hanging under the seat
   for (const id of ['town-smith', 'band-a-hunter', 'town-child', 'town-digger'])
     test(`${id} sits with the hips on the seat`, async () => {
-      const character = createCharacter(lookOf(id).config);
-      const rest = restOf(character);
-      const animation = await animateHumanoid(character, {
-        clips: ['Sitting'],
-        planted: new Set(['Sitting']),
-      });
-      animation.play('Sitting', { fade: 0 });
-      animation.update(0.5);
-      const world = new Group();
-      const posed = new Group();
-      world.add(posed);
-      posed.add(character);
-      const print = settle(posed, character, rest, 'seated');
-      holdPosture(rest, 'seated', null, print.lift);
-      const seat = new Set(['Hips']);
-      const hips = skinnedPoints(character, world).filter(
-        ({ bones, weights }) =>
-          bones.reduce(
-            (sum, bone, k) => sum + (seat.has(bone) ? weights[k] : 0),
-            0,
-          ) > 0.5,
-      );
-      const under = Math.min(...hips.map(({ at }) => at.y));
-      expect(Math.abs(under - SEAT_HEIGHT), `hips ${under}`).toBeLessThan(0.05);
+      const { character, hips } = await seated(id);
+      expect(Math.abs(hips - SEAT_HEIGHT), `hips ${hips}`).toBeLessThan(0.05);
       // seated bodies are lifted, never tilted, and hold nothing
       showWorn(character, 'seated');
       for (const side of ['left', 'right'] as const)
         expect(holderOf(character, side).visible).toBe(false);
+    });
+
+  // the loom's stool (S1's slot: 0.3 m) is 0.15 m under an adult's chair sit: the knees come up, the feet stay down
+  for (const id of ['town-weaver', 'town-smith'])
+    test(`${id} sits on the loom's low stool with the feet on the ground`, async () => {
+      const { hips, feet } = await seated(id, 0.3);
+      expect(Math.abs(hips - 0.3), `hips ${hips}`).toBeLessThan(0.06);
+      expect(Math.abs(feet), `feet ${feet}`).toBeLessThan(0.04);
+      const bench = await seated(id);
+      expect(bench.hips - hips, 'a bench is 0.15 m higher').toBeCloseTo(
+        0.15,
+        1,
+      );
+      expect(
+        Math.abs(bench.feet),
+        `feet on a bench ${bench.feet}`,
+      ).toBeLessThan(0.04);
     });
 });
 
@@ -824,6 +911,16 @@ test.describe('on the globe', () => {
       [
         { activity: 'working', motion: 'pray' },
         { clip: 'Idle', posture: 'kneeling', layer: 'pray', prop: '' },
+      ],
+      // the feed's posture: crafting seated at the loom (hands at rest, the hammer put away)
+      [
+        {
+          activity: 'working',
+          motion: 'craft',
+          posture: 'sitting',
+          slot_height_m: 0.3,
+        },
+        { clip: 'Sitting', posture: 'seated', prop: '' },
       ],
       [
         { activity: 'resting', motion: 'sit_ground' },

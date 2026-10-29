@@ -81,8 +81,8 @@ const STEEPEST_SHIN = 80 * DEG;
 /** A sleeper's head turns this far to its side (radians, about the head's up axis). */
 const SLEEP_HEAD = 25 * DEG;
 /**
- * How high a seat is (m): the feed doesn't carry a slot's height yet, so every seat is a bench's (a camp's log seat
- * is 0.4).
+ * How high a seat is (m) when the feed doesn't say (`slot_height_m`, not on the feed yet): a bench's (a camp's log
+ * seat is 0.4, the loom's stool 0.3).
  */
 export const SEAT_HEIGHT = 0.45;
 /**
@@ -90,7 +90,7 @@ export const SEAT_HEIGHT = 0.45;
  * (0.44-0.50 measured over adults and children).
  */
 const CHAIR_SEAT = 0.47;
-/** A seated body's knees come down at most this far to reach for the ground (radians). */
+/** A seated body's knees come down (or up, on a low seat) at most this far to keep the feet on the ground (radians). */
 const SEAT_KNEE_DROP = 25 * DEG;
 const X = new Vector3(1, 0, 0);
 const UP = new Vector3(0, 1, 0);
@@ -182,18 +182,18 @@ export function holdPosture(
 
 /**
  * A seated body lifted `lift` m above the chair clip's own seat lowers its knees (thighs sloping down, shins as the
- * clip has them) so its feet come down by as much, as far as SEAT_KNEE_DROP allows.
+ * clip has them) so its feet come down by as much, as far as SEAT_KNEE_DROP allows; one set lower (a negative lift:
+ * a low stool) raises them so its feet come up by as much.
  */
 function lowerKnees(rest: Rest, lift: number) {
-  if (lift <= 0) return;
+  if (lift === 0) return;
   for (const side of ['Left', 'Right']) {
     const thigh = rest.legs.get(`${side}UpLeg`)!.bone;
     const shin = rest.legs.get(`${side}Leg`)!.bone;
     const length = shin.position.length() * thigh.getWorldScale(scaleOf).y;
-    const drop = Math.min(
-      Math.asin(Math.min(lift / length, 1)),
-      SEAT_KNEE_DROP,
-    );
+    const drop =
+      Math.sign(lift) *
+      Math.min(Math.asin(Math.min(Math.abs(lift) / length, 1)), SEAT_KNEE_DROP);
     thigh.quaternion.multiply(bend.setFromAxisAngle(X, drop));
     shin.quaternion.multiply(bend.setFromAxisAngle(X, -drop));
   }
@@ -332,9 +332,11 @@ export function settle(
   character: Object3D,
   rest: Rest,
   posture: Posture,
+  /** A seat's height (m), seated. */
+  height = SEAT_HEIGHT,
 ): Footprint {
   const lying = onBack(posture);
-  if (posture === 'seated') return seat(posed, character, rest);
+  if (posture === 'seated') return seat(posed, character, rest, height);
   posed.position.set(0, 0, 0);
   posed.rotation.set(lying ? -Math.PI / 2 : 0, 0, 0);
   character.position.set(0, lying ? -rest.hipsAt.y : 0, 0);
@@ -363,11 +365,17 @@ export function settle(
 }
 
 /**
- * A seated body: lifted (never tilted) so the chair clip's seat comes to SEAT_HEIGHT; never lowered (an adult's own
- * chair is up to 0.03 m higher), so its feet stay on the ground.
+ * A seated body: lifted or lowered (never tilted) so the chair clip's seat comes to the seat's `height` (an adult's
+ * own chair is up to 0.03 m higher than a bench, 0.15 m higher than the loom's stool); `lowerKnees` keeps its feet
+ * on the ground.
  */
-function seat(posed: Object3D, character: Object3D, rest: Rest): Footprint {
-  const lift = Math.max(SEAT_HEIGHT - CHAIR_SEAT * rest.hipsAt.y, 0);
+function seat(
+  posed: Object3D,
+  character: Object3D,
+  rest: Rest,
+  height: number,
+): Footprint {
+  const lift = height - CHAIR_SEAT * rest.hipsAt.y;
   posed.position.set(0, lift, 0);
   posed.rotation.set(0, 0, 0);
   character.position.set(0, 0, 0);
@@ -408,20 +416,22 @@ export function groundTilt(print: Footprint, under: Under, out: Quaternion) {
 }
 
 /**
- * What a resting body's shape hangs on: its posture, the action its clips fade into (a stand-in while the posture's
- * own clip is still loading) and whether that cross-fade is under way.
+ * What a resting body's shape hangs on: its posture (and its seat's height), the action its clips fade into (a
+ * stand-in while the posture's own clip is still loading) and whether that cross-fade is under way.
  */
 export interface Shape {
   posture: Posture;
+  seat: number;
   action: AnimationAction | null;
   fading: boolean;
 }
 
-/** The shape of a body playing `action` among `actions` (every clip of its mixer) in `posture`. */
+/** The shape of a body playing `action` among `actions` (every clip of its mixer) in `posture` (on a `seat` m high). */
 export function shapeOf(
   posture: Posture,
   action: AnimationAction | null,
   actions: Iterable<AnimationAction>,
+  seat = SEAT_HEIGHT,
 ): Shape {
   let fading = action !== null && action.getEffectiveWeight() < 1;
   for (const other of actions)
@@ -431,11 +441,11 @@ export function shapeOf(
       other.getEffectiveWeight() > 0
     )
       fading = true;
-  return { posture, action, fading };
+  return { posture, seat, action, fading };
 }
 
 /**
- * Whether a resting body must be measured again: its posture or its clip changed (the posture's clip arrived and
+ * Whether a resting body must be measured again: its posture, its seat or its clip changed (the posture's clip arrived and
  * replaced the stand-in), or the clips are cross-fading, or were until this frame. A settled body is not.
  */
 export function reshaped(was: Shape | null, now: Shape) {
@@ -443,6 +453,7 @@ export function reshaped(was: Shape | null, now: Shape) {
   return (
     was === null ||
     was.posture !== now.posture ||
+    was.seat !== now.seat ||
     was.action !== now.action ||
     was.fading ||
     now.fading
@@ -492,7 +503,7 @@ export function layToRest(
     return;
   }
   if (state.print === null || reshaped(was, shape))
-    state.print = settle(posed, character, rest, shape.posture);
+    state.print = settle(posed, character, rest, shape.posture, shape.seat);
   const { print } = state;
   if (shape.posture === 'seated') {
     tilt.quaternion.identity();

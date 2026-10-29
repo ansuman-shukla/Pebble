@@ -467,13 +467,17 @@ function NpcModel({
     view.hidden = inside;
 
     place(posed.current, character, state.laid);
-    layToRest(resting.current, shapeOf(posture, action, actions), {
-      character,
-      rest,
-      tilt: tilt.current,
-      posed: posed.current,
-      ground,
-    });
+    layToRest(
+      resting.current,
+      shapeOf(posture, action, actions, shown.seat ?? undefined),
+      {
+        character,
+        rest,
+        tilt: tilt.current,
+        posed: posed.current,
+        ground,
+      },
+    );
     placementOf(posed.current, character, state.laid);
     if (posture !== state.posture) {
       if (state.posture !== null) {
@@ -678,7 +682,12 @@ function Npc({
           spear: wearsSpear(look),
           dark,
         },
-        { dead: doing.activity === 'dead', gesture },
+        {
+          dead: doing.activity === 'dead',
+          gesture,
+          posture: doing.posture,
+          seat: doing.slot_height_m,
+        },
       ),
     [doing, look, citizen.region, dark, gesture],
   );

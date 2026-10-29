@@ -79,6 +79,7 @@ const doingOf = ({
   motion,
   posture,
   slot_heading,
+  slot_height_m,
 }: Doing): Doing => ({
   activity,
   action_label,
@@ -86,6 +87,7 @@ const doingOf = ({
   motion,
   posture,
   slot_heading,
+  slot_height_m,
 });
 
 export interface Track {

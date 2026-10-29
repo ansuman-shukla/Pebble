@@ -11,6 +11,7 @@
  */
 import type { Activity } from './live-contract';
 import type { HandPropKind } from '@/lib/world/assets';
+import { SEAT_HEIGHT } from '@/lib/world/rest-posture';
 
 /** The feed's motion vocabulary (backend `app/sim/motion.py`). */
 export const MOTIONS = [
@@ -47,7 +48,7 @@ export const MOTIONS = [
 export type Motion = (typeof MOTIONS)[number];
 
 /** How the feed says the body rests (backend `Posture`). */
-type FedPosture =
+export type FedPosture =
   'standing' | 'crouching' | 'sitting' | 'sitting_ground' | 'lying' | 'inside';
 
 /** The gestures a citizen makes (backend `GestureKind`): the feed's `gestured` events name them. */
@@ -69,6 +70,11 @@ export interface FedBody {
   posture?: FedPosture;
   /** The seat's or work slot's facing (degrees, the heading convention), once slots exist. */
   slot_heading?: number | null;
+  /**
+   * How high the seat's top is (m, the slot's `height_m`: a bench 0.45, the loom's stool 0.3), once the feed carries
+   * it (S1's slots have it, the feed doesn't yet): a seat without it is a bench's (`SEAT_HEIGHT`).
+   */
+  slot_height_m?: number | null;
 }
 
 /** The clips the live citizens use (a subset of Polyfork's CLIP_NAMES). */
@@ -151,6 +157,8 @@ export interface MotionLook {
   pose: BodyPose;
   /** Whether the clip is frozen on its first frame (sleepers and the dead lie still). */
   still: boolean;
+  /** How high the seat is (m) for a seated body, else null. */
+  seat: number | null;
   prop: HeldProp | null;
   layer: Layer | null;
 }
@@ -225,15 +233,45 @@ const TABLE: Record<Motion, Entry> = {
 };
 
 /**
+ * The poses that rest the way each of the feed's postures says, the first the one a body takes when its motion rests
+ * some other way (a crouch is on the feet: the clip crouches; a kneel is on the ground; the dead lie too).
+ */
+const FED_POSES: Record<FedPosture, readonly BodyPose[]> = {
+  standing: ['standing'],
+  crouching: ['standing'],
+  sitting: ['seated'],
+  sitting_ground: ['sitting', 'kneeling'],
+  lying: ['sleeping', 'lying'],
+  inside: ['inside'],
+};
+/** The plain clip of a body resting in each pose. */
+const REST_CLIPS: Record<BodyPose, NpcClip> = {
+  standing: 'Idle',
+  seated: 'Sitting',
+  sitting: 'Sitting',
+  kneeling: 'Idle',
+  sleeping: 'Idle',
+  lying: 'Idle',
+  inside: 'Opening',
+};
+
+/**
  * The look of `motion` for this bearer: the table's entry, with what differs by person (10 §4.5): a guard folds its
  * arms (a torch at night), band folk fish with a spear and knap crouching with a stone, the smith hammers at the
  * anvil, the merchant talks a sale, a spear-bearer thrusts instead of punching (and keeps its own spear), the dead
- * lie straight, a gesture names its kind.
+ * lie straight, a gesture names its kind. The feed's `posture` says where the body rests (on a seat at the slot's
+ * height, on the ground, lying, inside): a motion the table rests some other way rests the feed's way, with that
+ * pose's plain clip (the weaver at the loom sits on its stool).
  */
 export function motionLook(
   motion: Motion,
   bearer: Bearer,
-  options: { dead?: boolean; gesture?: GestureKind | null } = {},
+  options: {
+    dead?: boolean;
+    gesture?: GestureKind | null;
+    posture?: FedPosture | null;
+    seat?: number | null;
+  } = {},
 ): MotionLook {
   const entry = { ...TABLE[motion] };
   const band = bearer.region !== 'town';
@@ -263,16 +301,28 @@ export function motionLook(
     Object.assign(entry, { clip: 'Talking', prop: null });
   if (motion === 'attack' && bearer.spear)
     Object.assign(entry, { clip: 'Pushing' });
-  if (motion === 'lie' && options.dead) entry.pose = 'lying';
+  const poses = options.posture && FED_POSES[options.posture];
+  if (poses && !poses.includes(entry.pose ?? 'standing')) {
+    const pose = poses[0];
+    Object.assign(entry, {
+      pose,
+      clip: REST_CLIPS[pose],
+      pace: 1,
+      still: pose === 'sleeping',
+    });
+  }
+  if (entry.pose === 'sleeping' && options.dead) entry.pose = 'lying';
   if (motion === 'gesture' && options.gesture) entry.layer = options.gesture;
   // a look that holds its own spear keeps it instead of being handed another
   if (entry.prop?.kind === 'spear' && bearer.spear) entry.prop = null;
+  const pose = entry.pose ?? 'standing';
   return {
     motion,
     clip: entry.clip,
     pace: entry.pace ?? 1,
-    pose: entry.pose ?? 'standing',
+    pose,
     still: entry.still ?? false,
+    seat: pose === 'seated' ? (options.seat ?? SEAT_HEIGHT) : null,
     prop: entry.prop ?? null,
     layer: entry.layer ?? null,
   };
