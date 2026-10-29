@@ -7,7 +7,7 @@ LISTENs on that channel, keeps a replayed state per followed run (latest snapsho
 ```
  engine ── NOTIFY {run, tick, seqs} ──▶ listener thread ── fetch events after the last seq ──▶ replay per tick
                                               │                                                     │
-             WebSocket /api/v1/live ◀── queue ◀── "event" messages (said, died, action_started/finished)
+             WebSocket /api/v1/live ◀── queue ◀── "event" messages (public events with a line worth telling)
                                               ◀── one "tick" message per tick (citizens, animals, fires)
 ```
 
@@ -30,21 +30,27 @@ from sqlalchemy import Engine
 from sqlmodel import Session
 
 from app.db.models import Event, Run
+from app.observability.lines import GROUP_NAMES, Importance, Told, tell
 from app.observability.replay import ReplayEvent, ReplayState, apply_event, replay
 from app.observability.store import EVENTS_CHANNEL, events_after, latest_run, latest_snapshot
 from app.services.entities import (
     AnimalEntity,
     CitizenEntity,
     FireEntity,
+    Position,
     citizen_entity,
+    position,
     snapshot_before,
     wild_entities,
 )
 from app.sim.clock import town_clock
+from app.sim.fauna import SPECIES
 from app.sim.snapshot import SimSnapshot
 
 log = logging.getLogger("pebble.live")
 
+# sent whatever their importance (clients follow actions and speech); any other public event is sent when its line
+# is worth telling (importance 1-3)
 LIVE_EVENT_TYPES = frozenset({"said", "died", "action_started", "action_finished"})
 LISTEN_TIMEOUT_S = 1.0  # how often the listener looks at the clock while no ticks arrive (pause, speed changes)
 RUN_SWITCHED = None  # queued to clients following the latest run when a newer run starts
@@ -67,9 +73,12 @@ class LiveState(BaseModel):
 
 class LiveEventDetail(BaseModel):
     id: str
-    type: str  # said | died | action_started | action_finished
+    type: str  # an event type (app.observability.events.EventType)
     actor_id: str | None
     payload: dict[str, Any]  # typed per event type: app.observability.events.PAYLOAD_TYPES
+    line: str  # what happened in one line, names not ids (app.observability.lines)
+    importance: Importance  # 3 death, attack, theft seen, judgement ... 0 hidden (10-world-v1 §5.4)
+    position: Position | None  # where it happened (fly-to), when it happened somewhere
 
 
 class LiveEvent(BaseModel):
@@ -120,14 +129,48 @@ class RunFeed:
         for row in events_after(session, self.run_id, self.last_seq):
             apply_event(self.state, _replayable(row))
             self.last_seq = row.seq
-            if row.type in LIVE_EVENT_TYPES and row.visibility == "public":
-                detail = LiveEventDetail(id=row.id, type=row.type, actor_id=row.actor_id, payload=row.payload)
+            detail = self.detail(row) if row.visibility == "public" and row.type != "tick_summary" else None
+            if detail is not None and (row.type in LIVE_EVENT_TYPES or detail.importance > 0):
                 messages.append(LiveEvent(type="event", run_id=self.run_id, tick=row.tick, event=detail))
             elif row.type == "tick_summary":
                 messages.append(self.message("tick"))
         if not messages and clock_changed:
             messages.append(self.message("tick"))
         return messages
+
+    def detail(self, row: Event) -> LiveEventDetail:
+        """The event as spectators get it: its payload plus its line, importance and place."""
+        told = Told(type=row.type, actor_kind=row.actor_kind, actor_id=row.actor_id, payload=row.payload)
+        line, importance = tell(told, self.name)
+        return LiveEventDetail(
+            id=row.id,
+            type=row.type,
+            actor_id=row.actor_id,
+            payload=row.payload,
+            line=line,
+            importance=importance,
+            position=self.where(row),
+        )
+
+    def name(self, ref: str) -> str:
+        """A citizen's name, "a deer" for an animal, a group's name, else the id in plain words."""
+        if (citizen := self.state.citizens.get(ref)) is not None:
+            return citizen.name
+        if (animal := self.state.animals.get(ref)) is not None:
+            return SPECIES[animal.kind].one
+        return GROUP_NAMES.get(ref, ref.replace("_", " "))
+
+    def where(self, row: Event) -> Position | None:
+        """Where the payload says (fires, spawns), else where the actor is (after the event)."""
+        payload = row.payload
+        if "position" in payload and "height_m" in payload:
+            x, y, z = payload["position"]
+            return position((x, y, z), payload["height_m"])
+        if (citizen := self.state.citizens.get(row.actor_id or "")) is not None:
+            return position(citizen.position, citizen.height_m)
+        if (animal := self.state.animals.get(row.actor_id or "")) is not None:
+            return position(animal.position, animal.height_m)
+        return None
 
 
 def load_feed(session: Session, run: Run) -> RunFeed:
