@@ -22,7 +22,11 @@ import type { GlobePlayerState } from './globe-player';
 import { Label } from '@/components/world/labels';
 import { MAX_FRAME, smoothing } from '@/components/world/player/motion';
 import type { LiveCitizen } from '@/lib/live/live-contract';
-import type { Speech } from '@/lib/live/live-state';
+import {
+  type Speech,
+  type TickClock,
+  tickElapsed,
+} from '@/lib/live/live-state';
 import {
   follow,
   moveOn,
@@ -339,6 +343,7 @@ function Npc({
   labels,
   rate,
   replay,
+  tickElapsed,
   peopleRef,
   views,
   followId,
@@ -353,6 +358,8 @@ function Npc({
   rate: number;
   /** A replayed moment: drawn where it says, not a tick behind (no tick follows). */
   replay: boolean;
+  /** Game seconds into the current tick now (a citizen first seen mid-tick is drawn that far along). */
+  tickElapsed: () => number;
   peopleRef: RefObject<Map<string, Vector3>>;
   views: NpcViews;
   followId: string | null;
@@ -363,7 +370,9 @@ function Npc({
   if (!look) throw new Error(`unknown citizen look ${citizen.look}`);
   const group = useRef<Group>(null);
   const [mounted, setMounted] = useState(false);
-  const [firstTrack] = useState(() => newTrack(citizen, radius, replay));
+  const [firstTrack] = useState(() =>
+    newTrack(citizen, radius, replay, tickElapsed()),
+  );
   const trackRef = useRef<Track>(firstTrack);
   const viewRef = useRef<NpcView>(newView(citizen));
   // what the body is shown doing: the frame's activity, or a moving one while it walks there (drawn-track)
@@ -489,6 +498,7 @@ export function GlobeNpcs({
   citizens,
   speed,
   paused,
+  tickClock,
   replay = false,
   speech,
   terrain,
@@ -503,6 +513,8 @@ export function GlobeNpcs({
   /** The feed's clock: game seconds per real second, and whether it is paused. */
   speed: number;
   paused: boolean;
+  /** How far into the current tick the feed was, and when. */
+  tickClock: TickClock;
   /** The citizens of a replayed moment (`?tick=`), which no tick follows. */
   replay?: boolean;
   speech: Speech[];
@@ -523,6 +535,10 @@ export function GlobeNpcs({
     return byActor;
   }, [speech]);
 
+  // read when a citizen is first drawn (not during later renders)
+  const elapsed = () =>
+    tickElapsed({ tickClock, speed, paused }, performance.now());
+
   return (
     <>
       {citizens.map((citizen) => (
@@ -535,6 +551,7 @@ export function GlobeNpcs({
           labels={labels}
           rate={paused ? 0 : speed}
           replay={replay}
+          tickElapsed={elapsed}
           peopleRef={peopleRef}
           views={views}
           followId={followId}

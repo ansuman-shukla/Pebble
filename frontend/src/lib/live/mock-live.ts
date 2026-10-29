@@ -445,6 +445,8 @@ export class MockLiveServer {
   /** Like a new engine run: tick 0 is 08:00 on day 0. */
   private tick = 0;
   private clock: MockClock = { speed: 1, paused: false };
+  /** When (performance.now) the current tick began counting: its tick, or the last clock change (it restarts the timer). */
+  private beat = performance.now();
   private timer: ReturnType<typeof setInterval> | null = null;
   private sockets = new Set<MockSocket>();
   private states: PersonState[];
@@ -490,6 +492,7 @@ export class MockLiveServer {
       tick: this.tick,
       day,
       time,
+      tick_elapsed_s: this.tickElapsed(),
       citizens: this.citizens(),
       animals: this.wild.animals(isDark(this.tick)),
       fires: this.wild.fires(isDark(this.tick)),
@@ -566,13 +569,22 @@ export class MockLiveServer {
     this.timer = null;
   }
 
+  /** Game seconds of the current tick passed, like the backend's `tick_elapsed_s`. */
+  private tickElapsed() {
+    if (this.clock.paused) return 0;
+    const seconds = ((performance.now() - this.beat) / 1000) * this.clock.speed;
+    return Math.min(seconds, TICK_SECONDS);
+  }
+
   private schedule() {
     this.stop();
+    this.beat = performance.now();
     if (this.clock.paused || this.sockets.size === 0) return;
     this.timer = setInterval(() => this.step(), tickMs(this.clock.speed));
   }
 
   private step() {
+    this.beat = performance.now();
     this.tick += 1;
     const night = isNight(this.tick);
     for (const state of this.states) this.advance(state, night);
@@ -658,6 +670,7 @@ export class MockLiveServer {
       ...this.clockWords(),
       speed: this.clock.speed,
       paused: this.clock.paused,
+      tick_elapsed_s: this.tickElapsed(),
       citizens: this.citizens(),
       animals: this.wild.animals(isDark(this.tick)),
       fires: this.wild.fires(isDark(this.tick)),

@@ -9,6 +9,7 @@ import type {
 } from '../../src/lib/live/live-contract';
 import {
   applyEntities,
+  tickElapsed,
   applyMessage,
   EMPTY_LIVE,
   feedMinutes,
@@ -16,6 +17,7 @@ import {
   SPEECH_MS,
   speedWords,
 } from '../../src/lib/live/live-state';
+import { newTrack } from '../../src/lib/live/drawn-track';
 import { MockLiveServer } from '../../src/lib/live/mock-live';
 import { activityWords, npcLook } from '../../src/lib/live/npc-activity';
 import { advance, citizenPath, pointAt } from '../../src/lib/live/walk-path';
@@ -78,6 +80,7 @@ function frame(
     tick,
     day: 0,
     time: '08:00',
+    tick_elapsed_s: 0,
     speed: 1,
     paused: false,
     citizens,
@@ -133,15 +136,22 @@ test('frames replace the citizens; stale ticks are ignored; a snapshot or a new 
     tick: 6,
     day: 0,
     time: '08:06',
+    tick_elapsed_s: 0,
     animals: [],
     fires: [],
   };
-  expect(applyEntities(state, { ...answer, citizens: [entity()] })).toBe(state);
-  const later = applyEntities(state, {
-    ...answer,
-    tick: 7,
-    citizens: [entity({ action: 'eat', activity: 'eating' })],
-  });
+  expect(applyEntities(state, { ...answer, citizens: [entity()] }, 0)).toBe(
+    state,
+  );
+  const later = applyEntities(
+    state,
+    {
+      ...answer,
+      tick: 7,
+      citizens: [entity({ action: 'eat', activity: 'eating' })],
+    },
+    0,
+  );
   expect(later.citizens[0].activity).toBe('eating');
 });
 
@@ -403,4 +413,44 @@ test('the mock feed carries the spectator fields: motion, why, needs, purse, ran
     expect(['grazing', 'wandering', 'prowling']).toContain(animal.goal); // what it does once there
   }
   expect(animals.every((animal) => animal.gait === 'walk')).toBe(true);
+});
+
+test('a walker first seen mid-tick is drawn as far along its path as the tick has gone', () => {
+  const radius = 2000;
+  const start = directionFromLatLon(35, 12);
+  const end = directionFromLatLon(35, 12.02); // ~10 m east
+  const walker = entity({
+    activity: 'walking',
+    position: { unit: end.toArray(), height_m: 8, lat: 35, lon: 12.02 },
+    route: [
+      { unit: start.toArray(), height_m: 8, t_s: 0 },
+      { unit: end.toArray(), height_m: 8, t_s: 40 },
+    ],
+    speed_mps: 0.25,
+  });
+  // the feed said 10 s into the tick 2 real s ago at ×5: 20 game s, half way along
+  let state = applyMessage(
+    EMPTY_LIVE,
+    { ...frame('snapshot', 9, [walker]), speed: 5, tick_elapsed_s: 10 },
+    1000,
+  );
+  expect(tickElapsed(state, 3000)).toBeCloseTo(20);
+  expect(
+    newTrack(walker, radius, false, tickElapsed(state, 3000)).path.time,
+  ).toBeCloseTo(20);
+  expect(newTrack(walker, radius, false, 59).path.time).toBe(40); // never past where the tick says it is
+  expect(newTrack(walker, radius).path.time).toBe(0);
+  expect(tickElapsed(state, 60_000)).toBe(60); // a late tick: the end of this one
+  // paused: what was said stays; a same-tick clock frame re-anchors
+  state = applyMessage(
+    state,
+    {
+      ...frame('tick', 9, [walker]),
+      speed: 5,
+      paused: true,
+      tick_elapsed_s: 30,
+    },
+    4000,
+  );
+  expect(tickElapsed(state, 9000)).toBe(30);
 });

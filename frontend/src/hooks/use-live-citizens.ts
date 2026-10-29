@@ -54,7 +54,7 @@ const RETRY_MAX_MS = 15_000;
 const NEW_RUN_RETRY_MS = 50;
 
 type Action =
-  | { type: 'entities'; view: EntitiesAnswer }
+  | { type: 'entities'; view: EntitiesAnswer; now: number }
   | { type: 'message'; message: LiveMessage; now: number }
   | { type: 'clock'; change: ClockChange }
   | { type: 'prune'; now: number };
@@ -62,7 +62,7 @@ type Action =
 function reduce(state: LiveState, action: Action): LiveState {
   switch (action.type) {
     case 'entities':
-      return applyEntities(state, action.view);
+      return applyEntities(state, action.view, action.now);
     case 'message':
       return applyMessage(state, action.message, action.now);
     case 'clock':
@@ -124,10 +124,17 @@ export function useLiveCitizens(
         retry = window.setTimeout(open, delay);
       };
     };
-    if (server) dispatch({ type: 'entities', view: server.entities() });
+    if (server)
+      dispatch({
+        type: 'entities',
+        view: server.entities(),
+        now: performance.now(),
+      });
     else
       fetchEntities().then(
-        (view) => !disposed && dispatch({ type: 'entities', view }),
+        (view) =>
+          !disposed &&
+          dispatch({ type: 'entities', view, now: performance.now() }),
         () => undefined, // the socket's snapshot fills in
       );
     // deferred: StrictMode's mount-unmount-mount in dev would otherwise close a socket still connecting (a warning)
