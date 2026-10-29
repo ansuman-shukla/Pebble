@@ -104,15 +104,32 @@ vec4 groundLook(int layer, vec3 p, vec3 tint, float fw, vec4 g) {
     c *= 0.86 + 0.28 * gFine(p + 8.0, 12.0, fw);
     relief = 0.35 + mottle * 0.2 + pebble * 0.6;
   } else if (layer == 3) {
-    // gravel: small stones of mixed tones (cells) packed in darker grit
-    vec3 cells = gCells(p * 13.0);
-    float keep = 1.0 - smoothstep(0.25, 0.6, fw * 13.0);
-    float stone = mix(0.5, smoothstep(0.0, 0.18, cells.y - cells.x), keep);
-    float tone = mix(0.5, cells.z, keep);
-    c = mix(gravel_light, gravel_warm, smoothstep(0.45, 0.8, tone)) * (0.85 + 0.25 * tone);
-    c = mix(gravel_dark, c, 0.35 + 0.65 * stone);
-    c *= 0.88 + 0.24 * g.z;
-    relief = stone;
+    // gravel: loose rounded stones of uneven sizes and tones (cells, some left empty) in darker grit, mottled in
+    // clumps that still show where the stones are too small to see
+    float clump = gFine(p + 6.0, 4.3, fw);
+    float mottle = g.y * 0.45 + g.z * 0.35 + clump * 0.2;
+    float grit = gFine(p + 2.0, 31.0, fw);
+    c = mix(gravel_grit, gravel_mid, smoothstep(0.2, 0.85, mottle)) * (0.9 + 0.2 * grit);
+    float stones = 0.0;
+    float kb = 1.0 - smoothstep(0.2, 0.5, fw * 9.0);
+    if (kb > 0.0) {
+      vec3 big = gCells(p * 9.0);
+      float r = 0.26 + 0.2 * fract(big.z * 7.0) + 0.06 * (grit - 0.5);
+      float stone = (1.0 - smoothstep(r - 0.06, r + 0.03, big.x)) * step(0.15, big.z) * kb;
+      vec3 tone = mix(mix(gravel_light, gravel_warm, smoothstep(0.4, 0.8, fract(big.z * 13.0))), gravel_dark, step(0.85, fract(big.z * 29.0)));
+      c = mix(c, tone * (0.8 + 0.3 * smoothstep(r, 0.0, big.x)), stone);
+      stones = stone;
+    }
+    float ks = 1.0 - smoothstep(0.2, 0.5, fw * 23.0);
+    if (ks > 0.0) {
+      vec3 small = gCells(p * 23.0 + 5.0);
+      float stone = (1.0 - smoothstep(0.24, 0.34, small.x)) * step(0.25, small.z) * ks * (1.0 - stones);
+      c = mix(c, mix(gravel_mid, gravel_light, small.z) * 1.05, stone);
+      stones += stone * 0.6;
+    }
+    // far away the stones and grit average out into the mottle
+    c = mix(c, mix(gravel_far_dark, gravel_far_light, smoothstep(0.2, 0.85, mottle)), 1.0 - max(kb, ks));
+    relief = mix(0.5, 0.15 + 0.85 * stones, max(kb, ks)) + (clump - 0.5) * 0.4;
   } else if (layer == 4) {
     // sand: pale drifts with wind ripples
     float keep = 1.0 - smoothstep(0.15, 0.4, fw * 1.2);
@@ -186,11 +203,15 @@ export const GROUND_STYLE: GroundStyle = {
       bump: 0.05,
     },
     gravel: {
-      base: '#978d7c',
+      base: '#837767',
       colors: {
-        dark: '#7a7062',
-        light: '#b3a994',
-        warm: '#a08868',
+        grit: '#665b4d',
+        mid: '#8a7f70',
+        dark: '#6b655d',
+        light: '#ada391',
+        warm: '#a2866a',
+        far_dark: '#6f6455',
+        far_light: '#978a77',
       },
       roughness: 0.92,
       bump: 0.07,
