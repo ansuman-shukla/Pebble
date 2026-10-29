@@ -45,6 +45,7 @@ SlotKind = Literal["seat", "mat", "inside", "stand", "queue", "work"]
 SlotPosture = Literal["standing", "sitting", "sitting_ground", "lying", "inside"]
 
 PERSONAL_M = 0.8  # no two bodies end an action closer than this (D117)
+LEGS_M = 0.7  # the legs of someone sitting or lying reach this far before them (kept clear like a body)
 OCCUPY_M = 0.05  # a body this close to its claim is on it
 APPROACH_M = 8.0  # a mat (sleep) or a stand freed in a queue is taken this close, and walked to at the tick's end
 SEAT_M = 4.0  # rest takes a free seat this close
@@ -351,22 +352,41 @@ def release(core: SimCore, citizen: Citizen) -> None:
 # --- what is free ---
 
 
+def _down(citizen: Citizen) -> bool:
+    """Sitting or lying: resting or asleep (their legs stretch out before them)."""
+    return citizen.body.asleep or (citizen.action is not None and citizen.action.kind == "rest")
+
+
+def legs(world: SimWorld, at: Vec3, heading_deg: float) -> Vec3:
+    """Where the legs of a body sitting or lying at a spot, facing that way, reach: kept clear like a body."""
+    return step_towards(at, (180.0 - heading_deg) % 360.0, LEGS_M, world.radius_m)
+
+
 def _bodies(core: SimCore, but: str) -> list[Vec3]:
-    """Where everyone else stands, sits or lies (walkers pass through; those inside a house are out of the way)."""
-    return [
-        other.position
-        for other in core.living()
-        if other.id != but and not is_moving(other) and not is_inside(core, other)
-    ]
+    """Where everyone else stands, sits or lies, and the legs of those sitting or lying (walkers pass through; those
+    inside a house are out of the way)."""
+    spots: list[Vec3] = []
+    for other in core.living():
+        if other.id == but or is_moving(other) or is_inside(core, other):
+            continue
+        spots.append(other.position)
+        if _down(other):
+            spots.append(legs(core.world, other.position, other.heading_deg))
+    return spots
 
 
 def _taken(core: SimCore, but: str) -> list[Vec3]:
-    """Every spot a body or a claim keeps, except the citizen's own (claims inside a house keep none)."""
+    """Every spot a body or a claim keeps (a seat's or mat's with the legs before it), except the citizen's own
+    (claims inside a house keep none)."""
     spots = _bodies(core, but)
     lay = layout(core)
     for citizen_id, claimed in slot_state(core).claims.items():
-        if citizen_id != but and (claimed.slot is None or lay.slots[claimed.slot].kind != "inside"):
-            spots.append(claimed.position)
+        slot = lay.slots[claimed.slot] if claimed.slot is not None else None
+        if citizen_id == but or (slot is not None and slot.kind == "inside"):
+            continue
+        spots.append(claimed.position)
+        if slot is not None and slot.posture in ("sitting", "sitting_ground", "lying"):
+            spots.append(legs(core.world, slot.position, slot.heading_deg))
     return spots
 
 
@@ -681,6 +701,8 @@ def _keep_apart(core: SimCore) -> None:
         claimed = state.claims.get(citizen.id)
         if claimed is not None and core.distance_m(citizen.position, claimed.position) <= OCCUPY_M:
             placed.append(citizen.position)
+            if _down(citizen):  # nobody stands on their legs either
+                placed.append(legs(core.world, citizen.position, citizen.heading_deg))
         else:
             loose.append(citizen)
     loose.sort(key=lambda c: (c.id in core.strides, c.id))  # who stood there first keeps the spot
@@ -692,6 +714,8 @@ def _keep_apart(core: SimCore) -> None:
         if spot is not None and step_to(core, citizen, spot):
             release(core, citizen)  # a ring spot of their own now: any claim of theirs elsewhere is let go
         placed.append(citizen.position)
+        if _down(citizen):
+            placed.append(legs(core.world, citizen.position, citizen.heading_deg))
 
 
 def step_to(core: SimCore, citizen: Citizen, spot: Vec3, straight: bool = False) -> bool:

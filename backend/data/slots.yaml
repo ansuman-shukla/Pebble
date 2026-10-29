@@ -92,11 +92,11 @@ kinds:
     - {name: rope, kind: work, task: ring bell, at: [0, 2.8], heading: 180, words: at the bell rope}
 
   # --- camps ---
-  fire_pit: # 8 seats on 4 log seats, a tend stand and 3 stands round the pit, 10 mats beyond them, feet to the fire
+  fire_pit: # 8 seats on 4 log seats, a tend stand and 2 stands round the pit in the gaps between the logs (0.8 m
+    # off the sitters' legs), 10 mats beyond the seats, feet to the fire and 0.8 m off the seats
     - {name: tend, kind: stand, polar: [1.2, 65]}
-    - {name: stand-1, kind: stand, polar: [1.4, 140]}
-    - {name: stand-2, kind: stand, polar: [1.4, 200]}
-    - {name: stand-3, kind: stand, polar: [1.4, 335]}
+    - {name: stand-1, kind: stand, polar: [1.4, 205]}
+    - {name: stand-2, kind: stand, polar: [1.4, 240]}
     - {name: seat-1, kind: seat, polar: [2.2, 9.0], height_m: 0.4, words: on a log by the fire}
     - {name: seat-2, kind: seat, polar: [2.2, 31.0], height_m: 0.4, words: on a log by the fire}
     - {name: seat-3, kind: seat, polar: [2.2, 99.0], height_m: 0.4, words: on a log by the fire}
@@ -105,21 +105,21 @@ kinds:
     - {name: seat-6, kind: seat, polar: [2.2, 171.0], height_m: 0.4, words: on a log by the fire}
     - {name: seat-7, kind: seat, polar: [2.2, 289.0], height_m: 0.4, words: on a log by the fire}
     - {name: seat-8, kind: seat, polar: [2.2, 311.0], height_m: 0.4, words: on a log by the fire}
-    - {name: mat-1, kind: mat, polar: [3.2, 0], words: on a mat by the fire}
-    - {name: mat-2, kind: mat, polar: [3.2, 20], words: on a mat by the fire}
-    - {name: mat-3, kind: mat, polar: [3.2, 75], words: on a mat by the fire}
-    - {name: mat-4, kind: mat, polar: [3.2, 92], words: on a mat by the fire}
-    - {name: mat-5, kind: mat, polar: [3.2, 135], words: on a mat by the fire}
-    - {name: mat-6, kind: mat, polar: [3.2, 155], words: on a mat by the fire}
-    - {name: mat-7, kind: mat, polar: [3.2, 175], words: on a mat by the fire}
-    - {name: mat-8, kind: mat, polar: [3.2, 290], words: on a mat by the fire}
-    - {name: mat-9, kind: mat, polar: [3.2, 310], words: on a mat by the fire}
-    - {name: mat-10, kind: mat, polar: [3.2, 340], words: on a mat by the fire}
-  lean_to: # 2 mats under the roof, 0.9 m apart, heads in, and 2 stands before it
+    - {name: mat-1, kind: mat, polar: [3.8, 0], words: on a mat by the fire}
+    - {name: mat-2, kind: mat, polar: [3.8, 20], words: on a mat by the fire}
+    - {name: mat-3, kind: mat, polar: [3.8, 65], words: on a mat by the fire}
+    - {name: mat-4, kind: mat, polar: [3.8, 83], words: on a mat by the fire}
+    - {name: mat-5, kind: mat, polar: [3.8, 135], words: on a mat by the fire}
+    - {name: mat-6, kind: mat, polar: [3.8, 155], words: on a mat by the fire}
+    - {name: mat-7, kind: mat, polar: [3.8, 175], words: on a mat by the fire}
+    - {name: mat-8, kind: mat, polar: [3.8, 290], words: on a mat by the fire}
+    - {name: mat-9, kind: mat, polar: [3.8, 310], words: on a mat by the fire}
+    - {name: mat-10, kind: mat, polar: [3.8, 340], words: on a mat by the fire}
+  lean_to: # 2 mats under the roof, 0.9 m apart, heads in, and 2 stands before its front corners (off the fire's mats)
     - {name: mat-1, kind: mat, at: [-0.45, -0.2], heading: 0, words: under the lean-to}
     - {name: mat-2, kind: mat, at: [0.45, -0.2], heading: 0, words: under the lean-to}
-    - {name: stand-1, kind: stand, at: [-0.9, 2.0], heading: 180}
-    - {name: stand-2, kind: stand, at: [0.9, 2.0], heading: 180}
+    - {name: stand-1, kind: stand, at: [-1.6, 1.6], heading: 180}
+    - {name: stand-2, kind: stand, at: [1.6, 1.6], heading: 180}
 
 placements: # per placement: slots instead of its kind's (replace) or besides them
   west-gate: # faces into the town: its guards stand on the outer side, facing out

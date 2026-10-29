@@ -12,6 +12,7 @@ from app.sim.doing import water_within_reach
 from app.sim.ground_speed import ground_mps
 from app.sim.simulation import Simulation
 from app.sim.slots import (
+    LEGS_M,
     PERSONAL_M,
     SLOTS,
     Slot,
@@ -21,6 +22,7 @@ from app.sim.slots import (
     crowded,
     held_slot,
     layout,
+    legs,
     load_slots_spec,
     ring_bearings,
     ring_spot,
@@ -74,6 +76,15 @@ def test_the_layout_keeps_personal_space_and_stands_on_walkable_ground(sim_world
         if sim_world.distance_m(a.position, b.position) < 0.8  # a body's personal space (10 §4.3)
     ]
     assert close == [] and PERSONAL_M == 0.8
+    down = [slot for slot in spots if slot.posture in ("sitting", "sitting_ground", "lying")]
+    on_legs = [
+        (sitter.id, other.id)
+        for sitter in down
+        for other in spots
+        if other is not sitter
+        and sim_world.distance_m(legs(sim_world, sitter.position, sitter.heading_deg), other.position) < PERSONAL_M
+    ]
+    assert on_legs == []  # no stand, seat or mat on a sitter's or lier's legs (the fire's stands sat on them)
     for slot in spots:
         if slot.kind in ("stand", "queue", "work") and sim_world.town_point(slot.position) is not None:
             assert sim_world.town.walk.is_walkable(*sim_world.town_point(slot.position) or (0, 0)), slot.id
@@ -435,3 +446,22 @@ def test_a_crowd_round_one_point_spreads_a_metre_apart_from_a_pace_off(new_sim: 
         assert min(gaps) >= 0.99  # a metre apart on a ring, not 0.77 m (8 round 1 m) as a scrum
     assert all(sim.world.distance_m(a, b) >= PERSONAL_M for index, a in enumerate(spots) for b in spots[index + 1 :])
     assert [ring_bearings(r) for r in (1.2, 2.0, 2.8, 3.6)] == [7, 12, 17, 22]
+
+
+def test_nobody_stays_standing_on_a_sitters_legs(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    sitter = sim.add_citizen(make_spec("sitter", at=(16.0, 53.5)))
+    WorldApi(sim, sitter.id).rest(30)
+    sim.step()
+    seat = _slot(sim, sitter)
+    feet = legs(sim.world, seat.position, seat.heading_deg)
+    assert sim.world.distance_m(feet, seat.position) == pytest.approx(LEGS_M, abs=0.01)
+    x, z = sim.world.town_point(feet) or (0.0, 0.0)
+    comer = sim.add_citizen(make_spec("comer", at=(x, z)))  # 0.7 m in front of the sitter: on their legs
+    assert sim.world.distance_m(comer.position, sitter.position) < PERSONAL_M + 0.01
+    sim.step()
+    assert sim.world.distance_m(comer.position, feet) >= PERSONAL_M  # stepped off them
+    assert sitter.position == seat.position
+    assert ring_spot(sim.core, comer, sitter.position, with_centre=False) is not None
+    spot = ring_spot(sim.core, comer, sitter.position, with_centre=False)
+    assert spot is not None and sim.world.distance_m(spot, feet) >= PERSONAL_M  # ring spots keep off them too
