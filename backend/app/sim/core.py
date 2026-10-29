@@ -168,15 +168,22 @@ class SimCore:
         body.health = max(0.0, body.health - amount)
         seq = self.emit("injured", Injured(amount=round(amount, 2), cause=cause), actor=citizen, cause_seq=cause_seq)
         if body.health <= 0:
-            body.alive, body.asleep, body.cause_of_death = False, False, cause
-            died = self.emit("died", Died(cause=cause), actor=citizen, cause_seq=seq)
-            if citizen.action is not None:
-                self.end_action(citizen, "interrupted", "Everything goes dark.", cause_seq=died)
-            citizen.in_view, citizen.animals_in_view, citizen.threats = set(), set(), set()
-            self.hurt.pop(citizen.id, None)
+            self.die(citizen, cause, seq)
         else:
             self.hurt[citizen.id] = (words, seq)
         return seq
+
+    def die(self, citizen: Citizen, cause: str, cause_seq: int | None = None) -> int:
+        """The citizen dies of the cause (a `died` event); the one place a death ends the running action, so whoever
+        set off the death (an eat that made them sick, a blow) must not end it again."""
+        body = citizen.body
+        body.alive, body.asleep, body.cause_of_death = False, False, cause
+        died = self.emit("died", Died(cause=cause), actor=citizen, cause_seq=cause_seq)
+        if citizen.action is not None:
+            self.end_action(citizen, "interrupted", "Everything goes dark.", cause_seq=died)
+        citizen.in_view, citizen.animals_in_view, citizen.threats = set(), set(), set()
+        self.hurt.pop(citizen.id, None)
+        return died
 
     def carried_kg(self, citizen: Citizen) -> float:
         return sum(ITEMS[item].weight_kg * count for item, count in citizen.inventory.items())

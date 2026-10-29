@@ -10,7 +10,6 @@ import numpy as np
 
 from app.observability.events import (
     CitizenSpawned,
-    Died,
     EventDraft,
     ItemLocation,
     ItemMoved,
@@ -347,9 +346,7 @@ class Simulation:
                 visibility="private",
             )
         if change.died is not None:
-            died = core.emit("died", Died(cause=change.died), actor=citizen)
-            actions.end_for_death(core, citizen, died)
-            citizen.in_view, citizen.animals_in_view, citizen.threats = set(), set(), set()
+            core.die(citizen, change.died)
             return []
         if change.collapsed:
             resting.collapse(core, citizen)

@@ -166,14 +166,6 @@ def advance(core: SimCore, citizen: Citizen) -> None:
         finisher(core, citizen, action)
 
 
-# --- body events that end actions ---
-
-
-def end_for_death(core: SimCore, citizen: Citizen, died_seq: int) -> None:
-    if citizen.action is not None:
-        core.end_action(citizen, "interrupted", "Everything goes dark.", cause_seq=died_seq)
-
-
 # --- interrupts (once per tick, after bodies) ---
 
 
