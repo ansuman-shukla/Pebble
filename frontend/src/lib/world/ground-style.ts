@@ -13,7 +13,8 @@
  * - `vec3 groundTintShift(vec3 tint)`: how a grass tint shifts the grass colours (1 for the reference tint);
  * - every colour below as `<layer>_<name>` (linear `vec3`).
  * `groundLook(layer, p, tint, fw, g)` returns the layer's colour at planet point p (rgb) and its relief 0..1 (a),
- * which drives the bump. `tint` is the terrain's grass tint there (the vertex colour); `g` holds the noises the
+ * which drives the bump: 0.5 is the ground's mean level (where the detail fades out too), so the layers meet
+ * without a step. `tint` is the terrain's grass tint there (the vertex colour); `g` holds the noises the
  * breakup already paid for (15 m drifts, 3 m patches, 1 m grain, 11 m drifts), free to reuse.
  */
 import type { GroundLayer } from './ground-shader';
@@ -101,12 +102,12 @@ vec4 groundLook(int layer, vec3 p, vec3 tint, float fw, vec4 g) {
     float pebble = smoothstep(0.76, 0.86, gFine(p + 3.0, 9.0, fw));
     c = mix(c, dirt_pebble, pebble * 0.7);
     c *= 0.86 + 0.28 * gFine(p + 8.0, 12.0, fw);
-    relief = mottle * 0.4 + pebble * 0.6;
+    relief = 0.35 + mottle * 0.2 + pebble * 0.6;
   } else if (layer == 3) {
     // gravel: small stones of mixed tones (cells) packed in darker grit
     vec3 cells = gCells(p * 13.0);
     float keep = 1.0 - smoothstep(0.25, 0.6, fw * 13.0);
-    float stone = mix(0.7, smoothstep(0.0, 0.18, cells.y - cells.x), keep);
+    float stone = mix(0.5, smoothstep(0.0, 0.18, cells.y - cells.x), keep);
     float tone = mix(0.5, cells.z, keep);
     c = mix(gravel_light, gravel_warm, smoothstep(0.45, 0.8, tone)) * (0.85 + 0.25 * tone);
     c = mix(gravel_dark, c, 0.35 + 0.65 * stone);
@@ -143,7 +144,7 @@ vec4 groundLook(int layer, vec3 p, vec3 tint, float fw, vec4 g) {
     float wet = smoothstep(0.52, 0.62, g.y * 0.7 + g.z * 0.3);
     c = mix(mud_light, mud_dark, wet);
     c *= 0.88 + 0.24 * gFine(p + 7.0, 3.7, fw);
-    relief = 1.0 - wet;
+    relief = 0.65 - 0.5 * wet;
   }
   return vec4(c, relief);
 }

@@ -6,8 +6,8 @@
  *   breakup rules), then a height blend of the weights and the fields picks the top two layers with crisp, ragged
  *   1-3 m edges;
  * - only those two layers draw their pattern (ground-style.ts), and the pattern's relief bumps the normal;
- * - level of detail by view distance: full < 40 m, no bump 40-300 m, layer colours and a tone > 300 m, and the
- *   per-vertex layer colours alone > 1.5 km.
+ * - level of detail by view distance: full < 40 m (the bump fading as the pixels outgrow it), no bump 40-300 m,
+ *   layer colours and a tone > 300 m, and the per-vertex layer colours alone > 1.5 km.
  * A mesh without the weight attributes (the town's grass) passes constant weights; its tint is the material colour.
  * Pages pick the quality with `?ground=`: `flat` (layer colours only, the A/B baseline) or `low` (one pattern, no
  * bump).
@@ -197,6 +197,8 @@ vGround1 = ground1;
 
 /** Width of a breakup patch's soft edge in field units: crisp, a few decimetres (widened by the pixel size). */
 const BREAKUP_EDGE = 0.04;
+/** Pixel footprints (metres) over which the bump fades out: past them its detail would shade as pixel blocks. */
+const BUMP_FOOTPRINT: [number, number] = [0.015, 0.05];
 
 const FRAGMENT_COMMON = /* glsl */ `
 varying vec3 vGroundPlanet;
@@ -270,7 +272,7 @@ vec3 groundMacro(float w[8], vec3 grassTint) {
 }
 /*
  * Bumps a view-space normal by a height field h (metres) over the fragment's view position. The slope is capped
- * so a layer's edge (where the relief steps) shades as a soft rim, not as jagged pixel blocks.
+ * so detail a few pixels across never tilts whole pixel quads.
  */
 vec3 groundBump(vec3 position, vec3 normal, float h) {
   vec3 dx = dFdx(position);
@@ -317,7 +319,10 @@ float groundRelief = 0.0;
       vec4 look = groundLook(first, p, tint, fw, g);
       vec4 other = t < 0.999 ? groundLook(second, p, tint, fw, g) : look;
       vec3 pattern = mix(other.rgb, look.rgb, t);
-      groundRelief = mix(other.a * GROUND_DEPTH[second], look.a * GROUND_DEPTH[first], t);
+      // relief about each layer's mean level (0.5), so a layer's edge is no step
+      groundRelief = mix((other.a - 0.5) * GROUND_DEPTH[second], (look.a - 0.5) * GROUND_DEPTH[first], t);
+      // the bump fades out with distance and as a pixel's footprint outgrows the relief's detail
+      groundRelief *= (1.0 - smoothstep(${glslFloat(BUMP_FOOTPRINT[0])}, ${glslFloat(BUMP_FOOTPRINT[1])}, fw)) * (1.0 - smoothstep(30.0, 40.0, dist));
       groundRoughness = mix(GROUND_ROUGHNESS[second], GROUND_ROUGHNESS[first], t);
       near = mix(pattern, near, smoothstep(GROUND_PATTERN_END * 0.8, GROUND_PATTERN_END, dist));
     }
@@ -339,7 +344,7 @@ const FRAGMENT_NORMAL = /* glsl */ `
 
 const FRAGMENT_BUMP = /* glsl */ `
 #ifdef GROUND_BUMP
-normal = groundBump(-vViewPosition, normal, groundRelief * (1.0 - smoothstep(30.0, 40.0, length(vViewPosition))));
+normal = groundBump(-vViewPosition, normal, groundRelief);
 #endif
 `;
 
