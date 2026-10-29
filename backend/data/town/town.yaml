@@ -199,6 +199,7 @@ placements:
   - {id: river-boat, kind: river_boat, at: [-156, 0]}
   - {id: stream-reeds-1, kind: reeds, at: [-155, -40]}
   - {id: stream-reeds-2, kind: reeds, at: [-157, 60]}
+  - {id: stream-bridge, kind: moat_bridge, at: [-155, 104]} # the west road over the stream (data/world/roads.yaml)
 
 runs:
   # castle walls stop at the corner turrets; the south wall leaves a gap for the gate
