@@ -158,6 +158,13 @@ def test_every_ambition_names_known_checks_with_their_arguments(cast: CitizensSp
     assert goro is not None and [(c.check, c.args) for c in goro.all_of] == [("seizures_guilty", {"count": 3})]
     masanori = by_id["masanori"].ambition
     assert masanori is not None and [c.check for c in masanori.all_of] == ["store_holds", "standing_at_least"]
+    stores = {
+        cid: clause.args["store"]
+        for cid, citizen in by_id.items()
+        for clause in (citizen.ambition.all_of if citizen.ambition else [])
+        if clause.check == "store_holds"
+    }
+    assert stores == {"masanori": "store-2", "genzo": "farmhouse-1-chest", "suna": "band_a_camp:drying-rack"}
 
 
 @pytest.mark.parametrize(
@@ -243,6 +250,13 @@ def test_the_rice_fields_stand_lies_inside_a_paddy() -> None:
         (lambda c: c["goro"]["bonds"].update(kaz=-101), "-100 to 100"),
         (lambda c: c["goro"]["bonds"].update(kaz=101), "-100 to 100"),
         (lambda c: c["goro"].update(rank=4), "doesn't match the titles"),
+        (lambda c: c["masanori"]["ambition"]["all_of"][0]["args"].update(store="granary"), "unknown store 'granary'"),
+        (lambda c: c["suna"]["ambition"]["all_of"][0]["args"].update(store="drying-rack"), "unknown store"),
+        (lambda c: c["genzo"]["ambition"]["all_of"][0]["args"].update(store="farmhouse-1"), "unknown store"),
+        (lambda c: c["hana"]["ambition"]["all_of"][0]["args"].update(place="band_c_camp"), "unknown place"),
+        (lambda c: c["nim"]["ambition"]["all_of"][0]["args"].update(who="nobody"), "unknown who"),
+        (lambda c: c["tetsu"]["ambition"]["all_of"][0]["args"].update(to="nobody"), "unknown to"),
+        (lambda c: c["barro"]["ambition"]["all_of"][0]["args"].update(group="band_c"), "unknown group"),
     ],
 )
 def test_the_cast_refuses_broken_links(change: Callable[[dict[str, dict[str, Any]]], None], error: str) -> None:

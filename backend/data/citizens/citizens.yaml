@@ -14,6 +14,8 @@
 # family    = kin by id: what that person is to this one ("aiko: mate" = Aiko is Genzo's mate); both sides agree.
 # bonds     = how a pair feels about each other beyond kin (-100..100); when both of a pair give it, they agree.
 # ambition  = in words, and the world checks that tell it is reached (all of them; app/sim/citizens.py lists them).
+#             Arguments name things by id: store = a storehouse, "<home>-chest", the market stall, a field rack or
+#             "<camp site>:drying-rack"; place = a site or town place; who, to = citizen ids; group = a region.
 # coins     = starting purse in mon; with the keep's chest (the treasury) the town holds the whole supply of 3 000.
 
 stores:
@@ -50,7 +52,7 @@ citizens:
     ambition:
       text: the granary holds 600 rice at the week's end and Ama is well regarded in town
       all_of:
-        - {check: store_holds, args: {store: granary, item: rice, count: 600, at: week end}}
+        - {check: store_holds, args: {store: store-2, item: rice, count: 600, at: week end}}
         - {check: standing_at_least, args: {who: ama, group: town, value: 30}}
   - id: kenji
     name: Kenji
@@ -148,7 +150,7 @@ citizens:
     ambition:
       text: 200 rice in the household chest and no tax owed
       all_of:
-        - {check: store_holds, args: {store: household chest, item: rice, count: 200}}
+        - {check: store_holds, args: {store: farmhouse-1-chest, item: rice, count: 200}}
         - {check: no_tax_owed, args: {days: 1}}
     coins: 60
   - id: aiko
@@ -453,7 +455,7 @@ citizens:
     ambition:
       text: 30 strips of dried meat on the camp rack
       all_of:
-        - {check: store_holds, args: {store: camp drying rack, item: dried meat, count: 30}}
+        - {check: store_holds, args: {store: band_a_camp:drying-rack, item: dried meat, count: 30}}
 
   # --- band B ---
   - id: barro

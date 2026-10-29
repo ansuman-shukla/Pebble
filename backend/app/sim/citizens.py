@@ -8,14 +8,17 @@ ownership, coins, scoreboard) read them from here.
 
 from functools import cache
 from pathlib import Path
-from typing import Literal
+from typing import Literal, get_args
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.config import WORLD_DATA_DIR
 from app.sim.state import Region
+from app.sim.world import load_town_places
 from app.world.geometry import Point
+from app.world.spec import load_world_spec
+from app.world.town import load_town
 
 CITIZENS_DATA_DIR = WORLD_DATA_DIR / "citizens"
 DEV_CITIZENS = CITIZENS_DATA_DIR / "dev.yaml"
@@ -72,6 +75,9 @@ AMBITION_ARGS: dict[AmbitionCheck, tuple[frozenset[str], frozenset[str]]] = {  #
     "followed_hunt": (frozenset(), frozenset()),
     "no_witnessed_deed": (frozenset({"group", "days"}), frozenset()),
 }
+STORE_KINDS = frozenset(
+    {"storehouse", "chest", "market_stall", "drying_rack"}
+)  # what an ambition's `store` names (§2.6)
 
 
 class _Spec(BaseModel):
@@ -173,11 +179,47 @@ class CitizensSpec(_Spec):
             raise ValueError(f"chests of nobody's home: {sorted(set(self.chests) - homes)}")
         return self
 
+    @model_validator(mode="after")
+    def _check_ambition_targets(self) -> "CitizensSpec":
+        """Ambition arguments that name something in the world name it by its real id, so the checks can find it."""
+        known = {
+            "store": _store_ids(),
+            "place": _place_ids(),
+            "group": frozenset(get_args(Region)),
+            "who": frozenset(citizen.id for citizen in self.citizens),
+            "to": frozenset(citizen.id for citizen in self.citizens),
+        }
+        for citizen in self.citizens:
+            for clause in citizen.ambition.all_of if citizen.ambition else []:
+                for arg, value in clause.args.items():
+                    if arg in known and value not in known[arg]:
+                        raise ValueError(f"{citizen.id}: {clause.check} names an unknown {arg} {value!r}")
+        return self
+
     def coins(self) -> int:
         """Every coin the cast starts with: purses and chests (the closed money supply, §2.1)."""
         return sum(citizen.coins for citizen in self.citizens) + sum(
             stock.get("coins", 0) for stock in self.chests.values()
         )
+
+
+@cache
+def _store_ids() -> frozenset[str]:
+    """Stores by id: town placements by their own, camp ones as "<camp site>:<placement id>" (like camp homes)."""
+    town = {placement.id for placement in load_town().placements if placement.kind in STORE_KINDS}
+    camps = {
+        f"{site.id}:{placement.id}"
+        for site in load_world_spec().sites
+        for placement in site.placements
+        if placement.kind in STORE_KINDS
+    }
+    return frozenset(town | camps)
+
+
+@cache
+def _place_ids() -> frozenset[str]:
+    """Places someone can know: the sites and the named town places."""
+    return frozenset({site.id for site in load_world_spec().sites} | {place.id for place in load_town_places().places})
 
 
 @cache
