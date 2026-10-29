@@ -19,9 +19,9 @@ import { type LiveSocket, MockLiveServer } from '@/lib/live/mock-live';
 /*
  * The citizens live: `GET /api/v1/entities` first, then the engine's feed (WebSocket `/api/v1/live`, one `tick`
  * per engine tick plus `event`s). A dropped socket reconnects with backoff and resyncs from the `snapshot` the
- * server sends on connect; "no run yet" (4404) keeps retrying with backoff; "a newer run started" (1012)
- * reconnects at once and takes the new run's snapshot. The `mock` source is the dev/test mock server (the same
- * socket path); `off`: no feed.
+ * server sends on connect; "no run yet" (4404) keeps retrying with backoff; "resync" (1012: a newer run started,
+ * or a resumed engine rewrote the run's history) reconnects at once and takes a fresh snapshot. The `mock` source
+ * is the dev/test mock server (the same socket path); `off`: no feed.
  */
 
 /**
@@ -53,7 +53,7 @@ export interface LiveFeed {
 const RETRY_FIRST_MS = 500;
 const RETRY_MAX_MS = 15_000;
 /** A newer run started: reconnect right away. */
-const NEW_RUN_RETRY_MS = 50;
+const RESYNC_RETRY_MS = 50;
 
 type Action =
   | { type: 'entities'; view: EntitiesAnswer }
@@ -122,10 +122,10 @@ export function useLiveCitizens(
       };
       socket.onclose = ({ code }) => {
         if (disposed) return;
-        if (code === LIVE_CLOSE.newRun) {
+        if (code === LIVE_CLOSE.resync) {
           attempt = 0;
           setStatus('reconnecting');
-          retry = window.setTimeout(open, NEW_RUN_RETRY_MS);
+          retry = window.setTimeout(open, RESYNC_RETRY_MS);
           return;
         }
         setStatus(code === LIVE_CLOSE.noRun ? 'no-run' : 'reconnecting');

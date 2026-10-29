@@ -12,8 +12,10 @@ LISTENs on that channel, keeps a replayed state per followed run (latest snapsho
 ```
 
 On connect a client gets a `snapshot` message; when the clock's speed or pause changes without a tick, a `tick`
-message with the same tick says so. Clients following the latest run are closed (code 1012) when a newer run starts,
-so they reconnect and resync from its snapshot.
+message with the same tick says so. Clients are closed (code 1012) to reconnect and resync from a fresh snapshot when
+a newer run starts (those following the latest run) or when their run's history past its latest snapshot was rewritten
+(an engine resumed after an unclean stop or a lost connection drops that tail and simulates it again; its events get
+new ids, and new code can make them come out differently).
 """
 
 import asyncio
@@ -31,7 +33,7 @@ from sqlmodel import Session
 
 from app.db.models import Event, Run
 from app.observability.replay import ReplayEvent, ReplayState, apply_event, replay
-from app.observability.store import EVENTS_CHANNEL, events_after, latest_run, latest_snapshot
+from app.observability.store import EVENTS_CHANNEL, event_id_at, events_after, latest_run, latest_snapshot
 from app.services.entities import (
     AnimalEntity,
     CitizenEntity,
@@ -47,7 +49,7 @@ log = logging.getLogger("pebble.live")
 
 LIVE_EVENT_TYPES = frozenset({"said", "died", "action_started", "action_finished"})
 LISTEN_TIMEOUT_S = 1.0  # how often the listener looks at the clock while no ticks arrive (pause, speed changes)
-RUN_SWITCHED = None  # queued to clients following the latest run when a newer run starts
+RESYNC = None  # queued to clients that must reconnect for a fresh snapshot (a newer run, a rewritten history)
 
 
 class LiveState(BaseModel):
@@ -91,6 +93,7 @@ class RunFeed:
     run_id: str
     state: ReplayState
     last_seq: int
+    last_id: str | None  # the id of the event at last_seq (None: there is none yet)
     speed: float
     paused: bool
 
@@ -111,15 +114,23 @@ class RunFeed:
             fires=fires,
         )
 
-    def advance(self, session: Session, run: Run) -> list[LiveMessage]:
+    def advance(self, session: Session, run: Run) -> list[LiveMessage] | None:
         """Apply the events stored since the last call: event messages as they come, a tick message after each
-        tick's summary (actions taken between ticks are stored with the next tick, before its summary)."""
+        tick's summary (actions taken between ticks are stored with the next tick, before its summary).
+
+        None if the last event replayed was dropped or replaced since (a resumed engine rewrote the tail): the same
+        read fetches it with the new ones, so a rewrite can't slip in between the check and the fetch.
+        """
+        rows = events_after(session, self.run_id, self.last_seq - 1)
+        seen = rows[0] if rows and rows[0].seq == self.last_seq else None
+        if (seen.id if seen is not None else None) != self.last_id:
+            return None
         messages: list[LiveMessage] = []
         clock_changed = (float(run.speed), run.paused) != (self.speed, self.paused)
         self.speed, self.paused = float(run.speed), run.paused
-        for row in events_after(session, self.run_id, self.last_seq):
+        for row in rows[1:] if seen is not None else rows:
             apply_event(self.state, _replayable(row))
-            self.last_seq = row.seq
+            self.last_seq, self.last_id = row.seq, row.id
             if row.type in LIVE_EVENT_TYPES and row.visibility == "public":
                 detail = LiveEventDetail(id=row.id, type=row.type, actor_id=row.actor_id, payload=row.payload)
                 messages.append(LiveEvent(type="event", run_id=self.run_id, tick=row.tick, event=detail))
@@ -137,7 +148,10 @@ def load_feed(session: Session, run: Run) -> RunFeed:
     rows = events_after(session, run.id, snapshot_row.last_seq)
     state = replay(SimSnapshot.model_validate(snapshot_row.state), (_replayable(row) for row in rows))
     last_seq = rows[-1].seq if rows else snapshot_row.last_seq
-    return RunFeed(run_id=run.id, state=state, last_seq=last_seq, speed=float(run.speed), paused=run.paused)
+    last_id = rows[-1].id if rows else event_id_at(session, run.id, last_seq)
+    return RunFeed(
+        run_id=run.id, state=state, last_seq=last_seq, last_id=last_id, speed=float(run.speed), paused=run.paused
+    )
 
 
 def _replayable(row: Event) -> ReplayEvent:
@@ -183,10 +197,15 @@ class LiveHub:
             if run is None or latest_snapshot(session, run.id) is None:
                 return None
             feed = self.feeds.get(run.id)
+            if feed is not None:
+                messages = feed.advance(session, run)  # catch up before the snapshot
+                if messages is None:
+                    self._resync(run.id)
+                    feed = None
+                else:
+                    self._broadcast(run.id, messages)
             if feed is None:
                 feed = self.feeds[run.id] = load_feed(session, run)
-            else:
-                self._broadcast(feed.run_id, feed.advance(session, run))  # catch up before the snapshot
             subscriber = Subscriber(loop, queue, run.id, follows_latest=run_id is None)
             self.subscribers.append(subscriber)
             return subscriber, feed.message("snapshot").model_dump_json()
@@ -223,20 +242,34 @@ class LiveHub:
                 self._refresh(runs)
 
     def _refresh(self, notified: set[str]) -> None:
-        """Advance every followed run (all of them on a timeout, to notice clock changes) and spot new runs."""
+        """Advance every followed run (all of them on a timeout, to notice clock changes), resync the ones whose
+        history was rewritten and spot new runs."""
         with Session(self.db_engine) as session, self.lock:
             for run_id in sorted(set(self.feeds)):
                 run = session.get(Run, run_id)
-                if run is not None:
-                    self._broadcast(run_id, self.feeds[run_id].advance(session, run))
+                if run is None:
+                    continue
+                messages = self.feeds[run_id].advance(session, run)
+                if messages is None:
+                    self._resync(run_id)
+                else:
+                    self._broadcast(run_id, messages)
             newcomers = notified - set(self.feeds)
             if newcomers and any(s.follows_latest for s in self.subscribers):
                 newest = latest_run(session)
                 if newest is not None and newest.id in newcomers:
-                    for subscriber in [s for s in self.subscribers if s.follows_latest]:
-                        subscriber.send(RUN_SWITCHED)
-                        self.subscribers.remove(subscriber)
+                    self._close([s for s in self.subscribers if s.follows_latest])
             self._drop_unwatched()
+
+    def _resync(self, run_id: str) -> None:
+        """Send the run's clients off to reconnect and forget its replayed state."""
+        self._close([s for s in self.subscribers if s.run_id == run_id])
+        del self.feeds[run_id]
+
+    def _close(self, subscribers: list[Subscriber]) -> None:
+        for subscriber in subscribers:
+            subscriber.send(RESYNC)
+            self.subscribers.remove(subscriber)
 
     def _broadcast(self, run_id: str, messages: list[LiveMessage]) -> None:
         texts = [message.model_dump_json() for message in messages]

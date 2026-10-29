@@ -66,6 +66,10 @@ def events_after(session: Session, run_id: str, after_seq: int, until_tick: int 
     return session.exec(statement.order_by(col(Event.seq))).all()
 
 
+def event_id_at(session: Session, run_id: str, seq: int) -> str | None:
+    return session.exec(select(Event.id).where(Event.run_id == run_id, Event.seq == seq)).first()
+
+
 def discard_after(session: Session, run_id: str, last_seq: int) -> int:
     """Drop events past a snapshot (the tail of a run that stopped without one); they are simulated again."""
     result = session.execute(delete(Event).where(col(Event.run_id) == run_id, col(Event.seq) > last_seq))
@@ -101,8 +105,7 @@ class EventStore:
         if seq is None:
             return None
         if seq not in self._ids_by_seq:
-            statement = select(Event.id).where(Event.run_id == self.run_id, Event.seq == seq)
-            found = self.session.exec(statement).first()
+            found = event_id_at(self.session, self.run_id, seq)
             if found is None:
                 raise ValueError(f"cause seq {seq} of run {self.run_id} is not stored")
             self._ids_by_seq[seq] = found

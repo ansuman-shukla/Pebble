@@ -73,6 +73,68 @@ def test_a_run_resumes_from_its_snapshot_and_replays_the_lost_tail(db_session: S
     assert latest_snapshot(db_session, run_id) is not None
 
 
+def _snapshot_ticks(session: Session, run_id: str) -> list[int]:
+    return list(session.exec(select(Snapshot.tick).where(Snapshot.run_id == run_id).order_by(col(Snapshot.tick))))
+
+
+def test_stopping_a_resumed_run_before_it_ticks_keeps_its_snapshot(db_session: Session, sim_world: SimWorld) -> None:
+    first = open_loop(db_session, sim_world, KEY, new_run=True, citizens=DEV_CITIZENS, clock=Clock())
+    run_id = first.run.id
+    first.run_ticks(90, headless=True)
+    first.shut_down()  # off the hour: snapshotted where it stopped
+    assert _snapshot_ticks(db_session, run_id) == [0, 60, 90]
+
+    idle = open_loop(db_session, sim_world, KEY, new_run=False, citizens=DEV_CITIZENS, clock=Clock())
+    assert idle.sim.tick == 90
+    idle.shut_down()  # no tick since the resume: the snapshot at 90 is already there (#68)
+    run = db_session.get(Run, run_id)
+    assert run is not None and (run.status, run.tick) == ("stopped", 90)
+    assert _snapshot_ticks(db_session, run_id) == [0, 60, 90]
+
+    again = open_loop(db_session, sim_world, KEY, new_run=False, citizens=DEV_CITIZENS, clock=Clock())
+    again.run_ticks(35, headless=True)
+    again.shut_down()
+    assert _snapshot_ticks(db_session, run_id) == [0, 60, 90, 120, 125]
+    last = latest_snapshot(db_session, run_id)
+    assert last is not None
+    assert canonical_json(SimSnapshot.model_validate(last.state)) == canonical_json(take_snapshot(again.sim.state))
+
+
+def test_a_resumed_run_catches_up_its_lost_tail_without_waiting(db_session: Session, sim_world: SimWorld) -> None:
+    first = open_loop(db_session, sim_world, KEY, new_run=True, citizens=None, clock=Clock(), brains=False)
+    first.run_ticks(90, headless=True)  # an unclean stop: ticks 61..90 were committed but aren't in a snapshot
+
+    resumed = open_loop(db_session, sim_world, KEY, new_run=False, citizens=None, clock=Clock(), brains=False)
+    assert (resumed.sim.tick, resumed.catch_up_to) == (60, 90)
+    fake = FakeTime()
+    resumed.now, resumed.idle_sleep, resumed.brains = fake.now, fake.sleep, [fake.brain]
+    resumed.run_ticks(31, headless=False)
+    # spectators already saw ticks up to 90: they come back at once, then real time carries on from there
+    assert fake.ticked_at == pytest.approx([0.0] * 30 + [60.0], abs=1e-6)
+    run = db_session.get(Run, first.run.id)
+    assert run is not None and run.tick == 91
+
+
+def test_a_paused_resumed_run_still_catches_up_until_a_stop(db_session: Session, sim_world: SimWorld) -> None:
+    first = open_loop(db_session, sim_world, KEY, new_run=True, citizens=None, clock=Clock(paused=True), brains=False)
+    first.run_ticks(90, headless=True)  # headless ignores the pause; an unclean stop at 90
+
+    resumed = open_loop(db_session, sim_world, KEY, new_run=False, citizens=None, clock=Clock(), brains=False)
+    assert resumed.clock.paused and (resumed.sim.tick, resumed.catch_up_to) == (60, 90)
+    fake = FakeTime()
+    fake.at.append((600.0, lambda: setattr(resumed, "stopping", True)))  # a catch-up held by the pause ends here
+
+    def interrupt_at_75(sim: Simulation) -> None:
+        if sim.tick == 75:
+            resumed.stopping = True  # what the SIGINT handler does
+
+    resumed.now, resumed.idle_sleep, resumed.brains = fake.now, fake.sleep, [fake.brain, interrupt_at_75]
+    resumed.run_ticks(None, headless=False)
+    resumed.shut_down()
+    assert fake.ticked_at == [0.0] * 16  # 61..76 at once despite the pause; the stop ends the catch-up there
+    assert _snapshot_ticks(db_session, first.run.id) == [0, 60, 76]
+
+
 def test_clock_commands_reach_the_engine(db_session: Session, sim_world: SimWorld) -> None:
     loop = open_loop(db_session, sim_world, KEY, new_run=True, citizens=None, clock=Clock())
     command = queue_command(db_session, loop.run.id, "clock", {"paused": True, "speed": 30})

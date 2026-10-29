@@ -237,7 +237,6 @@ class EngineLoop:
         run = session.get(Run, self.store.run_id)
         if run is None:
             raise ValueError(f"run {self.store.run_id} vanished from the database")
-        committed_tick = run.tick
         fresh = resume_run(
             session, self.sim.world, run, self.store.ids, self.clock, planner=self.sim.core.planner, brains=False
         )
@@ -248,11 +247,14 @@ class EngineLoop:
             citizen_brains(fresh.sim, run.world_seed) if isinstance(hook, CitizenBrains) else hook
             for hook in self.brains
         ]
-        self.catch_up_to = committed_tick
+        # a reload while catching up resumes from a run committed short of the old target: keep that target
+        self.catch_up_to = max(self.catch_up_to, fresh.catch_up_to)
 
     def shut_down(self) -> None:
-        """Snapshot where we are so a restart loses nothing, and mark the run stopped."""
-        if self.sim.tick % TICKS_PER_HOUR != 0:
+        """Snapshot where we are so a restart loses nothing (unless that snapshot is stored already: the hour's, or
+        the one a run resumed from and stopped again before ticking), and mark the run stopped."""
+        stored = latest_snapshot(self.store.session, self.store.run_id)
+        if stored is None or stored.last_seq != self.sim.state.next_seq - 1:
             self.store.snapshot(take_snapshot(self.sim.state))
         self.store.commit(self.sim.tick, self.clock.speed, self.clock.paused, status="stopped")
 
@@ -297,11 +299,13 @@ def resume_run(
     planner: Planner | None = None,
     brains: bool = True,
 ) -> EngineLoop:
-    """Continue a run from its latest snapshot; events after it (an unclean stop) are dropped and re-simulated."""
+    """Continue a run from its latest snapshot; events after it (an unclean stop) are dropped and re-simulated,
+    up to the tick the run had committed without real-time waits (spectators already saw those ticks)."""
     snapshot_row = latest_snapshot(session, run.id)
     if snapshot_row is None:
         raise ValueError(f"run {run.id} has no snapshot to resume from")
     snapshot = SimSnapshot.model_validate(snapshot_row.state)
+    committed_tick = run.tick
     dropped = discard_after(session, run.id, snapshot_row.last_seq)
     clock.speed, clock.paused = run.speed, run.paused
     sim = Simulation(world, restore(snapshot), planner)
@@ -309,7 +313,7 @@ def resume_run(
     store.commit(sim.tick, clock.speed, clock.paused)
     log.info("resumed run %s at tick %s (dropped %s events past the snapshot)", run.id, sim.tick, dropped)
     hooks: list[Brain] = [citizen_brains(sim, run.world_seed)] if brains else []
-    return EngineLoop(sim=sim, store=store, clock=clock, brains=hooks)
+    return EngineLoop(sim=sim, store=store, clock=clock, brains=hooks, catch_up_to=committed_tick)
 
 
 def open_loop(
