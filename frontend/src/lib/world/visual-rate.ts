@@ -8,7 +8,7 @@
  */
 
 /** Clips and procedural motion play at most this many times their natural speed. */
-export const VISUAL_RATE_MAX = 10;
+const VISUAL_RATE_MAX = 10;
 /** Wind sway plays at most this many times its natural speed. */
 const WIND_RATE_MAX = 3;
 

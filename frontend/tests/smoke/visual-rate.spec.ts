@@ -4,7 +4,6 @@ import {
   clockRate,
   isTimeLapse,
   timeLapseBadge,
-  VISUAL_RATE_MAX,
   visualRate,
   windRate,
 } from '../../src/lib/world/visual-rate';
@@ -22,7 +21,6 @@ test('the clock rate is the speed, or nothing while paused', () => {
 
 test('clips speed up with the clock like a film, up to ×10', () => {
   // the body moves speed × rate real metres a second; the gait, paced to the game speed, plays × the same
-  expect(VISUAL_RATE_MAX).toBe(10);
   expect(CLOCKS.map(visualRate)).toEqual([0, 1, 10, 10, 10]);
   expect(visualRate(3)).toBe(3);
   expect(visualRate(-1)).toBe(0);
