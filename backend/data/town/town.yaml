@@ -116,8 +116,7 @@ placements:
   - {id: cross-n-8-chest, kind: chest, at: [39, 57.5]} # the digger's
   - {id: cross-n-9, kind: townhouse, at: [46, 55]}
   - {id: cross-n-9-chest, kind: chest, at: [49, 57.5]} # the smith's
-  - {id: forge, kind: forge, at: [53.5, 54.5]} # the smith's forge next door, open to the cross street
-  - {id: anvil, kind: anvil, at: [52, 57.4]}
+  - {id: forge, kind: forge, at: [53.5, 54.5]} # the smith's forge next door, open to the cross street (the model has its own anvil)
   - {id: cross-n-10, kind: townhouse, at: [70, 55]}
   - {id: cross-n-11, kind: townhouse, at: [80, 55]}
   - {id: cross-n-12, kind: townhouse, at: [90, 55]}

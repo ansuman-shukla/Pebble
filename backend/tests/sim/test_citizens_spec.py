@@ -208,7 +208,8 @@ def test_every_town_home_has_its_household_chest(cast: CitizensSpec) -> None:
 
 def test_the_town_has_its_v1_furniture() -> None:
     kinds = Counter(p.kind for p in load_town().placements)
-    assert kinds["market_stall"] == kinds["forge"] == kinds["anvil"] == kinds["loom"] == 1
+    assert kinds["market_stall"] == kinds["forge"] == kinds["loom"] == 1
+    assert kinds["anvil"] == 0  # the forge model has its own anvil: the forge is the station (§2.3)
     assert kinds["drying_rack"] == 3  # the two field racks by the paddies and the farmyard rack
     assert kinds["field_barricade"] == 5  # the gaol pen
     assert {"gaol", "bell-tower", "forge"} <= {p.id for p in load_town_places().places}
