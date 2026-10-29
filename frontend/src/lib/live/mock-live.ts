@@ -454,12 +454,15 @@ const PEOPLE: MockPerson[] = [
     appearance: 'a wiry man with a shovel',
     site: 'town',
     pace: 1,
+    // on the cross street in front of his townhouse (cross-n-8): he goes in through its door first
     home: [36, 60],
     plan: [
+      { walk: [36, 56], to: 'home' },
+      { activity: 'resting', label: 'home', ticks: 8 },
       { walk: [58, 72], to: 'the storehouse' },
       { activity: 'working', label: 'filling the storehouse', ticks: 5 },
-      { walk: [36, 60], to: 'home' },
-      { activity: 'resting', label: 'home', ticks: 8 },
+      { walk: [36, 60], to: 'the cross street' },
+      { activity: 'idle', label: 'the cross street', ticks: 1 },
     ],
   },
   {

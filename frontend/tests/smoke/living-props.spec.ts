@@ -5,7 +5,7 @@ import { openGlobe } from './globe-helpers';
 /*
  * Living props on the planet with the mock feed (`?mockLive=1`, starting 08:00 at the town's main gate): the mill
  * wheel turns and the nearest props play their loops at the clock's visual rate, cold fires hide their fuel and
- * burning ones smoke and spark, a door opens while a citizen passes, and the gate stays within its draw calls.
+ * burning ones smoke and spark, a door opens while a citizen goes in, and the gate stays within its draw calls.
  */
 
 /** The town gate's draw-call budget (World v1 plan, L4). */
@@ -100,27 +100,27 @@ test('cold fires hide their fuel; burning ones smoke and spark, and the gate sta
   expect(errors).toEqual([]);
 });
 
-test('a door opens while a citizen passes and shuts behind them', async ({
+test('a door opens while a citizen goes in through it and shuts behind them', async ({
   page,
 }) => {
   const errors: string[] = [];
   await openGlobe(page, errors, '?mockLive=1');
   await setClock(page, { speed: 10 });
-  // the first walkers pass a townhouse door on the cross street within the first game minutes
+  // Daisuke steps in at his townhouse (cross-n-8) on the first tick and rests inside
+  const opened = new Set<string>();
   await expect
-    .poll(() => props(page, 'open-doors'), { timeout: 60_000, intervals: [50] })
-    .not.toBe('');
-  const opened = (await props(page, 'open-doors')).split(',');
-  expect(
-    opened.every((id) =>
-      /^cross-|^farmhouse|^storehouse|^temple|^pagoda/.test(id),
-    ),
-  ).toBe(true);
+    .poll(
+      async () => {
+        const open = await props(page, 'open-doors');
+        if (open) opened.add(open);
+        return open;
+      },
+      { timeout: 60_000, intervals: [50] },
+    )
+    .toBe('cross-n-8');
   await expect
-    .poll(async () => (await props(page, 'open-doors')).split(','), {
-      timeout: 10_000,
-      intervals: [50],
-    })
-    .not.toEqual(expect.arrayContaining(opened));
+    .poll(() => props(page, 'open-doors'), { timeout: 10_000, intervals: [50] })
+    .toBe('');
+  expect([...opened]).toEqual(['cross-n-8']);
   expect(errors).toEqual([]);
 });
