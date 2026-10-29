@@ -7,9 +7,12 @@ places:
   - {id: well, name: the well, at: [-20, 52.5], radius_m: 6}
   - {id: main-gate, name: the main gate, at: [0, 104], radius_m: 8}
   - {id: west-gate, name: the west gate, at: [-104, 76], radius_m: 8}
-  - {id: market, name: the market, at: [20, 56], radius_m: 12}
+  - {id: market, name: the market, at: [20, 56], radius_m: 12} # in front of the stall
   - {id: castle, name: the castle, at: [0, 20], radius_m: 30}
   - {id: temple, name: the temple, at: [70, -58], radius_m: 22}
   - {id: storehouses, name: the storehouses, at: [70, 85], radius_m: 16}
   - {id: training-ground, name: the training ground, at: [-70, -70], radius_m: 22}
-  - {id: rice-fields, name: the rice fields, at: [-112, 58], radius_m: 30}
+  - {id: rice-fields, name: the rice fields, at: [-124, 56], radius_m: 30} # in paddy-5, not on the grass beside
+  - {id: forge, name: the forge, at: [53.5, 58.6], radius_m: 5}
+  - {id: gaol, name: the gaol, at: [-14, -15], radius_m: 3} # inside the pen before castle-store-w
+  - {id: bell-tower, name: the bell tower, at: [85, -71.5], radius_m: 4}

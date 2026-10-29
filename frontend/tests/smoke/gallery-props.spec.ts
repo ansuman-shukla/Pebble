@@ -36,6 +36,7 @@ test('gallery shows every World v1 prop, hand prop and kit look in the props and
     'camp_drying_rack',
     'sleeping_mat',
     'field_barricade',
+    'loom', // drawn from code
     'castle_keep',
   ] satisfies (keyof typeof PROPS)[]) {
     await expect(page.locator(`[data-label="prop-${kind}"]`)).toHaveText(

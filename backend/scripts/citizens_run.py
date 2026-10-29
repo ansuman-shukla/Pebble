@@ -1,4 +1,4 @@
-"""Run the 15 citizens with their scripted brains headless (no database) and print how their days went.
+"""Run the 22 citizens with their scripted brains headless (no database) and print how their days went.
 
     uv run python -m scripts.citizens_run [days] [seed]
 

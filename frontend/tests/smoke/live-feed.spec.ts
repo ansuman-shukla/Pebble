@@ -264,7 +264,7 @@ test('activities in words', () => {
   expect(words('dead', '', 'thirst')).toBe('dead (thirst)');
 });
 
-test('the mock feed has the 15 citizens around their home sites', () => {
+test('the mock feed has the 22 citizens around their home sites', () => {
   const world = createMockWorld();
   const server = new MockLiveServer(world);
   const answer = server.entities();

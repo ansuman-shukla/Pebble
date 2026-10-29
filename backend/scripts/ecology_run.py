@@ -1,4 +1,4 @@
-"""Run the world with its 15 scripted citizens headless (no database) and print how the ecology went.
+"""Run the world with its 22 scripted citizens headless (no database) and print how the ecology went.
 
     uv run python -m scripts.ecology_run [days] [seed]
 

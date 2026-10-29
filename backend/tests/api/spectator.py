@@ -73,7 +73,7 @@ def tell_story(session: Session, world: SimWorld) -> Story:
 
 
 def live_cast(session: Session, world: SimWorld) -> EngineLoop:
-    """The real cast of 15 with their brains, for 70 minutes."""
+    """The real cast of 22 with their brains, for 70 minutes."""
     loop = open_loop(session, world, KEY, new_run=True, citizens=CITIZENS, clock=Clock(speed=1), brains=True)
     loop.run_ticks(70, headless=True)
     return loop

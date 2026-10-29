@@ -118,6 +118,7 @@ STRUCTURE_KEYWORDS: dict[str, frozenset[str]] = {
     "farmhouse": frozenset({"farmhouse", "house"}),
     "castle_gatehouse": frozenset({"gate", "gatehouse"}),
     "castle_keep": frozenset({"keep", "castle"}),
+    "temple_hall": frozenset({"temple", "hall"}),
     "lean_to": frozenset({"lean-to", "shelter"}),
     "fire_pit": frozenset({"fire", "pit", "firepit"}),
 }

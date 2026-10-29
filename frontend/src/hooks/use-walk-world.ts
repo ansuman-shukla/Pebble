@@ -9,12 +9,15 @@ import {
   type WalkWater,
   type WalkWorld,
 } from '@/lib/world/collision';
+import { isProcedural, PROCEDURAL_PROPS } from '@/lib/world/procedural-props';
 
 const colliderFiles = new Map<string, Promise<ColliderFile>>();
 
 function loadColliders(id: string) {
   let file = colliderFiles.get(id);
   if (!file) {
+    if (isProcedural(id))
+      return Promise.resolve(PROCEDURAL_PROPS[id].colliders);
     file = fetch(collidersUrl(id)).then((response) => {
       if (!response.ok)
         throw new Error(`colliders for ${id}: HTTP ${response.status}`);

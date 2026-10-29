@@ -1,14 +1,30 @@
-# The v0 cast: 15 citizens (docs/design/04-minds.md roster; D7). The engine starts new runs with this file.
+# The World v1 cast: 22 citizens (docs/design/10-world-v1.md §3.1; D7, D129). The engine starts new runs with this file.
 #
 # site + at = where they start, in local metres (x east, z south) around the site's anchor (the town uses its chart).
-# home      = a town house placement id (townhouse, farmhouse, castle-keep) or "<camp site>:<lean-to placement id>".
+# home      = a town house placement id (townhouse, farmhouse, castle-keep, temple-hall) or
+#             "<camp site>:<lean-to placement id>"; the household chest by a town home is the placement "<home>-chest".
 # look      = a look id from frontend/src/lib/world/citizen-looks.ts (sex follows the look's figure).
-# skills    = what work(task) and later crafts need: farming, weaving, trade, arms, governing (town);
-#             gathering, hunting, fire, healing (bands).
+# role      = their job in words; brains/profile.py routes it to a routine by keyword.
+# region    = their group (town, band_a, band_b).
+# skills    = what work(task) and crafts need: farming, weaving, trade, arms, governing, smithing, digging (town);
+#             gathering, hunting, fire, healing (bands and the monk).
 # knows_places / knows_people = starting knowledge (place ids from sites or data/town/places.yaml; citizen ids).
+# rank, titles = §3.2 (lord 5; samurai, monk, band leader 4; ashigaru, merchant, smith, elders 3; adults 2; children 1).
+# traits    = honesty, generosity, boldness, temper (0-1).
+# family    = kin by id: what that person is to this one ("aiko: mate" = Aiko is Genzo's mate); both sides agree.
+# bonds     = how a pair feels about each other beyond kin (-100..100); when both of a pair give it, they agree.
+# ambition  = in words, and the world checks that tell it is reached (all of them; app/sim/citizens.py lists them).
+#             Arguments name things by id: store = a storehouse, "<home>-chest", the market stall, a field rack or
+#             "<camp site>:drying-rack"; place = a site or town place; who, to = citizen ids; group = a region.
+# coins     = starting purse in mon; with the keep's chest (the treasury) the town holds the whole supply of 3 000.
 
 stores:
-  store-2: {rice: 400, wood: 300} # the storehouses' stand: about six days of rice, firewood for the gate baskets
+  store-2: {rice: 400, wood: 300} # the granary's stand: about six days of rice, firewood for the gate baskets
+
+chests: # by home: the household chest's starting stock
+  castle-keep: {coins: 2015} # the lord's treasury
+  farmhouse-1: {rice: 20}
+  farmhouse-2: {rice: 20}
 
 citizens:
   # --- the castle town (Japanese names) ---
@@ -25,8 +41,19 @@ citizens:
     site: town
     at: [0, 3]
     home: castle-keep
-    knows_places: [town, castle, well, market, main-gate, west-gate, temple, storehouses, training-ground, rice-fields]
-    knows_people: [kenji, fumiko, genzo, aiko, hana]
+    knows_places:
+      [town, castle, well, market, main-gate, west-gate, temple, storehouses, training-ground, rice-fields, forge, gaol,
+       bell-tower]
+    knows_people: [kenji, goro, fumiko, genzo, aiko, hana, tokuji, tetsu, daisuke, ennen]
+    rank: 5
+    titles: [lord]
+    traits: {honesty: 0.7, generosity: 0.3, boldness: 0.5, temper: 0.6}
+    bonds: {kenji: 60, ennen: 30, barro: -20}
+    ambition:
+      text: the granary holds 600 rice at the week's end and Ama is well regarded in town
+      all_of:
+        - {check: store_holds, args: {store: store-2, item: rice, count: 600, at: week end}}
+        - {check: standing_at_least, args: {who: ama, group: town, value: 30}}
   - id: kenji
     name: Kenji
     role: samurai retainer
@@ -40,8 +67,45 @@ citizens:
     site: town
     at: [-20, 23]
     home: castle-keep
-    knows_places: [town, castle, well, market, main-gate, west-gate, temple, storehouses, training-ground, rice-fields]
-    knows_people: [masanori, fumiko, genzo, aiko, hana]
+    knows_places:
+      [town, castle, well, market, main-gate, west-gate, temple, storehouses, training-ground, rice-fields, forge, gaol,
+       bell-tower]
+    knows_people: [masanori, goro, fumiko, genzo, aiko, hana, tokuji, tetsu, daisuke, ennen]
+    rank: 4
+    titles: [samurai]
+    traits: {honesty: 0.9, generosity: 0.5, boldness: 0.7, temper: 0.4}
+    bonds: {masanori: 60, hana: 30, goro: 40} # Goro's mentor
+    ambition:
+      text: every witnessed deed against the town ends judged within 14 days
+      all_of:
+        - {check: deeds_judged, args: {group: town, days: 14}}
+    coins: 60
+  - id: goro
+    name: Goro
+    role: ashigaru of the night watch
+    region: town
+    age: 22
+    sex: male
+    look: town-ashigaru
+    appearance: a young foot soldier in a flat war hat, carrying a long spear
+    personality: Eager and quick to anger; wants to prove he is more than a farmer's nephew.
+    skills: [arms]
+    site: town
+    at: [-94, 76]
+    home: cross-s-1
+    knows_places: [town, castle, well, market, main-gate, west-gate, storehouses, training-ground, rice-fields, gaol]
+    knows_people: [masanori, kenji, fumiko, genzo, aiko, hana, tokuji, tetsu, daisuke, ennen]
+    inventory: {spear: 1}
+    rank: 3
+    titles: [ashigaru]
+    traits: {honesty: 0.6, generosity: 0.4, boldness: 0.8, temper: 0.7}
+    family: {tokuji: parent's sibling}
+    bonds: {kenji: 40, kaz: -20}
+    ambition:
+      text: three of his seizures judged guilty
+      all_of:
+        - {check: seizures_guilty, args: {count: 3}}
+    coins: 60
   - id: fumiko
     name: Fumiko
     role: merchant
@@ -53,10 +117,18 @@ citizens:
     personality: Shrewd, talkative and curious about anything new or far away.
     skills: [trade]
     site: town
-    at: [20, 54]
+    at: [20, 52.2] # behind her stall
     home: main-e-2
-    knows_places: [town, market, well, main-gate, west-gate, storehouses, temple, castle]
-    knows_people: [masanori, kenji, genzo, aiko, hana]
+    knows_places: [town, market, well, main-gate, west-gate, storehouses, temple, castle, forge]
+    knows_people: [masanori, kenji, goro, genzo, aiko, hana, tokuji, tetsu, daisuke, ennen]
+    rank: 3
+    traits: {honesty: 0.5, generosity: 0.3, boldness: 0.5, temper: 0.3}
+    bonds: {aiko: 30, tetsu: 20, ama: 10}
+    ambition:
+      text: own 300 coins
+      all_of:
+        - {check: coins_at_least, args: {count: 300}}
+    coins: 500
   - id: genzo
     name: Genzo
     role: rice farmer
@@ -71,7 +143,16 @@ citizens:
     at: [-128, 44]
     home: farmhouse-1
     knows_places: [town, rice-fields, well, west-gate, main-gate, storehouses, market]
-    knows_people: [masanori, kenji, fumiko, aiko, hana]
+    knows_people: [masanori, kenji, goro, fumiko, aiko, hana, tokuji, tetsu, daisuke, ennen]
+    traits: {honesty: 0.8, generosity: 0.5, boldness: 0.4, temper: 0.4}
+    family: {aiko: mate, hana: child}
+    bonds: {tokuji: 30}
+    ambition:
+      text: 200 rice in the household chest and no tax owed
+      all_of:
+        - {check: store_holds, args: {store: farmhouse-1-chest, item: rice, count: 200}}
+        - {check: no_tax_owed, args: {days: 1}}
+    coins: 60
   - id: aiko
     name: Aiko
     role: weaver, the farmer's wife
@@ -86,7 +167,15 @@ citizens:
     at: [-78, 93]
     home: farmhouse-1
     knows_places: [town, rice-fields, well, west-gate, main-gate, storehouses, market, temple]
-    knows_people: [masanori, kenji, fumiko, genzo, hana]
+    knows_people: [masanori, kenji, goro, fumiko, genzo, hana, tokuji, tetsu, daisuke, ennen]
+    traits: {honesty: 0.7, generosity: 0.6, boldness: 0.4, temper: 0.3}
+    family: {genzo: mate, hana: child}
+    bonds: {fumiko: 30}
+    ambition:
+      text: sell 10 lengths of cloth
+      all_of:
+        - {check: sold, args: {item: cloth, count: 10}}
+    coins: 60
   - id: hana
     name: Hana
     role: the farmer's child
@@ -101,7 +190,129 @@ citizens:
     at: [-23, 47]
     home: farmhouse-1
     knows_places: [town, well, market, rice-fields, west-gate, storehouses]
-    knows_people: [masanori, kenji, fumiko, genzo, aiko]
+    knows_people: [masanori, kenji, goro, fumiko, genzo, aiko, tokuji, tetsu, daisuke, ennen]
+    rank: 1
+    traits: {honesty: 0.7, generosity: 0.7, boldness: 0.9, temper: 0.3}
+    family: {genzo: parent, aiko: parent}
+    bonds: {kenji: 30}
+    ambition:
+      text: find band A's camp
+      all_of:
+        - {check: knows_place, args: {place: band_a_camp}}
+    coins: 5
+  - id: tokuji
+    name: Tokuji
+    role: elder rice farmer
+    region: town
+    age: 58
+    sex: male
+    look: town-elder-farmer
+    appearance: a stooped old man with a grey beard under a wide straw hat
+    personality: Stubborn and gloomy, slow at the work but proud of every measure he brings in; grumbles about the tax.
+    skills: [farming]
+    site: town
+    at: [-136, 30]
+    home: farmhouse-2
+    knows_places: [town, rice-fields, well, west-gate, main-gate, storehouses, market, temple]
+    knows_people: [masanori, kenji, goro, fumiko, genzo, aiko, hana, tetsu, daisuke, ennen]
+    rank: 3
+    traits: {honesty: 0.6, generosity: 0.3, boldness: 0.3, temper: 0.8}
+    family: {goro: sibling's child}
+    bonds: {genzo: 30, masanori: -10}
+    ambition:
+      text: owe no tax for seven days running
+      all_of:
+        - {check: no_tax_owed, args: {days: 7}}
+    coins: 60
+  - id: tetsu
+    name: Tetsu
+    role: smith
+    region: town
+    age: 45
+    sex: male
+    look: town-smith
+    appearance: a broad man in a leather apron with soot on his arms
+    personality: Patient and exacting; speaks little and judges people by the tools they keep.
+    skills: [smithing]
+    site: town
+    at: [53.5, 59]
+    home: cross-n-9
+    knows_places: [town, forge, market, well, main-gate, west-gate, storehouses, castle, temple]
+    knows_people: [masanori, kenji, goro, fumiko, genzo, aiko, hana, tokuji, daisuke, ennen]
+    rank: 3
+    traits: {honesty: 0.8, generosity: 0.4, boldness: 0.5, temper: 0.6}
+    bonds: {daisuke: 20, fumiko: 20}
+    ambition:
+      text: forge an iron spear and give it to the lord
+      all_of:
+        - {check: gave_crafted, args: {item: iron spear, to: masanori}}
+    coins: 60
+  - id: daisuke
+    name: Daisuke
+    role: iron-sand digger
+    region: town
+    age: 31
+    sex: male
+    look: town-digger
+    appearance: a wiry man in a straw hat with a shovel over his shoulder
+    personality: Restless and boastful; always sure the next pan will turn up gold.
+    skills: [digging, gathering]
+    site: town
+    at: [36, 60]
+    home: cross-n-8
+    knows_places: [town, forge, market, well, main-gate, west-gate, storehouses, rice-fields]
+    knows_people: [masanori, kenji, goro, fumiko, genzo, aiko, hana, tokuji, tetsu, ennen]
+    traits: {honesty: 0.5, generosity: 0.4, boldness: 0.7, temper: 0.6}
+    bonds: {tetsu: 20, barro: -10}
+    ambition:
+      text: own 100 coins
+      all_of:
+        - {check: coins_at_least, args: {count: 100}}
+    coins: 60
+  - id: ennen
+    name: Ennen
+    role: monk of the temple
+    region: town
+    age: 50
+    sex: male
+    look: town-monk
+    appearance: a shaven-headed monk in a brown robe with a ringed staff
+    personality: Gentle and unhurried; listens more than he speaks and finds good in everyone.
+    skills: [healing]
+    site: town
+    at: [70, -62]
+    home: temple-hall
+    knows_places: [town, temple, bell-tower, well, market, main-gate, castle, storehouses]
+    knows_people: [masanori, kenji, goro, fumiko, genzo, aiko, hana, tokuji, tetsu, daisuke]
+    rank: 4
+    traits: {honesty: 0.95, generosity: 0.9, boldness: 0.4, temper: 0.1}
+    bonds: # everyone +10, the lord +30
+      masanori: 30
+      kenji: 10
+      goro: 10
+      fumiko: 10
+      genzo: 10
+      aiko: 10
+      hana: 10
+      tokuji: 10
+      tetsu: 10
+      daisuke: 10
+      ama: 10
+      bo: 10
+      oru: 10
+      tek: 10
+      lia: 10
+      suna: 10
+      barro: 10
+      nim: 10
+      kaz: 10
+      pip: 10
+      vesa: 10
+    ambition:
+      text: tend 10 different people
+      all_of:
+        - {check: tended_people, args: {count: 10}}
+    coins: 60
 
   # --- band A (invented, simple names) ---
   - id: ama
@@ -118,8 +329,41 @@ citizens:
     at: [1.5, 3]
     home: band_a_camp:shelter-n
     knows_places: [band_a_camp]
-    knows_people: [oru, tek, lia, suna]
+    knows_people: [bo, oru, tek, lia, suna]
     inventory: {dried meat: 8}
+    rank: 4
+    titles: [leader]
+    traits: {honesty: 0.8, generosity: 0.8, boldness: 0.6, temper: 0.3}
+    family: {bo: mate, lia: child}
+    bonds: {oru: 50}
+    ambition:
+      text: band A never starving for seven days running, and well regarded in town
+      all_of:
+        - {check: never_starving, args: {group: band_a, days: 7}}
+        - {check: standing_at_least, args: {group: town, value: 30}}
+  - id: bo
+    name: Bo
+    role: toolmaker and hunter
+    region: band_a
+    age: 36
+    sex: male
+    look: band-a-toolmaker
+    appearance: a thickset bearded man with a flint knife and a hide pack on his back
+    personality: Steady and good with his hands; trusts a well-made spear more than words.
+    skills: [gathering, hunting, fire]
+    site: band_a_camp
+    at: [-0.5, 4]
+    home: band_a_camp:shelter-n
+    knows_places: [band_a_camp]
+    knows_people: [ama, oru, tek, lia, suna]
+    inventory: {dried meat: 8, spear: 1}
+    traits: {honesty: 0.7, generosity: 0.5, boldness: 0.5, temper: 0.4}
+    family: {ama: mate, lia: child}
+    bonds: {tek: 30}
+    ambition:
+      text: own an iron axe
+      all_of:
+        - {check: owns, args: {item: iron axe}}
   - id: oru
     name: Oru
     role: elder healer
@@ -134,8 +378,15 @@ citizens:
     at: [-3, 2.5]
     home: band_a_camp:shelter-w
     knows_places: [band_a_camp]
-    knows_people: [ama, tek, lia, suna]
+    knows_people: [ama, bo, tek, lia, suna]
     inventory: {dried meat: 6}
+    rank: 3
+    traits: {honesty: 0.8, generosity: 0.8, boldness: 0.3, temper: 0.2}
+    bonds: {ama: 50, lia: 40}
+    ambition:
+      text: tend 10 different people
+      all_of:
+        - {check: tended_people, args: {count: 10}}
   - id: tek
     name: Tek
     role: hunter
@@ -150,8 +401,15 @@ citizens:
     at: [3.5, 1]
     home: band_a_camp:shelter-e
     knows_places: [band_a_camp]
-    knows_people: [ama, oru, lia, suna]
+    knows_people: [ama, bo, oru, lia, suna]
     inventory: {dried meat: 10, spear: 1}
+    traits: {honesty: 0.6, generosity: 0.5, boldness: 0.9, temper: 0.7}
+    family: {suna: mate}
+    bonds: {kaz: -30, bo: 30}
+    ambition:
+      text: become the band's leader
+      all_of:
+        - {check: is_leader, args: {group: band_a}}
   - id: lia
     name: Lia
     role: teen gatherer
@@ -166,8 +424,16 @@ citizens:
     at: [-1, -3]
     home: band_a_camp:shelter-n
     knows_places: [band_a_camp]
-    knows_people: [ama, oru, tek, suna]
+    knows_people: [ama, bo, oru, tek, suna]
     inventory: {dried meat: 6}
+    traits: {honesty: 0.8, generosity: 0.7, boldness: 0.6, temper: 0.2}
+    family: {ama: parent, bo: parent}
+    bonds: {oru: 40}
+    ambition:
+      text: know three town people by name, and the market
+      all_of:
+        - {check: knows_people, args: {group: town, count: 3}}
+        - {check: knows_place, args: {place: market}}
   - id: suna
     name: Suna
     role: gatherer
@@ -182,8 +448,14 @@ citizens:
     at: [2, -1.5]
     home: band_a_camp:shelter-e
     knows_places: [band_a_camp]
-    knows_people: [ama, oru, tek, lia]
+    knows_people: [ama, bo, oru, tek, lia]
     inventory: {dried meat: 8}
+    traits: {honesty: 0.8, generosity: 0.7, boldness: 0.4, temper: 0.2}
+    family: {tek: mate}
+    ambition:
+      text: 30 strips of dried meat on the camp rack
+      all_of:
+        - {check: store_holds, args: {store: band_a_camp:drying-rack, item: dried meat, count: 30}}
 
   # --- band B ---
   - id: barro
@@ -200,8 +472,17 @@ citizens:
     at: [1.5, 3]
     home: band_b_camp:shelter-n
     knows_places: [band_b_camp]
-    knows_people: [nim, kaz, pip]
+    knows_people: [nim, kaz, pip, vesa]
     inventory: {dried meat: 8}
+    rank: 4
+    titles: [leader]
+    traits: {honesty: 0.4, generosity: 0.6, boldness: 0.8, temper: 0.8}
+    family: {nim: mate, pip: child, kaz: sibling, vesa: parent}
+    bonds: {kenji: -30, masanori: -20, nim: 60, daisuke: -10}
+    ambition:
+      text: band B never starving for seven days running
+      all_of:
+        - {check: never_starving, args: {group: band_b, days: 7}}
   - id: nim
     name: Nim
     role: mother
@@ -216,8 +497,15 @@ citizens:
     at: [-3, 2.5]
     home: band_b_camp:shelter-n
     knows_places: [band_b_camp]
-    knows_people: [barro, kaz, pip]
+    knows_people: [barro, kaz, pip, vesa]
     inventory: {dried meat: 8}
+    traits: {honesty: 0.8, generosity: 0.6, boldness: 0.4, temper: 0.3}
+    family: {barro: mate, pip: child}
+    bonds: {barro: 60, vesa: 40}
+    ambition:
+      text: Pip never hungrier than hungry for seven days running
+      all_of:
+        - {check: hunger_below, args: {who: pip, word: hungry, days: 7}}
   - id: kaz
     name: Kaz
     role: young hunter
@@ -232,8 +520,15 @@ citizens:
     at: [3.5, 1]
     home: band_b_camp:shelter-e
     knows_places: [band_b_camp]
-    knows_people: [barro, nim, pip]
+    knows_people: [barro, nim, pip, vesa]
     inventory: {dried meat: 10, spear: 1}
+    traits: {honesty: 0.3, generosity: 0.5, boldness: 0.95, temper: 0.8}
+    family: {barro: sibling, vesa: parent}
+    bonds: {tek: -30, goro: -20}
+    ambition:
+      text: become the band's leader
+      all_of:
+        - {check: is_leader, args: {group: band_b}}
   - id: pip
     name: Pip
     role: child
@@ -248,5 +543,37 @@ citizens:
     at: [-1, -3]
     home: band_b_camp:shelter-n
     knows_places: [band_b_camp]
-    knows_people: [barro, nim, kaz]
+    knows_people: [barro, nim, kaz, vesa]
     inventory: {dried meat: 4}
+    rank: 1
+    traits: {honesty: 0.6, generosity: 0.7, boldness: 0.9, temper: 0.5}
+    family: {barro: parent, nim: parent, vesa: grandparent}
+    ambition:
+      text: follow a hunter on a hunt
+      all_of:
+        - {check: followed_hunt}
+  - id: vesa
+    name: Vesa
+    role: elder healer
+    region: band_b
+    age: 61
+    sex: female
+    look: band-b-elder
+    appearance: a white-haired old woman wrapped in a dark fur mantle
+    personality: Quiet and shrewd; keeps the fire, knows the roots, and talks her sons out of trouble.
+    skills: [gathering, healing, fire]
+    site: band_b_camp
+    at: [-1.3, -1.2]
+    home: band_b_camp:shelter-w
+    knows_places: [band_b_camp]
+    knows_people: [barro, nim, kaz, pip]
+    inventory: {dried meat: 6}
+    rank: 3
+    traits: {honesty: 0.8, generosity: 0.7, boldness: 0.2, temper: 0.2}
+    family: {barro: child, kaz: child, pip: grandchild}
+    bonds: {nim: 40}
+    ambition:
+      text: band B does no witnessed deed for seven days running, and is not distrusted in town
+      all_of:
+        - {check: no_witnessed_deed, args: {group: band_b, days: 7}}
+        - {check: standing_at_least, args: {group: town, value: 0}}

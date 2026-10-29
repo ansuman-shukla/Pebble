@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('gallery shows all 15 citizens animated and every animal labelled', async ({
+test('gallery shows all 22 citizens animated and every animal labelled', async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -12,10 +12,10 @@ test('gallery shows all 15 citizens animated and every animal labelled', async (
   await page.goto('/gallery');
 
   const gallery = page.getByTestId('gallery');
-  await expect(gallery).toHaveAttribute('data-citizens-ready', '15', {
+  await expect(gallery).toHaveAttribute('data-citizens-ready', '22', {
     timeout: 20_000,
   });
-  await expect(page.locator('[data-label]')).toHaveCount(30);
+  await expect(page.locator('[data-label]')).toHaveCount(37);
   await expect(page.locator('[data-label="town-lord"]')).toHaveText(
     'Lord of the castle',
   );

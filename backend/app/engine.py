@@ -1,7 +1,7 @@
 """The engine process: the only writer of world state. `python -m app.engine` (or `make engine`).
 
 Loads the stored world (current generator version) and the town, resumes the latest run of that world from its
-latest snapshot (or starts a new run with the 15 citizens of `data/citizens/citizens.yaml`), then ticks:
+latest snapshot (or starts a new run with the 22 citizens of `data/citizens/citizens.yaml`), then ticks:
 1 tick = 1 game minute; `speed` = game seconds per real second (1 = real time, a tick every real minute; up to 600),
 paused = no ticks.
 `--headless --ticks N` runs N ticks as fast as possible.

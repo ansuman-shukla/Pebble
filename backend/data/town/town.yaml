@@ -46,7 +46,14 @@ placements:
   - {id: castle-turret-ne, kind: corner_turret, at: [28, -28]}
   - {id: castle-turret-sw, kind: corner_turret, at: [-28, 28]}
   - {id: castle-turret-se, kind: corner_turret, at: [28, 28]}
-  - {id: castle-store-w, kind: storehouse, at: [-18, -15], rotation_deg: 90}
+  - {id: castle-store-w, kind: storehouse, at: [-18, -15], rotation_deg: 90} # the gaol
+  - {id: gaol-pen-n-1, kind: field_barricade, at: [-15, -17.42]} # a pen before its door, open to the east
+  - {id: gaol-pen-n-2, kind: field_barricade, at: [-13, -17.42]}
+  - {id: gaol-pen-s-1, kind: field_barricade, at: [-15, -12.58]}
+  - {id: gaol-pen-s-2, kind: field_barricade, at: [-13, -12.58]}
+  - {id: gaol-pen-e, kind: field_barricade, at: [-11.58, -16], rotation_deg: 90}
+  - {id: gaol-bucket, kind: bucket, at: [-12.6, -16.4]}
+  - {id: castle-keep-chest, kind: chest, at: [2.5, 0.7]} # the treasury, by the keep's door
   - {id: castle-store-e, kind: storehouse, at: [18, -15], rotation_deg: 270}
   - {id: castle-pine-sw, kind: sculpted_pine, at: [-10, 18]}
   - {id: castle-pine-se, kind: sculpted_pine, at: [10, 18]}
@@ -89,6 +96,7 @@ placements:
   - {id: main-w-4, kind: townhouse, at: [-6, 87], rotation_deg: 90}
   - {id: main-e-1, kind: townhouse, at: [6, 50], rotation_deg: 270}
   - {id: main-e-2, kind: townhouse, at: [6, 69], rotation_deg: 270}
+  - {id: main-e-2-chest, kind: chest, at: [3.5, 71.5]} # the merchant's household chest
   - {id: main-e-3, kind: townhouse, at: [6, 78], rotation_deg: 270}
   - {id: main-e-4, kind: townhouse, at: [6, 87], rotation_deg: 270}
   - {id: main-lantern-1, kind: lantern, at: [-3.5, 44]}
@@ -105,11 +113,15 @@ placements:
   - {id: cross-n-6, kind: townhouse, at: [-42, 55]}
   - {id: cross-n-7, kind: townhouse, at: [-32, 55]}
   - {id: cross-n-8, kind: townhouse, at: [36, 55]}
+  - {id: cross-n-8-chest, kind: chest, at: [39, 57.5]} # the digger's
   - {id: cross-n-9, kind: townhouse, at: [46, 55]}
+  - {id: cross-n-9-chest, kind: chest, at: [49, 57.5]} # the smith's
+  - {id: forge, kind: forge, at: [53.5, 54.5]} # the smith's forge next door, open to the cross street (the model has its own anvil)
   - {id: cross-n-10, kind: townhouse, at: [70, 55]}
   - {id: cross-n-11, kind: townhouse, at: [80, 55]}
   - {id: cross-n-12, kind: townhouse, at: [90, 55]}
   - {id: cross-s-1, kind: townhouse, at: [-86, 67], rotation_deg: 180}
+  - {id: cross-s-1-chest, kind: chest, at: [-83, 64.5]} # the night watchman's, by the west gate
   - {id: cross-s-2, kind: townhouse, at: [-76, 67], rotation_deg: 180}
   - {id: cross-s-3, kind: townhouse, at: [-66, 67], rotation_deg: 180}
   - {id: cross-s-4, kind: townhouse, at: [-56, 67], rotation_deg: 180}
@@ -128,6 +140,7 @@ placements:
 
   # market by the crossroads
   - {id: teahouse, kind: teahouse, at: [20, 48]}
+  - {id: market-stall, kind: market_stall, at: [20, 53.5]} # the merchant's stall, facing the cross street
   - {id: market-bench-1, kind: bench, at: [16, 52]}
   - {id: market-bench-2, kind: bench, at: [24, 52]}
   - {id: notice-board, kind: notice_board, at: [12, 56]}
@@ -145,6 +158,7 @@ placements:
 
   # temple quarter (north-east); the temple hall stands in for the shrine
   - {id: temple-hall, kind: temple_hall, at: [70, -75]}
+  - {id: temple-hall-chest, kind: chest, at: [73, -70.4]} # the monk's
   - {id: pagoda, kind: pagoda, at: [55, -75]}
   - {id: bell-tower, kind: bell_tower, at: [85, -75]}
   - {id: temple-cherry-1, kind: cherry_tree, at: [50, -60]}
@@ -176,7 +190,10 @@ placements:
   - {id: store-4, kind: storehouse, at: [60, 90]}
   - {id: store-5, kind: storehouse, at: [70, 90]}
   - {id: farmhouse-1, kind: farmhouse, at: [-85, 88]}
+  - {id: farmhouse-1-chest, kind: chest, at: [-90, 92.2]}
+  - {id: farmhouse-1-loom, kind: loom, at: [-87, 91.4]} # the weaver's loom at the foot of the veranda, by the door
   - {id: farmhouse-2, kind: farmhouse, at: [-70, 88]}
+  - {id: farmhouse-2-chest, kind: chest, at: [-65.5, 92]}
   - {id: farm-rack, kind: drying_rack, at: [-62, 88], rotation_deg: 90}
 
   # greenery around town
@@ -190,10 +207,9 @@ placements:
   - {id: azalea-4, kind: azalea, at: [60, -30]}
 
   # fields outside the west gate
-  - {id: field-rack-1, kind: drying_rack, at: [-111, 30], rotation_deg: 90}
-  - {id: field-rack-2, kind: drying_rack, at: [-111, 36], rotation_deg: 90}
-  - {id: field-rack-3, kind: drying_rack, at: [-111, 42], rotation_deg: 90}
-  - {id: field-rack-4, kind: drying_rack, at: [-111, 48], rotation_deg: 90}
+  # the two hasa racks where each farm household leaves its rice to dry: -1 farmhouse-1's, -2 farmhouse-2's
+  - {id: field-rack-1, kind: drying_rack, at: [-111, 36], rotation_deg: 90}
+  - {id: field-rack-2, kind: drying_rack, at: [-111, 42], rotation_deg: 90}
   - {id: ox-cart, kind: ox_cart, at: [-111, 88]}
   - {id: water-wheel, kind: water_wheel, at: [-152, 40], rotation_deg: 90} # the mill, at the stream's edge
   - {id: river-boat, kind: river_boat, at: [-156, 0]}
@@ -237,7 +253,7 @@ citizens:
     at: [-20, 23]
     heading_deg: 90
     route: [[-20, 23], [20, 23]]
-  - {look: town-merchant, at: [20, 54], heading_deg: 0} # at the market
+  - {look: town-merchant, at: [20, 52.2], heading_deg: 0} # behind the market stall
   - look: town-farmer # walks the dikes between the paddies
     at: [-128, 44]
     heading_deg: 270

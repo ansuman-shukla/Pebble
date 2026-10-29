@@ -1,9 +1,11 @@
 /*
- * How each of the 15 v0 citizens looks, as configs for Polyfork's shared humanoid engine.
- * Town looks follow the Medieval Japan kit's own characters; the Stone Age bands are new outfits built from
- * the engine's wardrobe (hide tunics, fur stoles, long hair, bare feet, spears). Ids are referenced by the
- * citizens spec; roles follow docs/design/04-minds.md (names arrive with the citizens spec).
+ * How each of the 22 citizens looks, as configs for Polyfork's shared humanoid engine.
+ * Town looks follow the Medieval Japan kit's own characters (the monk, the night watch and the farmers and
+ * craftsmen of World v1 build on `kit-looks.ts`); the Stone Age bands are new outfits built from the engine's
+ * wardrobe (hide tunics, fur stoles, long hair, bare feet, spears). Ids are referenced by the citizens spec;
+ * roles follow docs/design/10-world-v1.md §3.1.
  */
+import { KIT_LOOKS } from './kit-looks';
 import type { CharacterConfig, Garment } from '@/vendor/polyfork/humanoid.mjs';
 
 export type Region = 'town' | 'band_a' | 'band_b';
@@ -101,6 +103,156 @@ const bun: Garment = {
   knotBall: true,
   dome: 0.16,
 };
+
+const KIT_FARMER = KIT_LOOKS.farmer;
+
+/** World v1's new town folk: the kit's monk and ashigaru, and the farmer base dressed for each trade. */
+const TOWN_V1: CitizenLook[] = [
+  {
+    id: 'town-ashigaru',
+    region: 'town',
+    role: 'Ashigaru of the night watch',
+    config: {
+      ...KIT_LOOKS.ashigaru,
+      figure: 'masculine',
+      palette: {
+        ...KIT_LOOKS.ashigaru.palette,
+        skin: SKIN.olive,
+        hair: HAIR.black,
+      },
+    },
+  },
+  {
+    id: 'town-elder-farmer',
+    region: 'town',
+    role: 'Elder rice farmer',
+    config: {
+      ...KIT_FARMER,
+      age: 'old',
+      figure: 'masculine',
+      build: 0.84,
+      greyHair: true,
+      palette: {
+        ...KIT_FARMER.palette,
+        straw: 0xa8915e,
+        tunic: 0x6b5a45,
+        shirt: 0x6b5a45,
+        cuff: 0x6b5a45,
+        belt: 0x2f3a36,
+        denim: 0x7d6e58,
+        skin: SKIN.tan,
+      },
+      wear: {
+        hair: KIT_FARMER.wear.hair,
+        top: {
+          name: 'tunic',
+          length: 'thigh',
+          sleeve: 'long',
+          neck: 'slit',
+          belt: true,
+          beltAt: 'low',
+        },
+        bottom: KIT_FARMER.wear.bottom,
+        feet: 'waraji',
+        hat: {
+          name: 'jingasa',
+          brim: 1.75,
+          cone: 0.42,
+          coneDrop: 0.02,
+          cord: true,
+        },
+        face: 'goatee',
+        righthand: 'cane',
+      },
+    },
+  },
+  {
+    id: 'town-smith',
+    region: 'town',
+    role: 'Smith',
+    config: {
+      ...KIT_FARMER,
+      figure: 'masculine',
+      build: 1.15,
+      palette: {
+        ...KIT_FARMER.palette,
+        tunic: 0x3e3a36,
+        shirt: 0x3e3a36,
+        cuff: 0x3e3a36,
+        denim: 0x4a4440,
+        apron: 0x5c4030,
+        apronTie: 0x3b2a20,
+        wrap: 0xe4ded0,
+        skin: SKIN.tan,
+        hair: HAIR.black,
+      },
+      wear: {
+        hair: KIT_FARMER.wear.hair,
+        hat: { name: 'headwrap' },
+        face: 'moustache',
+        top: { name: 'tunic', length: 'hip', sleeve: 'none', neck: 'slit' },
+        coat: { name: 'apron', style: 'butcher', length: 'knee' },
+        bottom: KIT_FARMER.wear.bottom,
+        feet: 'waraji',
+      },
+    },
+  },
+  {
+    id: 'town-digger',
+    region: 'town',
+    role: 'Iron-sand digger',
+    config: {
+      ...KIT_FARMER,
+      figure: 'masculine',
+      build: 0.82,
+      palette: {
+        ...KIT_FARMER.palette,
+        straw: 0xd9c89a,
+        tunic: 0x9c6b3a,
+        shirt: 0x9c6b3a,
+        cuff: 0x9c6b3a,
+        belt: 0x3b3128,
+        denim: 0x5a5048,
+        pole: 0x8c7355,
+        skin: SKIN.brown,
+        hair: HAIR.black,
+      },
+      wear: {
+        hair: KIT_FARMER.wear.hair,
+        hat: { name: 'jingasa', brim: 1.15, cone: 0.55, coneDrop: 0.03 },
+        face: 'stubble',
+        top: {
+          name: 'tunic',
+          length: 'thigh',
+          sleeve: 'none',
+          neck: 'slit',
+          belt: true,
+          beltAt: 'low',
+        },
+        bottom: { name: 'pants', crop: 0.5, turnup: 0.06, band: false },
+        feet: 'waraji',
+        lefthand: 'shovel',
+      },
+    },
+  },
+  {
+    id: 'town-monk',
+    region: 'town',
+    role: 'Monk of the temple',
+    config: {
+      ...KIT_LOOKS.buddhist_monk,
+      figure: 'masculine',
+      greyHair: true,
+      palette: {
+        ...KIT_LOOKS.buddhist_monk.palette,
+        hair: 0x4a4642,
+        brow: 0x3a3632,
+        clipped: 0xb39477,
+      },
+      wear: { ...KIT_LOOKS.buddhist_monk.wear, hair: { name: 'buzz' } },
+    },
+  },
+];
 
 const TOWN: CitizenLook[] = [
   {
@@ -553,4 +705,55 @@ const BANDS: CitizenLook[] = [
   },
 ];
 
-export const CITIZEN_LOOKS: CitizenLook[] = [...TOWN, ...BANDS];
+/** World v1's new band members: band A's toolmaker and band B's elder healer. */
+const BANDS_V1: CitizenLook[] = [
+  {
+    id: 'band-a-toolmaker',
+    region: 'band_a',
+    role: 'Band A toolmaker and hunter',
+    config: {
+      age: 'adult',
+      figure: 'masculine',
+      build: 1.12,
+      palette: {
+        ...bandPalette(BAND_A, SKIN.brown, HAIR.dark),
+        pack: BAND_A.hideDark,
+        packTrim: BAND_A.cord,
+        packStrap: BAND_A.cord,
+      },
+      wear: {
+        hair: longHair(0.14),
+        face: 'full-beard',
+        top: hide('thigh'),
+        back: 'pack',
+        righthand: 'carving-knife',
+      },
+    },
+  },
+  {
+    id: 'band-b-elder',
+    region: 'band_b',
+    role: 'Band B elder healer',
+    config: {
+      age: 'old',
+      figure: 'feminine',
+      build: 0.9,
+      greyHair: true,
+      palette: { ...bandPalette(BAND_B, SKIN.deep, 0xd8d4cc) },
+      wear: {
+        hair: longHair(0.26),
+        top: hide('calf'),
+        neck: { name: 'mantle', width: 'shoulder' },
+        hands: ochreBands,
+        righthand: 'cane',
+      },
+    },
+  },
+];
+
+export const CITIZEN_LOOKS: CitizenLook[] = [
+  ...TOWN,
+  ...TOWN_V1,
+  ...BANDS,
+  ...BANDS_V1,
+];

@@ -88,7 +88,7 @@ def test_clock_commands_reach_the_engine(db_session: Session, sim_world: SimWorl
 
 def test_a_new_run_starts_with_the_cast_and_the_stocked_storehouse(db_session: Session, sim_world: SimWorld) -> None:
     loop = open_loop(db_session, sim_world, KEY, new_run=True, citizens=CITIZENS, clock=Clock())
-    assert len(loop.sim.state.citizens) == 15
+    assert len(loop.sim.state.citizens) == 22
     assert loop.sim.state.stores == {"store-2": {"rice": 400, "wood": 300}} == load_citizens(CITIZENS).stores
     events = _events(db_session, loop.run.id)
     stocked = [e for e in events if e.type == "item_moved"]

@@ -18,5 +18,16 @@ def test_replay_from_before_the_spawn_knows_what_they_know(new_sim: Callable[...
     assert rebuilt.same_as(from_snapshot(take_snapshot(sim.state)))
     genzo = rebuilt.citizens["genzo"]
     assert genzo.skills == ("farming",)
-    assert genzo.people == {"aiko", "fumiko", "hana", "kenji", "masanori"}
+    assert genzo.people == {
+        "aiko",
+        "daisuke",
+        "ennen",
+        "fumiko",
+        "goro",
+        "hana",
+        "kenji",
+        "masanori",
+        "tetsu",
+        "tokuji",
+    }
     assert genzo.places["rice-fields"] == "visited"
