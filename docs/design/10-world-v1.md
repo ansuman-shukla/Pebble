@@ -432,13 +432,21 @@ a route in the previous tick summary (spawn excepted). Hunt/attack stalks move a
 thief.
 
 ### 4.2 Drawing at ×1 / ×10 / ×60 / ×600 (supersedes the glide parts of D61, D72)
-1. **Paths are streamed from where the motion starts.** A new walk, flee, follow or stalk sends its route at once
-   (with its `action_started`), and every tick summary carries the path walked this tick plus the path ahead, with
-   `speed_mps` and `gait`, for citizens, stalks and **animals**. (Audit F1: the route was computed only after the
-   tick's step, so 46 % of moves were never drawn as walking and ~500 teleports a day of 30-83 m happened. The
-   fix-now PR `walker-motion` (D100-D104) does this for citizens, 1-tick walks and stalks, paces legs from the drawn
-   speed and caps playback; World v1 extends it to animals and to the time-lapse rules below.)
-   The client walks each body from where it is drawn toward its goal at `speed_mps × rate` and stops at the goal.
+1. **Every move is drawn one tick behind, along the path the sim walked.** Every tick summary carries, for each
+   mover (citizens, stalks and **animals**), the timed path from where it stood when the tick began (`t_s` 0) through
+   where it is now, then its plan ahead while the action that moved it lasts (`RoutePoint.t_s`, `speed_mps`,
+   `gait`). The client draws each tick's move over the tick after it, by those times: bodies trail the sim by one
+   tick (a real minute at ×1, 6 s at ×10, 1 s at ×60) and each new path starts where the last one left the body, so
+   nothing jumps, slides or cuts a corner. What a body walks is fact; the plan ahead is drawn only when a tick comes
+   late. A body first seen (a snapshot) is drawn the same way, from where its tick began; a page opened mid-tick
+   draws its first tick late, so its walkers walk the rest of that path before the next and stay up to one more tick
+   behind until they next stand still. Trade-offs (D100): speech bubbles, events and the People panel lead the body
+   by up to a tick (its label and pose keep the held activity, item 5); Phase B players will meet NPCs where the
+   sim placed them a tick ago, so player-NPC contact must be judged on the sim's positions, not the drawn ones.
+   (Audit F1: the route was computed only after the tick's step, so 46 % of moves were never drawn as walking and
+   ~500 teleports a day of 30-83 m happened. The fix-now PR `walker-motion` (D100) does this for citizens, 1-tick
+   walks and stalks, paces legs from the drawn speed and caps playback; World v1 extends it to animals (which
+   already glide one tick behind) and `gait`, and to the time-lapse rules below.)
 2. **Time-lapse rule:** every clip and procedural motion (gaits, work, transitions, prop clips, smoke, doors, tree
    fall) plays at natural speed × `visualRate = min(rate, 10)`. Gait choice comes from game speed, never drawn
    speed, so ×1 and ×10 are stride-locked (no skating). Wind sway uses `min(rate, 3)`.
@@ -448,7 +456,10 @@ thief.
 4. Never teleport: snap threshold = `max(30, 2.5 × speed_mps × rate)` m; beyond it (tab hidden, reconnect) the body
    fades out/in over 0.3 s.
 5. State changes that end a motion (death, pounce, arrive-and-sit) apply when the drawn body reaches the end of its
-   path.
+   path. `walker-motion` does the minimal form for citizens: while the drawn body still walks to where the tick
+   says it is, it keeps the activity it was shown on the move (walking, running, hunting; "walking" if it was seen
+   doing nothing moving), label and pose included; the tick's activity and pose (asleep, resting, dead...) apply
+   when the body gets there. World v1 adds the transition clips (sit down, lie down, fall).
 
 ### 4.3 Personal space and slots (`sim/slots.py`: the one claim registry)
 - A body is a 0.3 m disc. **No two standing/sitting/lying bodies end an action closer than 0.8 m** (0.6 m on a bench,

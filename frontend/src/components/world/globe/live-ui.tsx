@@ -221,8 +221,10 @@ export function NpcHooks({
         node.dataset.npcZ = fixed(position.z);
         node.dataset.npcGround = fixed(ground);
         node.dataset.npcActivity = view.activity;
+        node.dataset.npcPosture = view.posture;
         node.dataset.npcClip = view.clip;
         node.dataset.npcLoaded = String(view.loaded);
+        node.dataset.npcClipClock = view.clipClock.toFixed(3);
         node.dataset.npcFacing = view.pose.facing
           .toArray()
           .map((value) => value.toFixed(4))

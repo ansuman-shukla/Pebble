@@ -74,10 +74,12 @@ class CitizenEntity(BaseModel):
     region: Region
     position: Position
     heading_deg: float  # facing: yaw in the local tangent frame, 0 = south (+z local), 90 = east, 180 = north
-    # the planned walk ahead from `position` (its first point) over the next ~2 game minutes, along walkable ground;
-    # draw the walker moving along it at speed_mps × clock speed real metres per second until the next tick
-    route: list[RoutePoint]  # empty when not walking
-    speed_mps: float  # ground speed, game metres per game second (0 when not walking)
+    # how to draw their last tick's move: from where they stood when it began (the first point, t_s 0) through
+    # `position` and on along their plan for ~2 game minutes, along walkable ground; draw them t_s game seconds into
+    # the tick at each point (game seconds pass at the clock's speed), so the next tick's route starts where this
+    # one's step ended
+    route: list[RoutePoint]  # empty when they didn't move
+    speed_mps: float  # ground speed where the route starts, game metres per game second (0 when they didn't move)
     activity: Activity  # what spectators see them doing (derived from the action, sleep, speech and death)
     cell: int
     alive: bool

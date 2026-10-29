@@ -17,7 +17,7 @@ from app.observability.replay import from_snapshot
 from app.observability.store import latest_snapshot
 from app.services.clock import read_clock
 from app.services.entities import world_at
-from app.sim.actions import walk_ahead
+from app.sim.actions import streamed_route
 from app.sim.citizens import DEV_CITIZENS
 from app.sim.snapshot import SimSnapshot
 from app.sim.vec import lat_lon_deg
@@ -127,25 +127,25 @@ def test_entities_now_match_the_simulation(client: TestClient, loop: EngineLoop)
     assert (fires["main-gate-fire-w"]["kind"], fires["main-gate-fire-w"]["lit"]) == ("basket", False)
 
 
-def test_entities_carry_the_walk_ahead_even_at_a_snapshot_tick(
+def test_entities_carry_the_streamed_route_even_at_a_snapshot_tick(
     client: TestClient, api_session: Session, sim_world: SimWorld
 ) -> None:
     loop = open_loop(api_session, sim_world, KEY, new_run=True, citizens=DEV_CITIZENS, clock=Clock(), brains=False)
     loop.run_ticks(59, headless=True)
     WorldApi(loop.sim, "dev-aiko").walk_to_place("the west gate")  # ~90 m: still walking after tick 60
-    loop.run_ticks(1, headless=True)  # tick 60 is snapshotted; its summary has the walk ahead, the snapshot doesn't
-    expected, speed_mps = walk_ahead(loop.sim.core, loop.sim.citizen("dev-aiko"))
-    assert len(expected) >= 2
-    for params in ({}, {"at": 60}):
-        aiko = next(c for c in client.get(f"{API}/entities", params=params).json()["citizens"] if c["id"] == "dev-aiko")
-        assert aiko["activity"] == "walking"
-        assert aiko["route"] == [point.model_dump(mode="json") for point in expected]
-        assert aiko["route"][0]["unit"] == aiko["position"]["unit"]
-        assert aiko["speed_mps"] == pytest.approx(speed_mps)
+    loop.run_ticks(1, headless=True)  # tick 60 is snapshotted; its summary has the route, the snapshot doesn't
+    expected, speed_mps = streamed_route(loop.sim.core, loop.sim.citizen("dev-aiko"))
+    assert len(expected) >= 3  # where she stood, where she is, and on
     before = next(
         c for c in client.get(f"{API}/entities", params={"at": 59}).json()["citizens"] if c["id"] == "dev-aiko"
     )
     assert (before["route"], before["speed_mps"]) == ([], 0.0)  # she has just set off
+    for params in ({}, {"at": 60}):
+        aiko = next(c for c in client.get(f"{API}/entities", params=params).json()["citizens"] if c["id"] == "dev-aiko")
+        assert aiko["activity"] == "walking"
+        assert aiko["route"] == [point.model_dump(mode="json") for point in expected]
+        assert aiko["route"][0]["unit"] == before["position"]["unit"]
+        assert aiko["speed_mps"] == pytest.approx(speed_mps)
 
     loop.run_ticks(1, headless=True)
     WorldApi(loop.sim, "dev-aiko").walk_to_place("the main gate")

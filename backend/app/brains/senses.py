@@ -3,9 +3,11 @@ weighs (how hungry, what time of day, what food is around and how far). Nothing 
 """
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, get_args
 
-from app.world_api.models import Nearness, Perception, ResourceName, Seen, SelfView, TimeOfDay
+from pydantic import JsonValue
+
+from app.world_api.models import ActionResult, Compass, Nearness, Perception, ResourceName, Seen, SelfView, TimeOfDay
 
 Phase = Literal["night", "morning", "day", "dusk"]
 Distance = Literal["here", "near", "close", "off", "far"]
@@ -50,6 +52,7 @@ AMOUNT: tuple[tuple[str, int], ...] = (
     ("a few", 2),
     ("a little", 2),
 )
+FULL_LOAD = "You can't carry any more."  # what an action says when the load is full
 DISTANCE: dict[Nearness, Distance] = {
     "right beside you": "here",
     "a few paces": "near",
@@ -108,6 +111,7 @@ class Resource:
     kind: ResourceName
     distance: Distance
     plenty: bool
+    label: str  # as seen ("plenty of fallen wood"): what to walk to, not the wood lying about
 
 
 def phase(perception: Perception) -> Phase:
@@ -135,6 +139,16 @@ def carried_food(you: SelfView) -> dict[str, int]:
     return food
 
 
+def full_load(perception: Perception, noted: JsonValue) -> bool:
+    """Still carrying just what you carried when told you can't carry any more (`noted`, a brain's note)."""
+    return noted == perception.you.carrying
+
+
+def told_full(result: ActionResult | None) -> bool:
+    """The action ended saying the load is full (at once or as it went on): full until what you carry changes."""
+    return result is not None and result.text == FULL_LOAD
+
+
 def carries(perception: Perception, item: str) -> bool:
     return any(line.endswith(f" {item}") or line.endswith(item.rstrip("s")) for line in perception.you.carrying)
 
@@ -146,7 +160,9 @@ def food_value(food: dict[str, int]) -> float:
 def resources_in_view(perception: Perception) -> list[Resource]:
     """Wild plants in view (a plant's words say whether there's plenty: "a few nuts on the trees" is not)."""
     return [
-        Resource(thing.resource, DISTANCE[thing.nearness], not thing.label.startswith(("a few", "a little")))
+        Resource(
+            thing.resource, DISTANCE[thing.nearness], not thing.label.startswith(("a few", "a little")), thing.label
+        )
         for thing in perception.things
         if thing.resource is not None
     ]
@@ -162,6 +178,19 @@ def water_here(perception: Perception) -> bool:
 
 def water_in_view(perception: Perception) -> bool:
     return any(thing.kind == "water" for thing in perception.things)
+
+
+def water_way(perception: Perception) -> Compass | None:
+    """Which way the nearest fresh water in view lies ("close by to the north" -> north); None if none is in view."""
+    water = next((thing for thing in perception.things if thing.kind == "water"), None)
+    if water is None:
+        return None
+    return next((way for way in get_args(Compass) if water.where.endswith(f"to the {way}")), None)
+
+
+def compass_word(note: JsonValue) -> Compass | None:
+    """A direction a brain noted down, read back."""
+    return next((way for way in get_args(Compass) if way == note), None)
 
 
 def danger(perception: Perception) -> Seen | None:

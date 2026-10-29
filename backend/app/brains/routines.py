@@ -26,6 +26,7 @@ from app.brains.senses import (
     fire_here,
     fire_in_view,
     food_value,
+    full_load,
     game,
     near,
     resources_in_view,
@@ -281,7 +282,8 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
     if not hungry_empty and gathers >= style.outing:
         head_back = _then(lambda: _set(ctx, "returning", True), lambda: api.walk_to_place("home"))
         return [Option(score, "go home", head_back)]
-    wanted = [] if fresh >= OUTING_FOOD else list(FOODS)  # enough food: only chores, a look around, a rest
+    full = full_load(p, ctx.notes.get("full"))  # told there is no room for more
+    wanted = [] if fresh >= OUTING_FOOD or full else list(FOODS)  # enough (or no room): chores, a look around, a rest
     if style.chore is not None and not ctx.done_today(style.chore) and food:
         wanted.insert(0, style.chore)
     if not hungry_empty:
@@ -291,7 +293,8 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
     if wanted and water_here(p) and ctx.chance(FISH_CHANCE):
         return [Option(score, "fish", api.fish)]
     if not wanted:
-        if near(p, home_area) and ctx.chance(0.6):
+        rested = ctx.notes.get("last") == "rest at camp"  # one rest at a time: then a look around
+        if near(p, home_area) and (rested or ctx.chance(0.6)):
             direction = COMPASS[ctx.pick(len(COMPASS))]
             return [Option(score, "stroll", lambda: api.walk_towards(direction, "a short walk"))]
         if not (at_home(p) or at(p, home_area)):
@@ -311,7 +314,7 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
     visible = [r for r in seen if r.kind in wanted]
     if visible:
         target = min(visible, key=lambda r: (_reach(r), not r.plenty, wanted.index(r.kind)))
-        return [Option(score, f"go to {target.kind}", lambda: api.walk_to_thing(target.kind))]
+        return [Option(score, f"go to {target.kind}", lambda: api.walk_to_thing(target.label))]
     if near(p, home_area):
         direction = COMPASS[ctx.pick(len(COMPASS))]
         return [Option(score, "search", lambda: api.walk_towards(direction, "a short walk"))]

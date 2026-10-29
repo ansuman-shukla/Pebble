@@ -26,13 +26,17 @@ from app.brains.senses import (
     beside,
     carried_food,
     carries,
+    compass_word,
     danger,
     fire_here,
     fire_in_view,
     is_name,
+    near,
     phase,
+    told_full,
     water_here,
     water_in_view,
+    water_way,
 )
 from app.core.rng import Rng
 from app.world_api.facade import ActionHandle, WorldApi
@@ -95,6 +99,13 @@ class UtilityBrain:
             notes["asleep"] = False
             notes["greeted"] = []  # a new day: greet people again
             notes["chores"] = []
+            notes.pop("full", None)  # carrying words are rough: a little eaten may not change them, so try again
+        number = notes.get("action")
+        if isinstance(number, int) and told_full(api.handle(number).result):  # the load filled as it went on
+            notes["full"] = list(perception.you.carrying)
+        way = water_way(perception)
+        if way is not None and self.profile.region != "town" and at_home(perception):
+            notes["water_way"] = way  # which way the camp's water lies from home (only from there), for the dark
         options = self.options(perception)
         best = max(options, key=lambda option: option.score)
         if best.score < 60 and self.socialise(perception):
@@ -107,6 +118,8 @@ class UtilityBrain:
             streak = (previous if isinstance(previous, int) else 0) + 1
             notes["instant"] = streak
             notes["failed"] = notes.get("last") if handle.result.outcome == "failed" else None
+            if told_full(handle.result):
+                notes["full"] = list(perception.you.carrying)
             if handle.result.outcome == "failed" or streak >= 2:
                 handle = api.wait(10 + 5 * self.pick(4))  # nothing to do right now: look again in a while
                 notes["instant"] = 0
@@ -170,6 +183,12 @@ class UtilityBrain:
             return Option(score, "drink", self.api.drink)
         if self.profile.region == "town":
             return Option(score, "go drink", lambda: self.api.walk_to_place(WELL))
+        way = compass_word(self.api.notes.get("water_way"))
+        on_the_way = self.api.notes.get("last") == "go towards the water" and near(p, self.profile.home_area)
+        if way is not None and not water_in_view(p) and (at_home(p) or on_the_way):
+            # the camp's water out of sight (dark falls early under trees): set out from home the way it lies from
+            # there, a few steps at a time, until it comes into view
+            return Option(score, "go towards the water", lambda: self.api.walk_towards(way, "a few steps"))
         if water_in_view(p) or self.api.notes.get("last") != "go drink":
             # the water may be in sight without being among the things noticed first; if not, the walk fails
             return Option(score, "go drink", lambda: self.api.walk_to_thing("water"))

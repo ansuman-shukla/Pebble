@@ -47,6 +47,9 @@ class Payload(BaseModel):
 class RoutePoint(Payload):
     unit: Vec3  # direction from the planet's centre
     height_m: float  # ground height above sea level
+    # game seconds after the tick's start the mover is here (None in runs recorded before routes were timed, whose
+    # routes start at `position` and are walked at `speed_mps`)
+    t_s: float | None = None
 
 
 class Moved(Payload):
@@ -54,10 +57,10 @@ class Moved(Payload):
     height_m: float
     cell: int
     heading_deg: float = 0.0  # facing after the move (yaw in the local tangent frame, 0 = south, 180 = north)
-    # a walker's planned path ahead, from `position` (its first point) over the next couple of game minutes of
-    # walking, so clients can draw the walk between ticks; empty when they're not walking on
+    # how to draw the move: the path from where the mover stood when the tick began (its first point, t_s 0) through
+    # `position`, then on along their plan for a couple of game minutes while they keep at it, timed by t_s
     route: list[RoutePoint] = []
-    speed_mps: float = 0.0  # ground speed on the current leg, game metres per game second (0 when not walking)
+    speed_mps: float = 0.0  # ground speed where the route starts, game metres per game second
 
 
 class AnimalPose(Payload):

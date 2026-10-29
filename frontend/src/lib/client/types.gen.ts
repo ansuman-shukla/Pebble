@@ -1310,6 +1310,10 @@ export type RoutePoint = {
      * Height M
      */
     height_m: number;
+    /**
+     * T S
+     */
+    t_s?: number | null;
 };
 
 /**

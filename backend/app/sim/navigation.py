@@ -47,23 +47,26 @@ class WalkProgress:
     position: Vec3
     arrived: bool
     cost_spent: float
+    corners: tuple[tuple[Vec3, float], ...] = ()  # route points passed on the way, with the cost spent to reach each
 
 
 def walk_along(route: Route, leg: int, along_m: float, budget: float, radius_m: float) -> WalkProgress:
     """Advance along the route by a cost budget (metres × terrain cost)."""
     points, costs = route.points, route.costs
     spent = 0.0
+    corners: list[tuple[Vec3, float]] = []
     while leg < len(costs):
         length = angle(points[leg], points[leg + 1]) * radius_m
         need = (length - along_m) * costs[leg]
         if need <= budget - spent:
             spent += need
             leg, along_m = leg + 1, 0.0
+            corners.append((points[leg], spent))
             continue
         along_m += (budget - spent) / costs[leg]
         position = slerp(points[leg], points[leg + 1], along_m / length) if length > 0 else points[leg + 1]
-        return WalkProgress(leg=leg, along_m=along_m, position=position, arrived=False, cost_spent=budget)
-    return WalkProgress(leg=leg, along_m=0.0, position=points[-1], arrived=True, cost_spent=spent)
+        return WalkProgress(leg, along_m, position, arrived=False, cost_spent=budget, corners=tuple(corners))
+    return WalkProgress(leg, 0.0, points[-1], arrived=True, cost_spent=spent, corners=tuple(corners))
 
 
 class TownPlanner:

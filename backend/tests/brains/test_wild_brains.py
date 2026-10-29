@@ -3,14 +3,22 @@ camp fire going at dusk, hunters stalk the game they see, and the guard lights t
 
 from collections.abc import Callable
 
+import pytest
+
 from app.brains.brain import UtilityBrain
 from app.brains.profile import BrainProfile
+from app.brains.senses import water_way
 from app.sim import fire as fires
+from app.sim.items import RESOURCE_INDEX
 from app.sim.simulation import Simulation
 from app.sim.state import Fire
 from app.sim.vec import step_towards
 from app.world_api.facade import WorldApi
+from app.world_api.models import Compass
 from tests.sim_helpers import add_animal, make_spec, put_in_the_wild, skip_to, wild_cell, without_animals
+
+HOME_A = "band_a_camp:shelter-n"
+HOME_B = "band_b_camp:shelter-n"
 
 
 def _brain(sim: Simulation, citizen_id: str, region: str = "band_a", role: str = "hunter") -> UtilityBrain:
@@ -127,3 +135,190 @@ def test_a_hunter_back_at_camp_shares_half_the_meat(new_sim: Callable[..., Simul
     sim.run(21)  # the rest is over
     brain.decide()
     assert other.inventory["meat"] == 2  # once a day
+
+
+def _gathers(sim: Simulation, brain: UtilityBrain, minutes: int) -> list[str]:
+    """Run the brain for a while; how each of its gathers ended, in order."""
+    ended: list[str] = []
+    for _ in range(minutes):
+        brain.tick()
+        sim.step()
+        for event in sim.drain():
+            payload = event.payload.model_dump()
+            if event.type in ("action_finished", "action_interrupted") and event.actor_id == brain.profile.citizen_id:
+                if payload["action"] == "gather":
+                    ended.append(payload["text"])
+    return ended
+
+
+@pytest.mark.parametrize(
+    ("role", "age", "meat", "first"),  # 5 and 25 kg: all they can carry; a gatherer's day starts with its wood chore
+    [("child", 9, 10, "gather roots"), ("gatherer", 30, 50, "gather wood")],
+)
+def test_a_forager_with_a_full_load_stops_gathering_until_it_carries_less(
+    new_sim: Callable[..., Simulation], role: str, age: int, meat: int, first: str
+) -> None:
+    sim = without_animals(new_sim())
+    forager = sim.add_citizen(
+        make_spec(
+            "pip", age=age, site="band_a_camp", at=(0.0, 30.0), home=HOME_A, region="band_a", inventory={"meat": meat}
+        )
+    )
+    bushes = forager.cell
+    sim.state.resources[bushes, RESOURCE_INDEX["berries"]] = 40  # bushes heavy with berries right here
+    skip_to(sim, forager.position, night=False)
+    brain = _brain(sim, forager.id, role=role)
+    full = _gathers(sim, brain, 2 * 60)
+    assert full == ["You can't carry any more."]  # told once, it stops trying (and strolls off)
+
+    put_in_the_wild(sim, forager.id, bushes)  # back by the bushes
+    brain.api.notes["asleep"] = True  # a new day (just woken): it tries once more
+    brain.decide()
+    assert brain.api.notes["last"] == first  # the child's gather shows the reset; the wood chore comes either way
+
+    forager.inventory["meat"] = 3  # carrying less now ("a little meat", say some was eaten): room to gather again
+    lighter = _gathers(sim, brain, 3 * 60)
+    assert any(text.startswith("You gather") for text in lighter)
+
+
+def test_a_forager_whose_load_fills_while_it_gathers_stops_gathering(new_sim: Callable[..., Simulation]) -> None:
+    sim = without_animals(new_sim())
+    child = sim.add_citizen(
+        make_spec("pip", age=9, site="band_a_camp", at=(0.0, 30.0), home=HOME_A, region="band_a", inventory={"meat": 3})
+    )
+    sim.state.resources[child.cell, RESOURCE_INDEX["berries"]] = 40
+    skip_to(sim, child.position, night=False)
+    brain = _brain(sim, child.id, role="child")
+    brain.decide()
+    assert _started(sim, child.id) == "gather"
+    child.inventory["meat"] = 10  # handed meat as it gathers: no room left when the gather ends
+    assert _gathers(sim, brain, 2 * 60) == ["You can't carry any more."]  # not told twice
+
+
+def test_a_forager_walks_to_the_fallen_wood_it_saw_not_the_camp_woodpile(new_sim: Callable[..., Simulation]) -> None:
+    sim = without_animals(new_sim())
+    gatherer = sim.add_citizen(
+        make_spec("suna", site="band_a_camp", at=(0.0, 1.5), home=HOME_A, region="band_a", inventory={"roots": 30})
+    )  # food enough for the outing: only the day's wood chore is left
+    wood = RESOURCE_INDEX["wood"]
+    sim.state.resources[:, wood] = 0
+    plant = sim.world.neighbours[gatherer.cell][0]
+    sim.state.resources[plant, wood] = 40  # fallen wood a short way off; the woodpile by the fire is closer
+    api = WorldApi(sim, gatherer.id)
+    skip_to(sim, gatherer.position, night=False)
+    seen = api.look_around().things
+    assert any(thing.resource == "wood" and thing.nearness != "right beside you" for thing in seen)
+    assert any(thing.label.endswith("wood on the ground") for thing in seen)
+    brain = _brain(sim, gatherer.id, role="gatherer")
+    assert any(text.startswith("You gather") and text.endswith("wood.") for text in _gathers(sim, brain, 60))
+
+
+def _drinks_in_the_dark(sim: Simulation, brain: UtilityBrain, sun: float) -> bool:
+    """Skip on into the dark (the sun at `sun`°) and make the citizen thirsty: does it drink within the hour?"""
+    citizen = sim.citizen(brain.profile.citizen_id)
+    while sim.core.altitude(citizen.position) > sun:
+        sim.state.tick += 1
+    assert not any(thing.kind == "water" for thing in brain.api.look_around().things)  # too dark to see it now
+    sim.drain()
+    citizen.body.thirst = 70  # thirsty before bed
+    drank = False
+    walks: list[float] = []  # how far each walk the way the water lay went
+    for _ in range(60):
+        number, start = brain.api.notes.get("action"), citizen.position
+        brain.tick()
+        towards = brain.api.notes.get("action") != number and brain.api.notes["last"] == "go towards the water"
+        while towards and citizen.action is not None:
+            sim.step()
+        if towards:
+            walks.append(sim.core.distance_m(start, citizen.position))
+        sim.step()
+        drank |= any(
+            event.type == "action_finished"
+            and event.actor_id == citizen.id
+            and event.payload.model_dump()["action"] == "drink"
+            for event in sim.drain()
+        )
+    assert walks and max(walks) < 20  # a few steps at a time, looking again: none on past where the water shows
+    return drank and citizen.body.thirst < 30
+
+
+@pytest.mark.parametrize("sun", [-5.5, -15.0])  # deep dusk; the dead of night
+def test_a_band_finds_its_water_after_dark_the_way_it_lay_by_day(
+    new_sim: Callable[..., Simulation], sun: float
+) -> None:
+    sim = without_animals(new_sim())
+    child = sim.add_citizen(make_spec("pip", age=7, site="band_b_camp", at=(-1.0, -3.0), home=HOME_B, region="band_b"))
+    skip_to(sim, child.position, night=False)
+    brain = _brain(sim, child.id, region="band_b", role="child")
+    brain.decide()  # by day the river is in view from home
+    while child.action is not None:
+        sim.step()
+    assert _drinks_in_the_dark(sim, brain, sun)
+
+
+def test_a_band_notes_the_way_to_its_water_only_at_home(new_sim: Callable[..., Simulation]) -> None:
+    sim = without_animals(new_sim())
+    child = sim.add_citizen(make_spec("pip", age=7, site="band_b_camp", at=(-1.0, -3.0), home=HOME_B, region="band_b"))
+    home = child.cell
+    skip_to(sim, child.position, night=False)
+    brain = _brain(sim, child.id, region="band_b", role="child")
+    seen_from_home = water_way(brain.api.look_around())
+    assert seen_from_home is not None
+    brain.decide()
+    assert brain.api.notes["water_way"] == seen_from_home
+
+    def elsewhere(cell: int) -> tuple[str, Compass | None]:
+        put_in_the_wild(sim, child.id, cell)
+        seen = brain.api.look_around()
+        return seen.place, water_way(seen)
+
+    rings = {home}
+    for _ in range(4):
+        rings |= {n for cell in rings for n in sim.world.neighbours[cell]}
+    looks = {cell: elsewhere(cell) for cell in sorted(rings)}
+    other_ways = [cell for cell, (place, way) in looks.items() if way not in (None, seen_from_home)]
+    in_camp = next(c for c in other_ways if looks[c][0].startswith("at Band B camp"))  # in camp, not at home
+    out_of_camp = next(c for c in other_ways if not looks[c][0].startswith(("at your home", "at Band B camp")))
+    for cell in (in_camp, out_of_camp):  # by day, from there the water (or other water) lies another way
+        put_in_the_wild(sim, child.id, cell)
+        brain.decide()
+        while child.action is not None:
+            sim.step()
+        assert brain.api.notes["water_way"] == seen_from_home  # from there, it would be the wrong way from home
+
+    while all("Band B camp" in place for place, _ in looks.values()):  # out past "not far from" camp too
+        rings |= {n for cell in rings for n in sim.world.neighbours[cell]}
+        looks = {cell: elsewhere(cell) for cell in sorted(rings)}
+    skip_to(sim, child.position, night=True)
+    dark = {cell: elsewhere(cell) for cell in sorted(rings)}
+    unseen = [cell for cell, (place, way) in dark.items() if way is None and not place.startswith("at your home")]
+    in_camp = next(c for c in unseen if dark[c][0].startswith("at Band B camp"))
+    near_camp = next(c for c in unseen if "not far from Band B camp" in dark[c][0])
+    beyond = next(c for c in unseen if "Band B camp" not in dark[c][0])
+    child.body.thirst = 70
+    for cell, last in ((in_camp, "rest at camp"), (near_camp, "rest at camp"), (beyond, "go towards the water")):
+        put_in_the_wild(sim, child.id, cell)  # thirsty in the dark, the water out of sight, away from home
+        brain.api.notes["last"] = last  # far off, even if it had set out the way the water lies from home
+        brain.decide()
+        assert brain.api.notes["last"] in ("go drink", "go home")  # not that way: from here it may be wrong
+    put_in_the_wild(sim, child.id, home)
+    assert _drinks_in_the_dark(sim, brain, -15.0)
+
+
+def test_a_full_forager_at_camp_looks_around_after_one_rest(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sim = without_animals(new_sim())
+    child = sim.add_citizen(
+        make_spec("pip", age=9, site="band_a_camp", at=(0.0, 1.5), home=HOME_A, region="band_a", inventory={"meat": 10})
+    )
+    skip_to(sim, child.position, night=False)
+    brain = _brain(sim, child.id, role="child")
+    monkeypatch.setattr(brain, "chance", lambda _p: False)  # never the lucky roll that sends it for a stroll
+    brain.api.notes["full"] = list(brain.api.look_around().you.carrying)  # told it can carry no more
+    brain.decide()
+    assert brain.api.notes["last"] == "rest at camp"
+    while child.action is not None:
+        sim.step()
+    brain.decide()
+    assert brain.api.notes["last"] == "stroll"  # not a second rest, and a third... (seed 1: Pip stood 5 h)

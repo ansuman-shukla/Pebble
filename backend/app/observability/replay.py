@@ -60,8 +60,8 @@ class ReplayCitizen:
     places: dict[str, str] = field(default_factory=dict)  # place id -> visited | rough
     people: set[str] = field(default_factory=set)  # citizens they know
     said_tick: int | None = field(default=None, compare=False)  # last spoke (not in snapshots: a moment's flavour)
-    # the walk ahead from the latest tick summary (not in snapshots either: replay from the snapshot before a tick to
-    # see it at that tick)
+    # how the latest tick summary says to draw their move (not in snapshots either: replay from the snapshot before a
+    # tick to see it at that tick)
     route: tuple[RoutePoint, ...] = field(default=(), compare=False)
     speed_mps: float = field(default=0.0, compare=False)
 
