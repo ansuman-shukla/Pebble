@@ -22,7 +22,7 @@ Every kind rests on y = 0, centred, at real size (checked in the gallery's new *
 
 | Kind | Asset | Kit | Tris | Size x·y·z (m) | Stage hooks in the model |
 |---|---|---|---|---|---|
-| berry_bush | berry-bush-ee4812 | Cozy Farm | 720 | 0.73·0.97·0.65 | `fruit-0` … `fruit-7` (8 pieces; the bible's round(9 × stock/cap) needs 9: map 0-9 onto 0-8) |
+| berry_bush | berry-bush-ee4812 | Cozy Farm | 720 | 0.73·0.97·0.65 | `fruit-0` … `fruit-7` (8 pieces: the bible draws round(8 × stock/cap) of them) |
 | root_patch | taro-plant-8c0493 | Easter Island | 738 | 1.35·1.04·1.29 | `corm` + `leaf-N`, baked `tick` sway |
 | reed_bed | totora-reed-bed-36d78f | Easter Island | 917 | 2.25·2.5·2.33 | two skinned reed meshes with a baked `tick` gust clip |
 | nut_tree | broadleaf-oak-997c22 (the oak_tree asset) | Nature & Forest | 457 | 4.5·7.0·3.6 | – |
