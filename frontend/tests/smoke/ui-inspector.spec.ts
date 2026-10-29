@@ -106,28 +106,73 @@ test('Tab cycles the selection, F follows it, G goes to it, I hides and shows th
           (node as unknown as { dataset: Record<string, string> }).dataset.npc,
       ),
     );
+  const nth = (at: number) => order[(at + order.length) % order.length];
   await page.keyboard.press('Tab');
-  await expect(world).toHaveAttribute('data-selected', order[0]);
+  await expect(world).toHaveAttribute('data-selected', /./);
+  const first = order.indexOf((await world.getAttribute('data-selected'))!);
   await page.keyboard.press('Tab');
-  await expect(world).toHaveAttribute('data-selected', order[1]);
+  await expect(world).toHaveAttribute('data-selected', nth(first + 1));
+  await page.keyboard.press('Tab');
+  await expect(world).toHaveAttribute('data-selected', nth(first + 2));
   await page.keyboard.press('Shift+Tab');
-  await expect(world).toHaveAttribute('data-selected', order[0]);
   await page.keyboard.press('Shift+Tab');
-  await expect(world).toHaveAttribute('data-selected', order.at(-1)!);
+  await page.keyboard.press('Shift+Tab');
+  await expect(world).toHaveAttribute('data-selected', nth(first - 1));
+  const last = nth(first - 1);
 
   await page.keyboard.press('KeyI');
   await expect(inspector(page)).toHaveCount(0);
   await page.keyboard.press('KeyI');
-  await expect(inspector(page)).toHaveAttribute('data-inspect', order.at(-1)!);
+  await expect(inspector(page)).toHaveAttribute('data-inspect', last);
 
   await page.keyboard.press('KeyF');
-  await expect(world).toHaveAttribute('data-follow', order.at(-1)!);
+  await expect(world).toHaveAttribute('data-follow', last);
   await landed(world);
   await page.keyboard.press('KeyG');
   await expect(world).not.toHaveAttribute('data-follow');
   await landed(world);
-  const subject = (await drawn(page)).get(order.at(-1)!)!.at;
+  const subject = (await drawn(page)).get(last)!.at;
   expect((await cameraOf(world)).distanceTo(subject)).toBeLessThan(45);
+  expect(errors).toEqual([]);
+});
+
+test('with nobody selected Tab starts at the citizen nearest where the camera looks: the followed one, or the nearest', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  const world = await openHeld(page, errors);
+  // following Pip (last in the list, at band B): Tab and Shift+Tab both start at Pip
+  await page.getByRole('button', { name: 'people', exact: true }).click();
+  await page
+    .locator('[data-person="pip"]')
+    .getByRole('button', { name: 'follow' })
+    .click();
+  await landed(world);
+  await page.getByRole('button', { name: 'people', exact: true }).click();
+  for (const key of ['Tab', 'Shift+Tab']) {
+    await page.keyboard.press(key);
+    await expect(world).toHaveAttribute('data-selected', 'pip');
+    // closing the inspector lets go of the selection only
+    await inspector(page)
+      .getByRole('button', { name: 'close inspector' })
+      .click();
+    await expect(world).not.toHaveAttribute('data-selected');
+    await expect(world).toHaveAttribute('data-follow', 'pip');
+  }
+
+  // not following: from the camera at Haru's stall, Tab picks whoever is drawn nearest the look-at point
+  await page.keyboard.press('Escape');
+  await goToPerson(page, world, 'haru');
+  await page.getByRole('button', { name: 'people', exact: true }).click();
+  const avatar = new Vector3(
+    ...(await world.getAttribute('data-avatar'))!.split(',').map(Number),
+  );
+  const byDistance = [...(await drawn(page))]
+    .map(([id, { at }]) => ({ id, away: at.distanceTo(avatar) }))
+    .sort((a, b) => a.away - b.away);
+  expect(byDistance[1].away - byDistance[0].away).toBeGreaterThan(0.5);
+  await page.keyboard.press('Tab');
+  await expect(world).toHaveAttribute('data-selected', byDistance[0].id);
   expect(errors).toEqual([]);
 });
 

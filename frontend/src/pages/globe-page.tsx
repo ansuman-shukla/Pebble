@@ -83,6 +83,7 @@ import { useTown } from '@/hooks/use-town';
 import { useWorld } from '@/hooks/use-world';
 import type { TownView, WorldView } from '@/lib/client/types.gen';
 import { CLOCK_SPEEDS } from '@/lib/live/clock-speeds';
+import type { LiveCitizen } from '@/lib/live/live-contract';
 import { feedMinutes } from '@/lib/live/live-state';
 import { ShownDoings } from '@/lib/live/shown-doings';
 import { BIOME_PROPS } from '@/lib/world/biome-props';
@@ -545,6 +546,21 @@ function useBottomEdge(ref: RefObject<HTMLElement | null>, initial: number) {
   return bottom;
 }
 
+/** The citizen drawn nearest to `point` (the first in the list while nobody is drawn yet). */
+function nearestDrawn(
+  citizens: readonly LiveCitizen[],
+  views: NpcViews,
+  point: Vector3,
+) {
+  let nearest = citizens[0].id;
+  let best = Infinity;
+  for (const { id } of citizens) {
+    const distance = views.get(id)?.pose.position.distanceTo(point) ?? Infinity;
+    if (distance < best) [nearest, best] = [id, distance];
+  }
+  return nearest;
+}
+
 function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   const [params] = useSearchParams();
   const planet = useMemo(() => buildPlanet(view, town), [view, town]);
@@ -764,7 +780,8 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
       [selectedId, follow, goToCitizen, clockLive, livePaused, setClock],
     ),
   );
-  // Tab and Space belong to the scene here, not to focus moves or page scrolls; Tab (Shift+Tab back) cycles
+  // Tab and Space belong to the scene here, not to focus moves or page scrolls; Tab (Shift+Tab back) cycles,
+  // starting with nobody selected from the citizen drawn nearest where the camera looks (the followed one, if any)
   useEffect(() => {
     const claim = (event: KeyboardEvent) => {
       if (event.code !== 'Tab' && event.code !== 'Space') return;
@@ -774,19 +791,15 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
       const step = event.shiftKey ? -1 : 1;
       setSelectedId((current) => {
         const at = citizens.findIndex((citizen) => citizen.id === current);
-        const next =
-          at === -1
-            ? step > 0
-              ? 0
-              : citizens.length - 1
-            : (at + step + citizens.length) % citizens.length;
-        return citizens[next].id;
+        if (at !== -1)
+          return citizens[(at + step + citizens.length) % citizens.length].id;
+        return nearestDrawn(citizens, npcViews, focusRef.current);
       });
       setInspectorOpen(true);
     };
     window.addEventListener('keydown', claim);
     return () => window.removeEventListener('keydown', claim);
-  }, [citizens]);
+  }, [citizens, npcViews]);
 
   // the footer and the clock describe where the camera looks, not where the hidden avatar stands (F19, F20)
   const place = useCameraPlace(planet, focusRef);
