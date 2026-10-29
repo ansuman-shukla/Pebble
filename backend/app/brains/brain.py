@@ -179,7 +179,9 @@ class UtilityBrain:
             return None
         score = {0: 0.0, 1: 50.0, 2: 80.0, 3: 110.0}[needs.thirst]
         arrived = self.api.notes.get("last") == "go drink" and water_in_view(p)  # at the shore of a lake or river
-        if water_here(p) or arrived or (self.profile.region == "town" and at(p, WELL)):
+        # at the well but out of reach of it (stopped short, or brought there by someone): walk up to it first
+        at_well = self.profile.region == "town" and at(p, WELL) and self.api.notes.get("failed") != "drink"
+        if water_here(p) or arrived or at_well:
             return Option(score, "drink", self.api.drink)
         if self.profile.region == "town":
             return Option(score, "go drink", lambda: self.api.walk_to_place(WELL))
