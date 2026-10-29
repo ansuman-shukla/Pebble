@@ -1,5 +1,6 @@
 """The invariants of 02-simulation: determinism, ranges, one event per change, resumable snapshots."""
 
+from collections import Counter
 from collections.abc import Callable
 from typing import Any
 
@@ -8,6 +9,7 @@ import pytest
 
 from app.observability.events import EventDraft, ResourceChanged
 from app.observability.replay import ReplayEvent, from_snapshot, replay
+from app.sim.items import RESOURCE_INDEX
 from app.sim.navigation import Planner
 from app.sim.simulation import Simulation
 from app.sim.snapshot import canonical_json, restore, state_hash, take_snapshot
@@ -116,6 +118,7 @@ def test_needs_resources_and_items_stay_in_range(new_sim: Callable[..., Simulati
 def test_every_state_change_is_exactly_one_event(new_sim: Callable[..., Simulation]) -> None:
     sim = without_animals(new_sim(seed=5))  # game coming into view would stop Ben's walk into the wild
     start = take_snapshot(sim.state)  # before anyone exists
+    initial = sim.state.resources.copy()
     events: list[EventDraft] = []
     _spawn(sim)
     for checkpoint in (1, 7, 30, 77, 120, 181):
@@ -137,21 +140,27 @@ def test_every_state_change_is_exactly_one_event(new_sim: Callable[..., Simulati
         except (KeyError, ValueError):  # the stream refers to someone or something that never appeared
             return False
 
-    def stock(event: EventDraft) -> tuple[int, str] | None:
-        payload = event.payload
-        return (payload.cell, payload.resource) if isinstance(payload, ResourceChanged) else None
+    def change(event: EventDraft) -> ResourceChanged | None:
+        return event.payload if isinstance(event.payload, ResourceChanged) else None
 
-    def overwritten(index: int) -> bool:  # resource_changed carries the absolute stock: a later change replaces it
-        return any(stock(later) == stock(events[index]) for later in events[index + 1 :])
+    def overwritten(index: int, stock: ResourceChanged) -> bool:
+        later = (change(event) for event in events[index + 1 :])
+        return any(c is not None and (c.cell, c.resource) == (stock.cell, stock.resource) for c in later)
 
+    stocks: dict[tuple[int, str], int] = {}
+    changes: Counter[tuple[int, str]] = Counter()
     for index, event in enumerate(events):
-        checked = event.type in ("citizen_spawned", "item_moved") or (
-            event.type == "resource_changed" and not overwritten(index)
-        )
-        if checked:
+        stock = change(event)
+        if stock is not None:  # it carries the absolute stock, so it leads on from the one before
+            key = (stock.cell, stock.resource)
+            assert stock.before == stocks.get(key, int(initial[stock.cell, RESOURCE_INDEX[stock.resource]])), event.seq
+            stocks[key] = stock.after
+            changes[key] += 1
+        if event.type in ("citizen_spawned", "item_moved") or (stock is not None and not overwritten(index, stock)):
             assert not reaches_final(events[:index] + events[index + 1 :]), f"{event.type} #{event.seq} is redundant"
         if event.type == "item_moved":  # a delta (resource_changed carries absolute values)
             assert not reaches_final(events[: index + 1] + events[index:]), f"{event.type} #{event.seq} counted twice"
+    assert max(changes.values()) >= 2  # the bush Ben picked grows a berry back
 
 
 def test_a_snapshot_resumes_into_the_same_future(new_sim: Callable[..., Simulation], planner: Planner) -> None:
