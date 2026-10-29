@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { clone } from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 import { AnimalModel } from '@/components/world/animal-model';
 import { CitizenModel } from '@/components/world/citizen-model';
@@ -81,7 +82,8 @@ function rowX(index: number, count: number, spacing: number) {
 function PropModel({ kind }: { kind: PropKind }) {
   const id = PROPS[kind];
   const { scene } = useGLTF(assetUrl(id));
-  const model = useMemo(() => scene.clone(true), [scene]);
+  // SkeletonUtils keeps skinned parts (the reed bed's and dune grass's wind-swayed blades) bound to their bones
+  const model = useMemo(() => clone(scene), [scene]);
   return <primitive object={model} position-y={assetBaseY(id)} />;
 }
 
