@@ -99,21 +99,45 @@ function breakupGlsl(rules: GroundBreakup[]) {
 }
 
 /*
- * The two layers that draw their pattern: the top two by height (the weights h after the breakup, the fields and
- * a grain), and the first one's share t (0.5..1). Each layer's height rises from -1 with its weight, so a layer
- * fades in rather than pops; the top two share a 0.16 wide band and the second fades out as the third catches up,
- * so the blend never jumps where the pick changes.
+ * Where each layer stands in the plane of the two breakup fields (degrees): a layer's height rises with the fields
+ * along its direction, so layers that often share ground (grass and rock, grass and dirt, rock and snow) lie far
+ * apart and split it into crisp patches instead of ties.
+ */
+const PICK_PHASE: Record<GroundLayer, number> = {
+  grass: 0,
+  forest_floor: 150,
+  dirt: 110,
+  gravel: 250,
+  sand: 200,
+  rock: 180,
+  snow: 30,
+  mud: 300,
+};
+/** How far the fields lift a layer's height: weights 0.2 apart still share the ground. */
+const PICK_SPREAD = 1.5;
+/** Width of the height band where the top two layers blend. */
+const PICK_BAND = 0.1;
+
+/*
+ * The two layers that draw their pattern: the top two by height (the weights h after the breakup, lifted by the
+ * fields), and the first one's share t (0.5..1). Each layer's height rises from -1 with its weight, so a layer
+ * fades in rather than pops; the top two share a band and the second fades out as the third catches up, so the
+ * blend never jumps where the pick changes.
  */
 const GROUND_PICK = /* glsl */ `
-float groundPick(float hw[8], float f0, float f1, float grain, out int first, out int second) {
+const vec2 GROUND_PHASE[8] = vec2[8](${GROUND_LAYERS.map((layer) => {
+  const angle = (PICK_PHASE[layer] * Math.PI) / 180;
+  return `vec2(${glslFloat(Math.cos(angle) * PICK_SPREAD)}, ${glslFloat(Math.sin(angle) * PICK_SPREAD)})`;
+}).join(', ')});
+float groundPick(float hw[8], float f0, float f1, out int first, out int second) {
   first = 0;
   second = 0;
   float h1 = -9.0;
   float h2 = -9.0;
   float h3 = -9.0;
+  vec2 f = vec2(f0, f1) - 0.5;
   for (int i = 0; i < 8; i++) {
-    float mixer = fract(float(i) * 0.618);
-    float h = mix(-1.0, hw[i] + 0.9 * (mix(f0, f1, mixer) - 0.5) + 0.25 * (grain - 0.5), smoothstep(0.0, 0.03, hw[i]));
+    float h = mix(-1.0, hw[i] + dot(GROUND_PHASE[i], f), smoothstep(0.0, 0.03, hw[i]));
     if (h > h1) {
       h3 = h2;
       h2 = h1;
@@ -126,23 +150,23 @@ float groundPick(float hw[8], float f0, float f1, float grain, out int first, ou
       second = i;
     } else if (h > h3) h3 = h;
   }
-  float a1 = min(h1 - h2 + 0.08, h1 - h3);
-  float a2 = min(max(h2 - h1 + 0.08, 0.0), h2 - h3);
+  float a1 = min(h1 - h2 + ${glslFloat(PICK_BAND / 2)}, h1 - h3);
+  float a2 = min(max(h2 - h1 + ${glslFloat(PICK_BAND / 2)}, 0.0), h2 - h3);
   return a1 + a2 > 0.0 ? a1 / (a1 + a2) : 1.0;
 }
 `;
 
 /*
- * The breakup, then the pick: `float groundBlend(inout float w[8], float f0, float f1, float grain, float edge,
- * out int first, out int second)` returns the first layer's share and leaves the broken-up weights in w.
+ * The breakup, then the pick: `float groundBlend(inout float w[8], float f0, float f1, float edge, out int first,
+ * out int second)` returns the first layer's share and leaves the broken-up weights in w.
  */
 export const groundBlendGlsl = (rules: GroundBreakup[]) => /* glsl */ `
 ${breakupGlsl(rules)}
 ${GROUND_PICK}
-float groundBlend(inout float w[8], float f0, float f1, float grain, float edge, out int first, out int second) {
+float groundBlend(inout float w[8], float f0, float f1, float edge, out int first, out int second) {
   float hw[8] = w;
   groundBreakup(w, hw, f0, f1, edge);
-  return groundPick(hw, f0, f1, grain, first, second);
+  return groundPick(hw, f0, f1, first, second);
 }
 `;
 
@@ -265,10 +289,15 @@ vec3 gCells(vec3 p) {
 float gFine(vec3 p, float freq, float fw) {
   return mix(gNoise(p * freq), 0.5, smoothstep(0.35, 0.8, fw * freq));
 }
-/* The shared noises: 15 m drifts, 3 m patches, 1 m grain, 11 m drifts (and a 4 m one only the fields use). */
-vec4 groundNoises(vec3 p, out float extra) {
-  extra = gNoise(p * 0.43 + 53.0);
-  return vec4(gNoise(p * 0.065), gNoise(p * 0.31 + 17.0), gNoise(p * 1.13 + 31.0), gNoise(p * 0.09 + 41.0));
+/*
+ * The shared noises: 15 m drifts, 3 m patches, 1 m grain, 11 m drifts (and a 4 m one only the fields use), each
+ * fading to 0.5 where a pixel (fw metres) can't resolve it, so far patches never crawl.
+ */
+vec4 groundNoises(vec3 p, float fw, out float extra) {
+  vec4 freq = vec4(0.065, 0.31, 1.13, 0.09);
+  vec4 n = vec4(gNoise(p * freq.x), gNoise(p * freq.y + 17.0), gNoise(p * freq.z + 31.0), gNoise(p * freq.w + 41.0));
+  extra = mix(gNoise(p * 0.43 + 53.0), 0.5, smoothstep(0.35, 0.8, fw * 0.43));
+  return mix(n, vec4(0.5), smoothstep(vec4(0.35), vec4(0.8), fw * freq));
 }
 /* A grass tint shifts the grass colours by its ratio to the style's reference tint, kept within bounds. */
 vec3 groundTintShift(vec3 tint) {
@@ -278,6 +307,10 @@ vec3 groundMacro(float w[8], vec3 grassTint) {
   vec3 c = vec3(0.0);
   for (int i = 0; i < 8; i++) c += w[i] * GROUND_BASE[i];
   return c + w[0] * GROUND_BASE[0] * (groundTintShift(grassTint) - 1.0);
+}
+/* A layer's average colour (grass shifted by the tint). */
+vec3 groundBase(int layer, vec3 grassTint) {
+  return layer == 0 ? GROUND_BASE[0] * groundTintShift(grassTint) : GROUND_BASE[layer];
 }
 /*
  * Bumps a view-space normal by a height field h (metres) over the fragment's view position. The slope is capped
@@ -316,14 +349,15 @@ float groundRelief = 0.0;
   float fw = dist * groundPixel * sqrt(1.0 + 1.0 / (facing * facing));
   if (dist < GROUND_MACRO_END) {
     float extra;
-    vec4 g = groundNoises(p, extra);
+    vec4 g = groundNoises(p, fw, extra);
     // the breakup fields: drifts, patches and ragged 1 m edges
     float f0 = g.x * 0.42 + g.y * 0.38 + g.z * 0.2;
     float f1 = g.w * 0.5 + extra * 0.32 + (1.0 - g.z) * 0.18;
     int first;
     int second;
-    float t = groundBlend(w, f0, f1, g.z, ${BREAKUP_EDGE} + fw * 0.5, first, second);
-    vec3 near = groundMacro(w, tint);
+    float t = groundBlend(w, f0, f1, ${BREAKUP_EDGE} + fw * 0.5, first, second);
+    // past the patterns the top two layers' own colours, so they part along the fields, not the mesh's triangles
+    vec3 near = mix(groundBase(second, tint), groundBase(first, tint), t);
     if (dist < GROUND_PATTERN_END) {
 #ifdef GROUND_LOW
       t = 1.0;
