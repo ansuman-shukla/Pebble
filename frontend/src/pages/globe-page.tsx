@@ -63,6 +63,7 @@ import {
   NpcHooks,
   PeoplePanel,
 } from '@/components/world/globe/live-ui';
+import { TimeLapseTrails } from '@/components/world/globe/time-lapse-trails';
 import { VolcanoSmoke } from '@/components/world/globe/volcano-smoke';
 import { Waterfalls } from '@/components/world/globe/waterfalls';
 import { ChipOverlay, ChipProjector } from '@/components/world/labels';
@@ -119,6 +120,7 @@ import {
   streamChannels,
 } from '@/lib/world/river-courses';
 import { createScatter, type Scatter } from '@/lib/world/scatter';
+import { clockRate } from '@/lib/world/visual-rate';
 import type { WalkTown } from '@/lib/world/walk-charts';
 
 /*
@@ -464,6 +466,10 @@ const GlobeScene = memo(function GlobeScene({
         views={npcViews}
         followId={followId}
         subjectRef={subjectRef}
+      />
+      <TimeLapseTrails
+        views={npcViews}
+        rate={clockRate(live.speed, live.paused)}
       />
       <GlobeAnimals
         animals={live.animals}
