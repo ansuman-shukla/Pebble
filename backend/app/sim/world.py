@@ -35,7 +35,7 @@ UInt8Array = NDArray[np.uint8]
 
 WATER_BIOMES = ("deep_ocean", "shallow_ocean", "lake")
 SITE_RADIUS_M: dict[str, float] = {"town": 230.0, "camp": 60.0, "landmark": 80.0}
-HOME_KINDS = frozenset({"townhouse", "farmhouse", "castle_keep", "lean_to"})
+HOME_KINDS = frozenset({"townhouse", "farmhouse", "castle_keep", "temple_hall", "lean_to"})
 STRUCTURE_LABELS: dict[str, str] = {  # town placements
     "well": "the well",
     "storehouse": "a storehouse",
@@ -43,6 +43,7 @@ STRUCTURE_LABELS: dict[str, str] = {  # town placements
     "farmhouse": "a farmhouse",
     "castle_gatehouse": "a gatehouse",
     "castle_keep": "the keep",
+    "temple_hall": "the temple hall",
 }
 CAMP_STRUCTURE_LABELS: dict[str, str] = {"lean_to": "a lean-to", "fire_pit": "the fire pit"}  # camp placements
 FIRE_SEATS = 8  # spots round a fire pit, one per member of its band

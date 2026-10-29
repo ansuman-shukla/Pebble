@@ -30,7 +30,7 @@ def test_every_town_place_and_structure_door_is_walkable(sim_world: SimWorld) ->
 
 def test_homes_and_storehouses_come_from_the_town_spec_and_the_camps(sim_world: SimWorld) -> None:
     town = load_town()
-    houses = {p.id for p in town.placements if p.kind in ("townhouse", "farmhouse", "castle_keep")}
+    houses = {p.id for p in town.placements if p.kind in ("townhouse", "farmhouse", "castle_keep", "temple_hall")}
     lean_tos = {f"{camp}:shelter-{side}" for camp in ("band_a_camp", "band_b_camp") for side in "nwe"}
     stores = {p.id for p in town.placements if p.kind == "storehouse"}
     assert {s.id for s in sim_world.structures.values() if s.is_home} == houses | lean_tos
