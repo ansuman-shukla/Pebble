@@ -7,6 +7,7 @@ import { expect, test } from '@playwright/test';
 import manifest from '../../src/lib/world/asset-manifest.json' with { type: 'json' };
 import { ANIMALS, PROPS } from '../../src/lib/world/assets';
 import { CITIZEN_LOOKS } from '../../src/lib/world/citizen-looks';
+import { KIT_LOOKS } from '../../src/lib/world/kit-looks';
 import { VISITOR_LOOK } from '../../src/lib/world/visitor-look';
 import { createCharacter } from '../../src/vendor/polyfork/humanoid.mjs';
 
@@ -17,6 +18,15 @@ const registryIds = new Set([
   ...Object.values(ANIMALS).map((animal) => animal.asset),
 ]);
 
+/** Names of the meshes a character is built from (`body` + `attach-<slot>-mesh` per garment). */
+function meshNames(config: Parameters<typeof createCharacter>[0]) {
+  const names: string[] = [];
+  createCharacter(config).traverse((object) => {
+    if ((object as { isMesh?: boolean }).isMesh) names.push(object.name);
+  });
+  return names.sort();
+}
+
 test('every registry kind resolves to a vendored file matching its pinned hash', () => {
   for (const id of registryIds) {
     const asset = byId.get(id);
@@ -26,6 +36,21 @@ test('every registry kind resolves to a vendored file matching its pinned hash',
       asset!.files.glb.sha256,
     );
   }
+});
+
+test('kit looks build rigged humanoids wearing every garment they name', () => {
+  expect(Object.keys(KIT_LOOKS).sort()).toEqual(
+    ['ashigaru', 'buddhist_monk', 'farmer'].sort(),
+  );
+  for (const [id, config] of Object.entries(KIT_LOOKS)) {
+    const slots = Object.keys(config.wear);
+    expect(meshNames(config), id).toEqual(
+      ['body', ...slots.map((slot) => `attach-${slot}-mesh`)].sort(),
+    );
+  }
+  expect(KIT_LOOKS.buddhist_monk.wear.neck).toMatchObject({ name: 'kesa' });
+  expect(KIT_LOOKS.ashigaru.wear.coat).toMatchObject({ name: 'do-maru' });
+  expect(KIT_LOOKS.farmer.wear.neck).toMatchObject({ name: 'mino' });
 });
 
 test('every pinned asset is used by the registry', () => {
@@ -79,15 +104,11 @@ test('every citizen look builds a rigged humanoid', () => {
 });
 
 test('the visitor look builds a humanoid wearing every garment it names', () => {
-  const meshes: string[] = [];
-  createCharacter(VISITOR_LOOK).traverse((object) => {
-    if ((object as { isMesh?: boolean }).isMesh) meshes.push(object.name);
-  });
   const slots = Object.keys(VISITOR_LOOK.wear);
   expect(slots).toEqual(
     expect.arrayContaining(['hat', 'top', 'bottom', 'feet']),
   );
-  expect(meshes.sort()).toEqual(
+  expect(meshNames(VISITOR_LOOK)).toEqual(
     ['body', ...slots.map((slot) => `attach-${slot}-mesh`)].sort(),
   );
 });
