@@ -184,7 +184,7 @@ vec4 groundLook(int layer, vec3 p, vec3 tint, float fw, vec4 g, inout float roug
     relief = 0.65 - 0.5 * wet + (lumps - 0.5) * 0.3 + (silt - 0.5) * (0.15 + 0.15 * wet);
     // the driest patches part into plates along cracks a few centimetres wide, at least a pixel and a half (fw * 2.4
     // cell units a pixel), fainter as they widen
-    float keepCracks = (1.0 - smoothstep(0.2, 0.5, fw * 2.4)) * (1.0 - smoothstep(0.34, 0.42, damp - (g.w - 0.5) * 0.3));
+    float keepCracks = (1.0 - smoothstep(0.06, 0.15, fw * 2.4)) * (1.0 - smoothstep(0.34, 0.42, damp - (g.w - 0.5) * 0.3));
     if (keepCracks > 0.0) {
       vec3 plates = gCells(p * 2.4 + vec3(g.z, g.w, g.x) * 0.8);
       float crackWidth = 0.03 + fw * 3.6;
@@ -195,7 +195,7 @@ vec4 groundLook(int layer, vec3 p, vec3 tint, float fw, vec4 g, inout float roug
     }
     // ragged tufts of reed and grass a few centimetres across, and water standing in hoof pocks in the wet mud,
     // gone where a pixel can't hold them
-    float keepTufts = 1.0 - smoothstep(0.2, 0.5, fw * 6.0);
+    float keepTufts = 1.0 - smoothstep(0.1, 0.25, fw * 6.0);
     if (keepTufts > 0.0) {
       vec3 tufts = gCells(p * 6.0 + 3.0);
       float d = tufts.x + (silt - 0.5) * 0.15;
