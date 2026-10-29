@@ -40,14 +40,14 @@ def test_citizens_list_everyone_with_what_they_do(client: TestClient, cast: Engi
             entity["state"],
         )
     places = {c["id"]: c["place"] for c in body["citizens"]}
-    camp = cast.sim.world.places["band_a_camp"]
-    at_camp = [  # whoever of band A is in camp (the hunters may be out after game)
-        citizen.id
-        for citizen in cast.sim.state.citizens.values()
-        if citizen.region == "band_a" and cast.sim.world.distance_m(citizen.position, camp.centre) < camp.radius_m - 5
-    ]
-    assert at_camp and all(places[cid] == {"id": "band_a_camp", "name": "Band A camp"} for cid in at_camp)
-    assert places["barro"] == {"id": "band_b_camp", "name": "Band B camp"}  # band B sleeps through its night
+    for region, name in (("band_a", "Band A"), ("band_b", "Band B")):
+        camp = cast.sim.world.places[f"{region}_camp"]
+        at_camp = [  # whoever of the band is in camp (the hunters may be out after game)
+            citizen.id
+            for citizen in cast.sim.state.citizens.values()
+            if citizen.region == region and cast.sim.world.distance_m(citizen.position, camp.centre) < camp.radius_m - 5
+        ]
+        assert at_camp and all(places[cid] == {"id": camp.id, "name": f"{name} camp"} for cid in at_camp), region
 
 
 @pytest.mark.usefixtures("story")

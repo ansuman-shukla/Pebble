@@ -6,13 +6,13 @@ from typing import Any
 import numpy as np
 import pytest
 
-from app.observability.events import EventDraft
+from app.observability.events import EventDraft, ResourceChanged
 from app.observability.replay import ReplayEvent, from_snapshot, replay
 from app.sim.navigation import Planner
 from app.sim.simulation import Simulation
 from app.sim.snapshot import canonical_json, restore, state_hash, take_snapshot
 from app.world_api.facade import WorldApi
-from tests.sim_helpers import GATE, WELL, make_spec
+from tests.sim_helpers import GATE, WELL, make_spec, without_animals
 
 Plan = dict[int, list[tuple[str, Callable[[WorldApi], Any]]]]
 
@@ -114,7 +114,7 @@ def test_needs_resources_and_items_stay_in_range(new_sim: Callable[..., Simulati
 
 
 def test_every_state_change_is_exactly_one_event(new_sim: Callable[..., Simulation]) -> None:
-    sim = new_sim(seed=5)
+    sim = without_animals(new_sim(seed=5))  # game coming into view would stop Ben's walk into the wild
     start = take_snapshot(sim.state)  # before anyone exists
     events: list[EventDraft] = []
     _spawn(sim)
@@ -137,8 +137,18 @@ def test_every_state_change_is_exactly_one_event(new_sim: Callable[..., Simulati
         except (KeyError, ValueError):  # the stream refers to someone or something that never appeared
             return False
 
+    def stock(event: EventDraft) -> tuple[int, str] | None:
+        payload = event.payload
+        return (payload.cell, payload.resource) if isinstance(payload, ResourceChanged) else None
+
+    def overwritten(index: int) -> bool:  # resource_changed carries the absolute stock: a later change replaces it
+        return any(stock(later) == stock(events[index]) for later in events[index + 1 :])
+
     for index, event in enumerate(events):
-        if event.type in ("citizen_spawned", "item_moved", "resource_changed"):
+        checked = event.type in ("citizen_spawned", "item_moved") or (
+            event.type == "resource_changed" and not overwritten(index)
+        )
+        if checked:
             assert not reaches_final(events[:index] + events[index + 1 :]), f"{event.type} #{event.seq} is redundant"
         if event.type == "item_moved":  # a delta (resource_changed carries absolute values)
             assert not reaches_final(events[: index + 1] + events[index:]), f"{event.type} #{event.seq} counted twice"

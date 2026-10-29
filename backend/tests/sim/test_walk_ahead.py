@@ -122,12 +122,12 @@ def test_an_exhausted_walker_goes_at_half_pace(new_sim: Callable[..., Simulation
 
 def test_a_forest_walker_is_slower_and_still_lands_on_the_streamed_path(new_sim: Callable[..., Simulation]) -> None:
     sim = new_sim()
-    citizen = sim.add_citizen(make_spec(site="band_b_camp", at=(0.0, 20.0), home=None, knows_places=["band_b_camp"]))
+    citizen = sim.add_citizen(make_spec(site="band_a_camp", at=(30.0, 150.0), home=None, knows_places=["band_a_camp"]))
     assert sim.world.town_point(citizen.position) is None and sim.world.biome(citizen.cell) == "broadleaf_forest"
-    WorldApi(sim, citizen.id).walk_towards("north", "a long walk")
+    WorldApi(sim, citizen.id).walk_towards("east", "a long walk")
     sim.drain()
     predicted: Vec3 | None = None
-    for _ in range(4):  # the forest around band B's camp: terrain cost 1.5 the whole way
+    for _ in range(4):  # the forest south of band A's camp: terrain cost 1.5 the whole way
         sim.step()
         moved = _moved(sim, citizen.id)
         assert moved is not None and citizen.action is not None
