@@ -46,15 +46,17 @@ type TrailGeometry = BufferGeometry<{
   color: BufferAttribute;
 }>;
 
-/** Room for every mover's trail; nothing drawn until the first sample. */
+/** Room for every mover's trail, all one colour (only the alpha changes); nothing drawn until the first sample. */
 function newGeometry(): TrailGeometry {
   const geometry: TrailGeometry = new BufferGeometry();
   const attribute = (size: number) =>
     new BufferAttribute(new Float32Array(VERTICES * size), size).setUsage(
       DynamicDrawUsage,
     );
+  const colors = attribute(4);
+  for (let v = 0; v < VERTICES; v++) colors.setXYZ(v, ...COLOR);
   geometry.setAttribute('position', attribute(3));
-  geometry.setAttribute('color', attribute(4));
+  geometry.setAttribute('color', colors);
   geometry.setDrawRange(0, 0);
   return geometry;
 }
@@ -105,12 +107,7 @@ export function TimeLapseTrails({
       now,
     );
     const rgba = colors.array as Float32Array;
-    for (let v = 0; v < vertices; v++) {
-      rgba[v * 4] = COLOR[0];
-      rgba[v * 4 + 1] = COLOR[1];
-      rgba[v * 4 + 2] = COLOR[2];
-      rgba[v * 4 + 3] = alphas[v] * OPACITY;
-    }
+    for (let v = 0; v < vertices; v++) rgba[v * 4 + 3] = alphas[v] * OPACITY;
     uploadTrails([positions, colors], vertices);
     mesh.geometry.setDrawRange(0, vertices);
   });
