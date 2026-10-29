@@ -10,10 +10,10 @@ from app.observability.events import EventDraft, ItemMoved, Spoiled, ToolBroke
 from app.observability.replay import ReplayEvent, replay
 from app.sim.economy import load_economy
 from app.sim.simulation import Simulation
-from app.sim.snapshot import take_snapshot
+from app.sim.snapshot import restore, take_snapshot
 from app.sim.systems import REGISTRY, dawn_at
 from app.sim.vec import Vec3
-from app.sim.wear import spoil_at_dawn, spoilage, store_spot, use_tool, wear_packs_at_dawn
+from app.sim.wear import DAWN_GAP, WEAR, spoil_at_dawn, spoilage, store_spot, use_tool, wear_packs_at_dawn
 from app.sim.world import SimWorld
 from tests.sim_helpers import GATE, make_spec, without_animals
 
@@ -114,6 +114,44 @@ def test_nothing_spoils_away_from_dawn_and_nothing_twice_a_day(new_sim: Callable
     assert tek.inventory == {"meat": 20}
 
 
+def test_a_citizen_s_dawn_counts_once_in_half_a_day(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    tek = sim.citizen("tek")
+    spoiled = []
+    for tick in (1000, 1000, 1100, 1000 + DAWN_GAP - 1, 1000 + DAWN_GAP, 1000 + DAWN_GAP + 5):
+        sim.state.tick = tick
+        tek.inventory["meat"] = 2
+        spoil_at_dawn(sim.core, lambda _unit: True)
+        spoiled += [e.tick for e in sim.drain() if e.type == "spoiled"]
+    assert spoiled == [1000, 1000, 1000 + DAWN_GAP]  # again in the same tick (another hook), then not till noon
+
+
+def test_a_walker_heading_west_into_the_night_doesn_t_spoil_at_the_second_sunrise(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    sim = _sim(new_sim, inventory={"meat": 16})
+    tek = sim.citizen("tek")
+    dawn = _dawn_tick(sim, tek.position)
+    assert len([e for e in _run_over(sim, dawn, before=1, after=1) if e.type == "spoiled"]) == 1
+    west = sim.world.structures["band_b_camp:fire-pit"].door  # hours behind the town: still night there
+    assert sim.core.altitude(west) < 0
+    sim.core.place_at(tek, west)
+    second = _dawn_tick(sim, west)
+    assert second - dawn < 6 * 60
+    events = _run_over(sim, second, before=second - dawn - 2, after=2)
+    assert not [e for e in events if e.type == "spoiled"] and tek.inventory["meat"] == 8
+    assert WEAR.of(sim.state).last == {"tek": dawn}
+
+
+def test_the_wear_block_round_trips_a_snapshot(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim, inventory={"meat": 4})
+    sim.state.tick = 77
+    spoil_at_dawn(sim.core, lambda _unit: True)
+    snapshot = take_snapshot(sim.state)
+    assert WEAR.of(restore(snapshot)).last == {"tek": 77}
+    assert (snapshot.systems["wear"].version, snapshot.systems["wear"].data) == (1, {"last": {"tek": 77}})
+
+
 def test_the_dead_keep_what_they_carried(new_sim: Callable[..., Simulation]) -> None:
     sim = _sim(new_sim, inventory={"meat": 4})
     sim.citizen("tek").body.alive = False
@@ -146,6 +184,7 @@ def test_every_store_stands_somewhere(sim_world: SimWorld) -> None:
 
 def test_wear_hooks_are_registered_at_dawn() -> None:
     assert spoil_at_dawn in REGISTRY.at_dawn and wear_packs_at_dawn in REGISTRY.at_dawn
+    assert WEAR in REGISTRY.systems
 
 
 @pytest.mark.parametrize(

@@ -7,21 +7,59 @@
   is gone (`tool_broke`).
 
 Gone items leave through `item_moved` to the `world`, caused by the `spoiled` or `tool_broke` event, so replay keeps
-every inventory and store exact. Wear keeps no state of its own, so it registers hooks but no system.
+every inventory and store exact. On a 2 km world a walker outruns the dawn ten times over: heading west after
+sunrise they see the sun set and rise again. So a citizen's dawn counts once a day: the `wear` system remembers when
+each citizen's last one was (stores stand still and need no such memory).
 """
 
 import math
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
+
+from pydantic import JsonValue
 
 from app.observability.events import ItemLocation, Spoiled, ToolBroke
+from app.sim.clock import DAY_MINUTES
 from app.sim.core import SimCore
 from app.sim.economy import load_economy
-from app.sim.state import Citizen
+from app.sim.state import Citizen, System
 from app.sim.vec import Vec3
 from app.sim.world import SimWorld, site_unit
 from app.world.town import load_town
 
 LocalTest = Callable[[Vec3], bool]  # app.sim.systems' (which registers these hooks, so can't be imported here)
+DAWN_GAP = DAY_MINUTES // 2  # a citizen's next dawn counts only this many ticks after the last
+
+
+@dataclass
+class Dawns:
+    last: dict[str, int] = field(default_factory=dict)  # citizen id -> the tick their last dawn counted
+
+
+def _dump(dawns: Dawns) -> JsonValue:
+    return {"last": dict[str, JsonValue](sorted(dawns.last.items()))}
+
+
+def _load(data: JsonValue) -> Dawns:
+    if not isinstance(data, dict) or not isinstance(last := data.get("last"), dict):
+        raise ValueError("a wear block holds {last: {citizen: tick}}")
+    return Dawns(last={citizen: int(str(tick)) for citizen, tick in last.items()})
+
+
+WEAR = System[Dawns]("wear", 1, new=lambda _world: Dawns(), dump=_dump, load=_load)
+
+
+def dawn_of(core: SimCore, citizen: Citizen, now: LocalTest) -> bool:
+    """It is this citizen's dawn: the sun rises where they are and their last dawn was half a day or more ago (or
+    earlier this tick)."""
+    if not now(citizen.position):
+        return False
+    last = WEAR.of(core.state).last
+    tick = core.state.tick
+    if 0 < tick - last.get(citizen.id, -DAWN_GAP) < DAWN_GAP:
+        return False
+    last[citizen.id] = tick
+    return True
 
 
 def spoilage(stock: Mapping[str, int]) -> dict[str, int]:
@@ -54,7 +92,7 @@ def spoil_at_dawn(core: SimCore, now: LocalTest) -> None:
     """Dawn hook: spoiling food in inventories and stores whose dawn it is goes off."""
     for citizen in core.living():
         lost = spoilage(citizen.inventory)
-        if lost and now(citizen.position):
+        if dawn_of(core, citizen, now) and lost:
             _spoil(core, citizen.inventory, lost, citizen, ItemLocation(kind="inventory", id=citizen.id))
     for store_id, stock in sorted(core.state.stores.items()):
         lost = spoilage(stock)
@@ -77,7 +115,7 @@ def wear_packs_at_dawn(core: SimCore, now: LocalTest) -> None:
     chance = load_economy().breakage["pack"].chance
     for citizen in core.living():
         packs = citizen.inventory.get("pack", 0)
-        if not packs or not now(citizen.position):
+        if not dawn_of(core, citizen, now) or not packs:
             continue
         rng = core.state.rng("wear.pack")
         for _ in range(packs):

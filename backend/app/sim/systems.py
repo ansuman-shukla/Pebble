@@ -37,7 +37,7 @@ class Registry:
 
 
 REGISTRY = Registry(
-    systems=(movement.RUNNING,),
+    systems=(movement.RUNNING, wear.WEAR,),
     every_tick=(movement.catch_breath,),
     at_dawn=(wear.spoil_at_dawn, wear.wear_packs_at_dawn,),
     at_midnight=(),
