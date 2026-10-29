@@ -47,6 +47,7 @@ const GROUNDS: [string, number, number][] = [
 const LOOKS = ['town-farmer', 'band-a-hunter', 'town-child', 'band-a-healer'];
 /** The clip each posture plays under it (`npc-activity.ts`). */
 const CLIP: Record<Exclude<Posture, 'standing'>, string> = {
+  seated: 'Sitting',
   sitting: 'Sitting',
   sleeping: 'Idle',
   lying: 'Idle',

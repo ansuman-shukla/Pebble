@@ -2,6 +2,8 @@
  * Bodies at rest on the ground: sitting on it (resting) and lying on the back (asleep, dead). Polyfork has no clip
  * for either (its `Sitting` is a chair sit), so the posture is layered on top of the clip each frame:
  *
+ *   seated:   the chair clip on a seat: lifted so the hips rest at the seat's height, the knees lowered to reach
+ *             down towards the ground (a child's feet dangle)
  *   sitting:  the chair clip's upper body and thighs, knees straightened (legs out in front), the hips set down
  *   lying:    a still standing frame (Idle, frozen) with straight legs, turned onto its back about the hips (the dead)
  *   sleeping: lying, but the right knee drawn up (its foot flat on the ground) and the head turned aside, so a
@@ -23,7 +25,7 @@ import {
   Vector3,
 } from 'three';
 
-export type Posture = 'standing' | 'sitting' | 'sleeping' | 'lying';
+export type Posture = 'standing' | 'seated' | 'sitting' | 'sleeping' | 'lying';
 
 const onBack = (posture: Posture) =>
   posture === 'sleeping' || posture === 'lying';
@@ -61,6 +63,18 @@ const SLEEP_KNEE: Knee = { thigh: 35 * DEG, shin: 60 * DEG };
 const STEEPEST_SHIN = 80 * DEG;
 /** A sleeper's head turns this far to its side (radians, about the head's up axis). */
 const SLEEP_HEAD = 25 * DEG;
+/**
+ * How high a seat is (m): the feed doesn't carry a slot's height yet, so every seat is a bench's (a camp's log seat
+ * is 0.4).
+ */
+export const SEAT_HEIGHT = 0.45;
+/**
+ * Where Polyfork's chair sit (`Sitting`) puts the underside of the hips, as a share of the rig's hip height at rest
+ * (0.44-0.50 measured over adults and children).
+ */
+const CHAIR_SEAT = 0.47;
+/** A seated body's knees come down at most this far to reach for the ground (radians). */
+const SEAT_KNEE_DROP = 25 * DEG;
 const X = new Vector3(1, 0, 0);
 const UP = new Vector3(0, 1, 0);
 
@@ -125,8 +139,17 @@ const drawKnee = (rest: Rest, { thigh, shin }: Knee) => {
  * sit out in front; on the back the legs straighten (a sleeper's knee drawn up, its head turned aside) and the hips
  * go back where the rig keeps them (no sway).
  */
-export function holdPosture(rest: Rest, posture: Posture, knee?: Knee | null) {
+export function holdPosture(
+  rest: Rest,
+  posture: Posture,
+  knee?: Knee | null,
+  lift = 0,
+) {
   if (posture === 'standing') return;
+  if (posture === 'seated') {
+    lowerKnees(rest, lift);
+    return;
+  }
   for (const name of LEGS)
     turnLeg(
       rest,
@@ -143,11 +166,32 @@ export function holdPosture(rest: Rest, posture: Posture, knee?: Knee | null) {
     .multiply(bend.setFromAxisAngle(UP, SLEEP_HEAD));
 }
 
+/**
+ * A seated body lifted `lift` m above the chair clip's own seat lowers its knees (thighs sloping down, shins as the
+ * clip has them) so its feet come down by as much, as far as SEAT_KNEE_DROP allows.
+ */
+function lowerKnees(rest: Rest, lift: number) {
+  if (lift <= 0) return;
+  for (const side of ['Left', 'Right']) {
+    const thigh = rest.legs.get(`${side}UpLeg`)!.bone;
+    const shin = rest.legs.get(`${side}Leg`)!.bone;
+    const length = shin.position.length() * thigh.getWorldScale(scaleOf).y;
+    const drop = Math.min(
+      Math.asin(Math.min(lift / length, 1)),
+      SEAT_KNEE_DROP,
+    );
+    thigh.quaternion.multiply(bend.setFromAxisAngle(X, drop));
+    shin.quaternion.multiply(bend.setFromAxisAngle(X, -drop));
+  }
+}
+
+const scaleOf = new Vector3();
+
 /** Tools in hand are hidden while sitting; on the back a hat, a straw cape or a stole are hidden too. */
 export function showWorn(character: Object3D, posture: Posture) {
   const hidden = onBack(posture)
     ? HIDDEN_ON_BACK
-    : posture === 'sitting'
+    : posture === 'sitting' || posture === 'seated'
       ? IN_HAND
       : null;
   character.traverse((object) => {
@@ -246,6 +290,7 @@ export function settle(
   posture: Posture,
 ): Footprint {
   const lying = onBack(posture);
+  if (posture === 'seated') return seat(posed, character, rest);
   posed.position.set(0, 0, 0);
   posed.rotation.set(lying ? -Math.PI / 2 : 0, 0, 0);
   character.position.set(0, lying ? -rest.hipsAt.y : 0, 0);
@@ -266,6 +311,26 @@ export function settle(
     half,
     hips: boneAt(posed, rest.hips).y,
     knee,
+  };
+}
+
+/**
+ * A seated body: lifted (never tilted) so the chair clip's seat comes to SEAT_HEIGHT; never lowered (an adult's own
+ * chair is up to 0.03 m higher), so its feet stay on the ground.
+ */
+function seat(posed: Object3D, character: Object3D, rest: Rest): Footprint {
+  const lift = Math.max(SEAT_HEIGHT - CHAIR_SEAT * rest.hipsAt.y, 0);
+  posed.position.set(0, lift, 0);
+  posed.rotation.set(0, 0, 0);
+  character.position.set(0, 0, 0);
+  posed.updateMatrixWorld(true);
+  return {
+    lift,
+    back: 0,
+    front: 0,
+    half: 0,
+    hips: boneAt(posed, rest.hips).y,
+    knee: null,
   };
 }
 
@@ -366,7 +431,7 @@ export function layToRest(
   const { character, rest, tilt, posed, ground } = body;
   const was = state.shape;
   state.shape = shape;
-  holdPosture(rest, shape.posture, state.print?.knee);
+  holdPosture(rest, shape.posture, state.print?.knee, state.print?.lift);
   if (shape.posture !== (was?.posture ?? 'standing'))
     showWorn(character, shape.posture);
   if (shape.posture === 'standing') {
@@ -381,6 +446,10 @@ export function layToRest(
   if (state.print === null || reshaped(was, shape))
     state.print = settle(posed, character, rest, shape.posture);
   const { print } = state;
+  if (shape.posture === 'seated') {
+    tilt.quaternion.identity();
+    return;
+  }
   under.back = ground(print.back, 0);
   under.front = ground(print.front, 0);
   under.left = ground(0, -print.half);
