@@ -337,8 +337,57 @@ interface BlendPath {
 const SAMPLES = 1024;
 
 /*
+ * Draws a fragment shader (GLSL 300 es, writing `out vec4 color`) over a width × height canvas on the GPU, with
+ * float uniforms, and returns `summary`: a browser expression over the RGBA8 `pixels` it drew (Uint8Array, rows
+ * bottom up). Browser code goes in as a string: the test TypeScript has no DOM types.
+ */
+async function drawFragment<T>(
+  page: Page,
+  {
+    shader,
+    width,
+    height,
+    uniforms = {},
+    summary,
+  }: {
+    shader: string;
+    width: number;
+    height: number;
+    uniforms?: Record<string, number[]>;
+    summary: string;
+  },
+): Promise<T> {
+  return page.evaluate<T>(`(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = ${width};
+    canvas.height = ${height};
+    const gl = canvas.getContext('webgl2', { premultipliedAlpha: false });
+    const compile = (type, source) => {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, source);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+      return s;
+    };
+    const program = gl.createProgram();
+    gl.attachShader(program, compile(gl.VERTEX_SHADER, '#version 300 es\\nvoid main() { gl_Position = vec4(vec2(gl_VertexID & 1, gl_VertexID >> 1) * 4.0 - 1.0, 0.0, 1.0); }'));
+    gl.attachShader(program, compile(gl.FRAGMENT_SHADER, ${JSON.stringify(shader)}));
+    gl.linkProgram(program);
+    gl.useProgram(program);
+    for (const [name, value] of Object.entries(${JSON.stringify(uniforms)})) {
+      const set = { 1: gl.uniform1fv, 2: gl.uniform2fv, 3: gl.uniform3fv }[value.length] ?? gl.uniform1fv;
+      set.call(gl, gl.getUniformLocation(program, name), value);
+    }
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    const pixels = new Uint8Array(${width} * ${height} * 4);
+    gl.readPixels(0, 0, ${width}, ${height}, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    return ${summary};
+  })()`);
+}
+
+/*
  * Runs the shader's own breakup and pick (`groundBlendGlsl`) on the GPU at SAMPLES points along a path and reads
- * back which two layers draw and their mix. Browser code goes in as a string: the test TypeScript has no DOM types.
+ * back which two layers draw and their mix.
  */
 async function blendAlong(
   page: Page,
@@ -365,33 +414,18 @@ void main() {
   float t = groundBlend(w, f.x, f.y, 0.04, first, second, gap);
   color = vec4(float(first) / 7.0, float(second) / 7.0, mix(float(second), float(first), t) / 7.0, t);
 }`;
-  const pixels = await page.evaluate<number[]>(`(() => {
-    const canvas = document.createElement('canvas');
-    canvas.width = ${SAMPLES};
-    canvas.height = 1;
-    const gl = canvas.getContext('webgl2', { premultipliedAlpha: false });
-    const compile = (type, source) => {
-      const s = gl.createShader(type);
-      gl.shaderSource(s, source);
-      gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
-      return s;
-    };
-    const program = gl.createProgram();
-    gl.attachShader(program, compile(gl.VERTEX_SHADER, '#version 300 es\\nvoid main() { gl_Position = vec4(vec2(gl_VertexID & 1, gl_VertexID >> 1) * 4.0 - 1.0, 0.0, 1.0); }'));
-    gl.attachShader(program, compile(gl.FRAGMENT_SHADER, ${JSON.stringify(shader)}));
-    gl.linkProgram(program);
-    gl.useProgram(program);
-    const set = (name, value) => (value.length === 8 ? gl.uniform1fv : gl.uniform2fv).call(gl, gl.getUniformLocation(program, name), value);
-    set('wFrom', ${JSON.stringify(weightsArray(from.weights))});
-    set('wTo', ${JSON.stringify(weightsArray(to.weights))});
-    set('fFrom', [${from.f0}, ${from.f1}]);
-    set('fTo', [${to.f0}, ${to.f1}]);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-    const out = new Uint8Array(${SAMPLES} * 4);
-    gl.readPixels(0, 0, ${SAMPLES}, 1, gl.RGBA, gl.UNSIGNED_BYTE, out);
-    return [...out];
-  })()`);
+  const pixels = await drawFragment<number[]>(page, {
+    shader,
+    width: SAMPLES,
+    height: 1,
+    uniforms: {
+      wFrom: weightsArray(from.weights),
+      wTo: weightsArray(to.weights),
+      fFrom: [from.f0, from.f1],
+      fTo: [to.f0, to.f1],
+    },
+    summary: '[...pixels]',
+  });
   return Array.from({ length: SAMPLES }, (_, k) => ({
     first: Math.round((pixels[k * 4] / 255) * 7),
     second: Math.round((pixels[k * 4 + 1] / 255) * 7),

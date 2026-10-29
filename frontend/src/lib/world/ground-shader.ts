@@ -241,7 +241,10 @@ uniform float groundPixel;
 uniform vec3 groundHoleUp;
 uniform float groundHoleCos;
 #endif
+`;
 
+/* The noises and the helpers the patterns and the blend read. */
+const GROUND_HELPERS = /* glsl */ `
 uint groundPcg(uint v) {
   uint state = v * 747796405u + 2891336453u;
   uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
@@ -462,7 +465,7 @@ export function groundMaterial({
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
-        `#include <common>\n${chunk.constants}\n${FRAGMENT_COMMON}\n${chunk.functions}`,
+        `#include <common>\n${chunk.constants}\n${FRAGMENT_COMMON}\n${GROUND_HELPERS}\n${chunk.functions}`,
       )
       .replace(
         'void main() {',
