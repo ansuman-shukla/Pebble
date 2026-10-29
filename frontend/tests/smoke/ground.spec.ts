@@ -444,20 +444,47 @@ test.describe('ground blend', () => {
     expect(largestStep(close)).toBeLessThan(0.2);
   });
 
-  test('two layers sharing the ground evenly split it into patches, not a mix', async ({
+  test('a layer fades in from no weight, however much the fields lift it', async ({
     page,
   }) => {
-    // level mountain: rock and grass half and half
+    // grass and dirt share the ground where the fields lift sand most and grass least; sand's weight rises from 0
     const samples = await blendAlong(page, [], {
-      from: { weights: { grass: 0.5, rock: 0.5 }, f0: 0.35, f1: 0.5 },
-      to: { weights: { grass: 0.5, rock: 0.5 }, f0: 0.65, f1: 0.5 },
+      from: { weights: { grass: 0.5, dirt: 0.5 }, f0: 0.1, f1: 0.35 },
+      to: {
+        weights: { grass: 0.485, dirt: 0.485, sand: 0.03 },
+        f0: 0.1,
+        f1: 0.35,
+      },
     });
-    const firsts = new Set(samples.map((s) => s.first));
-    expect([...firsts].sort()).toEqual([layer('grass'), layer('rock')].sort());
-    // only a narrow band along the patches' edges blends the two
-    const crisp = samples.filter((s) => s.share > 0.99).length;
-    expect(crisp / SAMPLES).toBeGreaterThan(0.75);
+    // a layer with no weight never draws
+    expect(samples[0]).toMatchObject({
+      first: layer('dirt'),
+      second: layer('grass'),
+    });
+    expect(samples.at(-1)!.first).toBe(layer('sand'));
+    // it rises into first place without popping in
+    expect(largestStep(samples)).toBeLessThan(0.2);
   });
+
+  for (const pair of [
+    ['grass', 'rock'],
+    ['grass', 'dirt'],
+  ] as const)
+    test(`${pair.join(' and ')} sharing the ground evenly split it into patches, not a mix`, async ({
+      page,
+    }) => {
+      // level mountain (rock and grass) or trodden grassland (grass and dirt), half and half
+      const weights = { [pair[0]]: 0.5, [pair[1]]: 0.5 };
+      const samples = await blendAlong(page, [], {
+        from: { weights, f0: 0.35, f1: 0.5 },
+        to: { weights, f0: 0.65, f1: 0.5 },
+      });
+      const firsts = new Set(samples.map((s) => s.first));
+      expect([...firsts].sort()).toEqual(pair.map(layer).sort());
+      // only a narrow band along the patches' edges blends the two
+      const crisp = samples.filter((s) => s.share > 0.99).length;
+      expect(crisp / SAMPLES).toBeGreaterThan(0.75);
+    });
 
   test("a patch's edge shows no third layer between the two", async ({
     page,
