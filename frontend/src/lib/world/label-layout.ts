@@ -97,6 +97,45 @@ export type ChipSizer = (
   chip: Pick<PlacedChip, 'leader' | 'members' | 'view'>,
 ) => ChipSize;
 
+/** An element's last measured size in a view, with the text it said then. */
+export interface MeasuredSize {
+  text: string;
+  size: ChipSize;
+}
+
+/** Rough sizes (px) of a chip or bubble saying `text` in a view, until it is measured saying it. */
+const CHAR_PX = 6.5;
+const CHIP_PX = 24;
+const BUBBLE_WIDTH_PX = 224;
+const BUBBLE_LINE_PX = 16;
+
+function estimate(text: string, view: ChipView | 'speech'): ChipSize {
+  const chars = text.length + 3;
+  switch (view) {
+    case 'icon':
+      return { width: CHIP_PX, height: CHIP_PX };
+    case 'cluster-icon':
+      return { width: CHIP_PX * 2, height: CHIP_PX };
+    case 'full':
+    case 'cluster':
+      return { width: chars * CHAR_PX + CHIP_PX + 12, height: CHIP_PX };
+    case 'speech': {
+      const width = Math.min(BUBBLE_WIDTH_PX, chars * CHAR_PX + 16);
+      const lines = Math.ceil((chars * CHAR_PX) / (BUBBLE_WIDTH_PX - 16));
+      return { width, height: lines * BUBBLE_LINE_PX + 8 };
+    }
+  }
+}
+
+/** The size to lay out `text` at: its `last` measurement while that said the same text, else an estimate. */
+export function sizeFor(
+  last: MeasuredSize | undefined,
+  text: string,
+  view: ChipView | 'speech',
+): ChipSize {
+  return last?.text === text ? last.size : estimate(text, view);
+}
+
 export interface PlacedChip {
   /** The subject drawn: the nearest of the cluster (or the pinned one). */
   leader: string;

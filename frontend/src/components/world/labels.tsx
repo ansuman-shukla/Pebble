@@ -23,12 +23,13 @@ import { type Camera, type Group, Vector3 } from 'three';
 import {
   type BubbleAnchor,
   type ChipAnchor,
-  type ChipSize,
   type ChipView,
   clusterFace,
   type LabelBox,
   layoutBubbles,
   layoutChips,
+  type MeasuredSize,
+  sizeFor,
   stackLabels,
 } from '@/lib/world/label-layout';
 import type {
@@ -184,30 +185,6 @@ const CHIP_ICONS: Record<ChipIcon, LucideIcon> = {
   people: Users,
 };
 
-/** Rough sizes (px) of a chip or bubble saying `text` in a view, until it is measured saying it. */
-const CHAR_PX = 6.5;
-const CHIP_PX = 24;
-const BUBBLE_WIDTH_PX = 224;
-const BUBBLE_LINE_PX = 16;
-
-function estimate(text: string, view: ChipView | 'speech'): ChipSize {
-  const chars = text.length + 3;
-  switch (view) {
-    case 'icon':
-      return { width: CHIP_PX, height: CHIP_PX };
-    case 'cluster-icon':
-      return { width: CHIP_PX * 2, height: CHIP_PX };
-    case 'full':
-    case 'cluster':
-      return { width: chars * CHAR_PX + CHIP_PX + 12, height: CHIP_PX };
-    case 'speech': {
-      const width = Math.min(BUBBLE_WIDTH_PX, chars * CHAR_PX + 16);
-      const lines = Math.ceil((chars * CHAR_PX) / (BUBBLE_WIDTH_PX - 16));
-      return { width, height: lines * BUBBLE_LINE_PX + 8 };
-    }
-  }
-}
-
 /** Projects `subject`'s anchor: its screen spot (CSS px) and distance, or null when it has none or is off screen. */
 function onScreen(
   store: LabelStore,
@@ -252,7 +229,7 @@ export function ChipProjector({
   pinned: readonly string[];
 }) {
   // each element's last measured size in a view, with the text it said then
-  const sizes = useRef(new Map<string, { text: string; size: ChipSize }>());
+  const sizes = useRef(new Map<string, MeasuredSize>());
   useFrame(({ camera, size }) => {
     const chipOf = new Map<string, LabelContent>();
     const speech: LabelContent[] = [];
@@ -272,10 +249,8 @@ export function ChipProjector({
       }
       return spots.get(subject);
     };
-    const measured = (key: string, text: string, view: ChipView | 'speech') => {
-      const last = sizes.current.get(key);
-      return last?.text === text ? last.size : estimate(text, view);
-    };
+    const measured = (key: string, text: string, view: ChipView | 'speech') =>
+      sizeFor(sizes.current.get(key), text, view);
     const faceOf = (members: readonly string[], view: ChipView) =>
       clusterFace(
         members.map((id) => chipOf.get(id)!),

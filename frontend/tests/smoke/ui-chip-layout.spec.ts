@@ -12,6 +12,7 @@ import {
   MAX_BUBBLES,
   MAX_CHIPS,
   type PlacedChip,
+  sizeFor,
 } from '../../src/lib/world/label-layout';
 import type { LabelContent } from '../../src/lib/world/label-store';
 
@@ -353,6 +354,33 @@ test('the sizer is asked for each cluster as it grows, with its members', () => 
     'full c',
     'cluster a+b+c',
   ]);
+});
+
+test('a measured size is kept only while the element says the same text', () => {
+  const measured = { text: 'Hana · cooking', size: { width: 131, height: 27 } };
+  expect(sizeFor(measured, 'Hana · cooking', 'full')).toEqual(measured.size);
+  const unmeasured = sizeFor(undefined, 'Hana · asleep by the fire', 'full');
+  expect(sizeFor(measured, 'Hana · asleep by the fire', 'full')).toEqual(
+    unmeasured,
+  );
+  expect(unmeasured.width).toBeGreaterThan(
+    sizeFor(undefined, 'Hana · cooking', 'full').width,
+  );
+  // icons say nothing: one size whatever the subject does
+  expect(sizeFor(undefined, '', 'icon')).toEqual(
+    sizeFor(undefined, 'Hana · asleep by the fire', 'icon'),
+  );
+  expect(sizeFor(undefined, '', 'cluster-icon').width).toBeGreaterThan(
+    sizeFor(undefined, '', 'icon').width,
+  );
+  // a long speech wraps onto more lines instead of growing wider
+  const short = sizeFor(undefined, 'Hello.', 'speech');
+  const long = sizeFor(undefined, 'Hello. '.repeat(20), 'speech');
+  expect(long.width).toBeGreaterThan(short.width);
+  expect(long.height).toBeGreaterThan(short.height);
+  expect(sizeFor(undefined, 'Hello. '.repeat(40), 'speech').width).toBe(
+    long.width,
+  );
 });
 
 const member = (change: Partial<LabelContent>): LabelContent => ({
