@@ -12,9 +12,9 @@ from app.sim.navigation import Route
 from app.sim.simulation import Simulation
 from app.sim.snapshot import restore, take_snapshot
 from app.sim.state import AgeGroup, Citizen, Fire
-from app.sim.vec import step_towards
+from app.sim.vec import bearing_deg, step_towards
 from app.world_api.facade import WorldApi
-from tests.sim_helpers import make_spec, put_in_the_wild, skip_to, wild_cell, without_animals
+from tests.sim_helpers import add_animal, make_spec, put_in_the_wild, skip_to, wild_cell, without_animals
 
 CAPS_M = {"walk": 84.0, "jog": 150.0, "run": 210.0, "stalk": 48.0}
 AGES: dict[AgeGroup, int] = {"child": 8, "teen": 15, "young_adult": 25, "middle_aged": 45, "elder": 70}
@@ -38,6 +38,19 @@ def _walk(sim: Simulation, citizen: Citizen, pace: str = "walk") -> None:
     far = step_towards(citizen.position, 0.0, 2000.0, sim.world.radius_m)
     walk.route, walk.leg, walk.along_m = Route(points=(citizen.position, far), costs=(1.0,)), 0, 0.0
     walk.args["pace"] = pace  # C1's contract v1 adds `pace` to walk_to
+
+
+def _flee(sim: Simulation, citizen: Citizen) -> None:
+    """Flee a sleeping wolf 40 m east, the route stretched to 2 km of flat open ground so the run can outlast the
+    endurance."""
+    spot = step_towards(citizen.position, 90.0, 40.0, sim.world.radius_m)
+    wolf = add_animal(sim, "wolf", spot, activity="sleeping", until=10**9)
+    WorldApi(sim, citizen.id).flee()
+    flee = citizen.action
+    assert flee is not None and flee.kind == "flee"
+    away = bearing_deg(wolf.position, citizen.position)
+    far = step_towards(citizen.position, away, 2000.0, sim.world.radius_m)
+    flee.route, flee.leg, flee.along_m = Route(points=(citizen.position, far), costs=(1.0,)), 0, 0.0
 
 
 def _stride(sim: Simulation, citizen: Citizen) -> Stride:
@@ -115,6 +128,22 @@ def test_a_run_lasts_three_minutes_then_jogs_and_comes_back_with_rest(new_sim: C
     assert movement.run_left_s(sim.core, citizen) == 60.0  # ...two minutes of walking give a minute of running
     _walk(sim, citizen, "run")
     assert [_stride(sim, citizen).gait for _ in range(3)] == ["run", "jog", "jog"]
+
+
+def test_a_fleeing_adult_runs_until_the_endurance_is_spent_then_jogs(new_sim: Callable[..., Simulation]) -> None:
+    sim, citizen = _walker(new_sim)
+    _flee(sim, citizen)
+    strides = [_stride(sim, citizen) for _ in range(4)]
+    assert [s.gait for s in strides] == ["run", "run", "run", "jog"]
+    assert _metres(sim, strides[0]) == pytest.approx(210.0, abs=0.1)
+
+
+def test_a_fleeing_elder_jogs(new_sim: Callable[..., Simulation]) -> None:
+    sim, citizen = _walker(new_sim, "elder")
+    _flee(sim, citizen)
+    stride = _stride(sim, citizen)
+    assert stride.gait == "jog"
+    assert _mps(sim, stride) <= 2.0
 
 
 def test_a_runner_spends_energy_and_gets_thirsty_twice_as_fast(new_sim: Callable[..., Simulation]) -> None:
