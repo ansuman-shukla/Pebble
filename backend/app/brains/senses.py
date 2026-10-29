@@ -110,6 +110,7 @@ class Resource:
     kind: ResourceName
     distance: Distance
     plenty: bool
+    label: str  # as seen ("plenty of fallen wood"): what to walk to, not the wood lying about
 
 
 def phase(perception: Perception) -> Phase:
@@ -148,7 +149,9 @@ def food_value(food: dict[str, int]) -> float:
 def resources_in_view(perception: Perception) -> list[Resource]:
     """Wild plants in view (a plant's words say whether there's plenty: "a few nuts on the trees" is not)."""
     return [
-        Resource(thing.resource, DISTANCE[thing.nearness], not thing.label.startswith(("a few", "a little")))
+        Resource(
+            thing.resource, DISTANCE[thing.nearness], not thing.label.startswith(("a few", "a little")), thing.label
+        )
         for thing in perception.things
         if thing.resource is not None
     ]

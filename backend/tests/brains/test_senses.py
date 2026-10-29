@@ -66,9 +66,9 @@ def test_water_fire_and_plants_are_read_from_their_kinds_not_their_words() -> No
         _thing("tall grass", "far away", "material", "wood"),
     )
     assert resources_in_view(plants) == [
-        Resource("reeds", "off", True),
-        Resource("roots", "here", False),
-        Resource("wood", "far", True),
+        Resource("reeds", "off", True, "thick reeds"),
+        Resource("roots", "here", False, "a few edible roots"),
+        Resource("wood", "far", True, "tall grass"),
     ]
 
 

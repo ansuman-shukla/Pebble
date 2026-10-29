@@ -311,7 +311,7 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
     visible = [r for r in seen if r.kind in wanted]
     if visible:
         target = min(visible, key=lambda r: (_reach(r), not r.plenty, wanted.index(r.kind)))
-        return [Option(score, f"go to {target.kind}", lambda: api.walk_to_thing(target.kind))]
+        return [Option(score, f"go to {target.kind}", lambda: api.walk_to_thing(target.label))]
     if near(p, home_area):
         direction = COMPASS[ctx.pick(len(COMPASS))]
         return [Option(score, "search", lambda: api.walk_towards(direction, "a short walk"))]

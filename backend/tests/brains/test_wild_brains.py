@@ -8,12 +8,14 @@ import pytest
 from app.brains.brain import UtilityBrain
 from app.brains.profile import BrainProfile
 from app.sim import fire as fires
+from app.sim.items import RESOURCE_INDEX
 from app.sim.simulation import Simulation
 from app.sim.state import Fire
 from app.sim.vec import step_towards
 from app.world_api.facade import WorldApi
 from tests.sim_helpers import add_animal, make_spec, put_in_the_wild, skip_to, wild_cell, without_animals
 
+HOME_A = "band_a_camp:shelter-n"
 HOME_B = "band_b_camp:shelter-n"
 
 
@@ -131,6 +133,38 @@ def test_a_hunter_back_at_camp_shares_half_the_meat(new_sim: Callable[..., Simul
     sim.run(21)  # the rest is over
     brain.decide()
     assert other.inventory["meat"] == 2  # once a day
+
+
+def _gathers(sim: Simulation, brain: UtilityBrain, minutes: int) -> list[str]:
+    """Run the brain for a while; how each of its gathers ended, in order."""
+    ended: list[str] = []
+    for _ in range(minutes):
+        brain.tick()
+        sim.step()
+        for event in sim.drain():
+            payload = event.payload.model_dump()
+            if event.type == "action_finished" and event.actor_id == brain.profile.citizen_id:
+                if payload["action"] == "gather":
+                    ended.append(payload["text"])
+    return ended
+
+
+def test_a_forager_walks_to_the_fallen_wood_it_saw_not_the_camp_woodpile(new_sim: Callable[..., Simulation]) -> None:
+    sim = without_animals(new_sim())
+    gatherer = sim.add_citizen(
+        make_spec("suna", site="band_a_camp", at=(0.0, 1.5), home=HOME_A, region="band_a", inventory={"roots": 30})
+    )  # food enough for the outing: only the day's wood chore is left
+    wood = RESOURCE_INDEX["wood"]
+    sim.state.resources[:, wood] = 0
+    plant = sim.world.neighbours[gatherer.cell][0]
+    sim.state.resources[plant, wood] = 40  # fallen wood a short way off; the woodpile by the fire is closer
+    api = WorldApi(sim, gatherer.id)
+    skip_to(sim, gatherer.position, night=False)
+    seen = api.look_around().things
+    assert any(thing.resource == "wood" and thing.nearness != "right beside you" for thing in seen)
+    assert any(thing.label.endswith("wood on the ground") for thing in seen)
+    brain = _brain(sim, gatherer.id, role="gatherer")
+    assert any(text.startswith("You gather") and text.endswith("wood.") for text in _gathers(sim, brain, 60))
 
 
 @pytest.mark.parametrize("sun", [-5.5, -15.0])  # deep dusk; the dead of night
