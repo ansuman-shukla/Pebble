@@ -1036,13 +1036,13 @@ def approaching(
     citizen: Citizen,
     seen: set[str],
     before: dict[str, Vec3],
-    walking_to: dict[str, str | None],
+    walk_targets: dict[str, str | None],
 ) -> list[str]:
     """Known people in view who came within APPROACH_M this tick while walking to the citizen (someone merely heading
     to the same well, market or field as you doesn't count, even when their walk ends where you stand)."""
     found: list[str] = []
     for person_id in sorted(seen & citizen.people):
-        if walking_to.get(person_id) != citizen.id or person_id not in before:
+        if walk_targets.get(person_id) != citizen.id or person_id not in before:
             continue
         other = core.state.citizens[person_id]
         if core.distance_m(citizen.position, other.position) > APPROACH_M:
