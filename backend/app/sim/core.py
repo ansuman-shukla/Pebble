@@ -164,9 +164,9 @@ class SimCore:
         body = citizen.body
         if not body.alive:
             raise ValueError(f"{citizen.id} is dead and can't be hurt")
-        amount = round(min(amount, body.health), 2)
+        amount = min(amount, body.health)  # health heals by fractions: rounding first could leave a sliver of it
         body.health = max(0.0, body.health - amount)
-        seq = self.emit("injured", Injured(amount=amount, cause=cause), actor=citizen, cause_seq=cause_seq)
+        seq = self.emit("injured", Injured(amount=round(amount, 2), cause=cause), actor=citizen, cause_seq=cause_seq)
         if body.health <= 0:
             body.alive, body.asleep, body.cause_of_death = False, False, cause
             died = self.emit("died", Died(cause=cause), actor=citizen, cause_seq=seq)

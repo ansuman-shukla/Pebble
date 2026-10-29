@@ -1,12 +1,15 @@
 """Snapshots: the whole mutable state as JSON (resumable), and a canonical hash of it.
 
-Sets are stored sorted and the hash dumps with sorted keys, so equal states hash equal whatever their history.
+Sets are stored sorted and the hash dumps with sorted keys, so equal states hash equal whatever their history. Each
+registered system (`app.sim.systems`) stores its state in its own block with its own version.
 """
 
 import base64
 import copy
 import hashlib
 import json
+from collections.abc import Mapping
+from typing import Any
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, JsonValue
@@ -24,12 +27,15 @@ from app.sim.state import (
     Heard,
     PlaceKnowledge,
     Region,
+    System,
     WorldState,
 )
+from app.sim.systems import REGISTRY
 from app.sim.vec import Vec3
 from app.world_api.models import ActionResult
 
-SNAPSHOT_VERSION = 3  # 3: animals, groups, fires, fish stocks; 2: identities, regrowth, brain notes
+# 4: the seed and the systems' blocks; 3: animals, groups, fires, fish stocks; 2: identities, regrowth, brain notes
+SNAPSHOT_VERSION = 4
 
 
 class _Snap(BaseModel):
@@ -64,8 +70,14 @@ class CitizenSnap(_Snap):
     threats: list[str]
 
 
+class SystemSnap(_Snap):
+    version: int
+    data: JsonValue
+
+
 class SimSnapshot(_Snap):
     version: int = SNAPSHOT_VERSION
+    seed: int
     tick: int
     next_seq: int
     next_stack: int
@@ -82,10 +94,28 @@ class SimSnapshot(_Snap):
     fires: list[Fire]
     next_animal: int
     next_fire: int
+    systems: dict[str, SystemSnap]
 
 
-def take_snapshot(state: WorldState) -> SimSnapshot:
+def resumable(snapshot: Mapping[str, Any], systems: tuple[System[Any], ...] = REGISTRY.systems) -> bool:
+    """Whether this simulation can continue from a stored snapshot: the same snapshot version, and a block of the
+    same version for exactly the registered systems."""
+    blocks = snapshot.get("systems")
+    if not isinstance(blocks, dict):
+        return False
+    return _same_versions(
+        snapshot.get("version"), {name: block.get("version") for name, block in blocks.items()}, systems
+    )
+
+
+def _same_versions(version: object, blocks: Mapping[str, object], systems: tuple[System[Any], ...]) -> bool:
+    return version == SNAPSHOT_VERSION and dict(blocks) == {system.name: system.version for system in systems}
+
+
+def take_snapshot(state: WorldState, systems: tuple[System[Any], ...] = REGISTRY.systems) -> SimSnapshot:
     """A snapshot that shares no mutable objects with the live state."""
+    if set(state.systems) != {system.name for system in systems}:
+        raise ValueError(f"the state holds systems {sorted(state.systems)}, not the registered ones")
     state_citizens = copy.deepcopy(state.citizens)
     citizens = [
         CitizenSnap(
@@ -119,6 +149,7 @@ def take_snapshot(state: WorldState) -> SimSnapshot:
     ]
     resources = np.ascontiguousarray(state.resources, dtype=np.uint8)
     return SimSnapshot(
+        seed=state.seed,
         tick=state.tick,
         next_seq=state.next_seq,
         next_stack=state.next_stack,
@@ -135,14 +166,19 @@ def take_snapshot(state: WorldState) -> SimSnapshot:
         fires=[copy.deepcopy(fire) for _, fire in sorted(state.fires.items())],
         next_animal=state.next_animal,
         next_fire=state.next_fire,
+        systems={
+            system.name: SystemSnap(version=system.version, data=copy.deepcopy(system.dump(system.of(state))))
+            for system in sorted(systems, key=lambda system: system.name)
+        },
     )
 
 
-def restore(snapshot: SimSnapshot) -> WorldState:
+def restore(snapshot: SimSnapshot, systems: tuple[System[Any], ...] = REGISTRY.systems) -> WorldState:
     """A live state that shares no mutable objects with the snapshot."""
     snapshot = snapshot.model_copy(deep=True)
-    if snapshot.version != SNAPSHOT_VERSION:
-        raise ValueError(f"snapshot version {snapshot.version} is not {SNAPSHOT_VERSION}")
+    blocks = {name: block.version for name, block in snapshot.systems.items()}
+    if not _same_versions(snapshot.version, blocks, systems):
+        raise ValueError(f"snapshot version {snapshot.version} with system blocks {blocks} is not this simulation's")
     resources = np.frombuffer(base64.b64decode(snapshot.resources), dtype=np.uint8)
     citizens = {
         snap.id: Citizen(
@@ -176,6 +212,7 @@ def restore(snapshot: SimSnapshot) -> WorldState:
     }
     return WorldState(
         tick=snapshot.tick,
+        seed=snapshot.seed,
         next_seq=snapshot.next_seq,
         next_stack=snapshot.next_stack,
         citizens=citizens,
@@ -190,6 +227,7 @@ def restore(snapshot: SimSnapshot) -> WorldState:
         fires={fire.id: fire for fire in snapshot.fires},
         next_animal=snapshot.next_animal,
         next_fire=snapshot.next_fire,
+        systems={system.name: system.load(snapshot.systems[system.name].data) for system in systems},
     )
 
 
@@ -197,5 +235,5 @@ def canonical_json(snapshot: SimSnapshot) -> str:
     return json.dumps(snapshot.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 
 
-def state_hash(state: WorldState) -> str:
-    return hashlib.sha256(canonical_json(take_snapshot(state)).encode()).hexdigest()
+def state_hash(state: WorldState, systems: tuple[System[Any], ...] = REGISTRY.systems) -> str:
+    return hashlib.sha256(canonical_json(take_snapshot(state, systems)).encode()).hexdigest()

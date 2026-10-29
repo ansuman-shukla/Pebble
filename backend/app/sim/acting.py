@@ -18,6 +18,23 @@ _NUMBERS = {
 } | {"a": 1, "an": 1}
 # the amounts the world itself says, read back ("a great deal of rice" and "a lot of" mean all of it)
 _VAGUE: dict[str, int | None] = {"a few": 3, "a little": 3, "a handful": 8, "a great": None, "a lot": None}
+VERB: dict[str, str] = {
+    "walk_to": "walking",
+    "follow": "following",
+    "gather": "gathering",
+    "eat": "eating",
+    "drink": "drinking",
+    "rest": "resting",
+    "sleep": "sleeping",
+    "wait": "waiting",
+    "flee": "running",
+    "work": "working",
+    "hunt": "hunting",
+    "fish": "fishing",
+    "make_fire": "making a fire",
+    "feed_fire": "tending the fire",
+    "attack": "fighting",
+}
 
 
 def begin(

@@ -17,8 +17,8 @@ from app.observability.replay import from_snapshot
 from app.observability.store import latest_snapshot
 from app.services.clock import read_clock
 from app.services.entities import world_at
-from app.sim.actions import streamed_route
 from app.sim.citizens import DEV_CITIZENS
+from app.sim.feed_citizens import streamed_route
 from app.sim.snapshot import SimSnapshot
 from app.sim.vec import lat_lon_deg
 from app.sim.world import SimWorld

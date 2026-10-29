@@ -5,7 +5,7 @@ from collections.abc import Callable
 
 import pytest
 
-from app.sim import actions, wild
+from app.sim import doing, movement, wild
 from app.sim import fire as fires
 from app.sim.clock import NIGHT_ALTITUDE_DEG
 from app.sim.core import SIGHT_FIRE_M, SIGHT_NIGHT_M
@@ -149,7 +149,7 @@ def test_flee_runs_away_from_the_nearest_danger(new_sim: Callable[..., Simulatio
     result = run_until_done(sim, api.flee(), 10)
     assert result.text == "You run until you feel safer."
     assert sim.world.distance_m(hunter.position, wolf.position) > sim.world.distance_m(start, wolf.position) + 100
-    assert sim.world.distance_m(start, hunter.position) == pytest.approx(actions.FLEE_M, abs=25)
+    assert sim.world.distance_m(start, hunter.position) == pytest.approx(movement.FLEE_M, abs=25)
 
 
 # --- fishing ---
@@ -260,14 +260,14 @@ def test_a_fire_lights_the_night_and_cooks_meat(
     assert sim.core.sight_range(hunter) == pytest.approx(SIGHT_FIRE_M)
     assert any((t.label, t.doing, t.kind) == ("a campfire", "burning", "fire") for t in api.look_around().things)
 
-    monkeypatch.setattr(actions, "RAW_SICK_CHANCE", 1.0)
+    monkeypatch.setattr(doing, "RAW_SICK_CHANCE", 1.0)
     hunter.inventory["meat"] = 3
     hunter.body.hunger = 60.0
     cooked = run_until_done(sim, api.eat("meat"), 10)
     assert cooked.text.startswith("You roast")
     assert hunter.body.health == 100.0
     eaten = 3 - hunter.inventory.get("meat", 0)
-    assert hunter.body.hunger == pytest.approx(max(0.0, 60.0 - eaten * 10.0 * actions.COOKED), abs=0.5)
+    assert hunter.body.hunger == pytest.approx(max(0.0, 60.0 - eaten * 10.0 * doing.COOKED), abs=0.5)
 
     camp.fuel, camp.lit, camp.level = 0, False, 0
     hunter.inventory["meat"] = 2

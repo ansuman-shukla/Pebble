@@ -91,7 +91,7 @@ def _group(core: SimCore, group: AnimalGroup) -> None:
     tick = core.state.tick
     if tick < group.next_move:
         return
-    rng = core.state.rngs["animals"]
+    rng = core.state.rng("animals.wander")
     group.next_move = tick + rng.randint(*WANDER_TICKS)
     cells = _range(core, group)
     cell = int(cells[rng.randint(0, cells.size - 1)])
@@ -115,7 +115,7 @@ def _range(core: SimCore, group: AnimalGroup) -> NDArray[np.int64]:
 def _herbivore(core: SimCore, animal: Animal, threat: Vec3 | None) -> None:
     species = SPECIES[animal.kind]
     tick = core.state.tick
-    rng = core.state.rngs["animals"]
+    rng = core.state.rng("animals.graze")
     if threat is not None:
         bearing = (bearing_deg(threat, animal.position) + rng.random() * 40 - 20) % 360
         run_m = species.run_m * FLEE_TICKS
@@ -176,7 +176,7 @@ def _hunted_group(core: SimCore, person: Citizen) -> str | None:
 def _predator(core: SimCore, animal: Animal) -> None:
     species = SPECIES[animal.kind]
     tick = core.state.tick
-    rng = core.state.rngs["animals"]
+    rng = core.state.rng("animals.prowl")
     animal.hunger = min(100.0, animal.hunger + HUNGER_PER_TICK)
     altitude = core.altitude(animal.position)
     hunting_time = altitude < DUSK_ALTITUDE_DEG or species.swims
@@ -280,7 +280,7 @@ def _arrive_beside(core: SimCore, animal: Animal, position: Vec3) -> None:
 
 def _bite(core: SimCore, animal: Animal, person: Citizen) -> None:
     species = SPECIES[animal.kind]
-    rng = core.state.rngs["animals"]
+    rng = core.state.rng("animals.bite")
     low, high = species.bite
     amount = low + (high - low) * rng.random()
     animal.heading_deg = _heading(animal.position, person.position, animal.heading_deg)
@@ -300,7 +300,7 @@ def _bite(core: SimCore, animal: Animal, person: Citizen) -> None:
 
 def _bring_down(core: SimCore, animal: Animal, quarry: Animal) -> None:
     species = SPECIES[animal.kind]
-    rng = core.state.rngs["animals"]
+    rng = core.state.rng("animals.prey")
     if rng.random() < species.hunt_chance:
         kill(core, quarry, f"killed by {species.one}")
         for other in core.state.animals.values():
@@ -408,14 +408,14 @@ def _move(core: SimCore, animal: Animal, afraid: set[str]) -> None:
         if animal.target is not None and species.predator:
             _give_up(core, animal, retreat_from=None)
         else:  # water, walls or a fire in the way: step aside somewhere at random and try again from there
-            bearing = core.state.rngs["animals"].random() * 360.0
+            bearing = core.state.rng("animals.detour").random() * 360.0
             _go(animal, step_towards(animal.position, bearing, DETOUR_M, core.world.radius_m), species.walk_m)
         return
     _place(core, animal, position)
     if share >= 1.0:
         animal.goal = None
         if animal.target is None:
-            rng = core.state.rngs["animals"]
+            rng = core.state.rng("animals.arrive")
             animal.activity = "grazing" if not species.predator and not species.swims else "idle"
             animal.until = core.state.tick + rng.randint(*GRAZE_TICKS)
 
@@ -456,7 +456,7 @@ def _respawn(core: SimCore) -> None:
                 continue
             living = [state.animals[m] for m in group.members if state.animals[m].alive]
             cell = living[0].cell if living else group.home
-            animal = new_animal(core.world, group, state.next_animal, cell, state.rngs["animals"])
+            animal = new_animal(core.world, group, state.next_animal, cell, state.rng("animals.respawn"))
             state.next_animal += 1
             del state.animals[member_id]
             state.animals[animal.id] = animal
