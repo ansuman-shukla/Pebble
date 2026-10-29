@@ -15,6 +15,7 @@ from app.sim.slots import (
     LEGS_M,
     PERSONAL_M,
     SLOTS,
+    STEP_MAX_M,
     Slot,
     build_layout,
     claim,
@@ -264,8 +265,9 @@ def test_band_sleepers_take_their_lean_tos_mats_then_the_fires_by_their_door(
         for slot in layout(sim.core).owners["band_a_camp:fire-pit"]
         if slot.kind == "mat" and sim.world.distance_m(slot.position, home.door) <= 6.0
     ]
+    lying = [spot for m in band for spot in (m.position, legs(sim.world, m.position, m.heading_deg))]
     for mat in fire_mats:  # the fire's mats on their side are all taken, or someone lies by them already
-        assert mat in beds or any(sim.world.distance_m(m.position, mat.position) < PERSONAL_M for m in band)
+        assert mat in beds or any(sim.world.distance_m(spot, mat.position) < PERSONAL_M for spot in lying)
     assert all(sim.world.distance_m(m.position, home.door) <= 6.0 for m in band)
     assert _apart(sim, band) >= PERSONAL_M and crowded(sim.core) == []
 
@@ -405,6 +407,9 @@ def test_a_step_aside_keeps_within_the_tick_and_far_spots_are_not_stepped_to(
     sim.core.strides.clear()
     far = sim.world.town.to_unit(60.0, 61.0)  # 100 m: more than a minute's walk
     assert not step_to(sim.core, someone, far) and someone.position == aside
+    across = sim.world.town.to_unit(-26.0, 62.0)  # 10 m: within a minute's walk, but no step at a tick's end
+    assert not step_to(sim.core, someone, across) and someone.position == aside and STEP_MAX_M == 8.0
+    assert step_to(sim.core, someone, across, far=True) and someone.position == across  # a work slot in the place
 
 
 def test_steps_to_a_spot_take_the_time_the_person_walks_it_in(new_sim: Callable[..., Simulation]) -> None:

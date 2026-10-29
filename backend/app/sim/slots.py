@@ -47,7 +47,7 @@ SlotPosture = Literal["standing", "sitting", "sitting_ground", "lying", "inside"
 PERSONAL_M = 0.8  # no two bodies end an action closer than this (D117)
 LEGS_M = 0.7  # the legs of someone sitting or lying reach this far before them (kept clear like a body)
 OCCUPY_M = 0.05  # a body this close to its claim is on it
-APPROACH_M = 8.0  # a mat (sleep) or a stand freed in a queue is taken this close, and walked to at the tick's end
+STEP_MAX_M = 8.0  # the longest walk at a tick's end, to a seat, mat or stand or aside (work slots excepted): ~6 s
 SEAT_M = 4.0  # rest takes a free seat this close
 ALREADY_THERE_M = 1.0  # a walk to a spot this close is no walk (movement's "You are already there")
 RING_M = (1.2, 2.0, 2.8, 3.6)  # the ring fallback's radii (a pace off the centre, then a body's space apart)
@@ -582,7 +582,7 @@ def take_bed(core: SimCore, citizen: Citizen) -> Slot | None:
             for slot in lay.owners.get(owner, ())
             if slot.kind == "mat" and core.distance_m(slot.position, home.door) <= HOME_RADIUS_M
         ]
-        mat = nearest_free(core, citizen, mats, APPROACH_M)
+        mat = nearest_free(core, citizen, mats, STEP_MAX_M)
         if mat is not None:
             claim(core, citizen, mat, mat.position, approach=True)
             return mat
@@ -616,7 +616,9 @@ def take_work_slot(core: SimCore, citizen: Citizen, task: str, area: tuple[Vec3,
         if _clear(core, slot.position, spots)
     )
     for _, _, slot in options:
-        if core.distance_m(citizen.position, slot.position) <= OCCUPY_M or _path(core, citizen, slot.position):
+        if core.distance_m(citizen.position, slot.position) <= OCCUPY_M or _path(
+            core, citizen, slot.position, far=True
+        ):
             claim(core, citizen, slot, slot.position, approach=True)
             return slot
     return "all taken"
@@ -642,7 +644,8 @@ def settle(core: SimCore) -> None:
         if is_moving(citizen):
             continue
         if core.distance_m(citizen.position, claimed.position) > OCCUPY_M:
-            if not step_to(core, citizen, claimed.position, straight=inside):
+            far = slot is not None and slot.kind == "work"  # the task's slot anywhere in the place (D118)
+            if not step_to(core, citizen, claimed.position, straight=inside, far=far):
                 del state.claims[citizen_id]
                 continue
         if slot is not None and citizen.id in core.strides:  # turned as they arrive (a turn is told with a move)
@@ -669,7 +672,7 @@ def _move_queues(core: SimCore) -> None:
                 continue
             spots = _taken(core, citizen_id)
             ahead = [slot for slot in queue[:rank] if _clear(core, slot.position, spots)]
-            stand = nearest_free(core, citizen, stands, APPROACH_M)
+            stand = nearest_free(core, citizen, stands, STEP_MAX_M)
             target = stand if stand is not None else (ahead[0] if ahead else None)
             if target is None or not step_to(core, citizen, target.position):
                 continue
@@ -718,10 +721,11 @@ def _keep_apart(core: SimCore) -> None:
             placed.append(legs(core.world, citizen.position, citizen.heading_deg))
 
 
-def step_to(core: SimCore, citizen: Citizen, spot: Vec3, straight: bool = False) -> bool:
+def step_to(core: SimCore, citizen: Citizen, spot: Vec3, straight: bool = False, far: bool = False) -> bool:
     """Move a body a few steps within this tick, drawn as walking: a walk that ended this tick ends at the spot
     instead (a step aside); anyone else walks there from where they stand, round what's in the way (`straight`:
-    in or out through a door). False (and no move) when there's no way there within the tick."""
+    in or out through a door), at most STEP_MAX_M (`far`: to a work slot anywhere in the place). False (and no move)
+    when there's no such way there within the tick."""
     stride = core.strides.get(citizen.id)
     if stride is not None and len(stride.walked) >= 2:
         walked: list[TimedPoint] = list(stride.walked[:-1])
@@ -732,7 +736,7 @@ def step_to(core: SimCore, citizen: Citizen, spot: Vec3, straight: bool = False)
             walked.insert(0, stride.walked[0])
         core.strides[citizen.id] = Stride(stride.action, tuple(walked), stride.ahead, stride.gait)
     else:
-        path = _path(core, citizen, spot, straight)
+        path = _path(core, citizen, spot, straight, far)
         if path is None:
             return False
         number = citizen.action.number if citizen.action is not None else 0
@@ -741,13 +745,16 @@ def step_to(core: SimCore, citizen: Citizen, spot: Vec3, straight: bool = False)
     return True
 
 
-def _path(core: SimCore, citizen: Citizen, spot: Vec3, straight: bool = False) -> tuple[TimedPoint, ...] | None:
+def _path(
+    core: SimCore, citizen: Citizen, spot: Vec3, straight: bool = False, far: bool = False
+) -> tuple[TimedPoint, ...] | None:
     """The way from where the citizen stands to the spot, timed by distance at their own walking speed: straight for
-    a step or two (or through a door), else the planner's route; None when there is none or it takes longer than the
-    tick."""
+    a step or two (or through a door, or a few steps over open ground), else the planner's route; None when there is
+    none, it takes longer than the tick, or (unless `far`) it is longer than STEP_MAX_M."""
     mps = ground_mps(core, citizen, "walk")
     distance = core.distance_m(citizen.position, spot)
-    if distance <= STRAIGHT_M or straight:
+    open_ground = core.world.town_point(spot) is None and distance <= STEP_MAX_M  # no walls; the outer grid is coarse
+    if distance <= STRAIGHT_M or straight or open_ground:
         return ((citizen.position, 0.0), (spot, max(MIN_STEP_S, distance / mps)))
     route = core.planner.plan(citizen.position, spot, citizen.cell)
     if route is None:
@@ -760,7 +767,7 @@ def _path(core: SimCore, citizen: Citizen, spot: Vec3, straight: bool = False) -
         if step_m >= 0.001:
             walked_m += step_m
             kept.append((unit, walked_m / mps))
-    if kept[-1][1] > SECONDS_PER_TICK:
+    if kept[-1][1] > SECONDS_PER_TICK or (walked_m > STEP_MAX_M and not far):
         return None
     return tuple(kept) if len(kept) >= 2 else ((citizen.position, 0.0), (spot, MIN_STEP_S))
 
