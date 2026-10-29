@@ -1,10 +1,10 @@
 import { expect, test } from '@playwright/test';
 
-import { openGlobe, OUTSIDE_THE_WALLS } from './globe-helpers';
+import { openGlobe, OUTSIDE_THE_WALLS, SOUTH_MARSH } from './globe-helpers';
 
 /*
  * The ground shader's frame cost against the flat ground (bible §5.1: at most 1.5 ms a frame), at street level
- * outside the town walls where the ground fills most of the view.
+ * where the ground fills most of the view: grassland outside the town walls and the mud of the South marsh.
  */
 
 /** Mean frame time (ms) over 2 s of animation frames. */
@@ -39,26 +39,33 @@ test.use({
   },
 });
 
-test('the detailed ground costs at most 1.5 ms a frame more than the flat one', async ({
-  page,
-}) => {
-  test.setTimeout(240_000);
-  // a software renderer (headless Chrome off macOS) draws every frame on the CPU: its frame times say nothing
-  const renderer = await page.evaluate<string>(RENDERER);
-  test.skip(
-    /swiftshader|llvmpipe|software/i.test(renderer),
-    `no GPU (${renderer})`,
-  );
-  const errors: string[] = [];
-  const frameTime = () => page.evaluate<number>(FRAME_TIME);
-  // alternate the two looks and keep each one's best run: other work on the machine only ever slows a run down
-  const best: Record<string, number> = { flat: Infinity, full: Infinity };
-  for (let round = 0; round < 3; round++)
-    for (const quality of ['flat', 'full']) {
-      await openGlobe(page, errors, `${OUTSIDE_THE_WALLS}&ground=${quality}`);
-      await page.waitForTimeout(1500);
-      best[quality] = Math.min(best[quality], await frameTime());
-    }
-  expect(best.full - best.flat).toBeLessThanOrEqual(1.5);
-  expect(errors).toEqual([]);
-});
+// one spot at a time: two at once would share the GPU
+test.describe.configure({ mode: 'serial' });
+
+for (const [name, spot] of [
+  ['outside the walls', OUTSIDE_THE_WALLS],
+  ['in the South marsh', SOUTH_MARSH],
+] as const)
+  test(`the detailed ground costs at most 1.5 ms a frame more than the flat one ${name}`, async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    // a software renderer (headless Chrome off macOS) draws every frame on the CPU: its frame times say nothing
+    const renderer = await page.evaluate<string>(RENDERER);
+    test.skip(
+      /swiftshader|llvmpipe|software/i.test(renderer),
+      `no GPU (${renderer})`,
+    );
+    const errors: string[] = [];
+    const frameTime = () => page.evaluate<number>(FRAME_TIME);
+    // alternate the two looks and keep each one's best run: other work on the machine only ever slows a run down
+    const best: Record<string, number> = { flat: Infinity, full: Infinity };
+    for (let round = 0; round < 3; round++)
+      for (const quality of ['flat', 'full']) {
+        await openGlobe(page, errors, `${spot}&ground=${quality}`);
+        await page.waitForTimeout(1500);
+        best[quality] = Math.min(best[quality], await frameTime());
+      }
+    expect(best.full - best.flat).toBeLessThanOrEqual(1.5);
+    expect(errors).toEqual([]);
+  });

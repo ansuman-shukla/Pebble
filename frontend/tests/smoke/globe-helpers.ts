@@ -35,6 +35,8 @@ export const TOWN_CLEARING = 300;
 
 /** West of the town, just outside its walls and ground disc: open grassland at street level, facing the town. */
 export const OUTSIDE_THE_WALLS = '?at=37.49,3.22,85&time=12:00';
+/** The South marsh, just south of the town: mud and puddles at street level, facing the town. */
+export const SOUTH_MARSH = '?at=31.2,12,0&time=12:00';
 
 /** Opens the globe at `/<query>` and waits until the world is ready and the player is placed. */
 export async function openGlobe(page: Page, errors: string[], query = '') {
