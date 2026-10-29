@@ -1,9 +1,10 @@
 /*
- * Where a live citizen is drawn, frame by frame: on the timed path its latest tick streamed (`walk-path.ts`), joined
- * where the last path left it. Normally the new path starts right there (the feed streams each move from where the
- * mover stood when the tick began), so nothing jumps; a drawn spot a little off (a tick that came late) eases onto
- * the path, and one far off (a reconnect, a hidden tab) is a resync: the body fades out where it was and back in on
- * its path instead of jumping.
+ * Where a live citizen is drawn, frame by frame: on the timed path its latest tick
+ * streamed (`walk-path.ts`), one tick behind the sim, joined where the last path left it. Normally the new path starts
+ * right there (the feed streams each move from where the mover stood when the tick began), so nothing jumps; a walker
+ * drawn short of it (a page opened mid-tick) walks the rest of its old path first; a drawn spot a little past it (a
+ * tick that came late) eases onto the path, and one far off (a hidden tab) is a resync: the body fades out where it
+ * was and back in on its path instead of jumping.
  *
  *   opacity 1 ──fade out at the old spot──▶ 0 ──fade in on the path──▶ 1      (FADE_S real seconds in all)
  *
@@ -13,6 +14,7 @@ import { Vector3 } from 'three';
 
 import {
   advance,
+  carriedOn,
   citizenPath,
   groundSpeed,
   joinAt,
@@ -49,14 +51,12 @@ export interface Track {
 }
 
 /**
- * A citizen first seen (a snapshot, a replayed tick) is drawn where the feed says it is now: at the end of its tick's
- * step, walking on along its plan.
+ * A citizen first seen (a snapshot, a replayed tick) is drawn like any other, one tick behind: where its tick's step
+ * began, walking it.
  */
 export function newTrack(citizen: Streamed, radius: number): Track {
-  const path = citizenPath(citizen, radius);
-  joinAt(path, new Vector3(...citizen.position.unit), radius);
   return {
-    path,
+    path: citizenPath(citizen, radius),
     offset: new Vector3(),
     yaw: (citizen.heading_deg * Math.PI) / 180,
     fade: null,
@@ -78,13 +78,18 @@ export function follow(
   radius: number,
   rate: number,
 ) {
+  const next = citizenPath(citizen, radius);
+  const carried = carriedOn(track.path, next, radius);
+  if (carried) {
+    track.path = carried; // the offset carries on easing
+    return;
+  }
   const drawn = onPath(track, new Vector3());
   const limit = snapMetres(groundSpeed(track.path), rate);
-  const path = citizenPath(citizen, radius);
-  const off = joinAt(path, drawn, radius);
-  track.path = path;
+  const off = joinAt(next, drawn, radius);
+  track.path = next;
   if (off <= limit) {
-    track.offset.subVectors(drawn, pointAt(path, new Vector3()));
+    track.offset.subVectors(drawn, pointAt(next, new Vector3()));
     return;
   }
   track.offset.set(0, 0, 0);

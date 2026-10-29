@@ -6,18 +6,23 @@
  * sim, never a jump, never cutting a corner the route doesn't, slowing down where the ground is harder.
  *
  *   route[0] ──────▶ route[1] ──────▶ route[2]        `time` = game seconds walked from route[0]
- *     t 0        t 25 (corner)     t 60 (now)  ─▶ ahead
+ *     t 0        t 25 (corner)     t 60 (now: `arrive`)  ─▶ ahead
  *
  * Feeds recorded before routes were timed have no `t_s`: their route starts where the walker is and is walked at
  * `speed_mps`. Pure (no DOM, no React): `globe-npcs.tsx` keeps one per citizen and the tests drive it directly.
  */
 import { Vector3 } from 'three';
 
+import { TICK_SECONDS } from './live-contract';
 import type { RoutePoint } from '@/lib/client/types.gen';
 
 /** Drawn farther off its new path than this (and than SNAP_SECONDS of its drawn walking), it is a resync. */
 const SNAP_M = 30;
 const SNAP_SECONDS = 2.5;
+/** Game seconds below which two times on a route are the same moment. */
+const TIME_EPSILON = 1e-6;
+/** A new tick's path starting this close (metres) to a point of the old one starts there. */
+const SAME_SPOT_M = 0.01;
 
 export interface WalkPath {
   /** Unit directions from the planet's centre; one point = standing there. */
@@ -28,6 +33,8 @@ export interface WalkPath {
   times: number[];
   /** Game seconds walked from the first point. */
   time: number;
+  /** Game seconds at which the walker is where the feed says it is now (`position`): what it walked is behind it. */
+  arrive: number;
 }
 
 /** A path through the given directions (at least one), passed at the given game seconds. */
@@ -43,7 +50,13 @@ export function walkPath(
   const starts = [0];
   for (let k = 1; k < points.length; k++)
     starts.push(starts[k - 1] + points[k - 1].angleTo(points[k]) * radius);
-  return { points, starts, times: [...times], time: times[0] };
+  return {
+    points,
+    starts,
+    times: [...times],
+    time: times[0],
+    arrive: times[0],
+  };
 }
 
 /** Where someone stands still. */
@@ -65,12 +78,18 @@ export function citizenPath(
   if (route.length < 2) return standing(citizen.position.unit, radius);
   const units = route.map((point) => point.unit);
   const timed = route.every((point) => point.t_s != null);
-  if (timed)
-    return walkPath(
+  if (timed) {
+    const path = walkPath(
       units,
       route.map((point) => point.t_s ?? 0),
       radius,
     );
+    // the walked part ends a tick in at the latest (the tick's step); the plan ahead comes after it
+    path.arrive = Math.max(
+      ...path.times.filter((t) => t <= TICK_SECONDS + TIME_EPSILON),
+    );
+    return path;
+  }
   const untimed = walkPath(
     units,
     units.map(() => 0),
@@ -162,6 +181,37 @@ export function joinAt(path: WalkPath, drawn: Vector3, radius: number) {
   }
   path.time = time;
   return best;
+}
+
+/**
+ * A new tick's path for a walker still on the walked part of its old one, short of where the new path starts (a
+ * page opened mid-tick draws its first tick late): the rest of what it walked, then the new path, timed on from
+ * there, so it walks on instead of jumping (and stays that much behind until it next stands still). Null when the
+ * walker isn't behind, or is more than a tick behind (a resync).
+ */
+export function carriedOn(old: WalkPath, next: WalkPath, radius: number) {
+  const behind = old.arrive - old.time;
+  if (behind <= TIME_EPSILON || behind > TICK_SECONDS) return null;
+  const end = old.times.lastIndexOf(old.arrive);
+  if (old.points[end].angleTo(next.points[0]) * radius > SAME_SPOT_M)
+    return null;
+  const leg = legAt(old);
+  const shift = old.arrive - next.times[0];
+  const path = walkPath(
+    [
+      pointAt(old, new Vector3()),
+      ...old.points.slice(leg + 1, end + 1),
+      ...next.points.slice(1),
+    ].map((point) => point.toArray()),
+    [
+      old.time,
+      ...old.times.slice(leg + 1, end + 1),
+      ...next.times.slice(1).map((t) => t + shift),
+    ],
+    radius,
+  );
+  path.arrive = next.arrive + shift;
+  return path;
 }
 
 /**
