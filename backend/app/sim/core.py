@@ -6,6 +6,7 @@ Perception, actions and the tick loop all work through this object; it is the on
 import hashlib
 import math
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from app.observability.events import (
     ActionEnded,
@@ -41,10 +42,23 @@ REACH_M = 3.0
 ROUGH_GUESS_M = 60.0  # how far off a place someone was only told about may be
 KEPT_RESULTS = 8
 KEPT_HEARD = 20
+WALK_AHEAD_TICKS = 2  # how much of a mover's plan spectators get beyond this tick's step
 
 _LEVEL_RANK: dict[KnowledgeLevel, int] = {"rough": 1, "visited": 2}
 
 GiftPolicy = Callable[[Citizen, Citizen, str, int], bool]  # (giver, receiver, item, count) -> accepted
+TimedPoint = tuple[Vec3, float]  # a spot and the game second after the tick's start someone is there
+
+
+@dataclass(frozen=True)
+class Stride:
+    """How a citizen moved this tick, for spectators to draw: the spots passed from where they stood when the tick
+    began to where they are now (`walked`), then on along their plan (`ahead`, while the action that moved them
+    lasts), each with the game second after the tick's start they are there."""
+
+    action: int  # the number of the action that moved them
+    walked: tuple[TimedPoint, ...]
+    ahead: tuple[TimedPoint, ...] = ()
 
 
 def awake_accepts(giver: Citizen, receiver: Citizen, item: str, count: int) -> bool:  # noqa: ARG001  # a GiftPolicy
@@ -62,6 +76,7 @@ class SimCore:
         self.state = state
         self.outbox: list[EventDraft] = []
         self.hurt: dict[str, tuple[str, int]] = {}  # citizens hurt this tick: (what happened, injured seq)
+        self.strides: dict[str, Stride] = {}  # citizens who moved this tick: how (every move must leave one)
         self._sun_tick = -1
         self._sun: Vec3 = (0.0, 0.0, 1.0)
 

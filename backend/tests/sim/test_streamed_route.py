@@ -1,5 +1,6 @@
-"""The walk ahead in every tick summary: the path a walker will follow next, so clients can draw smooth motion over
-a tick that lasts a whole real minute at real-time speed."""
+"""The route in every tick summary: how a mover is drawn over the next tick. It starts where they stood when the tick
+began (where spectators drew them), passes through where they are now (timed in game seconds from the tick's start)
+and carries on along their plan, so the whole move is drawn as walking and the next tick picks up where it ended."""
 
 import math
 from collections.abc import Callable
@@ -7,16 +8,19 @@ from collections.abc import Callable
 import pytest
 
 from app.observability.events import Moved, RoutePoint, TickSummary
-from app.sim.actions import WALK_AHEAD_TICKS, WALK_M_PER_TICK, walk_ahead
+from app.sim import wild
+from app.sim.actions import WALK_M_PER_TICK, streamed_route
 from app.sim.clock import SECONDS_PER_TICK
-from app.sim.navigation import Route, walk_along
+from app.sim.core import WALK_AHEAD_TICKS
+from app.sim.navigation import Route
 from app.sim.simulation import Simulation
-from app.sim.vec import Vec3
+from app.sim.vec import Vec3, step_towards
 from app.world_api.facade import WorldApi
-from tests.sim_helpers import make_spec
+from tests.sim_helpers import add_animal, drawn_on, make_spec, put_in_the_wild, skip_to, wild_cell, without_animals
 
 STEP_M = 0.1
 FLAT_WALK_MPS = 5000 / 3600  # 5 km/h
+DRAWN_M = 0.01  # how close the drawn spot must be to the simulated one
 
 
 def _moved(sim: Simulation, citizen_id: str) -> Moved | None:
@@ -25,14 +29,19 @@ def _moved(sim: Simulation, citizen_id: str) -> Moved | None:
     return summaries[0].moved.get(citizen_id)
 
 
-def _length_m(sim: Simulation, route: list[RoutePoint]) -> float:
-    return sum(sim.world.distance_m(a.unit, b.unit) for a, b in zip(route, route[1:], strict=False))
+def _seconds(route: list[RoutePoint]) -> list[float]:
+    times = [point.t_s for point in route]
+    assert all(t is not None for t in times)
+    return [float(t) for t in times if t is not None]
 
 
-def _along(sim: Simulation, route: list[RoutePoint], metres: float) -> Vec3:
-    """Where walking `metres` along the streamed route ends (as a client drawing the walk would)."""
-    flat = Route(points=tuple(point.unit for point in route), costs=(1.0,) * (len(route) - 1))
-    return walk_along(flat, 0, 0.0, metres, sim.world.radius_m).position
+def _speeds(sim: Simulation, route: list[RoutePoint]) -> list[float]:
+    """Ground speed on each leg (metres per game second)."""
+    times = _seconds(route)
+    return [
+        sim.world.distance_m(a.unit, b.unit) / (tb - ta)
+        for a, b, ta, tb in zip(route, route[1:], times, times[1:], strict=False)
+    ]
 
 
 def _walkable_segment(sim: Simulation, a: Vec3, b: Vec3) -> bool:
@@ -44,99 +53,160 @@ def _walkable_segment(sim: Simulation, a: Vec3, b: Vec3) -> bool:
     )
 
 
+def _starts_where_they_stood(sim: Simulation, moved: Moved, before: Vec3) -> None:
+    first = moved.route[0]
+    assert first.unit == before and first.t_s == 0.0
+    cell = sim.world.nearest_cell(before)
+    assert first.height_m == pytest.approx(sim.world.ground_height(before, cell))
+
+
 @pytest.mark.parametrize(("age", "pace"), [(25, 1.0), (63, 0.6)])
-def test_a_town_walker_streams_the_walkable_path_ahead_and_follows_it(
+def test_a_town_walker_streams_each_step_from_where_they_stood_and_the_walkable_path_ahead(
     new_sim: Callable[..., Simulation], age: int, pace: float
 ) -> None:
     sim = new_sim()
     citizen = sim.add_citizen(make_spec(age=age, knows_places=["town", "main-gate", "training-ground"]))
     WorldApi(sim, citizen.id).walk_to_place("the training ground")
     sim.drain()
-    predicted: Vec3 | None = None
+    goal = sim.world.places["training-ground"].stand
     walking_ticks = 0
     while citizen.action is not None:
+        before = citizen.position
         sim.step()
         moved = _moved(sim, citizen.id)
         assert moved is not None  # a walker always moves
-        if predicted is not None:  # the last tick's route and speed told where they'd be now
-            assert sim.world.distance_m(citizen.position, predicted) < 1e-6
-        if citizen.action is None:  # arrived: nothing ahead
-            assert (moved.route, moved.speed_mps) == ([], 0.0)
-            break
-        walking_ticks += 1
-        route = moved.route
-        assert route[0] == RoutePoint(unit=citizen.position, height_m=citizen.height_m)
+        route, times = moved.route, _seconds(moved.route)
+        _starts_where_they_stood(sim, moved, before)
         assert all(sim.world.town_point(point.unit) is not None for point in route)
         assert all(point.height_m == sim.world.town.height_m for point in route)
         assert all(_walkable_segment(sim, a.unit, b.unit) for a, b in zip(route, route[1:], strict=False))
         assert all(a.unit != b.unit for a, b in zip(route, route[1:], strict=False))  # every leg has a direction
+        assert all(a < b for a, b in zip(times, times[1:], strict=False))
+        assert _speeds(sim, route) == pytest.approx([FLAT_WALK_MPS * pace] * (len(route) - 1))
         assert moved.speed_mps == pytest.approx(FLAT_WALK_MPS * pace)
-        ahead = _length_m(sim, route)
-        goal = sim.world.places["training-ground"]
-        ends_at_goal = sim.world.distance_m(route[-1].unit, goal.stand) < 1e-6
-        if ends_at_goal:
-            assert ahead <= WALK_AHEAD_TICKS * WALK_M_PER_TICK * pace + 1e-6
-        else:
-            assert ahead == pytest.approx(WALK_AHEAD_TICKS * WALK_M_PER_TICK * pace, abs=1e-6)
-            assert ahead > 1.5 * moved.speed_mps * SECONDS_PER_TICK  # outlasts the tick, with time to spare
-        predicted = _along(sim, route, moved.speed_mps * SECONDS_PER_TICK)
+        if citizen.action is None:  # arrived during the step: drawn walking up to the goal, nothing beyond
+            assert route[-1].unit == goal == citizen.position and times[-1] <= SECONDS_PER_TICK
+            break
+        walking_ticks += 1
+        # the step ends where they are a tick after it began; the plan goes on for WALK_AHEAD_TICKS
+        assert sim.world.distance_m(drawn_on(route, SECONDS_PER_TICK), citizen.position) < DRAWN_M
+        assert any(point.unit == citizen.position and point.t_s == pytest.approx(SECONDS_PER_TICK) for point in route)
+        if route[-1].unit != goal:
+            assert times[-1] == pytest.approx((1 + WALK_AHEAD_TICKS) * SECONDS_PER_TICK)
     assert walking_ticks >= 2
 
 
-def test_nobody_standing_still_has_a_walk_ahead(new_sim: Callable[..., Simulation]) -> None:
+def test_a_walk_shorter_than_a_tick_is_drawn_walking_all_the_way(new_sim: Callable[..., Simulation]) -> None:
+    sim = new_sim()
+    citizen = sim.add_citizen(make_spec())
+    WorldApi(sim, citizen.id).walk_towards("south", "a few steps")
+    walk = citizen.action
+    assert walk is not None and walk.goal is not None
+    goal, before = walk.goal, citizen.position
+    sim.drain()
+    sim.step()
+    moved = _moved(sim, citizen.id)
+    assert citizen.action is None and citizen.position == goal  # there within the tick
+    assert moved is not None
+    _starts_where_they_stood(sim, moved, before)
+    times = _seconds(moved.route)
+    assert moved.route[-1].unit == goal
+    length = sum(sim.world.distance_m(a.unit, b.unit) for a, b in zip(moved.route, moved.route[1:], strict=False))
+    assert length > 10.0
+    assert times[-1] == pytest.approx(length / FLAT_WALK_MPS)  # at walking pace, then standing for the rest
+    assert moved.speed_mps == pytest.approx(FLAT_WALK_MPS)
+
+
+def test_nobody_standing_still_is_streamed(new_sim: Callable[..., Simulation]) -> None:
     sim = new_sim()
     citizen = sim.add_citizen(make_spec())
     sim.step()
     assert _moved(sim, citizen.id) is None
-    assert walk_ahead(sim.core, citizen) == ([], 0.0)
+    WorldApi(sim, citizen.id).walk_towards("south", "a few steps")
+    sim.step()
+    assert _moved(sim, citizen.id) is not None
     WorldApi(sim, citizen.id).rest(30)
     sim.step()
-    assert walk_ahead(sim.core, citizen) == ([], 0.0)
+    assert _moved(sim, citizen.id) is None
+    with pytest.raises(ValueError, match="moved without a stride"):  # last tick's walk is no move of this one
+        streamed_route(sim.core, citizen)
 
 
-def test_a_follower_at_the_end_of_their_route_has_nothing_ahead_until_they_replan(
-    new_sim: Callable[..., Simulation],
-) -> None:
-    sim = new_sim()
-    citizen = sim.add_citizen(make_spec(knows_places=["town", "main-gate", "training-ground"]))
-    WorldApi(sim, citizen.id).walk_to_place("the training ground")
-    sim.step()
+def test_the_times_follow_each_legs_walking_cost(new_sim: Callable[..., Simulation]) -> None:
+    """Grass then forest: the drawn walker slows down where the sim does and is where the sim says a tick later."""
+    sim = without_animals(new_sim())
+    citizen = sim.add_citizen(make_spec(home=None))
+    put_in_the_wild(sim, citizen.id, wild_cell(sim))
+    WorldApi(sim, citizen.id).walk_towards("north", "a long walk")
     walk = citizen.action
-    assert walk is not None and walk.route is not None and walk_ahead(sim.core, citizen)[0]
-    walk.leg, walk.along_m = len(walk.route.costs), 0.0  # as when the person they follow moved on (goal cleared)
-    assert walk_ahead(sim.core, citizen) == ([], 0.0)
-
-
-def test_an_exhausted_walker_goes_at_half_pace(new_sim: Callable[..., Simulation]) -> None:
-    sim = new_sim()
-    citizen = sim.add_citizen(make_spec(knows_places=["town", "main-gate", "training-ground"]))
-    citizen.body.energy = 5.0
-    sim.step()  # feeling exhausted is news once; it would stop a walk started before
+    assert walk is not None
+    radius = sim.world.radius_m
+    corner = step_towards(citizen.position, 0.0, 30.0, radius)
+    end = step_towards(corner, 0.0, 60.0, radius)
+    walk.route, walk.leg, walk.along_m = Route(points=(citizen.position, corner, end), costs=(1.0, 2.0)), 0, 0.0
     sim.drain()
-    WorldApi(sim, citizen.id).walk_to_place("the training ground")
     sim.step()
     moved = _moved(sim, citizen.id)
-    assert moved is not None and moved.speed_mps == pytest.approx(FLAT_WALK_MPS / 2)
-    assert _length_m(sim, moved.route) == pytest.approx(WALK_AHEAD_TICKS * WALK_M_PER_TICK / 2, abs=1e-6)
+    assert moved is not None
+    seconds_per_cost = SECONDS_PER_TICK / WALK_M_PER_TICK
+    at_corner = next(point for point in moved.route if point.unit == corner)
+    assert at_corner.t_s == pytest.approx(30.0 * seconds_per_cost)
+    assert _speeds(sim, moved.route)[0] == pytest.approx(FLAT_WALK_MPS)
+    assert _speeds(sim, moved.route)[-1] == pytest.approx(FLAT_WALK_MPS / 2)
+    assert sim.world.distance_m(drawn_on(moved.route, SECONDS_PER_TICK), citizen.position) < DRAWN_M
+    # the rest of the forest leg (60 m at cost 2, less what the step walked) and nothing past the route's end
+    walked_m = 30.0 + (WALK_M_PER_TICK - 30.0) / 2.0
+    assert moved.route[-1].unit == end
+    assert moved.route[-1].t_s == pytest.approx(SECONDS_PER_TICK + (90.0 - walked_m) * 2.0 * seconds_per_cost)
 
 
-def test_a_forest_walker_is_slower_and_still_lands_on_the_streamed_path(new_sim: Callable[..., Simulation]) -> None:
-    sim = new_sim()
-    citizen = sim.add_citizen(make_spec(site="band_a_camp", at=(30.0, 150.0), home=None, knows_places=["band_a_camp"]))
-    assert sim.world.town_point(citizen.position) is None and sim.world.biome(citizen.cell) == "broadleaf_forest"
-    WorldApi(sim, citizen.id).walk_towards("east", "a long walk")
+def _hunter(new_sim: Callable[..., Simulation], deer_m: float, age: int = 25) -> tuple[Simulation, WorldApi, Vec3]:
+    sim = without_animals(new_sim())
+    spec = make_spec("hunter", age=age, home=None, skills=["hunting"], inventory={"spear": 1})
+    citizen = sim.add_citizen(spec)
+    put_in_the_wild(sim, citizen.id, wild_cell(sim))
+    skip_to(sim, citizen.position, night=False)
+    deer = step_towards(citizen.position, 90.0, deer_m, sim.world.radius_m)
+    add_animal(sim, "deer", deer, activity="grazing", until=10**9)
     sim.drain()
-    predicted: Vec3 | None = None
-    for _ in range(4):  # the forest south of band A's camp: terrain cost 1.5 the whole way
-        sim.step()
-        moved = _moved(sim, citizen.id)
-        assert moved is not None and citizen.action is not None
-        if predicted is not None:
-            assert sim.world.distance_m(citizen.position, predicted) < 1e-6
-        assert moved.route[0].unit == citizen.position
-        assert moved.speed_mps == pytest.approx(FLAT_WALK_MPS / 1.5)
-        for point in moved.route:
-            cell = sim.world.nearest_cell(point.unit, citizen.cell)
-            assert sim.world.biome(cell) == "broadleaf_forest"
-            assert point.height_m == pytest.approx(float(sim.world.heights[cell]))
-        predicted = _along(sim, moved.route, moved.speed_mps * SECONDS_PER_TICK)
+    return sim, WorldApi(sim, citizen.id), deer
+
+
+@pytest.mark.parametrize(("age", "pace"), [(25, 1.0), (63, 0.6)])
+def test_a_hunter_creeping_up_is_streamed_at_the_stalking_pace(
+    new_sim: Callable[..., Simulation], age: int, pace: float
+) -> None:
+    sim, api, deer = _hunter(new_sim, 140.0, age)
+    hunter = sim.citizen("hunter")
+    api.hunt("the deer")
+    before = hunter.position
+    sim.step()
+    moved = _moved(sim, "hunter")
+    assert moved is not None and hunter.action is not None
+    _starts_where_they_stood(sim, moved, before)
+    stalk_mps = wild.STALK_PACE_M * pace / SECONDS_PER_TICK
+    # (the sim creeps along the chord towards the deer: a few cm short of the arc's length)
+    assert moved.speed_mps == pytest.approx(stalk_mps, rel=1e-3)
+    assert _speeds(sim, moved.route) == pytest.approx([stalk_mps] * (len(moved.route) - 1), rel=1e-3)
+    assert moved.route[1].unit == hunter.position
+    assert moved.route[1].t_s == SECONDS_PER_TICK
+    # on towards the deer for two more minutes, stopping short of where they'd strike from
+    left = sim.world.distance_m(moved.route[-1].unit, deer)
+    assert left == pytest.approx(max(wild.HUNT_STRIKE_M * 0.8, 140.0 - 3 * wild.STALK_PACE_M * pace), abs=0.1)
+    assert sim.world.distance_m(drawn_on(moved.route, SECONDS_PER_TICK), hunter.position) < DRAWN_M
+
+
+def test_a_hunter_who_strikes_is_streamed_only_up_to_the_strike(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 64 m off: a minute's creep (50 m) brings the deer within the strike (15 m), short of the usual 12 m stop
+    sim, api, _ = _hunter(new_sim, 64.0)
+    monkeypatch.setattr(wild, "hunt_chance", lambda *_: 1.0)
+    hunter = sim.citizen("hunter")
+    api.hunt("the deer")
+    before = hunter.position
+    sim.step()
+    moved = _moved(sim, "hunter")
+    assert moved is not None and hunter.action is None  # struck this tick: no plan left to draw
+    assert [point.unit for point in moved.route] == [before, hunter.position]
+    assert _seconds(moved.route) == [0.0, SECONDS_PER_TICK]

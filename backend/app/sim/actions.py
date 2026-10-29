@@ -16,11 +16,11 @@ from app.sim import fire, wild
 from app.sim.acting import begin, capital, item_amount, item_name, refuse, settled, stack_in_reach
 from app.sim.bodies import COLLAPSE_WAKE_ENERGY, Crossing
 from app.sim.clock import NIGHT_ALTITUDE_DEG, SECONDS_PER_TICK, sun_altitude_deg, sun_direction
-from app.sim.core import HEARING_M, KEPT_HEARD, REACH_M, SimCore
+from app.sim.core import HEARING_M, KEPT_HEARD, REACH_M, WALK_AHEAD_TICKS, SimCore, Stride, TimedPoint
 from app.sim.ecology import schedule_regrowth
 from app.sim.fauna import DANGEROUS, SPECIES
 from app.sim.items import GATHERED, ITEMS, RESOURCE_INDEX, amount_words
-from app.sim.navigation import walk_along
+from app.sim.navigation import WalkProgress, walk_along
 from app.sim.perception import (
     HOME_RADIUS_M,
     WATCHING_M,
@@ -69,7 +69,6 @@ from app.world_api.models import (
 
 WALK_M_PER_TICK = 5000 / 60  # 5 km/h on flat ground
 EXHAUSTED_PACE = 0.5
-WALK_AHEAD_TICKS = 2  # how much of a walker's path spectators get: enough to draw the walk until the next tick
 ARRIVE_M = 2.0  # close enough to a person
 FOLLOW_REPLAN_M = 3.0
 GATHER_MINUTES = 20
@@ -716,7 +715,9 @@ def _advance_walk(core: SimCore, citizen: Citizen, walk: ActionState) -> None:
             walk.route, walk.goal, walk.leg, walk.along_m = route, person.position, 0, 0.0
     if walk.route is None:
         raise ValueError(f"walk {walk.number} of {citizen.id} has no route")
-    progress = walk_along(walk.route, walk.leg, walk.along_m, WALK_M_PER_TICK * walk_pace(citizen), core.world.radius_m)
+    budget = WALK_M_PER_TICK * walk_pace(citizen)
+    progress = walk_along(walk.route, walk.leg, walk.along_m, budget, core.world.radius_m)
+    core.strides[citizen.id] = _walk_stride(core, citizen, walk, progress, budget)
     walk.leg, walk.along_m = progress.leg, progress.along_m
     core.place_at(citizen, progress.position)
     if not progress.arrived:
@@ -758,32 +759,45 @@ def walk_pace(citizen: Citizen) -> float:
     )
 
 
-def walk_ahead(core: SimCore, citizen: Citizen) -> tuple[list[RoutePoint], float]:
-    """A walker's planned path for the next WALK_AHEAD_TICKS from where they stand (the first point), and their
-    ground speed on the current leg in metres per game second; ([], 0) when they aren't walking on.
+def _walk_stride(core: SimCore, citizen: Citizen, walk: ActionState, step: WalkProgress, budget: float) -> Stride:
+    """This tick's step along the route (from where the walker stands to `step`) and the next WALK_AHEAD_TICKS of
+    it, timed by the cost spent: the route's own corners, so the path between them is as walkable as the route (in
+    town: grid corners, no corner cutting)."""
+    if walk.route is None:
+        raise ValueError(f"walk {walk.number} of {citizen.id} has no route")
+    seconds = SECONDS_PER_TICK / budget  # game seconds per unit of walking cost
+    walked = [(citizen.position, 0.0), *((unit, cost * seconds) for unit, cost in step.corners)]
+    walked.append((step.position, step.cost_spent * seconds))
+    on = walk_along(walk.route, step.leg, step.along_m, WALK_AHEAD_TICKS * budget, core.world.radius_m)
+    ahead = [(unit, SECONDS_PER_TICK + cost * seconds) for unit, cost in on.corners]
+    ahead.append((on.position, SECONDS_PER_TICK + on.cost_spent * seconds))
+    return Stride(walk.number, _distinct(walked), _distinct(ahead, after=step.position))
 
-    The points are the route's own corners plus where the look-ahead ends on a leg, so the path between them is as
-    walkable as the route (in town: grid corners, no corner cutting).
-    """
-    walk = citizen.action
-    if (
-        walk is None
-        or walk.kind not in ("walk_to", "flee", "follow")
-        or walk.route is None
-        or walk.leg >= len(walk.route.costs)
-    ):
-        return [], 0.0
-    route, world = walk.route, core.world
-    pace = walk_pace(citizen)
-    end = walk_along(route, walk.leg, walk.along_m, WALK_AHEAD_TICKS * WALK_M_PER_TICK * pace, world.radius_m)
+
+def _distinct(points: list[TimedPoint], after: Vec3 | None = None) -> tuple[TimedPoint, ...]:
+    """The points without repeats of the spot just before (every leg drawn has a direction)."""
+    kept: list[TimedPoint] = []
+    for point in points:
+        if point[0] != (kept[-1][0] if kept else after):
+            kept.append(point)
+    return tuple(kept)
+
+
+def streamed_route(core: SimCore, citizen: Citizen) -> tuple[list[RoutePoint], float]:
+    """How a citizen who moved this tick is drawn: the path from where they stood when the tick began, through
+    where they are now, on along their plan while they keep at it, timed in game seconds from the tick's start;
+    and their ground speed where it starts (metres per game second)."""
+    stride = core.strides.get(citizen.id)
+    if stride is None:
+        raise ValueError(f"{citizen.id} moved without a stride")
+    going_on = citizen.action is not None and citizen.action.number == stride.action
+    world, cell = core.world, citizen.cell
     points: list[RoutePoint] = []
-    cell = citizen.cell
-    for unit in (citizen.position, *route.points[walk.leg + 1 : end.leg + 1], end.position):
-        if points and unit == points[-1].unit:
-            continue
+    for unit, seconds in (*stride.walked, *(stride.ahead if going_on else ())):
         cell = world.nearest_cell(unit, cell)
-        points.append(RoutePoint(unit=unit, height_m=world.ground_height(unit, cell)))
-    return points, WALK_M_PER_TICK * pace / route.costs[walk.leg] / SECONDS_PER_TICK
+        points.append(RoutePoint(unit=unit, height_m=world.ground_height(unit, cell), t_s=seconds))
+    (start, began), (then, reached) = stride.walked[0], stride.walked[1]
+    return points, world.distance_m(start, then) / (reached - began)
 
 
 def _advance_sleep(core: SimCore, citizen: Citizen) -> None:

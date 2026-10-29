@@ -17,7 +17,8 @@ import math
 from app.observability.events import ItemLocation, ResourceChanged
 from app.sim import animals, fire
 from app.sim.acting import begin, capital, settled
-from app.sim.core import REACH_M, SimCore
+from app.sim.clock import SECONDS_PER_TICK
+from app.sim.core import REACH_M, WALK_AHEAD_TICKS, SimCore, Stride
 from app.sim.ecology import schedule_regrowth
 from app.sim.fauna import SPECIES
 from app.sim.items import ITEMS, RESOURCE_INDEX, amount_words
@@ -99,11 +100,13 @@ def advance_stalk(core: SimCore, citizen: Citizen, action: ActionState) -> None:
         if action.until_tick is not None and core.state.tick >= action.until_tick:
             core.end_action(citizen, "failed", f"You lose the trail of {name}.")
             return
-        step = min(STALK_PACE_M * citizen.traits.speed, distance - strike_m * 0.8)
+        pace = STALK_PACE_M * citizen.traits.speed
+        step = min(pace, distance - strike_m * 0.8)
         target = _towards(citizen.position, animal.position, step / distance)
         if not _walkable(core, citizen, target):
             core.end_action(citizen, "failed", f"You can't get any closer to {name}.")
             return
+        core.strides[citizen.id] = _stalk_stride(core, citizen, action, (target, step), animal.position, strike_m)
         core.place_at(citizen, target)
         if core.distance_m(citizen.position, animal.position) > strike_m:
             return
@@ -111,6 +114,25 @@ def advance_stalk(core: SimCore, citizen: Citizen, action: ActionState) -> None:
         _strike_hunt(core, citizen, animal)
     else:
         _strike_animal(core, citizen, animal)
+
+
+def _stalk_stride(
+    core: SimCore, citizen: Citizen, action: ActionState, step: tuple[Vec3, float], quarry: Vec3, strike_m: float
+) -> Stride:
+    """This minute's creep (`step`: where to and how many metres, straight at the stalking pace) and, while still
+    out of reach, the next WALK_AHEAD_TICKS minutes of it towards where the animal is now."""
+    pace = STALK_PACE_M * citizen.traits.speed / SECONDS_PER_TICK  # metres a game second
+    target, metres = step
+    reached = metres / pace  # a full creep takes the whole minute
+    walked = ((citizen.position, 0.0), (target, reached))
+    gap = core.distance_m(target, quarry)
+    left = min(WALK_AHEAD_TICKS * STALK_PACE_M * citizen.traits.speed, gap - strike_m * 0.8)
+    if left <= 0:
+        return Stride(action.number, walked)
+    onward = _towards(target, quarry, left / gap)
+    if not _walkable(core, citizen, onward):
+        return Stride(action.number, walked)
+    return Stride(action.number, walked, ((onward, reached + left / pace),))
 
 
 def hunt_chance(core: SimCore, citizen: Citizen, animal: Animal) -> float:

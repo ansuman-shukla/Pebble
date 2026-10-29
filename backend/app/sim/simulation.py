@@ -293,6 +293,7 @@ class Simulation:
         core = self.core
         core.state.tick += 1
         core.hurt.clear()
+        core.strides.clear()
         before = {citizen.id: citizen.position for citizen in core.living()}
         poses = {a.id: (a.position, a.heading_deg, a.activity) for a in core.state.animals.values() if a.alive}
         walk_targets = {citizen.id: actions.walking_to(citizen) for citizen in core.living()}
@@ -340,7 +341,7 @@ class Simulation:
         moved: dict[str, Moved] = {}
         for citizen in core.citizens():
             if citizen.id in before and citizen.position != before[citizen.id]:
-                route, speed_mps = actions.walk_ahead(core, citizen)
+                route, speed_mps = actions.streamed_route(core, citizen)
                 moved[citizen.id] = Moved(
                     position=citizen.position,
                     height_m=citizen.height_m,
