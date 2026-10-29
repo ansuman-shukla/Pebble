@@ -47,6 +47,22 @@ CASES: list[tuple[str, dict[str, Any], str, str, dict[int, str]]] = [
     ("need_changed", {"need": "hunger", "level": "fed", "value": 20, "worse": False}, "me", "feels fed again", {}),
     ("injured", {"amount": 12.4, "cause": "a fall"}, "me", "is hurt: a fall", {}),
     ("died", {"cause": "starvation"}, "me", "dies: starvation", {}),
+    # world v1 events read as the feed tells them (the line registry), names not ids
+    (
+        "bought",
+        {"item": "rice", "count": 4, "lots": 2, "coins": 8, "stall": "stall", "merchant": "you"},
+        "me",
+        "Aiko buys 4 rice for 8 mon",
+        {},
+    ),
+    ("gestured", {"kind": "wave", "to": "kid", "seen_by": ["kid"]}, "me", "Aiko waved at Hana", {}),
+    (
+        "standing_changed",
+        {"group": "band_a", "before": 0, "after": 3, "word": "nothing said", "cause": "sale"},
+        "me",
+        "Aiko's standing with band A goes from 0 to 3 (sale)",
+        {},
+    ),
     ("knowledge_changed", {"about": "person", "ref": "you", "level": "known"}, "me", "gets to know Genzo", {}),
     ("knowledge_changed", {"about": "place", "ref": "temple", "level": "rough"}, "me", "hears of the temple", {}),
     (
