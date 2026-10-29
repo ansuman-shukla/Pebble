@@ -28,6 +28,7 @@ import {
   walking,
   type WalkPath,
 } from './walk-path';
+import type { FedBody } from './motion';
 import type { CitizenEntity, RoutePoint } from '@/lib/client/types.gen';
 
 /** How fast the drawn spot eases onto a new tick's path when it is a little off (1/s). */
@@ -43,11 +44,12 @@ const LANE_OUT_M = 1.5;
 /** How fast its lane swings to the new side at a corner (1/s, real time): a U-turn crosses two lane widths. */
 const SIDE_RATE = 2;
 
-/** What a citizen is shown doing (the label's words and the pose come from it). */
+/** What a citizen is shown doing (the label's words and the body's motion come from it). */
 export type Doing = Pick<
   CitizenEntity,
   'activity' | 'action_label' | 'cause_of_death'
->;
+> &
+  FedBody;
 
 /** What a feed frame says of a citizen's place, move and doing. */
 interface Streamed extends Doing {
@@ -70,10 +72,20 @@ const WALKING: Doing = {
   cause_of_death: null,
 };
 
-const doingOf = ({ activity, action_label, cause_of_death }: Doing): Doing => ({
+const doingOf = ({
   activity,
   action_label,
   cause_of_death,
+  motion,
+  posture,
+  slot_heading,
+}: Doing): Doing => ({
+  activity,
+  action_label,
+  cause_of_death,
+  motion,
+  posture,
+  slot_heading,
 });
 
 export interface Track {
