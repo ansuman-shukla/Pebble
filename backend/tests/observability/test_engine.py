@@ -73,6 +73,33 @@ def test_a_run_resumes_from_its_snapshot_and_replays_the_lost_tail(db_session: S
     assert latest_snapshot(db_session, run_id) is not None
 
 
+def _snapshot_ticks(session: Session, run_id: str) -> list[int]:
+    return list(session.exec(select(Snapshot.tick).where(Snapshot.run_id == run_id).order_by(col(Snapshot.tick))))
+
+
+def test_stopping_a_resumed_run_before_it_ticks_keeps_its_snapshot(db_session: Session, sim_world: SimWorld) -> None:
+    first = open_loop(db_session, sim_world, KEY, new_run=True, citizens=DEV_CITIZENS, clock=Clock())
+    run_id = first.run.id
+    first.run_ticks(90, headless=True)
+    first.shut_down()  # off the hour: snapshotted where it stopped
+    assert _snapshot_ticks(db_session, run_id) == [0, 60, 90]
+
+    idle = open_loop(db_session, sim_world, KEY, new_run=False, citizens=DEV_CITIZENS, clock=Clock())
+    assert idle.sim.tick == 90
+    idle.shut_down()  # no tick since the resume: the snapshot at 90 is already there (#68)
+    run = db_session.get(Run, run_id)
+    assert run is not None and (run.status, run.tick) == ("stopped", 90)
+    assert _snapshot_ticks(db_session, run_id) == [0, 60, 90]
+
+    again = open_loop(db_session, sim_world, KEY, new_run=False, citizens=DEV_CITIZENS, clock=Clock())
+    again.run_ticks(35, headless=True)
+    again.shut_down()
+    assert _snapshot_ticks(db_session, run_id) == [0, 60, 90, 120, 125]
+    last = latest_snapshot(db_session, run_id)
+    assert last is not None
+    assert canonical_json(SimSnapshot.model_validate(last.state)) == canonical_json(take_snapshot(again.sim.state))
+
+
 def test_clock_commands_reach_the_engine(db_session: Session, sim_world: SimWorld) -> None:
     loop = open_loop(db_session, sim_world, KEY, new_run=True, citizens=None, clock=Clock())
     command = queue_command(db_session, loop.run.id, "clock", {"paused": True, "speed": 30})

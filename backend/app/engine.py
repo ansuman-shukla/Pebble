@@ -251,8 +251,10 @@ class EngineLoop:
         self.catch_up_to = committed_tick
 
     def shut_down(self) -> None:
-        """Snapshot where we are so a restart loses nothing, and mark the run stopped."""
-        if self.sim.tick % TICKS_PER_HOUR != 0:
+        """Snapshot where we are so a restart loses nothing (unless that snapshot is stored already: the hour's, or
+        the one a run resumed from and stopped again before ticking), and mark the run stopped."""
+        stored = latest_snapshot(self.store.session, self.store.run_id)
+        if stored is None or stored.tick != self.sim.tick:
             self.store.snapshot(take_snapshot(self.sim.state))
         self.store.commit(self.sim.tick, self.clock.speed, self.clock.paused, status="stopped")
 
