@@ -134,7 +134,8 @@ def test_attacking_a_wolf_drives_it_off_and_attacking_a_person_hurts_them(
     hit = run_until_done(sim, api.attack("a person in a other cloak"), 3)
     assert hit.text == "You strike a person in a other cloak."
     assert other.body.health < 100.0
-    assert [e.payload.model_dump()["cause"] for e in sim.drain() if e.type == "injured"] == ["violence"]
+    hurt = [e.payload.model_dump() for e in sim.drain() if e.type == "injured"]
+    assert [(h["cause"], h["attacker"]) for h in hurt] == [("violence", "hunter")]
 
 
 # --- fleeing ---
