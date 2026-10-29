@@ -2,6 +2,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import { PerspectiveCamera, Quaternion, Vector3 } from 'three';
 
 import type { EntitiesView } from '../../src/lib/client/types.gen';
+import { CITIZEN_LOOKS } from '../../src/lib/world/citizen-looks';
 import { openGlobe } from './globe-helpers';
 
 /* Shared by the spectator UI browser tests (ui-*.spec.ts): the mock feed, drawn citizens, the camera. */
@@ -16,12 +17,15 @@ export type MockLiveWindow = {
   };
 };
 
+/** How many citizens the mock feed runs: one per look (live-feed.spec.ts checks it). */
+export const MOCK_CITIZENS = CITIZEN_LOOKS.length;
+
 /** The globe on the mock feed, held still: a fresh run with the clock paused. */
 export async function openHeld(page: Page, errors: string[], query = '') {
   const world = await openGlobe(page, errors, `?mockLive=1${query}`);
   await expect(page.getByTestId('npcs')).toHaveAttribute(
     'data-npcs-ready',
-    '15',
+    String(MOCK_CITIZENS),
   );
   await expect(world).toHaveAttribute('data-live-status', 'live');
   await page.evaluate(() => {

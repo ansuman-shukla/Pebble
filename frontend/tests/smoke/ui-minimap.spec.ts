@@ -19,6 +19,7 @@ import {
   cameraOf,
   drawn,
   landed,
+  MOCK_CITIZENS,
   type MockLiveWindow,
   openHeld,
 } from './ui-helpers';
@@ -120,7 +121,7 @@ test('the minimap draws every citizen, follows the camera to its site and goes w
   const world = await openHeld(page, errors);
   // the town: its folk on the map, the bands on its edge
   await expect(minimap(page)).toHaveAttribute('data-minimap-site', 'town');
-  await expect.poll(async () => (await dots(page)).length).toBe(15);
+  await expect.poll(async () => (await dots(page)).length).toBe(MOCK_CITIZENS);
   const inTown = await dots(page);
   expect(inTown.find((dot) => dot.id === 'genzo')!.edge).toBe(false);
   expect(inTown.find((dot) => dot.id === 'pip')!.edge).toBe(true);
@@ -185,7 +186,7 @@ async function expectOnEdgeToward(
   const anchor = world.sites.find((one) => one.id === site)!.anchor;
   const from = latLonFromDirection(new Vector3(...anchor.position));
   await expect(minimap(page)).toHaveAttribute('data-minimap-site', site);
-  await expect.poll(async () => (await dots(page)).length).toBe(15);
+  await expect.poll(async () => (await dots(page)).length).toBe(MOCK_CITIZENS);
   const where = new Map(
     await page.evaluate(() =>
       (globalThis as unknown as MockLiveWindow).__pebbleMockLive
