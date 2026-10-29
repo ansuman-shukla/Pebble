@@ -166,3 +166,11 @@ def test_nobody_moves_further_in_a_tick_than_their_gait_allows(new_sim: Callable
                 assert _mps(sim, stride) <= 2.0
             if citizen.action is None:
                 break
+
+
+def test_the_dark_doesnt_slow_anyone_inside_the_town(new_sim: Callable[..., Simulation]) -> None:
+    sim = without_animals(new_sim())
+    citizen = sim.add_citizen(make_spec("kenji", name="Kenji", at=(0.0, 120.0), home=None))
+    skip_to(sim, citizen.position, night=True)
+    _walk(sim, citizen)
+    assert _mps(sim, _stride(sim, citizen)) == pytest.approx(1.4, rel=1e-3)
