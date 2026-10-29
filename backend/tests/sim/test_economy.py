@@ -70,6 +70,8 @@ def _raw_economy() -> dict[str, Any]:
         (lambda e: e["breakage"]["pack"].update(chance=1.0), "chance"),
         (lambda e: e["spoilage"].update(meat=1.5), "spoilage share"),
         (lambda e: e["spoilage"].update(bread=0.5), "spoilage names unknown items"),
+        (lambda e: e["spoilage"].update(coins=0.1), "coins can't be in spoilage"),
+        (lambda e: e["breakage"].update(coins={"use": "carry", "chance": 0.01}), "coins can't be in breakage"),
     ],
 )
 def test_the_goods_table_refuses_gaps(change: Callable[[dict[str, Any]], None], error: str) -> None:

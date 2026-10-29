@@ -56,6 +56,8 @@ class EconomySpec(_Spec):
         for name, table in (("spoilage", self.spoilage), ("breakage", self.breakage)):
             if not set(table) <= set(ITEMS):
                 raise ValueError(f"{name} names unknown items: {sorted(set(table) - set(ITEMS))}")
+            if "coins" in table:
+                raise ValueError(f"coins can't be in {name}: the money supply is closed")
         if any(not 0 < share <= 1 for share in self.spoilage.values()):
             raise ValueError("a spoilage share is above 0 and at most 1")
         tools = {name for name, kind in ITEMS.items() if kind.tool}
