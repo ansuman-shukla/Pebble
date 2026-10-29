@@ -22,6 +22,7 @@ from app.world.biomes import BIOME_IDS, walk_costs
 from app.world.generate import GENERATOR
 from app.world.geometry import Point
 from app.world.grid import Grid, build_grid
+from app.world.roads import cell_kinds, walk_costs_with_roads
 from app.world.spec import BIOME_NAMES, load_site_kinds, load_world_spec
 from app.world.sphere import TangentFrame, lat_lon
 from app.world.store import WorldGenerator, load_or_generate
@@ -158,7 +159,8 @@ class SimWorld:
     biomes: UInt8Array
     river: BoolArray  # land cells a river runs through
     in_town: BoolArray  # cells whose centre lies in the town chart (handled by the town walk grid)
-    terrain_cost: FloatArray  # per metre; inf on water
+    road_kinds: UInt8Array  # roads.NONE, PATH or ROAD per cell (a road or path over a river is a bridge)
+    terrain_cost: FloatArray  # per metre (roads, paths and bridges cheaper); inf on water
     town: TownChart
     town_lon_deg: float
     sites: tuple[Site, ...]
@@ -285,7 +287,8 @@ def build_sim_world(
         x, z = chart.to_local(as_vec(grid.positions[cell]))
         in_town[cell] = chart.contains(x, z)
 
-    terrain_cost = walk_costs(biomes, river)
+    road_kinds = cell_kinds(view.places.roads, grid.cell_count)
+    terrain_cost = walk_costs_with_roads(walk_costs(biomes, river), road_kinds, river)  # routes take roads (D80)
 
     caps = np.zeros((grid.cell_count, len(RESOURCES)), dtype=np.uint8)
     for biome_name, biome_caps in RESOURCE_CAPS.items():
@@ -379,6 +382,7 @@ def build_sim_world(
         biomes=biomes,
         river=river,
         in_town=in_town,
+        road_kinds=road_kinds,
         terrain_cost=terrain_cost,
         town=chart,
         town_lon_deg=float(town_lon),
