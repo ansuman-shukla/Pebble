@@ -114,17 +114,21 @@ class RunFeed:
             fires=fires,
         )
 
-    def rewritten(self, session: Session) -> bool:
-        """Whether the events replayed so far were dropped or replaced since (a resumed engine rewrote the tail)."""
-        return event_id_at(session, self.run_id, self.last_seq) != self.last_id
-
-    def advance(self, session: Session, run: Run) -> list[LiveMessage]:
+    def advance(self, session: Session, run: Run) -> list[LiveMessage] | None:
         """Apply the events stored since the last call: event messages as they come, a tick message after each
-        tick's summary (actions taken between ticks are stored with the next tick, before its summary)."""
+        tick's summary (actions taken between ticks are stored with the next tick, before its summary).
+
+        None if the last event replayed was dropped or replaced since (a resumed engine rewrote the tail): the same
+        read fetches it with the new ones, so a rewrite can't slip in between the check and the fetch.
+        """
+        rows = events_after(session, self.run_id, self.last_seq - 1)
+        seen = rows[0] if rows and rows[0].seq == self.last_seq else None
+        if (seen.id if seen is not None else None) != self.last_id:
+            return None
         messages: list[LiveMessage] = []
         clock_changed = (float(run.speed), run.paused) != (self.speed, self.paused)
         self.speed, self.paused = float(run.speed), run.paused
-        for row in events_after(session, self.run_id, self.last_seq):
+        for row in rows[1:] if seen is not None else rows:
             apply_event(self.state, _replayable(row))
             self.last_seq, self.last_id = row.seq, row.id
             if row.type in LIVE_EVENT_TYPES and row.visibility == "public":
@@ -193,13 +197,15 @@ class LiveHub:
             if run is None or latest_snapshot(session, run.id) is None:
                 return None
             feed = self.feeds.get(run.id)
-            if feed is not None and feed.rewritten(session):
-                self._resync(run.id)
-                feed = None
+            if feed is not None:
+                messages = feed.advance(session, run)  # catch up before the snapshot
+                if messages is None:
+                    self._resync(run.id)
+                    feed = None
+                else:
+                    self._broadcast(run.id, messages)
             if feed is None:
                 feed = self.feeds[run.id] = load_feed(session, run)
-            else:
-                self._broadcast(feed.run_id, feed.advance(session, run))  # catch up before the snapshot
             subscriber = Subscriber(loop, queue, run.id, follows_latest=run_id is None)
             self.subscribers.append(subscriber)
             return subscriber, feed.message("snapshot").model_dump_json()
@@ -243,10 +249,11 @@ class LiveHub:
                 run = session.get(Run, run_id)
                 if run is None:
                     continue
-                if self.feeds[run_id].rewritten(session):
+                messages = self.feeds[run_id].advance(session, run)
+                if messages is None:
                     self._resync(run_id)
                 else:
-                    self._broadcast(run_id, self.feeds[run_id].advance(session, run))
+                    self._broadcast(run_id, messages)
             newcomers = notified - set(self.feeds)
             if newcomers and any(s.follows_latest for s in self.subscribers):
                 newest = latest_run(session)

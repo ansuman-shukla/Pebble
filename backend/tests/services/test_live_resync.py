@@ -6,15 +6,17 @@ afterwards). The listener thread isn't started: each test drives `_refresh` itse
 
 import asyncio
 import json
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import pytest
 from sqlalchemy import Engine
 from sqlmodel import Session
 
-from app.db.models import Run
+from app.db.models import Event, Run
 from app.engine import Clock, EngineLoop, open_loop
+from app.observability.store import events_after
 from app.services.live import LiveHub, Subscriber, load_feed
 from app.sim.citizens import DEV_CITIZENS
 from app.sim.world import SimWorld
@@ -118,3 +120,22 @@ def test_a_client_joining_after_a_rewrite_gets_the_new_history(
     assert watcher.received() == [None]
     assert hub.subscribers == [joiner.subscriber]
     assert joiner.received() == []
+
+
+def test_a_rewrite_right_before_the_hub_reads_new_events_still_resyncs(
+    hub: LiveHub, session: Session, sim_world: SimWorld, engine_loop: EngineLoop, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_id = engine_loop.run.id
+    watcher = _connect(hub, run_id)
+    rewrites: list[EngineLoop] = []
+
+    def rewrite_first(*args: Any, **kwargs: Any) -> Sequence[Event]:
+        if not rewrites:  # the engine resumes between whatever the hub checked before and its read of new events
+            rewrites.append(_restart_with_another_tail(session, sim_world, engine_loop))
+        return events_after(*args, **kwargs)
+
+    monkeypatch.setattr("app.services.live.events_after", rewrite_first)
+    hub._refresh({run_id})
+    assert rewrites
+    assert watcher.received() == [None]
+    assert run_id not in hub.feeds
