@@ -75,6 +75,7 @@ export const biomeColor = (name: string) =>
   BIOME_COLORS[name] ?? FALLBACK_COLOR;
 
 const PATTERNS = /* glsl */ `
+const mat3 GRASS_TWIST = mat3(0.6564, 0.4883, -0.5751, -0.3030, 0.8687, 0.3918, 0.6909, -0.0829, 0.7181);
 vec4 groundLook(int layer, vec3 p, vec3 tint, float fw, vec4 g, inout float roughness) {
   vec3 c;
   float relief;
@@ -84,8 +85,9 @@ vec4 groundLook(int layer, vec3 p, vec3 tint, float fw, vec4 g, inout float roug
     c = mix(c, grass_cool, smoothstep(0.55, 0.75, g.w) * 0.7);
     c *= groundTintShift(tint);
     float tufts = gFine(p + 11.0, 1.7, fw);
-    float blades = smoothstep(0.25, 0.75, gFine(p, 23.0, fw));
-    c *= 0.72 + 0.36 * tufts + 0.24 * blades;
+    // blades off the noise lattice's axes, so close up they don't line up into blocks
+    float blades = smoothstep(0.15, 0.85, gFine(GRASS_TWIST * p, 23.0, fw));
+    c *= 0.74 + 0.36 * tufts + 0.2 * blades;
     relief = tufts * 0.8 + blades * 0.2;
   } else if (layer == 1) {
     // forest floor: leaf litter over dark soil, moss in patches, twigs and needles near by
