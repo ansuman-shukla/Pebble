@@ -1,6 +1,7 @@
 """The run harness: which seeds and checks a world run uses, and how each check sees the run."""
 
 import argparse
+from collections.abc import Callable
 from typing import override
 
 import pytest
@@ -9,9 +10,11 @@ from app.observability.events import EventDraft
 from app.sim.clock import DAY_MINUTES
 from app.sim.navigation import Planner
 from app.sim.simulation import Simulation
+from scripts import world_run
 from scripts.checks import CHECKS, x0
 from scripts.checks.base import Check, Outcome
 from scripts.world_run import SWEEP_SEEDS, main, parse_seeds, run_seed, select
+from tests.sim_helpers import make_spec
 
 
 class Recorder(Check):
@@ -33,6 +36,14 @@ class Recorder(Check):
     @override
     def outcome(self, sim: Simulation) -> Outcome:
         return Outcome(len(self.calls), True, f"{self.citizens} citizens, {' | '.join(self.calls[:4])}")
+
+
+class Failing(Check):
+    name = "test.failing"
+
+    @override
+    def outcome(self, sim: Simulation) -> Outcome:
+        return Outcome(1, False, "always")
 
 
 def test_seeds_are_a_list_or_a_count_of_sweep_seeds() -> None:
@@ -59,7 +70,8 @@ def test_each_check_sees_every_tick_of_its_seeds_run(planner: Planner) -> None:
     assert recorded.value == 1 + 2 * DAY_MINUTES
     assert recorded.words == "15 citizens, start 0 | before 0 | after 1 tick_summary | before 1"
     assert outcomes["x0.deaths"] == Outcome(0, True, "none")
-    assert not outcomes["x0.actions"].ok and "make_fire" not in outcomes["x0.actions"].words  # a day uses some
+    actions = outcomes["x0.actions"]  # a day uses every required one; the lucky ones are only reported
+    assert actions.ok and set(actions.words.split(", ")) <= x0.LUCKY_ACTIONS | {"all used"}
     assert 0 < outcomes["x0.stall"].value < x0.MAX_STALL_H and outcomes["x0.stall"].ok
     assert outcomes["x0.need_damage"].ok
 
@@ -70,9 +82,22 @@ def test_the_overall_verdict_needs_every_seed_to_pass() -> None:
     assert x0.Stall.overall({1: passing, 2: failing}) == Outcome(7.0, False, "1/2 seeds pass, worst 7")
 
 
-def test_a_run_prints_and_exits_by_its_checks(capsys: pytest.CaptureFixture[str]) -> None:
+def test_a_run_prints_and_exits_by_its_checks(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
     assert main(["--days", "1", "--seeds", "7,", "--only", "x0.deaths"]) == 0
     out = capsys.readouterr().out
     assert "seed 7: x0.deaths none" in out and "ok   x0.deaths" in out
-    assert main(["--days", "1", "--seeds", "7,", "--only", "x0.actions"]) == 1
-    assert "FAIL x0.actions" in capsys.readouterr().out
+    monkeypatch.setattr(world_run, "CHECKS", (Failing,))
+    assert main(["--days", "1", "--seeds", "7,"]) == 1
+    assert "FAIL test.failing" in capsys.readouterr().out
+
+
+def test_a_death_fails_the_deaths_check(new_sim: Callable[..., Simulation]) -> None:
+    sim = new_sim()
+    victim = sim.add_citizen(make_spec("victim"))
+    check = x0.Deaths()
+    check.start(sim)
+    sim.core.injure(victim, 200.0, "animal attack", "a wolf attacks you")
+    check.after_step(sim, sim.drain())
+    assert check.outcome(sim) == Outcome(1, False, "victim")
