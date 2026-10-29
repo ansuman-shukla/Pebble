@@ -30,7 +30,7 @@ WATER_FEATURES = frozenset({"fishing_spot", "gold_pool", "iron_sand_bar"})
 FEATURE_SPACING_M = 20.0  # features of one kind in a hotspot keep this far apart
 DEN_BESIDE_M = (40.0, 60.0)  # a den beside a road lies this far off it
 DEN_EDGE_M = 35.0  # a den at a hotspot's edge lies this far outside its radius (bushes 30-50 m away)
-DEN_SEARCH_M = 400.0  # a den toward a bearing takes the nearest habitat cell this close to the target
+DEN_MIN_SHARE = 0.5  # a den toward a bearing lies at least this share of its distance from the site
 _BEARING_STEP_DEG = 15.0
 
 
@@ -345,12 +345,14 @@ def _edge(hotspot: Hotspot, surface: Surface, roads: Sequence[Road]) -> FloatArr
 
 
 def _toward(spec: DenSpec, surface: Surface) -> FloatArray | None:
-    """The habitat cell nearest the point `distance_m` from the site along the bearing."""
+    """The habitat cell nearest the point `distance_m` from the site along the bearing, at least half that far from
+    the site (so it stays out where the bearing puts it, whatever the ground near the point)."""
     assert spec.site is not None and spec.bearing_deg is not None and spec.distance_m is not None
-    target = destination(surface.site_unit(spec.site), spec.bearing_deg, spec.distance_m / surface.radius_m)
+    site = surface.site_unit(spec.site)
+    target = destination(site, spec.bearing_deg, spec.distance_m / surface.radius_m)
     habitat = np.isin(surface.biomes, [BIOME_IDS[name] for name in spec.biomes]) & surface.walk & ~surface.river
     distance = surface.distances_m(target)
-    habitat &= distance <= DEN_SEARCH_M
+    habitat &= surface.distances_m(site) >= DEN_MIN_SHARE * spec.distance_m
     if not habitat.any():
         return None
     return surface.cell_unit(int(np.argmin(np.where(habitat, distance, np.inf))))

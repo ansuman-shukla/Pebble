@@ -7,9 +7,9 @@ import pytest
 
 from app.world.flora import Flora, generate_flora
 from app.world.generate import GeneratedWorld, generate_world
-from app.world.hotspots import WATER_MOVE_M, place_hotspots, road_distance_m
+from app.world.hotspots import WATER_MOVE_M, place_features, place_hotspots, road_distance_m
 from app.world.paths import reachable
-from app.world.spec import BIOME_NAMES, HotspotsSpec, WorldSpec, load_site_kinds, load_world_spec
+from app.world.spec import BIOME_NAMES, DenSpec, HotspotsSpec, WorldSpec, load_site_kinds, load_world_spec
 from app.world.sphere import angle_between, bearing_deg, lat_lon, unit_from_lat_lon
 from app.world.surface import Surface, surface_from_view
 from app.world.view import Feature, Hotspot, Road
@@ -295,3 +295,15 @@ def test_sea_fishing_spots_sit_where_the_drawn_sea_meets_the_shore(world: Genera
                 shore = surface.grid.positions[land] * (1 - t) + surface.grid.positions[sea] * t
                 best = min(best, surface.distance_m(point, shore / np.linalg.norm(shore)))
         assert best < 0.01, spot.id
+
+
+def test_a_den_toward_a_bearing_stays_out_where_the_bearing_puts_it(
+    world: GeneratedWorld, spec: WorldSpec, surface: Surface
+) -> None:
+    # 1 km north of the town is the Bright gulf's sea; the grass nearest that point lies 0.3 km from the town
+    den = DenSpec(animal="lion", place="bearing", site="town", bearing_deg=0, distance_m=1000, biomes=["grassland"])
+    hotspots = _with_hotspot(spec.hotspots, "a_savanna", den=den)
+    features = place_features(hotspots, surface, world.places.hotspots, world.places.roads)
+
+    lion = next(feature for feature in features if feature.id == "a_savanna:den")
+    assert 500 <= surface.distance_m(surface.site_unit("town"), np.array(lion.position)) <= 600
