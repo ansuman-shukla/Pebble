@@ -247,7 +247,9 @@ const TOWN_V1: CitizenLook[] = [
         ...KIT_LOOKS.buddhist_monk.palette,
         hair: 0x4a4642,
         brow: 0x3a3632,
+        clipped: 0xb39477,
       },
+      wear: { ...KIT_LOOKS.buddhist_monk.wear, hair: { name: 'buzz' } },
     },
   },
 ];
