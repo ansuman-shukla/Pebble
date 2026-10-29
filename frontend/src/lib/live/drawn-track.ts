@@ -83,12 +83,18 @@ export interface Track {
 }
 
 /**
- * A citizen first seen (a snapshot, a replayed tick) is drawn like any other, one tick behind: where its tick's step
- * began, walking it.
+ * A citizen first seen (a snapshot) is drawn like any other, one tick behind: where its tick's step began, walking
+ * it. A replayed moment (`now`), which no tick follows, draws it where the frame says it is.
  */
-export function newTrack(citizen: Streamed, radius: number): Track {
+export function newTrack(
+  citizen: Streamed,
+  radius: number,
+  now = false,
+): Track {
+  const path = citizenPath(citizen, radius);
+  if (now) path.time = path.arrive;
   return {
-    path: citizenPath(citizen, radius),
+    path,
     offset: new Vector3(),
     yaw: (citizen.heading_deg * Math.PI) / 180,
     fade: null,

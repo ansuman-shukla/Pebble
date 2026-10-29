@@ -143,6 +143,13 @@ test('a citizen first seen mid-walk is drawn one tick behind: where its step beg
   ).toBeLessThan(0.01);
 });
 
+test('a replayed moment (no tick follows) draws a mover where the frame says it is, shown doing what it says', () => {
+  const track = newTrack(shortWalk({ activity: 'sleeping' }), R, true);
+  const spot = moveOn(track, 0, 0, new Vector3());
+  expect(metres(spot, new Vector3(...at(20, 0)))).toBeLessThan(0.01);
+  expect(shownDoing(track).activity).toBe('sleeping');
+});
+
 for (const rate of [1, 10]) {
   test(`at ×${rate} a citizen first seen mid-walk that then changes its plan turns where the step ended: no slide, no fade`, () => {
     const track = newTrack(walkingEast(1), R);

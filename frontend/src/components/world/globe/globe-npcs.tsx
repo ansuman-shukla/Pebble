@@ -338,6 +338,7 @@ function Npc({
   town,
   labels,
   rate,
+  replay,
   peopleRef,
   views,
   followId,
@@ -350,6 +351,8 @@ function Npc({
   labels: LabelStore;
   /** The clock: game seconds per real second (0 paused). */
   rate: number;
+  /** A replayed moment: drawn where it says, not a tick behind (no tick follows). */
+  replay: boolean;
   peopleRef: RefObject<Map<string, Vector3>>;
   views: NpcViews;
   followId: string | null;
@@ -360,7 +363,7 @@ function Npc({
   if (!look) throw new Error(`unknown citizen look ${citizen.look}`);
   const group = useRef<Group>(null);
   const [mounted, setMounted] = useState(false);
-  const [firstTrack] = useState(() => newTrack(citizen, radius));
+  const [firstTrack] = useState(() => newTrack(citizen, radius, replay));
   const trackRef = useRef<Track>(firstTrack);
   const viewRef = useRef<NpcView>(newView(citizen));
   // what the body is shown doing: the frame's activity, or a moving one while it walks there (drawn-track)
@@ -486,6 +489,7 @@ export function GlobeNpcs({
   citizens,
   speed,
   paused,
+  replay = false,
   speech,
   terrain,
   town,
@@ -499,6 +503,8 @@ export function GlobeNpcs({
   /** The feed's clock: game seconds per real second, and whether it is paused. */
   speed: number;
   paused: boolean;
+  /** The citizens of a replayed moment (`?tick=`), which no tick follows. */
+  replay?: boolean;
   speech: Speech[];
   terrain: GlobeTerrain;
   town: WalkTown;
@@ -528,6 +534,7 @@ export function GlobeNpcs({
           town={town}
           labels={labels}
           rate={paused ? 0 : speed}
+          replay={replay}
           peopleRef={peopleRef}
           views={views}
           followId={followId}
