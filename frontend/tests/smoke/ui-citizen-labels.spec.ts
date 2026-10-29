@@ -89,6 +89,42 @@ test('a chip names the citizen, says what they do and shows its icon', () => {
   ]);
 });
 
+test('a chip tells what the drawn body is shown doing, not what the feed already says', () => {
+  // Pip's tick says she sleeps, but her drawn body still walks home (D100)
+  const pip = citizen({
+    id: 'pip',
+    name: 'Pip',
+    activity: 'sleeping',
+    action_label: '',
+    state: ['hungry'],
+  });
+  const walkingHome = new Map<string, Doing>([
+    [
+      'pip',
+      { activity: 'walking', action_label: 'home', cause_of_death: null },
+    ],
+  ]);
+  expect(citizenLabels([pip], walkingHome, [])).toEqual([
+    {
+      id: 'npc-pip',
+      subject: 'pip',
+      kind: 'name',
+      text: 'Pip',
+      detail: 'walking home',
+      icon: 'walk',
+      ring: 'need',
+    },
+  ]);
+  // someone else's held walk leaves her chip alone
+  const elsewhere = new Map<string, Doing>([
+    ['genzo', walkingHome.get('pip')!],
+  ]);
+  expect(citizenLabels([pip], elsewhere, [])[0]).toMatchObject({
+    detail: 'asleep',
+    icon: 'sleep',
+  });
+});
+
 test('hungry or thirsty rings orange, hurt rings red and wins, mild words ring nothing', () => {
   expect(ringOf([])).toBeUndefined();
   expect(
