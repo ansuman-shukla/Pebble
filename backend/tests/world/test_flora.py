@@ -10,7 +10,7 @@ from app.world.flora import BYTES_PER_ITEM, OFFSET_STEP_M, SPREAD, Flora, genera
 from app.world.generate import GeneratedWorld, generate_world
 from app.world.hotspots import road_distance_m
 from app.world.spec import BIOME_NAMES, CAMPS, WorldSpec, load_site_kinds, load_world_spec
-from app.world.sphere import angle_between, tangent_frame
+from app.world.sphere import angle_between, bearing_deg, destination, tangent_frame
 from app.world.surface import Surface, surface_from_view
 from app.world.terrain import polyline_distance
 from app.world.view import WorldView, decode_array, encode_array
@@ -247,3 +247,21 @@ def test_camps_keep_their_worn_ground_clear_even_in_a_forest(view: WorldView, sp
         distance = _metres(surface, flora, surface.site_unit(camp))
         assert distance.min() >= 12, camp
         assert ((distance < 40) & trees).sum() >= 5, camp  # the forest reaches the clearing
+
+
+def test_a_home_ring_hotspot_on_the_ring_s_edge_keeps_its_counts_in_the_ring(
+    view: WorldView, spec: WorldSpec, surface: Surface
+) -> None:
+    camp = surface.site_unit("band_a_camp")
+    edged = view.model_copy(deep=True)
+    savanna = next(hotspot for hotspot in edged.places.hotspots if hotspot.id == "a_savanna")
+    away = float(bearing_deg(camp, np.array([savanna.centre]))[0])
+    centre = destination(camp, away, 360 / surface.radius_m)  # 2/3 of its 120 m disc lies beyond the 400 m ring
+    savanna.centre = (float(centre[0]), float(centre[1]), float(centre[2]))
+    flora = generate_flora(edged, spec)
+
+    roots = _nodes(edged, flora) == "root_patch"
+    in_savanna = roots & (_metres(surface, flora, centre) <= savanna.radius_m)
+    assert int(in_savanna.sum()) == 8
+    assert (_metres(surface, flora, camp)[in_savanna] <= spec.hotspots.rings.home_m).all()
+    assert int((roots & (_metres(surface, flora, camp) <= spec.hotspots.rings.home_m)).sum()) == 8

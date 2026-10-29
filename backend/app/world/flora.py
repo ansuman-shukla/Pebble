@@ -279,7 +279,8 @@ class _FloraPlacer:
                 region = _Annulus(centre, 0.0, hotspot.radius_m)
                 den = dens.get(hotspot.id) if node == "berry_bush" else None
                 outside_rings = None if home_camp is not None else home_m
-                items = items.extend(self._place_counted(region, node, count, outside_rings, items, den))
+                ring = None if home_camp is None else _Annulus(self.surface.site_unit(home_camp), 0.0, home_m)
+                items = items.extend(self._place_counted(region, node, count, outside_rings, items, den, within=ring))
                 if home_camp is not None:
                     in_rings[home_camp][node] = in_rings[home_camp].get(node, 0) + count
         for camp, unit in zip(CAMPS, self.camps, strict=True):
@@ -301,10 +302,12 @@ class _FloraPlacer:
         placed: _Items,
         den: FloatArray | None,
         avoid: Sequence[Hotspot] = (),
+        within: "_Annulus | None" = None,
     ) -> _Items:
-        """Exactly `count` items of the node kind in the annulus, each on good ground. The first berry bush of a
-        hotspot with an edge den (DEN_EDGE_M outside it, so no bush is nearer) stands DEN_FIRST_BUSH_M from the den,
-        inside its defence ring even in a sparse grove (10 §1.6: the Elder grove's bushes lie within its 40 m)."""
+        """Exactly `count` items of the node kind in the annulus, each on good ground (and in `within`: the home ring
+        a home-ring hotspot's counts belong to). The first berry bush of a hotspot with an edge den (DEN_EDGE_M
+        outside it, so no bush is nearer) stands DEN_FIRST_BUSH_M from the den, inside its defence ring even in a
+        sparse grove (10 §1.6: the Elder grove's bushes lie within its 40 m)."""
         if count == 0:
             return _Items.empty()
         units = self._annulus_points(region, count * _ATTEMPTS)
@@ -322,6 +325,8 @@ class _FloraPlacer:
         if outside_rings_m is not None:
             for camp in self.camps:
                 ok &= self.surface.distances_m(camp, candidate_units) > outside_rings_m
+        if within is not None:
+            ok &= within.contains(candidate_units, self.surface.radius_m)
         for hotspot in avoid:
             ok &= self.surface.distances_m(np.array(hotspot.centre), candidate_units) > hotspot.radius_m
         taken: list[int] = []
