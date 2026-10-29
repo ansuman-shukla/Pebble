@@ -195,10 +195,8 @@ function buildModel(
     const geometry = geometries.get(mesh)!;
     const material = mesh.material as Material;
     const node = namedAbove(mesh, source, live);
-    // skinned meshes are moved by their bones, which instanced parts don't follow: they stay at rest
-    const loopNode = (mesh as Mesh & { isSkinnedMesh?: boolean }).isSkinnedMesh
-      ? null
-      : namedAbove(mesh, source, targets);
+    // skinned meshes hang beside the bones a loop moves, not under them: instanced, they stay in the bind pose
+    const loopNode = namedAbove(mesh, source, targets);
     const moving =
       node || loopNode
         ? {
