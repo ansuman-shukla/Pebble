@@ -8,7 +8,8 @@ make the deeds matter. Phase B (`04-minds.md`) starts only after the World v1 cr
 (`plans/2026-10-29-world-v1.md`) passes.
 
 This doc owns the rules of World v1. Where an older design doc says otherwise, this one wins (decisions D77-D96).
-Numbers are v1 defaults; they live in data files (`backend/data/*.yaml`) so the balance run can tune them within
+The auditor's fault catalogue of the M9 world (F1-F22, `.runtime/briefs/audit-1.md`) is answered here and mapped to
+streams in the plan. Numbers are v1 defaults; they live in data files (`backend/data/*.yaml`) so the balance run can tune them within
 ±30 % without a design change (a larger change is a decision row).
 
 Principles (unchanged from 00, sharpened): the world is the authority (everything enforced in sim code, never in
@@ -359,7 +360,10 @@ a route in the previous tick summary (spawn excepted). Hunt/attack stalks move a
 thief.
 
 ### 4.2 Drawing at ×1 / ×10 / ×60 / ×600 (supersedes the glide parts of D61, D72)
-1. Every mover streams path-ahead + `speed_mps` + `gait`: citizens (D65), hunt/attack stalks, and **animals**.
+1. **Paths are streamed from where the motion starts.** A new walk, flee, follow or stalk sends its route at once
+   (with its `action_started`), and every tick summary carries the path walked this tick plus the path ahead, with
+   `speed_mps` and `gait`, for citizens, stalks and **animals**. (Audit F1: today the route is computed only after
+   the tick's step, so 46 % of moves were never drawn as walking and ~500 teleports a day of 30-83 m happened.)
    The client walks each body from where it is drawn toward its goal at `speed_mps × rate` and stops at the goal.
 2. **Time-lapse rule:** every clip and procedural motion (gaits, work, transitions, prop clips, smoke, doors, tree
    fall) plays at natural speed × `visualRate = min(rate, 10)`. Gait choice comes from game speed, never drawn
@@ -392,6 +396,7 @@ thief.
 | fire basket | 1 tend + 2 warm stands |
 | bench | 2 seats, 0.6 m apart, height 0.45 |
 | gate | 2 guard stands facing out |
+| castle court | lord's seat (facing the court) + 2 retainer stands + 4 petitioner stands facing the seat |
 | market stall | 1 seller + 2 buyer stands |
 | forge + anvil | 1 work stand (smith) + 1 stand |
 | drying rack | 1 work stand |
@@ -480,6 +485,8 @@ Speeds in m/s; flight distance from people / from predators.
   threat to it: a pack of ≥ 2 holds, a lone wolf or fox leaves.
 - **Waterholes:** herbivore groups drink 30 min at dawn and dusk at their hunting ground's waterhole: the ambush spot.
 - **Dens:** predator homes pinned at the hotspot dens (cave mouth or outcrop + bone scatter).
+- **Where animals live:** two thirds of herbivore groups are pinned to the hunting grounds of table 1.2 (≤ 700 m from a
+  settlement), so people meet animals (audit F9: today some animal is within 50 m of a person in 1 % of ticks).
 
 Procedural layers on baked Idle/Walk/Run: grazing (neck −55°, jaw 2 Hz), alert (head up, ears forward), stalking
 (hips −20 %, head low), pouncing (0.5 s arc 0.5 m), bite (head lunge + jaw), rear (hips −50°), feeding, drinking,
@@ -537,6 +544,8 @@ sleeping (legs folded), dead (rolled 90°).
   coloured by stock (the scarcity view), citizens by group, predators red, fires orange; click = go to.
 - **Scoreboard tab** (§7) with sortable columns; store/stall stocks and prices.
 - Keys: click select, Tab cycle, F follow, G go to, Esc, Space pause, 1-5 speeds, M minimap, L feed, I inspector.
+- The clock badge shows the local time of the site the camera is at ("band B camp 04:10") next to town time; going
+  to a site stops following; the footer describes where the camera is, not the hidden avatar (audit F18-F20).
 - **Budget:** town plaza at noon with all 22 citizens in view < 300 draw calls, ≥ 55 fps at 1440p.
 
 ### 5.5 Swappable look (part 2 readiness)
@@ -636,3 +645,5 @@ words (purse, hunger, standing word); the numbers are for spectators and researc
 | Loans, rent, land title, building, minting, denominations, copper/jade/clay/salt | money must work closed and simple first |
 | Skill-level effects, marriage and births, seasons, weather, wildfire, boats | later versions (09) |
 | Line-of-sight occlusion (D76) | perception without occlusion stays v1 |
+| The spectator avatar as a sim actor (audit F17) | animals and citizens ignoring the avatar is honest until the player version (v1.1+) |
+| Local avoidance; animal path planning around trees and rocks (audit F22) | 1-minute ticks can't do local avoidance; slots, spacing and keep-right lanes remove the visible merging |
