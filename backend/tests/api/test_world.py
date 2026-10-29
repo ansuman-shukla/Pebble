@@ -60,6 +60,7 @@ def test_world_is_served_with_the_contract_fields(world_response: dict[str, obje
         "rivers",
         "land_loop",
         "sites",
+        "places",
     }
     world = WorldView.model_validate(world_response)
     assert world.generator_version == GENERATOR.version

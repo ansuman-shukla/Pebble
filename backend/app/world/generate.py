@@ -23,16 +23,19 @@ from app.world.biomes import (
     walkable,
 )
 from app.world.grid import Grid, build_grid
+from app.world.hotspots import place_features, place_grounds, place_hotspots
 from app.world.hydrology import RiverPath, carve_channel, settle_water, trace_cells
 from app.world.paths import closed_loop
+from app.world.roads import route_network
 from app.world.spec import BIOME_NAMES, SiteSpec, Volcano, WorldSpec, load_site_kinds, load_world_spec
 from app.world.sphere import FloatArray, angle_between, lat_lon, tangent_frame, unit_from_lat_lon
 from app.world.store import WorldGenerator, find_payload, save_payload, world_key
+from app.world.surface import Surface, TownChart, site_frame
 from app.world.terrain import BoolArray, SiteArea, base_terrain, ensure_land, loop_band, shape_site
 from app.world.town import KindSpec, place_kind
-from app.world.view import Anchor, River, Site, WorldView, encode_array
+from app.world.view import Anchor, River, Site, WorldPlaces, WorldView, encode_array
 
-GENERATOR_VERSION = "m3.2"
+GENERATOR_VERSION = "m4.0"
 PLATEAU_TOLERANCE_M = 0.01  # a plateau that moved more sat in a closed depression
 _LOOP_CENTRE_PULL = 4.0  # extra path cost per band half-width away from the loop spine
 
@@ -48,6 +51,7 @@ class GeneratedWorld:
     rivers: list[RiverPath]
     land_loop: list[int]
     sites: list[Site]
+    places: WorldPlaces
     timings_s: dict[str, float] = field(default_factory=dict)
 
     def view(self) -> WorldView:
@@ -65,6 +69,7 @@ class GeneratedWorld:
             rivers=[River(id=river.id, name=river.name, cells=river.cells) for river in self.rivers],
             land_loop=self.land_loop,
             sites=self.sites,
+            places=self.places,
         )
 
 
@@ -143,6 +148,25 @@ def generate_world(spec: WorldSpec, kinds: Mapping[str, KindSpec]) -> GeneratedW
 
     sites = [_site(site, areas[site.id], grid, walk, kinds) for site in spec.sites]
     timer.lap("sites_view")
+
+    surface = Surface(
+        radius_m=spec.radius_m,
+        grid=grid,
+        heights=heights,
+        biomes=biomes,
+        rivers=rivers,
+        river=river_cells,
+        sites=sites,
+        chart=TownChart(
+            frame=site_frame(_find_site(sites, "town")),
+            radius_m=spec.radius_m,
+            height_m=_find_site(sites, "town").anchor.height_m,
+            half_m=spec.roads.town_chart_half_m,
+        ),
+    )
+    trail_band = walk & (loop_band(spec, grid.positions) <= 1)
+    places = lay_out(spec, surface, trail_band, _loop_stops(spec, grid))
+    timer.lap("places")
     return GeneratedWorld(
         spec=spec,
         grid=grid,
@@ -153,7 +177,28 @@ def generate_world(spec: WorldSpec, kinds: Mapping[str, KindSpec]) -> GeneratedW
         rivers=rivers,
         land_loop=land_loop,
         sites=sites,
+        places=places,
         timings_s=timer.timings,
+    )
+
+
+def _find_site(sites: list[Site], site_id: str) -> Site:
+    return next(site for site in sites if site.id == site_id)
+
+
+def lay_out(spec: WorldSpec, surface: Surface, trail_band: BoolArray, trail_stops: list[int]) -> WorldPlaces:
+    """Hotspots, grounds, roads and every fixed feature over the finished ground."""
+    hotspots = place_hotspots(spec.hotspots, surface)
+    network = route_network(spec, surface, hotspots, trail_band, trail_stops)
+    features = place_features(spec.hotspots, surface, hotspots, network.roads) + network.signposts
+    return WorldPlaces(
+        hotspots=hotspots,
+        grounds=place_grounds(spec.hotspots, surface),
+        features=features,
+        roads=network.roads,
+        bridges=network.bridges,
+        flora_kinds=[kind.id for kind in spec.flora.kinds],
+        flora_nodes=[kind.node for kind in spec.flora.kinds],
     )
 
 
@@ -188,10 +233,13 @@ def _paint_site(spec: WorldSpec, site: SiteSpec, units: FloatArray, biomes: UInt
         biomes[land & (distance <= site.biome_radius_m)] = BIOME_IDS[site.biome]
 
 
+def _loop_stops(spec: WorldSpec, grid: Grid) -> list[int]:
+    return [nearest_cell(grid, unit_from_lat_lon(*waypoint.at)) for waypoint in spec.land_loop.waypoints]
+
+
 def _land_loop(spec: WorldSpec, grid: Grid, walk: BoolArray) -> list[int]:
     band = loop_band(spec, grid.positions)
-    stops = [nearest_cell(grid, unit_from_lat_lon(*waypoint.at)) for waypoint in spec.land_loop.waypoints]
-    loop = closed_loop(grid, walk & (band <= 1), 1 + _LOOP_CENTRE_PULL * band, stops)
+    loop = closed_loop(grid, walk & (band <= 1), 1 + _LOOP_CENTRE_PULL * band, _loop_stops(spec, grid))
     gate = nearest_cell(grid, unit_from_lat_lon(*spec.site(spec.loop_gate).at))
     if gate not in loop:
         raise ValueError(f"the land loop misses the {spec.loop_gate} site; put a waypoint on it")

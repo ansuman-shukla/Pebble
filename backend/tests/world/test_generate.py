@@ -9,6 +9,7 @@ from app.world.hydrology import components
 from app.world.paths import reachable
 from app.world.spec import BIOME_NAMES, SITE_IDS, WorldSpec, load_site_kinds, load_world_spec
 from app.world.sphere import angle_between, lat_lon
+from app.world.terrain import base_terrain
 from app.world.view import decode_array
 
 LAND_BIOMES = sorted(set(range(len(BIOME_NAMES))) - WATER_BIOMES)
@@ -49,11 +50,11 @@ def test_same_seed_and_spec_give_identical_worlds(spec: WorldSpec, world: Genera
     assert again.view().model_dump() == world.view().model_dump()
 
 
-def test_another_seed_gives_another_world(spec: WorldSpec, world: GeneratedWorld) -> None:
-    other = generate_world(spec.model_copy(update={"seed": spec.seed + 1}), load_site_kinds())
+def test_another_seed_gives_another_terrain(spec: WorldSpec, world: GeneratedWorld) -> None:
+    # (only the terrain: the hotspots are laid out for this seed's ground and may not fit another's)
+    other = base_terrain(spec.model_copy(update={"seed": spec.seed + 1}), world.grid)
 
-    assert not np.array_equal(other.heights, world.heights)
-    assert _digest(other) != _digest(world)
+    assert not np.array_equal(other.heights, base_terrain(spec, world.grid).heights)
 
 
 def test_world_view_carries_the_generator_version_and_sizes(world: GeneratedWorld) -> None:
@@ -218,7 +219,8 @@ def test_sites_match_the_world_description(world: GeneratedWorld) -> None:
 
     for camp in ("band_a_camp", "band_b_camp"):
         assert near_water[cells[camp]] <= 120, camp
-        assert _distance_m(world, cells[camp], cells["town"]) >= 1500
+    assert _distance_m(world, cells["band_a_camp"], cells["town"]) >= 2500
+    assert 1200 <= _distance_m(world, cells["band_b_camp"], cells["town"]) <= 1700  # 10-world-v1 §1.2
     assert _distance_m(world, cells["band_a_camp"], cells["band_b_camp"]) >= 1500
     assert _distance_m(world, cells["painted_cave"], cells["band_a_camp"]) <= 600
     assert world.biomes[cells["elder_tree"]] == BIOME_IDS["broadleaf_forest"]

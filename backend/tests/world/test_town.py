@@ -112,7 +112,7 @@ def test_town_has_the_landmark_buildings(town: TownView) -> None:
     counts = Counter(placement.kind for placement in town.placements)
     assert counts["castle_keep"] == 1
     assert counts["castle_gatehouse"] == 3
-    assert counts["moat_bridge"] == 1
+    assert counts["moat_bridge"] == 2  # over the moat and over the stream on the west road
     for kind in ("pagoda", "temple_hall", "bell_tower", "well", "water_wheel", "teahouse", "lookout_tower"):
         assert counts[kind] >= 1, kind
     assert counts["townhouse"] >= 20

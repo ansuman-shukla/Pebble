@@ -7,7 +7,7 @@ from app.db.models import World
 from app.world.spec import WorldSpec, load_site_kinds, load_world_spec
 from app.world.store import WorldGenerator, find_payload, load_or_generate, save_payload, world_key
 from app.world.town import KindSpec
-from app.world.view import WorldView
+from app.world.view import WorldPlaces, WorldView
 
 
 class CountingGenerator:
@@ -32,6 +32,9 @@ class CountingGenerator:
             rivers=[],
             land_loop=[],
             sites=[],
+            places=WorldPlaces(
+                hotspots=[], grounds=[], features=[], roads=[], bridges=[], flora_kinds=[], flora_nodes=[]
+            ),
         )
 
 

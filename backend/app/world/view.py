@@ -139,6 +139,7 @@ class WorldView(BaseModel):
     rivers: list[River]
     land_loop: list[int]  # closed cycle of neighbouring walkable cells
     sites: list[Site]
+    places: WorldPlaces
 
 
 def encode_array(values: NDArray[np.generic], dtype: str) -> str:
