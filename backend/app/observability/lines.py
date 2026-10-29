@@ -89,12 +89,18 @@ def _both(*tests: Callable[[Told], bool]) -> Callable[[Told], bool]:
     return lambda told: all(test(told) for test in tests)
 
 
+def _label_says_where(told: Told) -> bool:
+    """A walk's label that says the way already ("to the west", "home")."""
+    label = str(told.payload.get("label", ""))
+    return label.startswith("to ") or label in ("home", "your home", "")
+
+
 def _killed_by_a_predator(told: Told) -> bool:
     return told.actor_kind == "animal" and str(told.payload.get("cause", "")).startswith("killed by")
 
 
-_ACTIONS = {
-    "walk_to": "walking to",
+_DOING = {
+    "walk_to": "walking",
     "follow": "following",
     "flee": "fleeing",
     "gather": "gathering",
@@ -106,10 +112,11 @@ _ACTIONS = {
     "rest": "resting",
     "sleep": "sleeping",
     "wait": "waiting",
-    "work": "working:",
+    "work": "working",
     "make_fire": "making a fire",
     "feed_fire": "feeding the fire",
 }
+_STARTS = {**_DOING, "walk_to": "walking to", "work": "working:", "drink": "drinking at"}
 _FIRES = {"pit": "the camp's fire pit", "basket": "a fire basket", "campfire": "a campfire"}
 _GESTURES = {
     "wave": "waved",
@@ -126,14 +133,19 @@ LINES: dict[str, Line] = {  # by event type
     "snapshot": Line("The world is saved at tick {tick}", 0),
     "citizen_spawned": Line("{name} comes into the world", 0),
     "perceived": Line("{actor} looks around", 0, (Variant(_field("kind", "check_self"), "{actor} takes stock", 0),)),
-    "action_started": Line("{actor} starts {action} {label}", 0, words={"action": _ACTIONS}),
+    "action_started": Line(
+        "{actor} starts {action} {label}",
+        0,
+        (Variant(_both(_field("action", "walk_to"), _label_says_where), "{actor} starts walking {label}", 0),),
+        words={"action": _STARTS},
+    ),
     "action_finished": Line(
         "{actor} is done {action}",
         0,
         (Variant(_field("outcome", "failed"), "{actor} fails at {action}", 0),),
-        words={"action": _ACTIONS},
+        words={"action": _DOING},
     ),
-    "action_interrupted": Line("{actor} stops {action}", 0, words={"action": _ACTIONS}),
+    "action_interrupted": Line("{actor} stops {action}", 0, words={"action": _DOING}),
     "said": Line("{actor}: “{words}”", 1),
     "need_changed": Line("{actor} feels {level}", 0),
     "injured": Line(
