@@ -609,6 +609,18 @@ stalker; "cover" is how long a fleeing animal needs to reach safety (burrow, cli
 - **Dens:** predator homes pinned at the hotspot dens (cave mouth or outcrop + bone scatter).
 - **Where animals live:** two thirds of herbivore groups are pinned to the hunting grounds of table 1.2 (≤ 700 m from a
   settlement), so people meet animals (audit F9: today some animal is within 50 m of a person in 1 % of ticks).
+- **Pinned herds and respawn** (D66: a dead member is replaced `respawn_days` after it died). Each herd's steady
+  share alive = 1 − losses a day × respawn days ÷ cap (Little's law), so a herd stays ≥ 50 % while losses a day ≤
+  cap ÷ (2 × respawn days):
+
+| Near | Pinned herds (cap, respawn days) | Takers (kills a day, expected) | Losses per herd a day | Share alive | Stays ≥ 50 % up to |
+|---|---|---|---|---|---|
+| band A | 2 antelope (6, 2), 2 deer (6, 2), 2 rabbit (4, 1) | lion pride 0.5, wolf pack 0.5, band A hunters 1.0 = 2.0 | 0.33 | 89-92 % | 1.5 a day on one antelope/deer herd, 2 on a rabbit group |
+| band B and the Lord's woods | deer (6, 2), rabbit (4, 1) on B's grass; deer (6, 2), boar (4, 2) in the woods | wolf pack 0.5, bear 0.2, band B hunters 0.7, Kaz's poaching 0.2 = 1.6 | 0.4 | 83-90 % | 1.5 on a deer herd, 1 on the boar |
+| town | deer (6, 2) in the North woods, rabbit (4, 1), ducks (5, 1) in the South marsh | wolf pack 0.4, fox 0.3 = 0.7 (town folk don't hunt; samurai rarely) | 0.23 | 92-95 % | as above |
+
+  Worst case (all of a camp's losses on one deer herd: band A 2.0 a day × 2 days ÷ 6) leaves 33 %, so A1/T1 spread
+  predator and hunter targets by nearest-herd-with-most-members; the run checks each herd's share daily.
 
 Procedural layers on baked Idle/Walk/Run: grazing (neck −55°, jaw 2 Hz), alert (head up, ears forward), stalking
 (hips −20 %, head low), pouncing (0.5 s arc 0.5 m), bite (head lunge + jaw), rear (hips −50°), feeding, drinking,
