@@ -16,7 +16,8 @@ cell u32 × n | east i8 × n | north i8 × n | kind u8 × n | scale u8 × n | ya
   tree falls along it.
 
 Placement:
-1. natural flora by biome density (×`woodland` inside woodlot hotspots), on every land cell outside the town chart;
+1. natural flora by biome density (×`woodland` inside woodlot hotspots, ×`lean_belt.share` for its food kinds in the
+   belt past each camp's home ring), on every land cell outside the town chart;
 2. each hotspot's exact counts inside its radius (natural flora of those node kinds stays out, and natural berry
    bushes stay DEN_NEAREST_BUSH_M off a grove's den);
 3. each camp's home ring holds exactly `home_ring_flora` (natural flora of those kinds stays out; counts of a
@@ -210,11 +211,17 @@ class _FloraPlacer:
         for hotspot in self.hotspots:
             if hotspot.woodland != 1.0:
                 woodland[surface.distances_m(np.array(hotspot.centre)) <= hotspot.radius_m] = hotspot.woodland
+        belt = self.hotspots_spec.lean_belt
+        lean = np.ones(self.grid.cell_count)
+        for camp in self.camps:
+            distance = surface.distances_m(camp)
+            lean[(distance > self.hotspots_spec.rings.home_m) & (distance <= belt.outer_m)] = belt.share
         batches = [_Items.empty()]
         for biome, table in self.flora.per_cell.items():
             cells = np.flatnonzero(land & (surface.biomes == BIOME_IDS[biome]))
             for kind, density in table.items():
-                factor = woodland[cells] if self.flora.kinds[self.codes[kind]].node == "tree" else 1.0
+                node = self.flora.kinds[self.codes[kind]].node
+                factor = woodland[cells] if node == "tree" else lean[cells] if node in belt.nodes else 1.0
                 batches.append(self._scatter(cells, density * factor, self.codes[kind]))
         on_rivers = (
             land & surface.river & np.isin(surface.biomes, [BIOME_IDS[name] for name in self.flora.river_biomes])

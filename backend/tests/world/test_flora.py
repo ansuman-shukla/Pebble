@@ -267,6 +267,33 @@ def test_a_home_ring_hotspot_on_the_ring_s_edge_keeps_its_counts_in_the_ring(
     assert int((roots & (_metres(surface, flora, camp) <= spec.hotspots.rings.home_m)).sum()) == 8
 
 
+def test_natural_food_thins_out_just_past_each_camp_s_home_ring(
+    view: WorldView, spec: WorldSpec, flora: Flora, surface: Surface
+) -> None:
+    belt = spec.hotspots.lean_belt
+    assert (belt.outer_m, belt.share, set(belt.nodes)) == (600, 0.2, {"berry_bush", "root_patch", "nut_tree"})
+    lush_belt = belt.model_copy(update={"share": 1.0})
+    lush = generate_flora(
+        view, spec.model_copy(update={"hotspots": spec.hotspots.model_copy(update={"lean_belt": lush_belt})})
+    )
+
+    def natural_food(table: Flora, camp: str, low_m: float, high_m: float) -> Counter[str]:
+        nodes = _nodes(view, table)
+        distance = _metres(surface, table, surface.site_unit(camp))
+        natural = (distance > low_m) & (distance <= high_m)
+        for hotspot in view.places.hotspots:  # a hotspot's counts are exact whatever the ground around it
+            inside = _metres(surface, table, np.array(hotspot.centre)) <= hotspot.radius_m
+            natural &= ~(inside & np.isin(nodes, list(hotspot.flora)))
+        return Counter(nodes[natural & np.isin(nodes, belt.nodes)].tolist())
+
+    for camp in CAMPS:
+        thin, full = natural_food(flora, camp, 400, 600), natural_food(lush, camp, 400, 600)
+        assert 0.05 <= sum(thin.values()) / sum(full.values()) <= 0.4, (camp, thin, full)
+        assert all(thin[node] < full[node] for node in belt.nodes if full[node] >= 5), (camp, thin, full)
+        beyond, beyond_full = natural_food(flora, camp, 600, 900), natural_food(lush, camp, 600, 900)
+        assert sum(beyond.values()) == pytest.approx(sum(beyond_full.values()), rel=0.15), camp
+
+
 def test_a_grove_s_den_keeps_natural_bushes_30_m_off_even_in_thick_bush(
     view: WorldView, spec: WorldSpec, surface: Surface
 ) -> None:

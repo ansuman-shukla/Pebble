@@ -324,10 +324,19 @@ class RingSpec(_Spec):
     far_m: float = Field(gt=0)  # far ring: beyond this
 
 
+class LeanBeltSpec(_Spec):
+    """Natural food thinned just past each camp's home ring, so its plenty lies at the middle ring's hotspots."""
+
+    outer_m: float = Field(gt=0)  # from the home ring's edge out to this far from the camp
+    share: float = Field(ge=0, le=1)  # of the biome's natural density of these kinds
+    nodes: list[FloraNode] = Field(min_length=1)
+
+
 class HotspotsSpec(_Spec):
     min_spacing_m: float = Field(gt=0)
     rings: RingSpec
     home_ring_flora: dict[FloraNode, int]  # exact counts of these kinds within each camp's home ring
+    lean_belt: LeanBeltSpec
     hotspots: list[HotspotSpec]
     grounds: list[GroundSpec] = []
 

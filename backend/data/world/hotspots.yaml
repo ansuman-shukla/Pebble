@@ -11,6 +11,8 @@ min_spacing_m: 40
 rings: {home_m: 400, middle_m: 1000, far_m: 1200}
 # each camp's home ring holds exactly these (10 §1.2 ring budget); nut trees stay out so foragers must travel
 home_ring_flora: {berry_bush: 8, root_patch: 8, deadwood: 6, nut_tree: 0}
+# beyond it, out to 600 m, natural food grows at a fifth of its density: the next plenty is a middle-ring outing
+lean_belt: {outer_m: 600, share: 0.2, nodes: [berry_bush, root_patch, nut_tree]}
 
 hotspots:
   - id: gulf_shore
