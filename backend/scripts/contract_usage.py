@@ -1,4 +1,4 @@
-"""Run the world with its 15 scripted citizens headless (no database) and count how they use the world contract.
+"""Run the world with its 22 scripted citizens headless (no database) and count how they use the world contract.
 
     uv run python -m scripts.contract_usage [days] [seed]
 
@@ -107,7 +107,8 @@ def main(days: int = 10, seed: int = 20261028) -> None:
             if event.type in ("action_finished", "action_interrupted"):
                 payload = event.payload.model_dump()
                 finished[f"{payload['action']}={payload['outcome']}"] += 1
-    print(f"{days} game days, {sum(c.body.alive for c in sim.state.citizens.values())}/15 alive\n\nactions:")
+    alive = sum(c.body.alive for c in sim.state.citizens.values())
+    print(f"{days} game days, {alive}/{len(sim.state.citizens)} alive\n\nactions:")
     for name in get_args(ActionName):
         outcomes = actions if name in INSTANT else finished  # a done instant action leaves no action event
         detail = ", ".join(f"{k.split('=')[1]} {n}" for k, n in sorted(outcomes.items()) if k.startswith(name + "="))

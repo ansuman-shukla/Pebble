@@ -155,7 +155,7 @@ async function openLive(
   const world = await openGlobe(page, errors, query);
   await expect(page.getByTestId('npcs')).toHaveAttribute(
     'data-npcs-ready',
-    '15',
+    '22',
   );
   await expect(world).toHaveAttribute('data-live-status', 'live');
   if (speed !== 1)
@@ -207,7 +207,7 @@ async function landed(world: Locator) {
   });
 }
 
-test('the 15 citizens glide between ticks, stand on the ground and play their activity', async ({
+test('the 22 citizens glide between ticks, stand on the ground and play their activity', async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -221,7 +221,7 @@ test('the 15 citizens glide between ticks, stand on the ground and play their ac
 
   const samples = await trackNpcs(page, 9_000);
   const ids = samples[0].map((npc) => npc.id);
-  expect(ids).toHaveLength(15);
+  expect(ids).toHaveLength(22);
   let moved = 0;
   let biggestStep = 0;
   for (const id of ids) {
@@ -412,7 +412,7 @@ test('the People panel follows a citizen with the camera and Esc returns to the 
   const player = await playerOf(world);
   await page.getByRole('button', { name: 'people', exact: true }).click();
   const rows = page.locator('[data-person]');
-  await expect(rows).toHaveCount(15);
+  await expect(rows).toHaveCount(22);
   await expect(page.locator('[data-person="oru"]')).toContainText(
     'Band A leader',
   );
@@ -791,14 +791,14 @@ test('a new run (1012) resyncs at once; no run yet (4404) waits and retries', as
   expect(errors).toEqual([]);
 });
 
-test('the real feed: the 15 citizens stand where the engine says, on the ground, and follow its ticks', async ({
+test('the real feed: the 22 citizens stand where the engine says, on the ground, and follow its ticks', async ({
   page,
 }) => {
   const errors: string[] = [];
   const world = await openGlobe(page, errors);
   await expect(page.getByTestId('npcs')).toHaveAttribute(
     'data-npcs-ready',
-    '15',
+    '22',
     { timeout: 30_000 },
   );
   await expect(world).toHaveAttribute('data-live-status', 'live');
@@ -835,7 +835,7 @@ test('the real feed: the 15 citizens stand where the engine says, on the ground,
   const api = await page.request.get(ENTITIES_URL);
   expect(api.status()).toBe(200);
   const entities = (await api.json()) as EntitiesView;
-  expect(entities.citizens).toHaveLength(15);
+  expect(entities.citizens).toHaveLength(22);
   expect(new Set(entities.citizens.map((citizen) => citizen.region))).toEqual(
     new Set(['town', 'band_a', 'band_b']),
   );
@@ -968,7 +968,7 @@ test('the real feed: the 15 citizens stand where the engine says, on the ground,
     .toEqual([]);
 
   await page.getByRole('button', { name: 'people', exact: true }).click();
-  await expect(page.locator('[data-person]')).toHaveCount(15);
+  await expect(page.locator('[data-person]')).toHaveCount(22);
   await expect(page.getByRole('region', { name: 'People' })).toContainText(
     entities.citizens[0].name,
   );

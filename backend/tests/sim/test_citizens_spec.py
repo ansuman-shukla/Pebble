@@ -1,17 +1,68 @@
-"""The v0 cast (`data/citizens/citizens.yaml`): 15 identities per the 04 roster that all spawn into the real world."""
+"""The World v1 cast (`data/citizens/citizens.yaml`): 22 identities per the 10-world-v1 §3.1 roster that all spawn into
+the real world, with their society data (ranks, titles, traits, family, bonds, ambitions, coins)."""
 
 import re
 from collections import Counter
 from collections.abc import Callable
+from typing import Any
+
+import pytest
+import yaml
+from pydantic import ValidationError
 
 from app.core.config import REPO_ROOT
-from app.sim.citizens import CITIZENS, load_citizens
+from app.sim.citizens import AMBITION_ARGS, CITIZENS, KIN_INVERSE, CitizenSpec, CitizensSpec, load_citizens
 from app.sim.simulation import Simulation
 from app.sim.state import age_group
+from app.sim.world import load_town_places
+from app.world.town import load_town, load_town_spec
 
 LOOKS = REPO_ROOT / "frontend" / "src" / "lib" / "world" / "citizen-looks.ts"
 FIGURE_SEX = {"masculine": "male", "feminine": "female"}
-ROSTER_AGES = [55, 34, 40, 28, 26, 9, 44, 63, 24, 15, 30, 38, 29, 19, 7]  # 04-minds, in roster order
+ROSTER = [  # 10-world-v1 §3.1, in roster order: (id, age, rank)
+    ("masanori", 55, 5),
+    ("kenji", 34, 4),
+    ("goro", 22, 3),
+    ("fumiko", 40, 3),
+    ("genzo", 28, 2),
+    ("aiko", 26, 2),
+    ("hana", 9, 1),
+    ("tokuji", 58, 3),
+    ("tetsu", 45, 3),
+    ("daisuke", 31, 2),
+    ("ennen", 50, 4),
+    ("ama", 44, 4),
+    ("bo", 36, 2),
+    ("oru", 63, 3),
+    ("tek", 24, 2),
+    ("lia", 15, 2),
+    ("suna", 30, 2),
+    ("barro", 38, 4),
+    ("nim", 29, 2),
+    ("kaz", 19, 2),
+    ("pip", 7, 1),
+    ("vesa", 61, 3),
+]
+NEW = {"goro", "tokuji", "tetsu", "daisuke", "ennen", "bo", "vesa"}  # the seven World v1 adds
+TITLES = {"masanori": ["lord"], "kenji": ["samurai"], "goro": ["ashigaru"], "ama": ["leader"], "barro": ["leader"]}
+TRAITS = {  # H G B T
+    "masanori": (0.7, 0.3, 0.5, 0.6),
+    "goro": (0.6, 0.4, 0.8, 0.7),
+    "ennen": (0.95, 0.9, 0.4, 0.1),
+    "kaz": (0.3, 0.5, 0.95, 0.8),
+    "vesa": (0.8, 0.7, 0.2, 0.2),
+}
+HOMES = {  # the seven new homes (§3.1)
+    "goro": "cross-s-1",  # by the west gate
+    "tokuji": "farmhouse-2",
+    "tetsu": "cross-n-9",  # beside the forge
+    "daisuke": "cross-n-8",
+    "ennen": "temple-hall",
+    "bo": "band_a_camp:shelter-n",
+    "vesa": "band_b_camp:shelter-w",
+}
+MONEY_SUPPLY = 3000  # mon, closed (§2.1)
+TREASURY = 2015
 
 
 def _looks() -> dict[str, tuple[str, str]]:
@@ -20,15 +71,27 @@ def _looks() -> dict[str, tuple[str, str]]:
     return {look: (region, FIGURE_SEX[figure]) for look, region, figure in pattern.findall(LOOKS.read_text())}
 
 
-def test_the_cast_follows_the_roster() -> None:
-    cast = load_citizens(CITIZENS)
+@pytest.fixture(scope="module")
+def cast() -> CitizensSpec:
+    return load_citizens(CITIZENS)
+
+
+def _raw_cast() -> dict[str, Any]:
+    raw: dict[str, Any] = yaml.safe_load(CITIZENS.read_text())
+    return raw
+
+
+def _by_id(raw: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {citizen["id"]: citizen for citizen in raw["citizens"]}
+
+
+def test_the_cast_follows_the_roster(cast: CitizensSpec) -> None:
     citizens = cast.citizens
-    assert len(citizens) == 15
-    assert Counter(c.region for c in citizens) == {"town": 6, "band_a": 5, "band_b": 4}
-    assert [c.age for c in citizens] == ROSTER_AGES
-    assert len({c.id for c in citizens}) == len({c.name for c in citizens}) == 15
+    assert [(c.id, c.age, c.rank) for c in citizens] == ROSTER
+    assert Counter(c.region for c in citizens) == {"town": 11, "band_a": 6, "band_b": 5}
+    assert len({c.name for c in citizens}) == 22
     looks = _looks()
-    assert len(looks) == 15
+    assert len(looks) == 22
     assert sorted(c.look for c in citizens) == sorted(looks)
     for citizen in citizens:
         assert looks[citizen.look] == (citizen.region, citizen.sex), citizen.id
@@ -44,6 +107,152 @@ def test_the_cast_follows_the_roster() -> None:
     assert cast.stores["store-2"]["rice"] >= 300  # the town has food for some days
 
 
+def test_ranks_titles_and_traits_follow_the_roster(cast: CitizensSpec) -> None:
+    by_id = {c.id: c for c in cast.citizens}
+    assert {c.id: c.titles for c in cast.citizens if c.titles} == TITLES
+    for citizen in cast.citizens:
+        assert citizen.traits is not None, citizen.id
+        assert (citizen.rank == 1) == (citizen.age < 13), f"{citizen.id}: children and only children rank 1"
+    for cid, (honesty, generosity, boldness, temper) in TRAITS.items():
+        traits = by_id[cid].traits
+        assert traits is not None
+        assert (traits.honesty, traits.generosity, traits.boldness, traits.temper) == (
+            honesty,
+            generosity,
+            boldness,
+            temper,
+        ), cid
+
+
+def test_family_links_are_symmetric_and_name_the_roster_kin(cast: CitizensSpec) -> None:
+    by_id = {c.id: c for c in cast.citizens}
+    for citizen in cast.citizens:
+        for other, kin in citizen.family.items():
+            assert by_id[other].family[citizen.id] == KIN_INVERSE[kin], (citizen.id, other)
+    assert by_id["genzo"].family == {"aiko": "mate", "hana": "child"}
+    assert by_id["goro"].family == {"tokuji": "parent's sibling"}  # Tokuji's nephew
+    assert by_id["lia"].family == {"ama": "parent", "bo": "parent"}
+    assert by_id["barro"].family == {"nim": "mate", "pip": "child", "kaz": "sibling", "vesa": "parent"}
+    assert by_id["vesa"].family == {"barro": "child", "kaz": "child", "pip": "grandchild"}
+
+
+def test_bonds_follow_the_roster(cast: CitizensSpec) -> None:
+    by_id = {c.id: c for c in cast.citizens}
+    assert by_id["masanori"].bonds == {"kenji": 60, "ennen": 30, "barro": -20}
+    assert by_id["goro"].bonds == {"kenji": 40, "kaz": -20}
+    assert by_id["kaz"].bonds == {"tek": -30, "goro": -20}
+    ennen = by_id["ennen"].bonds
+    assert set(ennen) == {c.id for c in cast.citizens} - {"ennen"}  # everyone
+    assert ennen["masanori"] == 30 and set(ennen.values()) == {10, 30}
+
+
+def test_every_ambition_names_known_checks_with_their_arguments(cast: CitizensSpec) -> None:
+    for citizen in cast.citizens:
+        assert citizen.ambition is not None, citizen.id
+        for clause in citizen.ambition.all_of:
+            required, optional = AMBITION_ARGS[clause.check]
+            assert required <= set(clause.args) <= required | optional, (citizen.id, clause.check)
+    by_id = {c.id: c for c in cast.citizens}
+    goro = by_id["goro"].ambition
+    assert goro is not None and [(c.check, c.args) for c in goro.all_of] == [("seizures_guilty", {"count": 3})]
+    masanori = by_id["masanori"].ambition
+    assert masanori is not None and [c.check for c in masanori.all_of] == ["store_holds", "standing_at_least"]
+
+
+@pytest.mark.parametrize(
+    ("clause", "error"),
+    [
+        ({"check": "coins_at_least"}, "missing \\['count'\\]"),
+        ({"check": "coins_at_least", "args": {"count": 5, "item": "rice"}}, "unknown \\['item'\\]"),
+        ({"check": "get_rich", "args": {}}, "check"),
+    ],
+)
+def test_ambition_checks_refuse_wrong_arguments(clause: dict[str, Any], error: str) -> None:
+    with pytest.raises(ValidationError, match=error):
+        CitizenSpec.model_validate({**_raw_cast()["citizens"][0], "ambition": {"text": "x", "all_of": [clause]}})
+
+
+@pytest.mark.parametrize(
+    ("ambition", "error"),
+    [
+        ({"text": "", "all_of": [{"check": "followed_hunt"}]}, "text"),
+        ({"text": "be happy", "all_of": []}, "all_of"),  # an ambition the world can't check
+    ],
+)
+def test_ambitions_need_words_and_a_check(ambition: dict[str, Any], error: str) -> None:
+    with pytest.raises(ValidationError, match=error):
+        CitizenSpec.model_validate({**_raw_cast()["citizens"][0], "ambition": ambition})
+
+
+def test_starting_coins_and_the_treasury_make_the_money_supply(cast: CitizensSpec) -> None:
+    by_id = {c.id: c for c in cast.citizens}
+    assert cast.coins() == MONEY_SUPPLY
+    assert cast.chests["castle-keep"] == {"coins": TREASURY}
+    assert by_id["masanori"].coins == 0 and by_id["fumiko"].coins == 500 and by_id["hana"].coins == 5
+    others = [c for c in cast.citizens if c.region == "town" and c.age >= 13 and c.id not in ("masanori", "fumiko")]
+    assert len(others) == 8 and {c.coins for c in others} == {60}
+    assert all(c.coins == 0 for c in cast.citizens if c.region != "town")  # bands start with none
+    assert cast.chests["farmhouse-1"] == cast.chests["farmhouse-2"] == {"rice": 20}
+
+
+def test_every_town_home_has_its_household_chest(cast: CitizensSpec) -> None:
+    placements = {p.id: p for p in load_town().placements}
+    by_id = {c.id: c for c in cast.citizens}
+    assert {cid: by_id[cid].home for cid in HOMES} == HOMES
+    for home in {c.home for c in cast.citizens if c.region == "town"}:
+        chest = placements[f"{home}-chest"]
+        door = placements[str(home)].front(0.75)
+        assert chest.kind == "chest" and abs(chest.x - door[0]) + abs(chest.z - door[1]) < 6, home
+
+
+def test_the_town_has_its_v1_furniture() -> None:
+    kinds = Counter(p.kind for p in load_town().placements)
+    assert kinds["market_stall"] == kinds["forge"] == kinds["anvil"] == kinds["loom"] == 1
+    assert kinds["drying_rack"] == 3  # the two field racks by the paddies and the farmyard rack
+    assert kinds["field_barricade"] == 5  # the gaol pen
+    assert {"gaol", "bell-tower", "forge"} <= {p.id for p in load_town_places().places}
+
+
+def test_the_rice_fields_stand_lies_inside_a_paddy() -> None:
+    stand = next(p for p in load_town_places().places if p.id == "rice-fields").at
+    paddies = [tiles.rect for tiles in load_town_spec().tiles if tiles.kind == "rice_paddy"]
+    assert any(x0 < stand[0] < x1 and z0 < stand[1] < z1 for x0, z0, x1, z1 in paddies)
+
+
+@pytest.mark.parametrize(
+    ("change", "error"),
+    [
+        (lambda c: c["genzo"]["family"].update(hana="parent"), "hana is genzo's parent"),
+        (lambda c: c["hana"]["family"].pop("aiko"), "aiko must be hana's parent"),
+        (lambda c: c["goro"]["family"].update(nobody="sibling"), "unknown kin nobody"),
+        (lambda c: c["goro"]["bonds"].update(kenji=10), "give their bond differently"),
+        (lambda c: c["goro"]["bonds"].update(goro=10), "own kin or bond"),
+        (lambda c: c["goro"]["bonds"].update(kaz=-101), "-100 to 100"),
+        (lambda c: c["goro"]["bonds"].update(kaz=101), "-100 to 100"),
+        (lambda c: c["goro"].update(rank=4), "doesn't match the titles"),
+    ],
+)
+def test_the_cast_refuses_broken_links(change: Callable[[dict[str, dict[str, Any]]], None], error: str) -> None:
+    raw = _raw_cast()
+    change(_by_id(raw))
+    with pytest.raises(ValidationError, match=error):
+        CitizensSpec.model_validate(raw)
+
+
+def test_citizen_ids_are_unique() -> None:
+    raw = _raw_cast()
+    raw["citizens"].append({**raw["citizens"][4], "family": {}, "bonds": {}})  # a second genzo
+    with pytest.raises(ValidationError, match="citizen ids must be unique"):
+        CitizensSpec.model_validate(raw)
+
+
+def test_chests_belong_to_someone_s_home() -> None:
+    raw = _raw_cast()
+    raw["chests"]["cross-n-3"] = {"rice": 5}
+    with pytest.raises(ValidationError, match="chests of nobody's home"):
+        CitizensSpec.model_validate(raw)
+
+
 def test_everyone_spawns_at_home_ground_and_knows_their_way_home(new_sim: Callable[..., Simulation]) -> None:
     sim = new_sim()
     cast = load_citizens(CITIZENS)
@@ -54,3 +263,4 @@ def test_everyone_spawns_at_home_ground_and_knows_their_way_home(new_sim: Callab
         assert home.is_home and home.site == spec.site
         assert sim.world.distance_m(citizen.position, home.door) < 140, spec.id
     assert {c.inventory.get("dried meat", 0) > 0 for c in sim.state.citizens.values() if c.region != "town"} == {True}
+    assert NEW <= set(sim.state.citizens)

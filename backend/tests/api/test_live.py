@@ -59,7 +59,7 @@ def test_the_live_feed_streams_snapshot_events_and_ticks(client: TestClient, com
     with client.websocket_connect(f"{API}/live?run_id={loop.run.id}") as ws:
         snapshot = LiveState.model_validate(_receive(ws))
         assert (snapshot.type, snapshot.run_id, snapshot.tick, snapshot.time) == ("snapshot", loop.run.id, 0, "08:00")
-        assert len(snapshot.citizens) == 15
+        assert len(snapshot.citizens) == 22
         assert {c.region for c in snapshot.citizens} == {"town", "band_a", "band_b"}
         genzo = next(c for c in snapshot.citizens if c.id == "genzo")
         assert (genzo.role, genzo.activity) == ("rice farmer", "idle")
@@ -125,7 +125,7 @@ def test_unknown_runs_close_the_socket_and_the_schema_route_answers(
         ws.receive_text()
     assert closed.value.code == 4404
     body = client.get(f"{API}/live/schema", params={"run_id": committed_run.run.id}).json()
-    assert body["type"] == "snapshot" and len(body["citizens"]) == 15
+    assert body["type"] == "snapshot" and len(body["citizens"]) == 22
     assert client.get(f"{API}/live/schema", params={"run_id": "nope"}).status_code == 404
     schema = client.get(f"{API}/openapi.json").json()["components"]["schemas"]
     assert {"LiveState", "LiveEvent", "LiveEventDetail", "CitizenEntity"} <= set(schema)

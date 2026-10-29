@@ -74,10 +74,15 @@ def test_profile_says_who_they_are(client: TestClient, cast: EngineLoop) -> None
     assert {"id": "rice-fields", "name": "the rice fields", "level": "visited"} in profile["known_places"]
     assert {p["id"]: p["name"] for p in profile["known_people"]} == {
         "aiko": "Aiko",
+        "daisuke": "Daisuke",
+        "ennen": "Ennen",
         "fumiko": "Fumiko",
+        "goro": "Goro",
         "hana": "Hana",
         "kenji": "Kenji",
         "masanori": "Masanori",
+        "tetsu": "Tetsu",
+        "tokuji": "Tokuji",
     }
     ama = client.get(f"{API}/citizens/ama").json()
     assert ama["home"] == {"id": "band_a_camp:shelter-n", "name": "a lean-to at Band A camp"}

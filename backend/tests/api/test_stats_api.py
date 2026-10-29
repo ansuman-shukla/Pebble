@@ -28,7 +28,7 @@ def test_stats_count_people_food_resources_and_days(
 ) -> None:
     stats = client.get(f"{API}/stats").json()
     state = cast.sim.state
-    assert stats["tick"] == 70 and stats["population"] == {"alive": 15, "dead": 0}
+    assert stats["tick"] == 70 and stats["population"] == {"alive": 22, "dead": 0}
     food = {f["id"]: f for f in stats["food"]}
     assert food["store-2"]["kind"] == "storehouse" and food["store-2"]["name"] == "the storehouse"
     assert food["store-2"]["items"] == {"rice": state.stores["store-2"]["rice"]}

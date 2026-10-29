@@ -1,4 +1,4 @@
-"""The M7 and M6 done-whens: the 15 scripted citizens live 10 game days headless among the animals.
+"""The M7 and M6 done-whens: the 22 scripted citizens live 10 game days headless among the animals.
 
 One 10-day run (~40 s) feeds every test here: nobody dies (deaths only from real causes, and the default cast
 doesn't starve or parch), everyone keeps making progress and moving, nobody passes through the town's walls,
@@ -195,7 +195,7 @@ def test_nobody_walks_through_the_town_walls(life: Life) -> None:
 
 def test_bands_sleep_at_camp_at_night_and_forage_by_day(life: Life) -> None:
     bands = [c for c in life.sim.state.citizens.values() if c.region != "town"]
-    assert len(bands) == 9
+    assert len(bands) == 11
     for citizen in bands:
         samples = life.night[citizen.id]
         assert len(samples) > 3 * 60 * (DAYS - 1)  # every night was sampled
