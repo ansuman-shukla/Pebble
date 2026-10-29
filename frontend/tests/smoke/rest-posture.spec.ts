@@ -1,11 +1,14 @@
 import { expect, test } from '@playwright/test';
 import {
+  AnimationClip,
+  AnimationMixer,
   type Bone,
   Group,
-  type Object3D,
+  Object3D,
   Quaternion,
   type SkinnedMesh,
   Vector3,
+  VectorKeyframeTrack,
 } from 'three';
 
 import { CITIZEN_LOOKS } from '../../src/lib/world/citizen-looks';
@@ -13,9 +16,14 @@ import { animateHumanoid } from '../../src/lib/world/humanoid-clips';
 import {
   groundTilt,
   holdPosture,
+  layToRest,
   type Posture,
+  type Resting,
+  reshaped,
   restOf,
   settle,
+  type Shape,
+  shapeOf,
   showWorn,
 } from '../../src/lib/world/rest-posture';
 import { createCharacter } from '../../src/vendor/polyfork/humanoid.mjs';
@@ -173,3 +181,110 @@ test('a sleeper keeps still: its hips stay put while the clip under it would swa
   }
   for (const at of seen) expect(at.distanceTo(rest.hipsAt)).toBeLessThan(1e-6);
 });
+
+test('a resting body is measured again only when its posture or clip changed, or while the clips cross-fade', () => {
+  const mixer = new AnimationMixer(new Object3D());
+  const clip = (name: string) =>
+    mixer.clipAction(new AnimationClip(name, 1, []));
+  const [idle, sitting] = [clip('Idle'), clip('Sitting')];
+  const shape = (over: Partial<Shape> = {}): Shape => ({
+    posture: 'sitting',
+    action: sitting,
+    fading: false,
+    ...over,
+  });
+  expect(reshaped(null, shape()), 'first frame at rest').toBe(true);
+  expect(reshaped(shape(), shape()), 'settled').toBe(false);
+  expect(reshaped(shape({ posture: 'lying' }), shape()), 'posture').toBe(true);
+  expect(reshaped(shape({ action: idle }), shape()), 'clip arrived').toBe(true);
+  expect(reshaped(shape({ action: null }), shape()), 'clips loaded').toBe(true);
+  expect(reshaped(shape(), shape({ fading: true })), 'fading').toBe(true);
+  expect(reshaped(shape({ fading: true }), shape()), 'fade just done').toBe(
+    true,
+  );
+  const standing = shape({ posture: 'standing', action: idle });
+  expect(reshaped(null, standing), 'standing').toBe(false);
+  expect(reshaped(shape(), standing), 'stood up').toBe(false);
+});
+
+test('a body is fading while another clip still blends into it', () => {
+  const box = new Object3D();
+  const mixer = new AnimationMixer(box);
+  const clip = (name: string) =>
+    mixer.clipAction(
+      new AnimationClip(name, 1, [
+        new VectorKeyframeTrack('.position', [0, 1], [0, 0, 0, 0, 1, 0]),
+      ]),
+    );
+  const [idle, sitting, unused] = [clip('Idle'), clip('Sitting'), clip('Run')];
+  const all = [idle, sitting, unused];
+  idle.play();
+  mixer.update(0.1);
+  expect(shapeOf('sitting', idle, all)).toEqual({
+    posture: 'sitting',
+    action: idle,
+    fading: false, // Run was never played: its weight doesn't count
+  });
+  idle.paused = true; // a still sleeper getting up still blends out
+  sitting.reset().play();
+  idle.crossFadeTo(sitting, 0.2, false);
+  mixer.update(0.1);
+  expect(shapeOf('sitting', sitting, all).fading, 'mid fade').toBe(true);
+  expect(shapeOf('sitting', null, all).fading, 'others blend').toBe(true);
+  mixer.update(0.15);
+  expect(shapeOf('sitting', sitting, all).fading, 'faded in').toBe(false);
+  sitting.setEffectiveWeight(0.5);
+  expect(shapeOf('sitting', sitting, all).fading, 'part weight').toBe(true);
+});
+
+for (const step of [1 / 60, 0.25]) {
+  test(`a sitter whose clip loads late still rests on the ground once it plays (${step.toFixed(2)} s frames)`, async () => {
+    const look = CITIZEN_LOOKS.find(
+      (candidate) => candidate.id === 'band-a-hunter',
+    )!;
+    const character = createCharacter(look.config);
+    const rest = restOf(character);
+    const world = new Group();
+    const tilt = new Group();
+    const posed = new Group();
+    world.add(tilt);
+    tilt.add(posed);
+    posed.add(character);
+    const body = { character, rest, tilt, posed, ground: () => 0 };
+    const state: Resting = { shape: null, print: null };
+    // sitting down before `Sitting` has loaded: the citizen's page plays Idle in its place
+    let animation = await animateHumanoid(character, { clips: ['Idle'] });
+    let playing = animation.play('Idle');
+    let measured = 0;
+    const frames = (seconds: number) => {
+      for (let t = 0; t < seconds; t += step) {
+        animation.update(step);
+        holdPosture(rest, 'sitting');
+        const print = state.print;
+        layToRest(
+          state,
+          shapeOf('sitting', playing, Object.values(animation.actions)),
+          body,
+        );
+        if (state.print !== print) measured++;
+      }
+    };
+    frames(1);
+    expect(measured, 'measured once on the stand-in').toBe(1);
+    // the clip arrives: the page loads every clip again and cross-fades into it
+    animation.mixer.stopAllAction();
+    animation = await animateHumanoid(character, {
+      clips: ['Idle', 'Sitting'],
+    });
+    playing = animation.play('Sitting');
+    measured = 0;
+    frames(1);
+    const low = clearance(character, world, 0, 0);
+    expect(Math.abs(low), `lowest vertex ${low}`).toBeLessThan(TOUCH);
+    expect(measured, 'measured through the fade').toBeGreaterThan(0);
+    expect(measured).toBeLessThanOrEqual(Math.ceil(0.2 / step) + 2);
+    measured = 0;
+    frames(1);
+    expect(measured, 'settled: no measuring every frame').toBe(0);
+  });
+}

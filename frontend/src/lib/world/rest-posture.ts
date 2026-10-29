@@ -5,13 +5,15 @@
  *   sitting: the chair clip's upper body and thighs, knees straightened (legs out in front), the hips set down
  *   lying:   a still standing frame (Idle, frozen) with straight legs, turned onto its back about the hips
  *
- * then lifted by the posed body's own depth (its lowest skinned vertex, measured once per posture: a child, an
- * elder or a long coat each rest on their own underside) and tilted to the ground sampled under its back, front and
+ * then lifted by the posed body's own depth (its lowest skinned vertex, measured again whenever the posture or the
+ * clip under it changes, until the cross-fade into it is done: a child, an elder or a long coat each rest on their own
+ * underside, and a clip that loads late doesn't sink them) and tilted to the ground sampled under its back, front and
  * sides, so it rests ON the ground on a slope too. Held tools are put away while sitting or lying.
  *
  *   tilt (ground fit) ─▶ posed (on its back about the hips, lifted) ─▶ character (bones posed)
  */
 import {
+  type AnimationAction,
   type Bone,
   type Object3D,
   Quaternion,
@@ -184,4 +186,96 @@ export function groundTilt(print: Footprint, under: Under, out: Quaternion) {
     UP,
     normal.set(-slopeX, 1, -slopeZ).normalize(),
   );
+}
+
+/**
+ * What a resting body's shape hangs on: its posture, the action its clips fade into (a stand-in while the posture's
+ * own clip is still loading) and whether that cross-fade is under way.
+ */
+export interface Shape {
+  posture: Posture;
+  action: AnimationAction | null;
+  fading: boolean;
+}
+
+/** The shape of a body playing `action` among `actions` (every clip of its mixer) in `posture`. */
+export function shapeOf(
+  posture: Posture,
+  action: AnimationAction | null,
+  actions: Iterable<AnimationAction>,
+): Shape {
+  let fading = action !== null && action.getEffectiveWeight() < 1;
+  for (const other of actions)
+    if (
+      other !== action &&
+      other.isScheduled() &&
+      other.getEffectiveWeight() > 0
+    )
+      fading = true;
+  return { posture, action, fading };
+}
+
+/**
+ * Whether a resting body must be measured again: its posture or its clip changed (the posture's clip arrived and
+ * replaced the stand-in), or the clips are cross-fading, or were until this frame. A settled body is not.
+ */
+export function reshaped(was: Shape | null, now: Shape) {
+  if (now.posture === 'standing') return false;
+  return (
+    was === null ||
+    was.posture !== now.posture ||
+    was.action !== now.action ||
+    was.fading ||
+    now.fading
+  );
+}
+
+/** Heights of the ground under a body (m, relative to the ground under it) `forward` along its facing, `side` across. */
+export type GroundProbe = (forward: number, side: number) => number;
+
+/** A body's last shape and, while it rests, its measured footprint. */
+export interface Resting {
+  shape: Shape | null;
+  print: Footprint | null;
+}
+
+const under: Under = { back: 0, front: 0, left: 0, right: 0 };
+
+/**
+ * Lays a sitting or lying body on the ground (call every frame after `holdPosture`): hides what it doesn't hold at
+ * rest, measures its footprint again when its shape changed, and tilts it to the ground under its ends.
+ */
+export function layToRest(
+  state: Resting,
+  shape: Shape,
+  body: {
+    character: Object3D;
+    rest: Rest;
+    tilt: Object3D;
+    posed: Object3D;
+    ground: GroundProbe;
+  },
+) {
+  const { character, rest, tilt, posed, ground } = body;
+  const was = state.shape;
+  state.shape = shape;
+  if (shape.posture !== (was?.posture ?? 'standing'))
+    showWorn(character, shape.posture);
+  if (shape.posture === 'standing') {
+    if (state.print === null) return;
+    posed.position.set(0, 0, 0);
+    posed.rotation.set(0, 0, 0);
+    character.position.set(0, 0, 0);
+    tilt.quaternion.identity();
+    state.print = null;
+    return;
+  }
+  if (state.print === null || reshaped(was, shape))
+    state.print = settle(posed, character, rest, shape.posture);
+  const { print } = state;
+  under.back = ground(print.back, 0);
+  under.front = ground(print.front, 0);
+  under.left = ground(0, -print.half);
+  under.right = ground(0, print.half);
+  groundTilt(print, under, tilt.quaternion);
 }

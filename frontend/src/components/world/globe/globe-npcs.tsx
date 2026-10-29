@@ -8,7 +8,13 @@ import {
   useRef,
   useState,
 } from 'react';
-import { type Group, Matrix4, type Mesh, Vector3 } from 'three';
+import {
+  type AnimationAction,
+  type Group,
+  Matrix4,
+  type Mesh,
+  Vector3,
+} from 'three';
 
 import type { GlobePlayerState } from './globe-player';
 import { Label } from '@/components/world/labels';
@@ -37,15 +43,12 @@ import { type GlobeTerrain, tangentFrame } from '@/lib/world/globe';
 import type { LabelStore } from '@/lib/world/label-store';
 import { animateHumanoid } from '@/lib/world/humanoid-clips';
 import {
-  type Footprint,
-  groundTilt,
+  type GroundProbe,
   holdPosture,
-  type Posture,
-  type Rest,
+  layToRest,
+  type Resting,
   restOf,
-  settle,
-  showWorn,
-  type Under,
+  shapeOf,
 } from '@/lib/world/rest-posture';
 import { groundUnder, type WalkTown } from '@/lib/world/walk-charts';
 import type { CharacterAnimation } from '@/vendor/polyfork/clips.mjs';
@@ -70,8 +73,6 @@ const SPEECH_ABOVE = 0.45;
 /** Labels hang lower over lying and sitting bodies. */
 const LYING_LABEL_HEIGHT = 0.7;
 const SITTING_LABEL_HEIGHT = 1.2;
-/** A new posture is measured again while the clips cross-fade into it (real seconds). */
-const SETTLE_S = 0.5;
 /** Children and teens are shorter: their labels hang lower. */
 const AGE_LABEL_SCALE: Partial<Record<string, number>> = {
   kid: 0.7,
@@ -120,13 +121,13 @@ interface Track {
 const wrapAngle = (angle: number) =>
   Math.atan2(Math.sin(angle), Math.cos(angle));
 
-/** Plays the clip of the citizen's look (the gait paced to its walk) and records it for the page. */
+/** Plays the clip of the citizen's look (the gait paced to its walk), records it for the page and returns it. */
 function playLook(
   animation: CharacterAnimation,
   look: NpcLook,
   pace: number,
   view: NpcView,
-) {
+): AnimationAction {
   const action =
     look.clip === 'Walk'
       ? animation.locomotion(pace)
@@ -135,19 +136,10 @@ function playLook(
   action.paused = look.still;
   view.clip = visibleClip(view, action.getClip().name);
   view.loaded = true;
+  return action;
 }
 
 const visibleClip = (view: NpcView, clip: string) => (view.near ? clip : '');
-
-/** Heights of the ground under a body (m, relative to the ground under it) `forward` along its facing, `side` across. */
-type GroundProbe = (forward: number, side: number) => number;
-
-/** A resting body's measured footprint, the posture it is for, and how long ago that posture began (real s). */
-interface Settled {
-  posture: Posture;
-  print: Footprint | null;
-  since: number;
-}
 
 function NpcModel({
   look,
@@ -166,11 +158,8 @@ function NpcModel({
   const rest = useMemo(() => restOf(character), [character]);
   const tilt = useRef<Group>(null);
   const posed = useRef<Group>(null);
-  const settled = useRef<Settled>({
-    posture: 'standing',
-    print: null,
-    since: 0,
-  });
+  const resting = useRef<Resting>({ shape: null, print: null });
+  const playing = useRef<AnimationAction | null>(null);
   const feet = useMemo(
     () =>
       ['LeftFoot', 'RightFoot'].flatMap(
@@ -182,6 +171,10 @@ function NpcModel({
     ...new Set([...BASE_CLIPS, pose.clip]),
   ]);
   const [animation, setAnimation] = useState<CharacterAnimation | null>(null);
+  const actions = useMemo(
+    () => (animation ? Object.values(animation.actions) : []),
+    [animation],
+  );
   // a new activity's clip joins the loaded set (Polyfork fetches each clip once per page)
   if (!clips.includes(pose.clip)) setClips([...clips, pose.clip]);
 
@@ -209,17 +202,27 @@ function NpcModel({
 
   useEffect(() => {
     if (animation)
-      playLook(animation, pose, currentPace(trackRef.current), viewRef.current);
+      playing.current = playLook(
+        animation,
+        pose,
+        currentPace(trackRef.current),
+        viewRef.current,
+      );
   }, [animation, pose, trackRef, viewRef]);
 
   useFrame((_, delta) => {
     if (!animation || !viewRef.current.near || !tilt.current || !posed.current)
       return;
     if (pose.clip === 'Walk')
-      playLook(animation, pose, currentPace(trackRef.current), viewRef.current);
+      playing.current = playLook(
+        animation,
+        pose,
+        currentPace(trackRef.current),
+        viewRef.current,
+      );
     animation.update(Math.min(delta, MAX_FRAME));
     holdPosture(rest, pose.pose);
-    layToRest(settled.current, pose.pose, delta, {
+    layToRest(resting.current, shapeOf(pose.pose, playing.current, actions), {
       character,
       rest,
       tilt: tilt.current,
@@ -238,49 +241,6 @@ function NpcModel({
       </group>
     </group>
   );
-}
-
-const under: Under = { back: 0, front: 0, left: 0, right: 0 };
-
-/**
- * Lays a sitting or lying body on the ground: puts away what it doesn't hold at rest, measures its footprint while
- * the clips cross-fade into the posture, and tilts it to the ground under its ends every frame.
- */
-function layToRest(
-  state: Settled,
-  posture: Posture,
-  delta: number,
-  body: {
-    character: Group;
-    rest: Rest;
-    tilt: Group;
-    posed: Group;
-    ground: GroundProbe;
-  },
-) {
-  const { character, rest, tilt, posed, ground } = body;
-  if (posture !== state.posture) {
-    Object.assign(state, { posture, print: null, since: 0 });
-    showWorn(character, posture);
-  }
-  if (posture === 'standing') {
-    if (state.print === null) return;
-    posed.position.set(0, 0, 0);
-    posed.rotation.set(0, 0, 0);
-    character.position.set(0, 0, 0);
-    tilt.quaternion.identity();
-    state.print = null;
-    return;
-  }
-  if (state.print === null || state.since < SETTLE_S)
-    state.print = settle(posed, character, rest, posture);
-  state.since += delta;
-  const { print } = state;
-  under.back = ground(print.back, 0);
-  under.front = ground(print.front, 0);
-  under.left = ground(0, -print.half);
-  under.right = ground(0, print.half);
-  groundTilt(print, under, tilt.quaternion);
 }
 
 const currentPace = (track: Track) => track.pace;
