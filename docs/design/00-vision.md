@@ -44,6 +44,10 @@ back and read any life in detail.
 
 ## Success for v0
 
+World v1 (`10-world-v1.md`, D77) raises the bar before Phase B: 22 citizens, money, law and a world where every
+usable thing is drawn and simulated.
+
+
 - A complete little planet renders in the browser: terrain, biomes, the town, landmarks, animals, 15 citizens.
 - Scripted citizens live a believable routine (eat, drink, sleep, wander, flee animals) for many game days without
   getting stuck.

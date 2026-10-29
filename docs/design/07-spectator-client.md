@@ -4,6 +4,9 @@ A web app where anyone can watch the planet live, follow a citizen, and read liv
 Associo's frontend (Vite + React + TypeScript, Tailwind + shadcn/ui, TanStack Query, react-router, generated API client),
 with the 3D world on **react-three-fiber + drei** (three.js).
 
+> World v1 (`10-world-v1.md` §5, D94-D95) defines the ground, living props, chips, inspector, event feed, minimap and
+> scoreboard; it wins over the overlay and creature notes below.
+
 ## Pages
 
 | Page | What you see |

@@ -1,5 +1,8 @@
 # 01 · World
 
+> World v1 (`10-world-v1.md`): band B moves to about (25, −35), resources become drawn nodes at named hotspots,
+> roads and paths join them, and walking speeds follow 10 §4.1 (D78-D82).
+
 ## Shape and scale
 
 The world is a **real sphere**: walk in one direction long enough and you come back home.

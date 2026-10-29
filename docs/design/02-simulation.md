@@ -1,5 +1,8 @@
 # 02 · Simulation
 
+> World v1 (`10-world-v1.md`) changes this doc where they differ: 22 citizens, resources as nodes (no per-cell
+> counters), paddies, speed caps, slots, spoilage, money, ownership, tax and law (D77-D93).
+
 The simulation is the single authority on what is true. It runs in its own process, advances on a fixed tick, and
 writes every change to the event store.
 
@@ -66,7 +69,7 @@ and no aging over time (ages are fixed); both arrive with v2.
   you sick) and keeps animals away. It burns out unless fed. A piece of wood burns an hour, a fire holds twelve; light: night sight
   ~30 m within 12 m; animals keep 25 m away; warmth arrives with seasons (v1).
 - **Town** fields grow rice and vegetables when tended; harvests go to a shared storehouse open to town members. The
-  well never runs dry. Walls keep animals out. (Money, ownership and taxes come in v2.)
+  well never runs dry. Walls keep animals out. (Money, ownership and taxes moved to World v1: see `10-world-v1.md` §2, D87-D90.)
 - **Bands** live from gathering, hunting and fishing; food spoils after a few days unless dried (drying racks).
 
 ## Scripted brains (v0 citizens and animals)
