@@ -42,8 +42,8 @@ class Life:
     started: Counter[tuple[str, int, str]] = field(default_factory=Counter)  # (citizen, day, action or task)
     night: dict[str, list[tuple[bool, float]]] = field(default_factory=lambda: defaultdict(list))  # (asleep, m home)
     rice: list[int] = field(default_factory=list)  # in the storehouse at the end of each day
-    lowest_health: dict[str, float] = field(default_factory=dict)  # not counting injuries: what hunger and thirst cost
-    injuries: dict[str, float] = field(default_factory=lambda: defaultdict(float))  # health lost to animals so far
+    # health lost to hunger and thirst: drops in ticks without an injury (health only drops from those, bodies.py)
+    need_damage: dict[str, float] = field(default_factory=lambda: defaultdict(float))
     said: int = 0
     attacks: list[tuple[str, float, int, bool, bool]] = field(default_factory=list)  # who, sun, near, fire, town
     populations: list[Counter[str]] = field(default_factory=list)  # living animals by kind at the end of each day
@@ -71,13 +71,15 @@ def life(sim_world: SimWorld, planner: Planner) -> Life:
     for _ in range(DAYS * DAY_MINUTES):
         brains(sim)
         before = {c.id: c.position for c in sim.state.citizens.values()}
+        health = {c.id: c.body.health for c in sim.state.citizens.values()}
+        injured: set[str] = set()
         sim.step()
         day = (sim.tick - 1) // DAY_MINUTES
         for event in sim.drain():
             if event.type == "died" and event.actor_kind == "citizen" and event.actor_id is not None:
                 out.deaths.append((event.actor_id, str(getattr(event.payload, "cause", ""))))
             elif isinstance(event.payload, Injured) and event.actor_kind == "citizen" and event.actor_id is not None:
-                out.injuries[event.actor_id] += event.payload.amount
+                injured.add(event.actor_id)
                 words, _ = sim.core.hurt.get(event.actor_id, ("", 0))
                 if words.endswith("attacks you"):  # a predator going for them (not game turning on a hunter)
                     victim = sim.citizen(event.actor_id)
@@ -104,8 +106,8 @@ def life(sim_world: SimWorld, planner: Planner) -> Life:
                 kind = str(payload["args"].get("task", payload["action"]))
                 out.started[(event.actor_id, day, kind)] += 1
         for citizen in sim.state.citizens.values():
-            unhurt = min(100.0, citizen.body.health + out.injuries[citizen.id])
-            out.lowest_health[citizen.id] = min(out.lowest_health.get(citizen.id, 100.0), unhurt)
+            if citizen.id not in injured:
+                out.need_damage[citizen.id] += max(0.0, health[citizen.id] - citizen.body.health)
             if not citizen.body.alive:
                 continue
             moved = sim_world.distance_m(before[citizen.id], citizen.position)
@@ -138,8 +140,8 @@ def test_nobody_dies_in_ten_days(life: Life) -> None:
     assert all(c.body.alive and c.body.health > 50 for c in life.sim.state.citizens.values())
     # nobody goes long without water or food: a night parched (thirsty to bed) costs dozens of health points; injuries
     # aren't counted here (game turning on a hunter is a hunter's risk, D70; predators have their own test)
-    worst = min(life.lowest_health.items(), key=lambda item: item[1])
-    assert worst[1] >= 90, f"{worst[0]} fell to health {worst[1]:.0f}"
+    worst = max(life.need_damage.items(), key=lambda item: item[1], default=("nobody", 0.0))
+    assert worst[1] <= 10, f"{worst[0]} lost {worst[1]:.0f} health to hunger and thirst"
 
 
 def test_everyone_keeps_doing_things_and_moving(life: Life) -> None:
