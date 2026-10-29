@@ -1,5 +1,6 @@
 import { Canvas } from '@react-three/fiber';
 import {
+  type CSSProperties,
   memo,
   type RefObject,
   Suspense,
@@ -525,6 +526,24 @@ const DROP_MESSAGES: Record<
 const MESSAGE_MS = 4000;
 /** A press that moves less than this (px) is a click, not a drag. */
 const CLICK_SLOP = 6;
+/** Where the toolbar ends on two lines (px), until measured, and the space between it and the panels below. */
+const TOOLBAR_BOTTOM = 84;
+const TOOLBAR_GAP = 12;
+
+/** Where an element ends (px from its offset parent's top), followed as it resizes; `initial` until measured. */
+function useBottomEdge(ref: RefObject<HTMLElement | null>, initial: number) {
+  const [bottom, setBottom] = useState(initial);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() =>
+      setBottom(element.offsetTop + element.offsetHeight),
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref]);
+  return bottom;
+}
 
 function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   const [params] = useSearchParams();
@@ -549,6 +568,9 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   const goTo = useMemo(() => goToSites(planet, town), [planet, town]);
   const dropRef = useRef<DropApi | null>(null);
   const [dropping, setDropping] = useState(false);
+  // the toolbar wraps onto more lines in narrow windows (and with the drop hint): panels hang below its real end
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const toolbarBottom = useBottomEdge(toolbarRef, TOOLBAR_BOTTOM);
   const [message, setMessage] = useState<string | null>(null);
   const press = useRef<{ x: number; y: number } | null>(null);
   /** Where the pin hovers while dropping (client pixels) and what is under it. */
@@ -825,7 +847,12 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
               .join(';')
           : undefined
       }
-      style={dropping && hover ? { cursor: 'none' } : undefined}
+      style={
+        {
+          '--toolbar-bottom': `${toolbarBottom + TOOLBAR_GAP}px`,
+          cursor: dropping && hover ? 'none' : undefined,
+        } as CSSProperties
+      }
       onPointerMove={(event) => {
         if (dropping && event.target instanceof HTMLCanvasElement)
           hoverAt(event.clientX, event.clientY);
@@ -923,7 +950,10 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
           </span>
         </div>
       )}
-      <div className="absolute top-3 left-3 flex flex-wrap items-center gap-2 rounded-lg bg-white/80 p-2 text-sm shadow">
+      <div
+        ref={toolbarRef}
+        className="absolute top-3 left-3 flex flex-wrap items-center gap-2 rounded-lg bg-white/80 p-2 text-sm shadow"
+      >
         {CAMERA_MODES.map((mode) => (
           <Button
             key={mode}
@@ -1053,7 +1083,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
       {message && (
         <div
           role="status"
-          className="absolute top-24 left-1/2 -translate-x-1/2 rounded-lg bg-white/90 px-3 py-2 text-sm shadow"
+          className="absolute top-(--toolbar-bottom) left-1/2 -translate-x-1/2 rounded-lg bg-white/90 px-3 py-2 text-sm shadow"
         >
           {message}
         </div>
