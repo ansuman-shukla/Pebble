@@ -533,9 +533,13 @@ test('a walk that ends in a rest within the tick is drawn walking all the way th
     mock.setClock({ speed: 10 });
   });
   await page.waitForTimeout(1_000); // past the resync to tick 18
-  const samples: Npc[] = [];
+  const tag = page.locator('[data-label="npc-sela"]');
+  const samples: (Npc & { tag: string })[] = [];
   for (let elapsed = 0; elapsed < 16_000; elapsed += 100) {
-    samples.push(await npcOf(page, 'sela'));
+    samples.push({
+      ...(await npcOf(page, 'sela')),
+      tag: (await tag.textContent()) ?? '',
+    });
     await page.waitForTimeout(100);
   }
   const moving = (k: number) =>
@@ -548,8 +552,17 @@ test('a walk that ends in a rest within the tick is drawn walking all the way th
   expect(
     onTheWay.map(({ activity, posture }) => `${activity} ${posture}`),
   ).toEqual(onTheWay.map(() => 'walking standing'));
+  // her label says what the drawn body does, not the rest the feed already reports (the hooks lag up to 100 ms
+  // behind the body and the label, so a sample counts only if the next one moves on too)
+  expect(
+    samples
+      .filter((_, k) => moving(k) && moving(k + 1))
+      .map(({ tag }) => tag)
+      .filter((tag) => !tag.startsWith('Sela · walking')),
+  ).toEqual([]);
   const last = samples.at(-1)!;
   expect([last.activity, last.posture]).toEqual(['resting', 'sitting']);
+  expect(last.tag).toMatch(/^Sela · resting/);
   expect(errors).toEqual([]);
 });
 
