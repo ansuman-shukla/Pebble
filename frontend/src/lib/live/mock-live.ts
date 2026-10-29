@@ -465,6 +465,29 @@ export class MockLiveServer {
     for (const socket of this.sockets) socket.deliver(frame);
   }
 
+  /** Queues an event of any type for the next tick, like the engine's own (tests: a death, a sale); `extra` adds
+   * fields of the line registry (`line`, `importance`, `position`). */
+  queueEvent(
+    type: string,
+    actor: string | null,
+    payload: Record<string, unknown>,
+    extra: Record<string, unknown> = {},
+  ) {
+    this.events += 1;
+    this.pending.push({
+      type: 'event',
+      run_id: this.runId,
+      tick: this.tick + 1,
+      event: {
+        id: `mock-${type}-${this.events}`,
+        type,
+        actor_id: actor,
+        payload,
+        ...extra,
+      },
+    });
+  }
+
   /** Jumps the feed `ticks` ahead at once (tests: to the evening): one `tick` frame with where everything is. */
   skip(ticks: number) {
     for (let k = 0; k < ticks; k++) {
