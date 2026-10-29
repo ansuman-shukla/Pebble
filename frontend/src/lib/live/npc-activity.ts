@@ -47,7 +47,7 @@ type NpcPose = 'standing' | 'sitting' | 'lying';
 export interface NpcLook {
   clip: NpcClip;
   pose: NpcPose;
-  /** Whether the clip is frozen on its first frame (the dead). */
+  /** Whether the clip is frozen on its first frame (sleepers and the dead lie still). */
   still: boolean;
 }
 
@@ -87,7 +87,7 @@ const STANDING_CLIPS: Record<
   drinking: { clip: 'Drinking', pose: 'standing', still: false },
   talking: { clip: 'Talking', pose: 'standing', still: false },
   resting: { clip: 'Sitting', pose: 'sitting', still: false },
-  sleeping: { clip: 'Idle', pose: 'lying', still: false },
+  sleeping: { clip: 'Idle', pose: 'lying', still: true },
   dead: { clip: 'Idle', pose: 'lying', still: true },
 };
 
