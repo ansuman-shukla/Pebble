@@ -7,6 +7,7 @@ from typing import override
 import pytest
 
 from app.observability.events import EventDraft
+from app.sim.citizens import CITIZENS, load_citizens
 from app.sim.clock import DAY_MINUTES
 from app.sim.navigation import Planner
 from app.sim.simulation import Simulation
@@ -68,7 +69,8 @@ def test_each_check_sees_every_tick_of_its_seeds_run(planner: Planner) -> None:
     outcomes = run_seed(7, 1, [Recorder, x0.Deaths, x0.Actions, x0.Stall, x0.NeedDamage], planner)
     recorded = outcomes["test.recorder"]
     assert recorded.value == 1 + 2 * DAY_MINUTES
-    assert recorded.words == "15 citizens, start 0 | before 0 | after 1 tick_summary | before 1"
+    cast = len(load_citizens(CITIZENS).citizens)
+    assert recorded.words == f"{cast} citizens, start 0 | before 0 | after 1 tick_summary | before 1"
     assert outcomes["x0.deaths"] == Outcome(0, True, "none")
     actions = outcomes["x0.actions"]  # a day uses every required one; the lucky ones are only reported
     assert actions.ok and set(actions.words.split(", ")) <= x0.LUCKY_ACTIONS | {"all used"}
