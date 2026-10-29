@@ -160,6 +160,25 @@ test('a growing cluster swallows the chip it grows into', () => {
   expect(chips[0].members).toEqual(['a', 'c', 'b']);
 });
 
+test('a cluster that swallows a nearer chip hands it the lead and its spot', () => {
+  // b (5 m) stands alone; c joins a (6 m) and the cluster grows into b, the nearest of the three
+  const chips = layoutChips(
+    [
+      anchor('b', { x: 170, y: 290, distance: 5 }),
+      anchor('a', { x: 100, distance: 6 }),
+      anchor('c', { x: 102, distance: 7 }),
+    ],
+    sizer,
+  );
+  expect(chips).toHaveLength(1);
+  expect(chips[0]).toMatchObject({
+    leader: 'b',
+    members: ['b', 'a', 'c'],
+    x: 170,
+    bottom: 290,
+  });
+});
+
 test('the pinned chip stays whole and the others cluster just above it', () => {
   const chips = layoutChips(
     [
@@ -245,8 +264,13 @@ test('randomized 40-label layouts: no overlaps, at most 14 chips, everyone in ra
     const inRangeIds = new Set(inRange.map((one) => one.id));
     for (const id of members)
       expect(inRangeIds.has(id), `${label} ${id}`).toBe(true);
+    const distanceOf = new Map(anchors.map((one) => [one.id, one.distance]));
     for (const chip of chips) {
       expect(chip.members[0], label).toBe(chip.leader);
+      const nearest = Math.min(
+        ...chip.members.map((id) => distanceOf.get(id)!),
+      );
+      expect(distanceOf.get(chip.leader), `${label} leader`).toBe(nearest);
       const lead = anchors.find((one) => one.id === chip.leader)!;
       expect(chip.x, label).toBe(lead.x);
       expect(chip.bottom, label).toBeLessThanOrEqual(lead.y);

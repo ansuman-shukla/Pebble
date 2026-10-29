@@ -144,6 +144,7 @@ export function layoutChips(
     .sort(
       (a, b) => Number(b.pinned) - Number(a.pinned) || a.distance - b.distance,
     );
+  const rank = new Map(order.map((anchor, index) => [anchor.id, index]));
   const chips: PlacedChip[] = [];
   const resize = (chip: PlacedChip) => {
     chip.view = viewOf(chip);
@@ -200,8 +201,14 @@ export function layoutChips(
         chip = hit;
         placed = true;
       } else {
-        chip.members.push(...hit.members);
-        chips.splice(chips.indexOf(hit), 1);
+        // the nearer leader leads the merged cluster, from its own spot
+        const [lead, swallowed] =
+          rank.get(hit.leader)! < rank.get(chip.leader)!
+            ? [hit, chip]
+            : [chip, hit];
+        lead.members.push(...swallowed.members);
+        chips.splice(chips.indexOf(swallowed), 1);
+        chip = lead;
       }
       resize(chip);
     }
