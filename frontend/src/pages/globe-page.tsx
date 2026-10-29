@@ -244,17 +244,21 @@ interface CameraPlace {
   site: PlanetSite | null;
   /** Town local metres on the town's ground disc. */
   town: { x: number; z: number } | null;
+  /** The longitude its local time is told at: a site's anchor (one time across the site), else the spot's. */
+  clockLon: number;
 }
 
 function placeAt(planet: Planet, point: Vector3): CameraPlace {
   const direction = point.clone().normalize();
   const { lat, lon } = latLonFromDirection(direction);
   const local = planet.town.mapping.toLocal(point, new Vector3());
+  const site = siteAt(planet, point);
   return {
     lat,
     lon,
     biome: planet.view.biome_names[planet.terrain.biomeAt(direction)],
-    site: siteAt(planet, point),
+    site,
+    clockLon: site ? latLonFromDirection(site.direction).lon : lon,
     town:
       Math.hypot(local.x, local.z) < TOWN_GROUND_RADIUS
         ? { x: local.x, z: local.z }
@@ -769,7 +773,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   // the footer and the clock describe where the camera looks, not where the hidden avatar stands (F19, F20)
   const place = useCameraPlace(planet, focusRef);
   const localTime = place
-    ? localMinutes(minutes, planet.town.lon, place.lon)
+    ? localMinutes(minutes, planet.town.lon, place.clockLon)
     : null;
   const biome = player ? view.biome_names[player.biome] : null;
   const site = player ? siteAt(planet, player) : null;

@@ -159,6 +159,11 @@ test('going to a site stops following (F18); footer and clock tell the camera pl
   const townTime = (await page.getByTestId('live-time').textContent())!.match(
     /\d\d:\d\d/,
   )![0];
+  // anywhere in town the footer tells town time (one time across a site): at Haru's stall too
+  await goToPerson(page, world, 'haru');
+  await expect(footer).toContainText(/town -?\d+, -?\d+/);
+  await expect(footer).toHaveText(new RegExp(`^${townTime}`));
+  await page.getByRole('button', { name: 'people', exact: true }).click();
 
   // following Pip at band B's camp, 11 hours behind the town
   await page.getByRole('button', { name: 'people', exact: true }).click();
