@@ -26,6 +26,7 @@ from app.sim.slots import (
     load_slots_spec,
     ring_bearings,
     ring_spot,
+    settle,
     step_to,
     walkable,
 )
@@ -465,3 +466,18 @@ def test_nobody_stays_standing_on_a_sitters_legs(new_sim: Callable[..., Simulati
     assert ring_spot(sim.core, comer, sitter.position, with_centre=False) is not None
     spot = ring_spot(sim.core, comer, sitter.position, with_centre=False)
     assert spot is not None and sim.world.distance_m(spot, feet) >= PERSONAL_M  # ring spots keep off them too
+
+
+def test_whoever_just_arrived_steps_aside_not_whoever_stood_there(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    stander = sim.add_citizen(make_spec("zed", at=(-40.0, 61.0)))  # stood there first (its id sorts last)
+    comer = sim.add_citizen(make_spec("amy", at=(-37.0, 61.0)))
+    spot, start = stander.position, comer.position
+    sim.core.strides[comer.id] = Stride(1, ((start, 0.0), (spot, 2.2)))  # walked onto them this tick
+    sim.core.place_at(comer, spot)
+    settle(sim.core)
+    assert stander.position == spot and stander.id not in sim.core.strides  # stays put, doesn't move
+    assert sim.world.distance_m(comer.position, spot) >= PERSONAL_M  # the newcomer steps aside...
+    walked = sim.core.strides[comer.id].walked
+    assert walked[0] == (start, 0.0) and walked[-1][0] == comer.position  # ...drawn walking on to there
+    assert crowded(sim.core) == []
