@@ -174,7 +174,13 @@ def _strike_hunt(core: SimCore, citizen: Citizen, animal: Animal) -> None:
         low, high = species.hurts
         text = f"{capital(species.one)} turns on you and gets away."
         core.end_action(citizen, "failed", text)
-        core.injure(citizen, low + (high - low) * rng.random(), "animal attack", f"{species.one} turns on you")
+        core.injure(
+            citizen,
+            low + (high - low) * rng.random(),
+            "animal attack",
+            f"{species.one} turns on you",
+            attacker=animal.id,
+        )
         return
     core.end_action(citizen, "failed", text)
 
@@ -191,7 +197,9 @@ def _strike_animal(core: SimCore, citizen: Citizen, animal: Animal) -> None:
     if species.bite[1] > 0 and rng.random() < FIGHT_BACK:
         core.end_action(citizen, "done", f"You strike {species.one}; it bites back and runs off.")
         low, high = species.bite
-        core.injure(citizen, low + (high - low) * rng.random(), "animal attack", f"{species.one} bites you")
+        core.injure(
+            citizen, low + (high - low) * rng.random(), "animal attack", f"{species.one} bites you", attacker=animal.id
+        )
         return
     core.end_action(citizen, "done", f"You strike {species.one} and it runs off.")
 
@@ -208,7 +216,7 @@ def _strike_person(core: SimCore, citizen: Citizen, action: ActionState) -> None
     blow = (BLOW[0] + (BLOW[1] - BLOW[0]) * rng.random()) * citizen.traits.strength * 0.5
     blow *= SPEAR if citizen.inventory.get("spear", 0) else 1.0
     core.end_action(citizen, "done", f"You strike {action.label}.")
-    core.injure(victim, blow, "violence", f"{person_label(victim, citizen)} strikes you")
+    core.injure(victim, blow, "violence", f"{person_label(victim, citizen)} strikes you", attacker=citizen.id)
 
 
 def _scatter(core: SimCore, animal: Animal, threat: Vec3) -> None:
