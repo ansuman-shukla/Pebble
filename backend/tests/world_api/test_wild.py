@@ -29,7 +29,7 @@ IN_WORLD = ("You", "There", "The", "A", "An", "Fish")
 
 def _hunter(new_sim: Callable[..., Simulation], **spec: object) -> tuple[Simulation, WorldApi]:
     sim = without_animals(new_sim())
-    fields: dict[str, object] = {"home": None, "skills": ["hunting", "fire"], "inventory": {"spear": 1}}
+    fields: dict[str, object] = {"home": None, "skills": ["hunting", "fire"], "inventory": {"flint spear": 1}}
     fields.update(spec)
     citizen = sim.add_citizen(make_spec("hunter", **fields))
     put_in_the_wild(sim, citizen.id, wild_cell(sim))
@@ -56,7 +56,7 @@ def test_a_hunter_stalks_a_deer_and_brings_it_down(
     assert result.text == "You bring down a deer. You take some meat and a hide."
     assert not deer.alive and deer.activity == "dead"
     hunter = sim.citizen("hunter")
-    assert hunter.inventory == {"spear": 1, "meat": SPECIES["deer"].meat, "hide": SPECIES["deer"].hide}
+    assert hunter.inventory == {"flint spear": 1, "meat": SPECIES["deer"].meat, "hide": SPECIES["deer"].hide}
     events = sim.drain()
     died = [e for e in events if e.type == "died"]
     assert [(e.actor_id, e.payload.model_dump()["cause"]) for e in died] == [(deer.id, "hunted")]
@@ -93,7 +93,7 @@ def test_hunting_odds_follow_skill_tool_strength_and_company(new_sim: Callable[.
     hunter = sim.citizen("hunter")
     skilled = wild.hunt_chance(sim.core, hunter, deer)
     assert skilled == pytest.approx(SPECIES["deer"].catch * wild.SPEAR)
-    hunter.inventory.pop("spear")
+    hunter.inventory.pop("flint spear")
     assert wild.hunt_chance(sim.core, hunter, deer) == pytest.approx(SPECIES["deer"].catch)
     hunter.skills = ()
     assert wild.hunt_chance(sim.core, hunter, deer) == pytest.approx(SPECIES["deer"].catch * wild.UNSKILLED)

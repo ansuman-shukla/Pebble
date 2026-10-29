@@ -90,12 +90,7 @@ def instrument(sim: Simulation) -> None:
 
 def main(days: int = 10, seed: int = 20261028) -> None:
     sim = Simulation.new(real_world(), seed=seed)
-    cast = load_citizens(CITIZENS)
-    for store_id, items in cast.stores.items():
-        for item, count in items.items():
-            sim.stock_store(store_id, item, count)
-    for spec in cast.citizens:
-        sim.add_citizen(spec)
+    sim.add_cast(load_citizens(CITIZENS))
     brains = citizen_brains(sim, seed)
     sim.drain()
     instrument(sim)

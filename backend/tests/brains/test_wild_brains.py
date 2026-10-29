@@ -107,7 +107,7 @@ def test_a_hunter_stalks_the_game_in_view(new_sim: Callable[..., Simulation]) ->
 
 def test_a_spear_carrier_drives_off_a_wolf_that_comes_close(new_sim: Callable[..., Simulation]) -> None:
     sim = without_animals(new_sim())
-    armed = sim.add_citizen(make_spec("armed", home=None, region="band_a", inventory={"spear": 1}))
+    armed = sim.add_citizen(make_spec("armed", home=None, region="band_a", inventory={"flint spear": 1}))
     put_in_the_wild(sim, armed.id, wild_cell(sim))
     skip_to(sim, armed.position, night=False)
     add_animal(sim, "wolf", step_towards(armed.position, 0.0, 12.0, sim.world.radius_m), until=10**9)

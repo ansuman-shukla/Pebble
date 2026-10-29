@@ -266,6 +266,20 @@ def test_giving_needs_reach_and_a_waking_receiver(new_sim: Callable[..., Simulat
     assert (giver.inventory, taker.inventory) == ({}, {"roots": 4})
 
 
+def test_a_bare_tool_word_names_the_best_of_that_tool_carried(new_sim: Callable[..., Simulation]) -> None:
+    sim = new_sim()
+    giver = sim.add_citizen(make_spec("giver", at=WELL, knows_people=["taker"]))
+    taker = sim.add_citizen(make_spec("taker", name="Taker", at=(-20.0, 54.0)))
+    giver.inventory.update({"flint spear": 2, "iron spear": 1, "stone axe": 1})
+    api = WorldApi(sim, "giver")
+    assert api.give("a spear", "Taker").text == "Taker takes an iron spear."
+    assert api.drop("a spear").text == "You put down a flint spear."
+    assert api.drop("the spears").text == "You put down a flint spear."
+    assert api.give("an axe", "Taker").text == "Taker takes a stone axe."
+    assert (giver.inventory, taker.inventory) == ({}, {"iron spear": 1, "stone axe": 1})
+    assert api.drop("a spear").text == "You aren't carrying any a spear."
+
+
 @pytest.mark.parametrize(
     ("words", "given", "dropped"),  # of 10 berries: how many are given, then how many of those are put down
     [

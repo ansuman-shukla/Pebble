@@ -3,15 +3,15 @@ finding them within reach. Every failure is an in-world sentence.
 """
 
 import re
+from collections.abc import Mapping
 
 from app.observability.events import ActionEnded, ActionStarted, JsonScalar
 from app.sim.core import REACH_M, SimCore
-from app.sim.items import ITEMS
+from app.sim.items import ITEM_WORDS, TOOL_WORDS, tool_in
 from app.sim.perception import normalize
 from app.sim.state import ActionState, Citizen
 from app.world_api.models import ActionName, ActionResult
 
-_SINGULAR = {"berry": "berries", "root": "roots", "nut": "nuts", "reed": "reeds"}
 _NUMBERS = {
     word: index + 1
     for index, word in enumerate("one two three four five six seven eight nine ten eleven twelve".split())
@@ -83,13 +83,22 @@ def refuse(core: SimCore, citizen: Citizen, kind: ActionName, text: str) -> Acti
 
 def item_name(words: str) -> str | None:
     """The item the words name: the last word or two-word name that is an item ("some dried meat" -> dried meat)."""
-    query = [_SINGULAR.get(word, word) for word in normalize(words).split()]
+    query = normalize(words).split()
     for end in range(len(query), 0, -1):
         for start in (end - 2, end - 1):
-            name = " ".join(query[max(start, 0) : end])
-            if start >= 0 and name in ITEMS:
+            name = ITEM_WORDS.get(" ".join(query[max(start, 0) : end]))
+            if start >= 0 and name is not None:
                 return name
     return None
+
+
+def carried_name(words: str, inventory: Mapping[str, int]) -> str | None:
+    """The item the words name, or for a bare tool word ("the spear", "an axe") the best of that tool carried."""
+    item = item_name(words)
+    last = normalize(words).split()[-1:]
+    if item is not None or not last or last[0] not in TOOL_WORDS:
+        return item
+    return tool_in(inventory, TOOL_WORDS[last[0]])
 
 
 def item_amount(words: str, have: int) -> int:

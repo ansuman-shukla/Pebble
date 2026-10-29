@@ -16,12 +16,7 @@ SEED = 7
 
 
 def _populate(sim: Simulation) -> None:
-    cast = load_citizens(CITIZENS)
-    for store_id, items in cast.stores.items():
-        for item, count in items.items():
-            sim.stock_store(store_id, item, count)
-    for spec in cast.citizens:
-        sim.add_citizen(spec)
+    sim.add_cast(load_citizens(CITIZENS))
 
 
 def _live(sim: Simulation, ticks: int, seed: int = SEED) -> list[EventDraft]:

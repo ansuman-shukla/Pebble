@@ -286,7 +286,7 @@ class SimCore:
 
     def item_moved(
         self,
-        actor: Citizen,
+        actor: Citizen | None,  # None: the world moved them (a store's food spoiling)
         item: str,
         count: int,
         source: ItemLocation,

@@ -9,6 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 from sqlalchemy import and_, func, or_
+from sqlalchemy.orm import aliased
 from sqlmodel import Session, col, select
 
 from app.db.models import Event
@@ -25,6 +26,8 @@ from app.observability.events import (
     NeedChanged,
     Perceived,
     Said,
+    Spoiled,
+    ToolBroke,
     Visibility,
 )
 from app.observability.lines import Names, Resident, Told, namer, tell
@@ -47,10 +50,13 @@ TIMELINE_TYPES: tuple[EventType, ...] = (
     "injured",
     "died",
     "item_moved",
+    "spoiled",
+    "tool_broke",
     "knowledge_changed",
     "intervention",
     *WORLD_V1_TYPES,
 )  # `perceived` (every look around, long) only when asked for
+LOSSES: tuple[EventType, ...] = ("spoiled", "tool_broke")  # the loss tells what its items' moves to the world mean
 RECENT_ENTRIES = 8
 MAX_TIMELINE = 500
 DEFAULT_NEEDS_SPAN = 24 * 60  # the last game day
@@ -321,6 +327,9 @@ def citizen_timeline(
         raise CitizenNotFound(f"no citizen {citizen_id} in run {run.id}")
     wanted = list(types or TIMELINE_TYPES)
     mine = and_(col(Event.actor_id) == citizen_id, col(Event.type).in_(wanted))
+    if told := [loss for loss in LOSSES if loss in wanted]:
+        cause = aliased(Event)
+        mine = and_(mine, ~select(cause.id).where(cause.id == Event.cause_id, col(cause.type).in_(told)).exists())
     statement = select(Event).where(Event.run_id == run.id)
     if "said" in wanted:
         heard = and_(col(Event.type) == "said", col(Event.payload)["heard_by"].contains([citizen_id]))
@@ -513,6 +522,8 @@ def _moved(moved: ItemMoved, me: str, people: dict[str, PersonRef], places: Plac
         return f"puts {amount} in {places.store_name(destination.id or '')}"
     if mine_from and destination.kind == "ground":
         return f"puts down {amount}"
+    if mine_from and destination.kind == "world":
+        return f"loses {amount}"
     if mine_from:
         return f"gives {amount} to {_location(destination, people, places)}"
     if mine_to and source.kind == "resource":
@@ -527,6 +538,15 @@ def _moved(moved: ItemMoved, me: str, people: dict[str, PersonRef], places: Plac
         grows = "ripens" if moved.item in ITEMS and ITEMS[moved.item].mass else "ripen"
         return f"{amount} {grows} in {_location(destination, people, places)}"
     return f"{amount} moves from {_location(source, people, places)} to {_location(destination, people, places)}"
+
+
+def _spoiled(spoiled: Spoiled) -> str:
+    lost = sorted(spoiled.items.items())
+    amounts = [amount_words(count, ITEMS[item]) for item, count in lost]
+    joined = amounts[0] if len(amounts) == 1 else f"{', '.join(amounts[:-1])} and {amounts[-1]}"
+    (item, count), *others = lost
+    one = not others and (count == 1 or ITEMS[item].mass)
+    return f"{joined} {'spoils' if one else 'spoil'}"
 
 
 def _summary(
@@ -572,6 +592,12 @@ def _summary(
             return f"is killed by {names(died.attacker)}", None, [died.attacker] if died.attacker in people else []
         case "item_moved":
             return _moved(ItemMoved.model_validate(payload), me, people, places), None, []
+        case "spoiled":
+            return _spoiled(Spoiled.model_validate(payload)), None, []
+        case "tool_broke":
+            broke = ToolBroke.model_validate(payload)
+            tool = ITEMS[broke.item].one if broke.item in ITEMS else broke.item
+            return f"{tool} {'wears out' if broke.use == 'carry' else 'breaks'}", None, []
         case "knowledge_changed":
             learned = KnowledgeChanged.model_validate(payload)
             if learned.about == "person":

@@ -1,0 +1,55 @@
+# The World v1 economy (docs/design/10-world-v1.md §2.1-2.4; D126-D128): one goods table and the wear numbers.
+# Read by app/sim/economy.py (values, stall lots) and app/sim/wear.py (spoilage, breakage). Weights, food and how an
+# item is said live with the item kinds in app/sim/items.py; every item kind has exactly one row here.
+#
+# goods.<item>:
+#   town, band = value in mon per unit: the stall's base price, scripted judgement and scoreboard wealth. Bands judge
+#                by their own column (cross-valuation is why trade is worth the walk); null = worth nothing to them.
+#   source, sink = where the good comes from and where it goes (every good has both).
+#   stall       = {lot, target}: sold at the market stall in lots of `lot`, priced around a `target` stock;
+#                 null = not sold there (goods without a buyer in town never are).
+
+money_supply: 3000 # mon; closed in v1: never minted or destroyed (in inventories + stores + ground at every tick)
+
+goods:
+  rice: {town: 2, band: 4, source: paddies, sink: eaten, stall: {lot: 2, target: 120}}
+  dried meat:
+    {town: 3, band: 3, source: craft at a drying rack, sink: eaten (the merchant eats the stall's), stall: {lot: 2, target: 20}}
+  meat: {town: 3, band: 2, source: hunts and carcasses, sink: eaten; spoils, stall: null} # dried meat is the traded form
+  fish: {town: 2, band: 2, source: fishing, sink: eaten; spoils, stall: null}
+  berries: {town: null, band: null, source: gathering, sink: eaten; spoils, stall: null}
+  nuts: {town: null, band: null, source: gathering, sink: eaten, stall: null}
+  roots: {town: null, band: null, source: gathering, sink: eaten; spoils, stall: null}
+  wood:
+    {town: 1, band: 0.5, source: deadwood and felling, sink: "fires, forge fuel (2 per iron craft) and recipes", stall: {lot: 4, target: 40}}
+  reeds: {town: 0.5, band: 0.5, source: reed beds, sink: cloth and packs, stall: null} # weavers gather their own
+  hide: {town: 15, band: 6, source: hunts, sink: packs, stall: {lot: 1, target: 6}}
+  flint: {town: 2, band: 5, source: flint seams, sink: stone spears and axes, stall: null} # bands knap their own
+  obsidian: {town: 6, band: 12, source: the obsidian field, sink: obsidian spears, stall: {lot: 1, target: 6}}
+  iron sand: {town: 4, band: 0, source: the iron-sand bar, sink: iron tools (the smith buys it), stall: {lot: 1, target: 20}}
+  gold:
+    {town: 20, band: 10, source: the falls pool (40 grains; finite), sink: "the lord's hoard (he buys while the treasury holds > 1 800, never sells)", stall: {lot: 1, target: 5}}
+  cloth: {town: 25, band: 15, source: looms, sink: "the keep (gifts to visiting band leaders)", stall: {lot: 1, target: 6}}
+  pack: {town: 30, band: 30, source: looms (2 hides + 2 reeds), sink: wears out, stall: {lot: 1, target: 3}}
+  flint spear: {town: 15, band: 30, source: craft at a fire pit, sink: breaks with use, stall: null}
+  obsidian spear: {town: 20, band: 40, source: craft at a fire pit, sink: breaks with use, stall: null}
+  iron spear: {town: 40, band: 40, source: craft at the forge, sink: "breaks with use; the lord's armoury", stall: {lot: 1, target: 2}}
+  stone axe: {town: 20, band: 25, source: craft at a fire pit, sink: breaks with use, stall: null}
+  iron axe: {town: 60, band: 40, source: craft at the forge, sink: "breaks with use; the lord's armoury", stall: {lot: 1, target: 2}}
+  sickle: {town: 50, band: 0, source: craft at the forge, sink: "breaks with use; the lord's armoury", stall: {lot: 1, target: 2}}
+  coins: {town: 1, band: 1, source: the treasury, sink: none (the supply is closed), stall: null}
+
+# Share of a holder's stock lost at each local dawn, rounded up (inventories and stores alike); anything not listed
+# never spoils (rice, nuts, dried meat, cloth, minerals, tools).
+spoilage: {meat: 0.5, fish: 0.5, berries: 0.3, roots: 0.1}
+
+# Chance one item breaks per use (no per-piece wear state). Spears 4 % per hunt strike, stone × 2 and iron × 0.5;
+# axes 2 % per felling, the sickle 1.5 % per harvest session; a pack 3 % at each dawn it is carried.
+breakage:
+  flint spear: {use: hunt, chance: 0.08}
+  obsidian spear: {use: hunt, chance: 0.08}
+  iron spear: {use: hunt, chance: 0.02}
+  stone axe: {use: fell, chance: 0.02}
+  iron axe: {use: fell, chance: 0.02}
+  sickle: {use: harvest, chance: 0.015}
+  pack: {use: carry, chance: 0.03}

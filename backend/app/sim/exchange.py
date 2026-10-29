@@ -3,7 +3,7 @@
 import re
 
 from app.observability.events import ItemLocation, Said
-from app.sim.acting import capital, item_amount, item_name, refuse, stack_in_reach
+from app.sim.acting import capital, carried_name, item_amount, item_name, refuse, stack_in_reach
 from app.sim.core import HEARING_M, KEPT_HEARD, REACH_M, SimCore
 from app.sim.items import ITEMS, amount_words
 from app.sim.perception import match_person, normalize, person_label
@@ -84,7 +84,7 @@ def _take_from_store(core: SimCore, citizen: Citizen, item: str, store_id: str, 
 
 
 def drop(core: SimCore, citizen: Citizen, action: Drop) -> ActionResult:
-    item = item_name(action.item)
+    item = carried_name(action.item, citizen.inventory)
     count = citizen.inventory.get(item, 0) if item else 0
     if item is None or count == 0:
         return refuse(core, citizen, "drop", f"You aren't carrying any {action.item}.")
@@ -110,7 +110,7 @@ def give(core: SimCore, citizen: Citizen, action: Give) -> ActionResult:
     label = person_label(citizen, receiver)
     if core.distance_m(citizen.position, receiver.position) > REACH_M:
         return refuse(core, citizen, "give", f"{capital(label)} is too far away to hand anything to.")
-    item = item_name(action.item)
+    item = carried_name(action.item, citizen.inventory)
     count = citizen.inventory.get(item, 0) if item else 0
     if item is None or count == 0:
         return refuse(core, citizen, "give", f"You aren't carrying any {action.item}.")

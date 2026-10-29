@@ -222,7 +222,7 @@ def test_the_times_follow_each_legs_walking_cost(new_sim: Callable[..., Simulati
 
 def _hunter(new_sim: Callable[..., Simulation], deer_m: float, age: int = 25) -> tuple[Simulation, WorldApi, Vec3]:
     sim = without_animals(new_sim())
-    spec = make_spec("hunter", age=age, home=None, skills=["hunting"], inventory={"spear": 1})
+    spec = make_spec("hunter", age=age, home=None, skills=["hunting"], inventory={"flint spear": 1})
     citizen = sim.add_citizen(spec)
     put_in_the_wild(sim, citizen.id, wild_cell(sim))
     skip_to(sim, citizen.position, night=False)

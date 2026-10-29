@@ -21,7 +21,7 @@ from app.sim.clock import SECONDS_PER_TICK
 from app.sim.core import REACH_M, WALK_AHEAD_TICKS, SimCore, Stride
 from app.sim.ecology import schedule_regrowth
 from app.sim.fauna import SPECIES
-from app.sim.items import ITEMS, RESOURCE_INDEX, amount_words
+from app.sim.items import ITEMS, RESOURCE_INDEX, amount_words, tool_in
 from app.sim.locomotion import gait_mps
 from app.sim.perception import match_animal, match_person, person_label
 from app.sim.state import ActionState, Animal, Citizen, Fire
@@ -140,7 +140,7 @@ def hunt_chance(core: SimCore, citizen: Citizen, animal: Animal) -> float:
     """03: outcome by skill, tool, strength and group."""
     chance = SPECIES[animal.kind].catch
     chance *= 1.0 if "hunting" in citizen.skills else UNSKILLED
-    chance *= SPEAR if citizen.inventory.get("spear", 0) else 1.0
+    chance *= SPEAR if tool_in(citizen.inventory, "spear") else 1.0
     chance *= math.sqrt(citizen.traits.strength)
     helpers = [
         other
@@ -190,7 +190,7 @@ def _strike_animal(core: SimCore, citizen: Citizen, animal: Animal) -> None:
     species = SPECIES[animal.kind]
     rng = core.state.rng("wild.attack")
     blow = (BLOW[0] + (BLOW[1] - BLOW[0]) * rng.random()) * citizen.traits.strength
-    blow *= SPEAR if citizen.inventory.get("spear", 0) else 1.0
+    blow *= SPEAR if tool_in(citizen.inventory, "spear") else 1.0
     if animals.wound(core, animal, blow, f"attacked by {citizen.name}"):
         core.end_action(citizen, "done", f"You kill {species.one}.")
         return
@@ -215,7 +215,7 @@ def _strike_person(core: SimCore, citizen: Citizen, action: ActionState) -> None
         return
     rng = core.state.rng("wild.strike")
     blow = (BLOW[0] + (BLOW[1] - BLOW[0]) * rng.random()) * citizen.traits.strength * 0.5
-    blow *= SPEAR if citizen.inventory.get("spear", 0) else 1.0
+    blow *= SPEAR if tool_in(citizen.inventory, "spear") else 1.0
     core.end_action(citizen, "done", f"You strike {action.label}.")
     core.injure(victim, blow, "violence", f"{person_label(victim, citizen)} strikes you", attacker=citizen.id)
 
@@ -297,7 +297,7 @@ def _finish_fish(core: SimCore, citizen: Citizen, action: ActionState) -> None:
         core.end_action(citizen, "failed", "You catch nothing; the water seems empty of fish.")
         return
     rng = core.state.rng("wild.fish")
-    chance = FISH_CHANCE * (SPEAR if citizen.inventory.get("spear", 0) else 1.0)
+    chance = FISH_CHANCE * (SPEAR if tool_in(citizen.inventory, "spear") else 1.0)
     chance *= (1.3 if "hunting" in citizen.skills else 1.0) * math.sqrt(citizen.traits.strength)
     if rng.random() >= min(CHANCE_RANGE[1], chance):
         core.end_action(citizen, "failed", "The fish slip away from you.")

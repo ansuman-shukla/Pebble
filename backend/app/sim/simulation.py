@@ -20,7 +20,7 @@ from app.observability.events import (
 from app.sim import actions, ecology, feed_animals, feed_citizens, movement, resting, systems
 from app.sim.acting import refuse
 from app.sim.bodies import COLLAPSE_WAKE_ENERGY, HOT_BIOMES, Crossing, update_body
-from app.sim.citizens import CitizenSpec
+from app.sim.citizens import CitizenSpec, CitizensSpec, store_ids
 from app.sim.core import GiftPolicy, SimCore
 from app.sim.fauna import populate
 from app.sim.fire import hearth_fires
@@ -185,11 +185,21 @@ class Simulation:
         self._visit(citizen)
         return citizen
 
+    def add_cast(self, cast: CitizensSpec) -> None:
+        """A cast's starting stores, household chests (`<home>-chest`) and citizens, in that order."""
+        for store_id, items in sorted(cast.stores.items()):
+            for item, count in sorted(items.items()):
+                self.stock_store(store_id, item, count)
+        for home, items in sorted(cast.chests.items()):
+            for item, count in sorted(items.items()):
+                self.stock_store(f"{home}-chest", item, count)
+        for spec in cast.citizens:
+            self.add_citizen(spec)
+
     def stock_store(self, store_id: str, item: str, count: int) -> None:
-        """Put a starting stock into a storehouse (one `item_moved` from the world)."""
-        structure = self.core.world.structures.get(store_id)
-        if structure is None or structure.kind != "storehouse":
-            raise ValueError(f"{store_id} is not a storehouse")
+        """Put a starting stock into a store: a storehouse, chest, stall or rack (one `item_moved` from the world)."""
+        if store_id not in store_ids():
+            raise ValueError(f"{store_id} is not a store")
         if item not in ITEMS or count <= 0:
             raise ValueError(f"can't stock {count} {item}")
         store = self.core.state.stores.setdefault(store_id, {})

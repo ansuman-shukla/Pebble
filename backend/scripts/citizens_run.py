@@ -24,12 +24,7 @@ PROGRESS = frozenset({"walk_to", "gather", "eat", "drink", "work", "sleep"})
 def main(days: int = 10, seed: int = 20261028) -> None:
     world = real_world()
     sim = Simulation.new(world, seed=seed)
-    cast = load_citizens(CITIZENS)
-    for store_id, items in cast.stores.items():
-        for item, count in items.items():
-            sim.stock_store(store_id, item, count)
-    for spec in cast.citizens:
-        sim.add_citizen(spec)
+    sim.add_cast(load_citizens(CITIZENS))
     brains = citizen_brains(sim, seed)
     sim.drain()
     activity: dict[str, Counter[str]] = defaultdict(Counter)

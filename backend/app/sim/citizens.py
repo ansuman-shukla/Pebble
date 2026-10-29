@@ -3,7 +3,8 @@ engine starts new runs with it); `data/citizens/dev.yaml` is a small cast for te
 
 Besides where someone starts, the World v1 cast carries their society data (10-world-v1 §3.1-3.2): rank and titles,
 traits, family, bonds, an ambition the world can check, and starting coins. The systems that use them (society,
-ownership, coins, scoreboard) read them from here.
+ownership, coins, scoreboard) read them from here. Starting coins are an item like any other: purses in the
+inventory, the treasury and other household stock in `chests`.
 """
 
 from functools import cache
@@ -14,6 +15,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.config import WORLD_DATA_DIR
+from app.sim.items import ITEMS
 from app.sim.state import Region
 from app.sim.world import load_town_places
 from app.world.geometry import Point
@@ -128,7 +130,7 @@ class CitizenSpec(_Spec):
     region: Region = "town"  # their group (§3.2: town, band_a, band_b)
     sex: Literal["female", "male"] | None = None
     skills: list[str] = []
-    inventory: dict[str, int] = {}  # what they start out carrying
+    inventory: dict[str, int] = {}  # what they start out carrying, their purse (`coins`) too
     personality: str = ""  # one line, for the minds of phase B and for spectators
     rank: int = Field(2, ge=1, le=5)  # §3.2: lord 5; samurai, monk, band leader 4; ashigaru, merchant, smith, elders 3
     titles: list[Title] = []
@@ -136,7 +138,6 @@ class CitizenSpec(_Spec):
     family: dict[str, Kin] = {}  # citizen id -> what they are to this citizen ("ama: mate")
     bonds: dict[str, int] = {}  # citizen id -> how they feel about each other (-100..100), beyond kin
     ambition: Ambition | None = None
-    coins: int = Field(0, ge=0)  # starting purse (mon); joins the inventory once coins are an item kind
 
     @model_validator(mode="after")
     def _check_society(self) -> "CitizenSpec":
@@ -151,7 +152,7 @@ class CitizenSpec(_Spec):
 
 class CitizensSpec(_Spec):
     citizens: list[CitizenSpec]
-    stores: dict[str, dict[str, int]] = {}  # storehouse id -> starting stock
+    stores: dict[str, dict[str, int]] = {}  # store id -> starting stock
     chests: dict[str, dict[str, int]] = {}  # a home's household chest (keep = the treasury) -> starting stock
 
     @model_validator(mode="after")
@@ -183,11 +184,12 @@ class CitizensSpec(_Spec):
     def _check_ambition_targets(self) -> "CitizensSpec":
         """Ambition arguments that name something in the world name it by its real id, so the checks can find it."""
         known = {
-            "store": _store_ids(),
+            "store": store_ids(),
             "place": _place_ids(),
             "group": frozenset(get_args(Region)),
             "who": frozenset(citizen.id for citizen in self.citizens),
             "to": frozenset(citizen.id for citizen in self.citizens),
+            "item": frozenset(ITEMS),
         }
         for citizen in self.citizens:
             for clause in citizen.ambition.all_of if citizen.ambition else []:
@@ -196,15 +198,29 @@ class CitizensSpec(_Spec):
                         raise ValueError(f"{citizen.id}: {clause.check} names an unknown {arg} {value!r}")
         return self
 
-    def coins(self) -> int:
-        """Every coin the cast starts with: purses and chests (the closed money supply, §2.1)."""
-        return sum(citizen.coins for citizen in self.citizens) + sum(
-            stock.get("coins", 0) for stock in self.chests.values()
+    @model_validator(mode="after")
+    def _check_items(self) -> "CitizensSpec":
+        """Everything carried or stocked is an item kind, counted above zero."""
+        for holder, stock in self._stocks():
+            if bad := sorted(item for item, count in stock.items() if item not in ITEMS or count <= 0):
+                raise ValueError(f"{holder} can't start with {bad}")
+        return self
+
+    def _stocks(self) -> list[tuple[str, dict[str, int]]]:
+        """(holder, starting stock) for every purse and inventory, store and household chest."""
+        return (
+            [(citizen.id, citizen.inventory) for citizen in self.citizens]
+            + list(self.stores.items())
+            + [(f"{home}-chest", stock) for home, stock in self.chests.items()]
         )
+
+    def coins(self) -> int:
+        """Every coin the cast starts with: purses, stores and chests (the closed money supply, §2.1)."""
+        return sum(stock.get("coins", 0) for _, stock in self._stocks())
 
 
 @cache
-def _store_ids() -> frozenset[str]:
+def store_ids() -> frozenset[str]:
     """Stores by id: town placements by their own, camp ones as "<camp site>:<placement id>" (like camp homes)."""
     town = {placement.id for placement in load_town().placements if placement.kind in STORE_KINDS}
     camps = {
