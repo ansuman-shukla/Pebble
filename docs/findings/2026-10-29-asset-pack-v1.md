@@ -68,7 +68,7 @@ size column (rotation 0, models face +z).
 | axe | hand-axe-cee9e7 (Dungeon & Crypt) | 0.3·0.6·0.08 |
 | hoe | garden-hoe-3974ad (Cozy Farm) | 0.4·1.5·0.26 |
 | hammer | hammer-fa3e51 | 0.16·0.32·0.04 |
-| torch | torch-stake-d82a2c (Pirate Cove), `flame` part | 0.29·1.5·0.3 |
+| torch | torch-stake-d82a2c (Pirate Cove), `flame` part; a ground stake, scale to ≈ 0.6 m (×0.4) in the hand | 0.29·1.5·0.3 |
 | spear | yari-spear-e72c1f (Medieval Japan); the engine also has `yari` | 2.6·0.07·0.18 |
 | basket | kete-reed-basket-6ca36c (already vendored; the engine also has `produce-basket`) | 0.45·0.41·0.22 |
 | coin_pouch | coin-pouch-be4dd8 (the engine also has `coin-pouch`) | 0.29·0.34·0.29 |

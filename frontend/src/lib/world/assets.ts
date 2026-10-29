@@ -253,6 +253,7 @@ export const HAND_PROPS: Record<HandPropKind, HandProp> = {
   axe: { asset: 'hand-axe-cee9e7' },
   hoe: { asset: 'garden-hoe-3974ad' },
   hammer: { asset: 'hammer-fa3e51' },
+  // a 1.5 m ground stake: scale it to about 0.6 m (x0.4) when held
   torch: { asset: 'torch-stake-d82a2c' },
   spear: { asset: 'yari-spear-e72c1f' },
   basket: { asset: 'kete-reed-basket-6ca36c' },
