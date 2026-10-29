@@ -77,6 +77,7 @@ import { useTown } from '@/hooks/use-town';
 import { useWorld } from '@/hooks/use-world';
 import type { TownView, WorldView } from '@/lib/client/types.gen';
 import { feedMinutes } from '@/lib/live/live-state';
+import { ShownDoings } from '@/lib/live/shown-doings';
 import { BIOME_PROPS } from '@/lib/world/biome-props';
 import {
   FAST_RATE,
@@ -274,6 +275,7 @@ type GlobeSceneProps = {
   dropRef: RefObject<DropApi | null>;
   goTo: GoToSite[];
   labels: LabelStore;
+  doings: ShownDoings;
   clockRef: RefObject<GameClock>;
   focusRef: RefObject<Vector3>;
   cameraMode: CameraMode;
@@ -306,6 +308,7 @@ const GlobeScene = memo(function GlobeScene({
   dropRef,
   goTo,
   labels,
+  doings,
   clockRef,
   focusRef,
   cameraMode,
@@ -384,6 +387,7 @@ const GlobeScene = memo(function GlobeScene({
         terrain={terrain}
         town={walkTown}
         labels={labels}
+        doings={doings}
         peopleRef={peopleRef}
         views={npcViews}
         followId={followId}
@@ -562,6 +566,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
     live.runId !== null && (replay !== null || feed.status === 'live');
   const peopleRef = useRef(new Map<string, Vector3>());
   const [npcViews] = useState<NpcViews>(() => new Map());
+  const [doings] = useState(() => new ShownDoings());
   const [animalViews] = useState<AnimalViews>(() => new Map());
   const [fireViews] = useState<FireViews>(() => new Map());
   const subjectRef = useRef<GlobePlayerState>({
@@ -749,6 +754,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
         dropRef={dropRef}
         goTo={goTo}
         labels={labels}
+        doings={doings}
         clockRef={clockRef}
         focusRef={focusRef}
         cameraMode={cameraMode}
@@ -766,6 +772,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
       <CitizenLabels
         store={labels}
         citizens={live.citizens}
+        doings={doings}
         speech={live.speech}
       />
       <NpcHooks citizens={live.citizens} views={npcViews} focusRef={focusRef} />

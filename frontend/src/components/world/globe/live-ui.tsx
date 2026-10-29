@@ -1,4 +1,10 @@
-import { type RefObject, useEffect, useMemo, useRef } from 'react';
+import {
+  type RefObject,
+  useEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from 'react';
 import type { Vector3 } from 'three';
 
 import type { NpcViews } from './globe-npcs';
@@ -7,6 +13,7 @@ import type { ClockChange, LiveStatus } from '@/hooks/use-live-citizens';
 import type { LiveCitizen } from '@/lib/live/live-contract';
 import { type LiveState, type Speech, speedWords } from '@/lib/live/live-state';
 import { activityWords } from '@/lib/live/npc-activity';
+import type { ShownDoings } from '@/lib/live/shown-doings';
 import type { Region } from '@/lib/world/citizen-looks';
 import type { LabelContent, LabelStore } from '@/lib/world/label-store';
 
@@ -193,16 +200,22 @@ export function PeoplePanel({
   );
 }
 
-/** What the citizens' labels say: a name tag each ("Pip · asleep") and the latest speech of whoever spoke. */
+/**
+ * What the citizens' labels say: a name tag each ("Pip · asleep", what the drawn body is shown doing) and the latest
+ * speech of whoever spoke.
+ */
 export function CitizenLabels({
   store,
   citizens,
+  doings,
   speech,
 }: {
   store: LabelStore;
   citizens: LiveCitizen[];
+  doings: ShownDoings;
   speech: Speech[];
 }) {
+  const shown = useSyncExternalStore(doings.subscribe, doings.getSnapshot);
   const contents = useMemo(() => {
     const latest = new Map<string, Speech>();
     for (const said of speech) latest.set(said.actorId, said);
@@ -211,7 +224,7 @@ export function CitizenLabels({
         id: `npc-${citizen.id}`,
         subject: citizen.id,
         kind: 'name',
-        text: `${citizen.name} · ${activityWords(citizen)}`,
+        text: `${citizen.name} · ${activityWords(shown.get(citizen.id) ?? citizen)}`,
       })),
       ...[...latest.values()].map((said): LabelContent => ({
         id: `say-${said.actorId}`,
@@ -220,7 +233,7 @@ export function CitizenLabels({
         text: said.words,
       })),
     ];
-  }, [citizens, speech]);
+  }, [citizens, shown, speech]);
   useEffect(() => store.describe('citizens', contents), [store, contents]);
   return null;
 }

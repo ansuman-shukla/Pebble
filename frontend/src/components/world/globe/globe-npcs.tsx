@@ -29,6 +29,7 @@ import {
   shownDoing,
   type Track,
 } from '@/lib/live/drawn-track';
+import type { ShownDoings } from '@/lib/live/shown-doings';
 import { groundSpeed, headingAt, walking } from '@/lib/live/walk-path';
 import {
   BASE_CLIPS,
@@ -332,6 +333,7 @@ function Npc({
   terrain,
   town,
   labels,
+  doings,
   rate,
   replay,
   peopleRef,
@@ -343,6 +345,7 @@ function Npc({
   terrain: GlobeTerrain;
   town: WalkTown;
   labels: LabelStore;
+  doings: ShownDoings;
   /** The clock: game seconds per real second (0 paused). */
   rate: number;
   /** A replayed moment: drawn where it says, not a tick behind (no tick follows). */
@@ -402,6 +405,7 @@ function Npc({
     showDoing();
   });
   useLayoutEffect(() => onFrame(citizen), [citizen]);
+  useEffect(() => doings.show(citizen.id, doing), [doings, citizen.id, doing]);
 
   useEffect(() => {
     const id = citizen.id;
@@ -473,6 +477,7 @@ export function GlobeNpcs({
   terrain,
   town,
   labels,
+  doings,
   peopleRef,
   views,
   followId,
@@ -487,6 +492,8 @@ export function GlobeNpcs({
   terrain: GlobeTerrain;
   town: WalkTown;
   labels: LabelStore;
+  /** Filled with what each citizen is shown doing, for their labels. */
+  doings: ShownDoings;
   /** Filled with where everyone's feet are, for the walker's collisions. */
   peopleRef: RefObject<Map<string, Vector3>>;
   /** Filled with what is drawn of each citizen. */
@@ -504,6 +511,7 @@ export function GlobeNpcs({
           terrain={terrain}
           town={town}
           labels={labels}
+          doings={doings}
           rate={paused ? 0 : speed}
           replay={replay}
           peopleRef={peopleRef}
