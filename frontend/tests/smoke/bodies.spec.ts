@@ -962,6 +962,46 @@ test.describe('on the globe', () => {
     expect(errors).toEqual([]);
   });
 
+  test('going inside opens the door first, then the body is gone', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    await openGlobe(page, errors, '?mockLive=1&follow=tetsu');
+    await expect(page.getByTestId('npcs')).toHaveAttribute(
+      'data-npcs-ready',
+      '22',
+    );
+    const mock = (call: string, ...args: unknown[]) =>
+      page.evaluate(
+        ({ call, args }) =>
+          (
+            (globalThis as unknown as Record<string, unknown>)
+              .__pebbleMockLive as Record<string, (...a: unknown[]) => void>
+          )[call](...args),
+        { call, args },
+      );
+    await mock('perform', 'tetsu', { activity: 'idle', motion: 'idle' });
+    await expect
+      .poll(() => drawn(page, 'tetsu'), { timeout: 20_000 })
+      .toMatchObject({ clip: 'Idle', loaded: true });
+    // with the clock stopped the door stays half open: the body is still there
+    await mock('setClock', { paused: true });
+    await mock('perform', 'tetsu', { activity: 'sleeping', motion: 'inside' });
+    await expect
+      .poll(() => drawn(page, 'tetsu'), { timeout: 20_000 })
+      .toMatchObject({ motion: 'inside', clip: 'Opening', hidden: false });
+    await page.waitForTimeout(1000);
+    expect(await drawn(page, 'tetsu')).toMatchObject({
+      clip: 'Opening',
+      hidden: false,
+    });
+    await mock('setClock', { paused: false });
+    await expect
+      .poll(() => drawn(page, 'tetsu'), { timeout: 20_000 })
+      .toMatchObject({ hidden: true });
+    expect(errors).toEqual([]);
+  });
+
   test('a cue from before a body was drawn is not replayed when it comes near', async ({
     page,
   }) => {

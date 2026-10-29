@@ -406,15 +406,18 @@ function NpcModel({
       look.id,
       has,
     );
-    const pose: BodyPose = gait ? 'standing' : shown.pose;
-    if (pose !== state.pose) {
-      const clip = gait ? null : passingClip(state.pose, pose);
-      state.passing =
-        clip && has(clip)
+    const wanted: BodyPose = gait ? 'standing' : shown.pose;
+    if (wanted !== state.pose) {
+      const clip = gait ? null : passingClip(state.pose, wanted);
+      // a move whose clip is still loading waits for it (the door opens before the body is gone)
+      if (!clip || has(clip)) {
+        state.passing = clip
           ? { clip, left: animation.actions[clip].getClip().duration }
           : null;
-      state.pose = pose;
+        state.pose = wanted;
+      }
     }
+    const pose = state.pose ?? wanted;
     // a cue counts down once its clip is there (a first nod waits for Agree to load)
     const oneShot = state.oneShot;
     const cueClip = oneShot && cueClipOf(oneShot.cue);
