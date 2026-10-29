@@ -12,6 +12,7 @@ import {
   tickMs,
 } from '../../src/lib/live/live-contract';
 import { LANE_M } from '../../src/lib/live/drawn-track';
+import { KEEP_M } from '../../src/lib/live/separation';
 import { npcLook } from '../../src/lib/live/npc-activity';
 import {
   anchorMapping,
@@ -315,6 +316,19 @@ function walkedPart({ route, position }: CitizenEntity) {
   return (
     walked.length > 0 ? walked.map(({ unit }) => unit) : [position.unit]
   ).map((unit) => new Vector3(...unit));
+}
+
+/**
+ * How far the drawing may part a body from where the engine has it (D192): up to KEEP_M for each body drawn close
+ * enough to push it (a crowd of n spreads over about KEEP_M √n), nothing with nobody about.
+ */
+function parted(npc: Npc, shown: Npc[]) {
+  const near = shown.filter(
+    (other) =>
+      other.id !== npc.id &&
+      other.position.distanceTo(npc.position) < KEEP_M + 2,
+  ).length;
+  return KEEP_M * Math.sqrt(near);
 }
 
 /** Metres from a drawn spot to the nearest of what a citizen walked in the given ticks. */
@@ -894,7 +908,7 @@ test('the real feed: the 22 citizens stand where the engine says, on the ground,
           const direction = npc.position.clone().normalize();
           const above = npc.position.length() - (R + groundUnder(direction));
           return [
-            ...(off < lateM
+            ...(off < lateM + parted(npc, shown)
               ? []
               : [`${citizen.id}: ${off.toFixed(2)} m off its walk`]),
             ...(Math.abs(above) < 0.5
@@ -908,7 +922,8 @@ test('the real feed: the 22 citizens stand where the engine says, on the ground,
     .toEqual([]);
 
   // the engine ticks on and the drawn citizens follow it: at the page's tick, everyone who stood still since the
-  // tick before is exactly where the engine has them, and everyone does what the engine says
+  // tick before is exactly where the engine has them (unless the engine has others on their spot: then just clear of
+  // them), and everyone does what the engine says
   await expect.poll(tick, { timeout: nextTick }).toBeGreaterThan(startTick);
   await expect
     .poll(
@@ -936,7 +951,7 @@ test('the real feed: the 22 citizens stand where the engine says, on the ground,
             ...(npc.activity === citizen.activity || onTheWay
               ? []
               : [`${citizen.id}: ${npc.activity} ≠ ${citizen.activity}`]),
-            ...(drift < (still ? 0.5 : lateM)
+            ...(drift < (still ? 0.5 : lateM) + parted(npc, shown)
               ? []
               : [`${citizen.id}: ${drift.toFixed(2)} m off`]),
           ];
@@ -969,7 +984,7 @@ test('the real feed: the 22 citizens stand where the engine says, on the ground,
                 citizen,
                 previous.find((old) => old.id === citizen.id)!,
               ]);
-              if (metres > 0.5)
+              if (metres > 0.5 + parted(npc, shown))
                 off.push(`${citizen.id}: ${metres.toFixed(2)} m`);
             }
             await page.waitForTimeout(100);
