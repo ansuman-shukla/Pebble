@@ -197,8 +197,7 @@ export function keepRight(
 ) {
   const onward = walking(track.path) && headingAt(track.path, going);
   if (onward) {
-    going.crossVectors(going, at);
-    going.addScaledVector(at, -going.dot(at)); // on the tangent plane
+    going.crossVectors(going, at); // right of the way it walks, on the tangent plane
     if (going.lengthSq() > 1e-18) track.side.copy(going).normalize();
   }
   track.lane +=
