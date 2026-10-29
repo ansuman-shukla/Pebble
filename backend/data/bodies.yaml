@@ -1,0 +1,33 @@
+# How fast bodies go (10-world-v1 §4.1, D114/D115): ground speed = gait × age × load × health × energy × night,
+# over ground that costs at least 1 per metre (biome × slope × road, `navigation.py`: costs below 1 shape routes, never
+# speed).
+# The age factor is the age group's `speed` (02-simulation's table, `AGE_GROUPS`).
+
+gaits_mps: # adult, flat, unloaded
+  walk: 1.4
+  jog: 2.5
+  run: 3.5 # flee, pace "run"
+  stalk: 0.8 # hunt and attack stalks
+
+run:
+  endurance_s: 180 # at most 3 game minutes of running, then jog...
+  recover_s_per_s: 0.5 # ...and comes back at half that rate while neither running nor jogging
+  energy_per_minute: 1.0 # running costs this much energy a minute on top of being awake
+  thirst_rate: 2.0 # and thirst rises this many times as fast
+  jog_only: [child, elder] # age groups that never run
+
+load: # carried kg / carry kg: at or above `share`, × `factor` (the heaviest band that applies)
+  - { share: 0.5, factor: 0.85 } # walking carrying
+  - { share: 0.9, factor: 0.7, no_run: true }
+
+health: # at or below `at`, × `factor` (the worst band that applies)
+  - { at: 50, factor: 0.85 }
+  - { at: 20, factor: 0.5 } # limping
+
+energy: # exhausted
+  - { at: 10, factor: 0.5 }
+
+night:
+  factor: 0.8 # outside the town at night...
+  fire_m: 12 # ...unless a lit fire is this close
+
