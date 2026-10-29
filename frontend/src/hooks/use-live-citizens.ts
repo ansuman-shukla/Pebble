@@ -45,6 +45,8 @@ export interface LiveFeed {
   /** Sockets opened so far (a reconnect makes it 2). */
   connects: number;
   setClock: (change: ClockChange) => void;
+  /** Calls `listener` with every feed message as it arrives (e.g. for the event feed) until the returned function is called. */
+  listen: (listener: (message: LiveMessage) => void) => () => void;
 }
 
 /** Backoff after a dropped socket: 0.5 s, 1 s, 2 s ... up to 15 s. */
@@ -88,6 +90,16 @@ export function useLiveCitizens(
     source === 'off' ? 'off' : 'connecting',
   );
   const [connects, setConnects] = useState(0);
+  const [listeners] = useState(() => new Set<(message: LiveMessage) => void>());
+  const listen = useCallback(
+    (listener: (message: LiveMessage) => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    [listeners],
+  );
   // the socket (mock or real), reconnecting with backoff
   useEffect(() => {
     if (source === 'off') return;
@@ -104,11 +116,9 @@ export function useLiveCitizens(
       socket.onmessage = ({ data }) => {
         attempt = 0;
         setStatus('live');
-        dispatch({
-          type: 'message',
-          message: JSON.parse(data) as LiveMessage,
-          now: performance.now(),
-        });
+        const message = JSON.parse(data) as LiveMessage;
+        dispatch({ type: 'message', message, now: performance.now() });
+        listeners.forEach((listener) => listener(message));
       };
       socket.onclose = ({ code }) => {
         if (disposed) return;
@@ -137,7 +147,7 @@ export function useLiveCitizens(
       window.clearTimeout(retry);
       socket?.close();
     };
-  }, [server, source]);
+  }, [server, source, listeners]);
 
   // speech bubbles expire
   const { speech } = state;
@@ -166,5 +176,5 @@ export function useLiveCitizens(
     return () => server.stop();
   }, [server]);
 
-  return { state, status, connects, setClock };
+  return { state, status, connects, setClock, listen };
 }
