@@ -6,12 +6,22 @@ from collections.abc import Callable
 
 import pytest
 
-from app.observability.events import EventDraft
+from app.observability.events import EventDraft, TickSummary
+from app.sim.clock import SECONDS_PER_TICK
 from app.sim.simulation import Simulation
 from app.sim.vec import step_towards
 from app.world_api.facade import WorldApi, run_until_done
 from app.world_api.models import ActionResult, Perception
-from tests.sim_helpers import GATE, WELL, make_spec, put_in_the_wild, skip_to, wild_cell, without_animals
+from tests.sim_helpers import (
+    GATE,
+    WELL,
+    drawn_on,
+    make_spec,
+    put_in_the_wild,
+    skip_to,
+    wild_cell,
+    without_animals,
+)
 
 FAR_IN_TOWN = (70.0, 85.0)  # the storehouses, ~95 m from the well
 LEAK = re.compile(r"\d|dev-|stack-|tester|cell|\bid\b")
@@ -448,9 +458,11 @@ def test_a_known_person_walking_up_to_you_interrupts_once_close(new_sim: Callabl
     closest = {"passer": 99.0, "visitor": 99.0}
     for _ in range(4):
         sim.step()
-        for other in closest:
-            distance = sim.world.distance_m(watcher.position, sim.citizen(other).position)
-            closest[other] = min(closest[other], distance)
+        summary = next(e.payload for e in sim.drain() if isinstance(e.payload, TickSummary))
+        for other, moved in summary.moved.items():
+            if other in closest:  # every spot of the minute's walk, not just where it ended
+                spots = [drawn_on(moved.route, t) for t in range(SECONDS_PER_TICK + 1)]
+                closest[other] = min(closest[other], *(sim.world.distance_m(watcher.position, s) for s in spots))
     assert max(closest.values()) < 10.0  # both came close...
     assert wait.result is None  # ...without stopping the watcher
 
@@ -502,7 +514,7 @@ def test_follow_keeps_beside_a_walker_until_they_stop(new_sim: Callable[..., Sim
     sim = without_animals(new_sim())
     leader = sim.add_citizen(make_spec("leader", name="Aiko", home=None))
     follower = sim.add_citizen(make_spec("follower", home=None, knows_people=["leader"]))
-    put_in_the_wild(sim, leader.id, wild_cell(sim))
+    put_in_the_wild(sim, leader.id, wild_cell(sim, flat_m=2.0))  # on a climb the one behind falls back a little
     sim.core.place_at(follower, step_towards(leader.position, 90.0, 4.0, sim.world.radius_m))
     skip_to(sim, leader.position, night=False)
     walk = WorldApi(sim, leader.id).walk_towards("north", "a long walk")

@@ -8,8 +8,9 @@ from app.sim.items import ITEMS, RESOURCE_INDEX, RIVER_REEDS, amount_words
 from app.sim.navigation import Planner
 from app.sim.vec import angle, bearing_deg, lat_lon_deg, slerp, step_towards
 from app.sim.world import SimWorld, load_sim_world
-from app.world.biomes import BIOME_IDS, TERRAIN_COST
+from app.world.biomes import BIOME_IDS, TERRAIN_COST, walk_costs
 from app.world.generate import GENERATOR
+from app.world.roads import NONE, PATH, ROAD
 from app.world.town import load_town
 
 
@@ -77,8 +78,19 @@ def test_terrain_costs_follow_the_world_doc(sim_world: SimWorld) -> None:
     water = np.isin(sim_world.biomes, [BIOME_IDS[b] for b in ("deep_ocean", "shallow_ocean", "lake")])
     assert np.isinf(sim_world.terrain_cost[water]).all()
     assert np.isfinite(sim_world.terrain_cost[~water]).all()
-    assert (sim_world.terrain_cost[sim_world.river] >= 1.5).all()
     assert not (sim_world.river & water).any()
+
+
+def test_roads_paths_and_bridges_are_cheaper_than_the_ground_they_cross(sim_world: SimWorld) -> None:
+    kinds, river, cost = sim_world.road_kinds, sim_world.river, sim_world.terrain_cost
+    base = walk_costs(sim_world.biomes, river)
+    road, path, bridge = (kinds == ROAD) & ~river, (kinds == PATH) & ~river, (kinds != NONE) & river
+    assert road.sum() > 100 and path.sum() > 100 and bridge.any()
+    assert (cost[road] == np.maximum(0.8, base[road] * 0.5)).all()
+    assert (cost[path] == np.maximum(0.9, base[path] * 0.7)).all()
+    assert (cost[bridge] == 0.8).all()  # instead of the 1.5 ford
+    assert (cost[river & (kinds == NONE)] >= 1.5).all()
+    assert (cost[kinds == NONE] == base[kinds == NONE]).all()
 
 
 def test_nearest_cell_greedy_walk_matches_a_full_scan(sim_world: SimWorld) -> None:

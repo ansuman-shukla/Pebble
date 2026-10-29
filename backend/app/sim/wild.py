@@ -22,6 +22,7 @@ from app.sim.core import REACH_M, WALK_AHEAD_TICKS, SimCore, Stride
 from app.sim.ecology import schedule_regrowth
 from app.sim.fauna import SPECIES
 from app.sim.items import ITEMS, RESOURCE_INDEX, amount_words
+from app.sim.locomotion import gait_mps
 from app.sim.perception import match_animal, match_person, person_label
 from app.sim.state import ActionState, Animal, Citizen, Fire
 from app.sim.vec import Vec3, bearing_deg, normalize
@@ -30,7 +31,7 @@ from app.world_api.models import Attack, Hunt
 HUNT_MINUTES = 60  # stalking gives up after this long ("You lose the trail.")
 HUNT_STRIKE_M = 15.0  # close enough to rush it or throw a spear
 ATTACK_STRIKE_M = 3.0
-STALK_PACE_M = 50.0  # metres a minute, creeping
+STALK_PACE_M = gait_mps("stalk") * SECONDS_PER_TICK  # metres a minute, creeping (bodies.yaml)
 UNSKILLED = 0.4  # without the hunting skill
 SPEAR = 1.4
 HELPER_BONUS = 0.25  # per other hunter after the same group close by (at most two count)
@@ -128,11 +129,11 @@ def _stalk_stride(
     gap = core.distance_m(target, quarry)
     left = min(WALK_AHEAD_TICKS * STALK_PACE_M * citizen.traits.speed, gap - strike_m * 0.8)
     if left <= 0:
-        return Stride(action.number, walked)
+        return Stride(action.number, walked, gait="stalk")
     onward = _towards(target, quarry, left / gap)
     if not _walkable(core, citizen, onward):
-        return Stride(action.number, walked)
-    return Stride(action.number, walked, ((onward, reached + left / pace),))
+        return Stride(action.number, walked, gait="stalk")
+    return Stride(action.number, walked, ((onward, reached + left / pace),), gait="stalk")
 
 
 def hunt_chance(core: SimCore, citizen: Citizen, animal: Animal) -> float:

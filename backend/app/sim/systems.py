@@ -12,6 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from app.sim import movement
 from app.sim.clock import local_minute, sun_altitude_deg, sun_direction
 from app.sim.core import SimCore
 from app.sim.state import System
@@ -36,8 +37,8 @@ class Registry:
 
 
 REGISTRY = Registry(
-    systems=(),
-    every_tick=(),
+    systems=(movement.RUNNING,),
+    every_tick=(movement.catch_breath,),
     at_dawn=(),
     at_midnight=(),
 )

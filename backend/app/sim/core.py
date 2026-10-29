@@ -23,6 +23,7 @@ from app.observability.events import (
 )
 from app.sim.clock import NIGHT_ALTITUDE_DEG, daylight, sun_altitude_deg, sun_direction
 from app.sim.items import ITEMS
+from app.sim.locomotion import Gait
 from app.sim.navigation import Planner
 from app.sim.state import Animal, Citizen, GroundStack, KnowledgeLevel, PlaceKnowledge, WorldState
 from app.sim.vec import Vec3, bearing_deg, step_towards
@@ -59,6 +60,7 @@ class Stride:
     action: int  # the number of the action that moved them
     walked: tuple[TimedPoint, ...]
     ahead: tuple[TimedPoint, ...] = ()
+    gait: Gait = "walk"
 
 
 def awake_accepts(giver: Citizen, receiver: Citizen, item: str, count: int) -> bool:  # noqa: ARG001  # a GiftPolicy

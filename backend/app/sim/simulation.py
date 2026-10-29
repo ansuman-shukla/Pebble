@@ -17,7 +17,7 @@ from app.observability.events import (
     Perceived,
     TickSummary,
 )
-from app.sim import actions, ecology, feed_animals, feed_citizens, resting, systems
+from app.sim import actions, ecology, feed_animals, feed_citizens, movement, resting, systems
 from app.sim.acting import refuse
 from app.sim.bodies import COLLAPSE_WAKE_ENERGY, HOT_BIOMES, Crossing, update_body
 from app.sim.citizens import CitizenSpec
@@ -337,7 +337,7 @@ class Simulation:
         core = self.core
         activity = actions.body_activity(citizen.action)
         hot = core.world.biome(citizen.cell) in HOT_BIOMES
-        change = update_body(citizen.body, citizen.traits, activity, hot)
+        change = update_body(citizen.body, citizen.traits, activity, hot, running=movement.ran(core, citizen))
         for crossing in change.crossings:
             core.emit(
                 "need_changed",

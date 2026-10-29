@@ -95,9 +95,9 @@ def test_a_new_run_holds_the_state_of_each_registered_system(sim_world: SimWorld
     assert isinstance(_sim(sim_world, planner).state.systems["tally"], Tally)
     plain = _sim(sim_world, planner, Registry())
     assert plain.state.systems == {}
-    snapshot = take_snapshot(plain.state)
+    snapshot = take_snapshot(plain.state, ())
     assert snapshot.systems == {} and snapshot.seed == SEED and snapshot.version == SNAPSHOT_VERSION
-    assert state_hash(restore(snapshot)) == state_hash(plain.state)
+    assert state_hash(restore(snapshot, ()), ()) == state_hash(plain.state, ())
 
 
 def test_hooks_run_every_tick_and_at_each_spots_own_dawn_and_midnight(sim_world: SimWorld, planner: Planner) -> None:
