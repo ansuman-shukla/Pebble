@@ -225,7 +225,7 @@ vGround1 = ground1;
 #endif
 `;
 
-/** Width of a breakup patch's soft edge in field units: crisp, a few decimetres (widened by the pixel size). */
+/** Width of a breakup patch's soft edge in field units: crisp, a few decimetres (widened to a pixel and a half). */
 const BREAKUP_EDGE = 0.04;
 /** Pixel footprints (metres) over which the bump fades out: past them its detail would shade as pixel blocks. */
 const BUMP_FOOTPRINT: [number, number] = [0.015, 0.05];
@@ -357,9 +357,12 @@ float groundGap = 9.0;
     // the breakup fields: drifts, patches and ragged 1 m edges
     float f0 = g.x * 0.42 + g.y * 0.38 + g.z * 0.2;
     float f1 = g.w * 0.5 + extra * 0.32 + (1.0 - g.z) * 0.18;
+    // patch edges widen by what the fields change across a pixel, not by the footprint's long axis: that blurred
+    // patches seen at grazing angles into smudges
+    float edge = ${BREAKUP_EDGE} + 1.5 * max(fwidth(f0), fwidth(f1));
     int first;
     int second;
-    float t = groundBlend(w, f0, f1, ${BREAKUP_EDGE} + fw * 0.5, first, second, groundGap);
+    float t = groundBlend(w, f0, f1, edge, first, second, groundGap);
     // past the patterns the top two layers' own colours, so they part along the fields, not the mesh's triangles
     vec3 near = mix(groundBase(second, tint), groundBase(first, tint), t);
     if (dist < GROUND_PATTERN_END) {
