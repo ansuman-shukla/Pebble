@@ -186,6 +186,7 @@ class ActionStarted(Payload):
     args: dict[str, JsonScalar]
     label: str  # destination or thing, in words
     collapsed: bool = False
+    target: Target | None = None  # what it is about, for spectators (set by actions that resolve one)
 
 
 class ActionEnded(Payload):
