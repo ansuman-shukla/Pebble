@@ -616,7 +616,7 @@ stalker; "cover" is how long a fleeing animal needs to reach safety (burrow, cli
 | Near | Pinned herds (cap, respawn days) | Takers (kills a day, expected) | Losses per herd a day | Share alive | Stays ≥ 50 % up to |
 |---|---|---|---|---|---|
 | band A | 2 antelope (6, 2), 2 deer (6, 2), 2 rabbit (4, 1) | lion pride 0.5, wolf pack 0.5, band A hunters 1.0 = 2.0 | 0.33 | 89-92 % | 1.5 a day on one antelope/deer herd, 2 on a rabbit group |
-| band B and the Lord's woods | deer (6, 2), rabbit (4, 1) on B's grass; deer (6, 2), boar (4, 2) in the woods | wolf pack 0.5, bear 0.2, band B hunters 0.7, Kaz's poaching 0.2 = 1.6 | 0.4 | 83-90 % | 1.5 on a deer herd, 1 on the boar |
+| band B and the Lord's woods | deer (6, 2), rabbit (4, 1) on B's grass; deer (6, 2), boar (4, 2) in the woods | wolf pack 0.5, bear 0.2, band B hunters 0.7, Kaz's poaching 0.2 = 1.6 | 0.4 | 80-90 % | 1.5 on a deer herd, 1 on the boar |
 | town | deer (6, 2) in the North woods, rabbit (4, 1), ducks (5, 1) in the South marsh | wolf pack 0.4, fox 0.3 = 0.7 (town folk don't hunt; samurai rarely) | 0.23 | 92-95 % | as above |
 
   Worst case (all of a camp's losses on one deer herd: band A 2.0 a day × 2 days ÷ 6) leaves 33 %, so A1/T1 spread
