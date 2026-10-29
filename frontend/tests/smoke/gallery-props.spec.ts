@@ -34,7 +34,6 @@ test('gallery shows every World v1 prop, hand prop and kit look in the props and
     'coin_pouch',
     'camp_drying_rack',
     'sleeping_mat',
-    'loom',
     'field_barricade',
     'castle_keep',
   ] satisfies (keyof typeof PROPS)[]) {

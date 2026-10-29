@@ -1738,39 +1738,6 @@
       }
     },
     {
-      "id": "jinmaku-camp-curtain-8efdbe",
-      "title": "Jinmaku Camp Curtain",
-      "kit": "medieval-japan-cb01ad",
-      "class": "prop",
-      "triangles": 670,
-      "size_m": {
-        "x": 2.11,
-        "y": 1.8,
-        "z": 0.3
-      },
-      "license": "Use in commercial projects, no attribution. No redistribution of the files themselves. https://polyfork.dev/licensing",
-      "files": {
-        "glb": {
-          "url": "https://polyfork.dev/cdn/jinmaku-camp-curtain-8efdbe.glb",
-          "path": "public/assets/polyfork/jinmaku-camp-curtain-8efdbe/jinmaku-camp-curtain-8efdbe.glb",
-          "sha256": "ae3bf8083273048a2042f20d993cab521fd616286745fb9998aa593e3344f2ba",
-          "bytes": 90884
-        },
-        "params": {
-          "url": "https://polyfork.dev/cdn/jinmaku-camp-curtain-8efdbe-params.json",
-          "path": "public/assets/polyfork/jinmaku-camp-curtain-8efdbe/jinmaku-camp-curtain-8efdbe-params.json",
-          "sha256": "0199a0c534416b5e24dc52fa155051e71c6dcf49ef929c8a24dd314f4a89b7b8",
-          "bytes": 11968
-        },
-        "colliders": {
-          "url": "https://polyfork.dev/cdn/jinmaku-camp-curtain-8efdbe-colliders.json",
-          "path": "public/assets/polyfork/jinmaku-camp-curtain-8efdbe/jinmaku-camp-curtain-8efdbe-colliders.json",
-          "sha256": "f18028d7f938366c02fcabf01f8f3b146fcaa1098f06dbbad81a76272774a81e",
-          "bytes": 6060
-        }
-      }
-    },
-    {
       "id": "kagaribi-fire-basket-d28c11",
       "title": "Kagaribi Fire Basket",
       "kit": "medieval-japan-cb01ad",

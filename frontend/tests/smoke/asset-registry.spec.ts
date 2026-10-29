@@ -84,7 +84,6 @@ const WORLD_V1_KINDS: PropKind[] = [
   'drying_rack',
   'camp_drying_rack',
   'sleeping_mat',
-  'loom',
   'field_barricade',
   'bell_tower',
   'storehouse',

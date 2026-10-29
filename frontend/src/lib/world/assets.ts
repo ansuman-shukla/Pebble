@@ -120,7 +120,6 @@ export type PropKind =
   | 'coin_pouch'
   | 'camp_drying_rack'
   | 'sleeping_mat'
-  | 'loom'
   | 'field_barricade';
 
 export const PROPS: Record<PropKind, string> = {
@@ -229,7 +228,6 @@ export const PROPS: Record<PropKind, string> = {
   coin_pouch: 'coin-pouch-be4dd8',
   camp_drying_rack: 'drying-net-rack-93ec3b',
   sleeping_mat: 'straw-pile-ebd54d',
-  loom: 'jinmaku-camp-curtain-8efdbe',
   field_barricade: 'field-barricade-a646b9',
 };
 

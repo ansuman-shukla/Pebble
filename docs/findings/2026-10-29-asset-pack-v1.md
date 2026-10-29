@@ -7,8 +7,8 @@ gaps other streams fill at runtime. Decisions D132-D134.
 
 | What | Number |
 |---|---|
-| New pinned assets | 26 (+2.4 MB GLB + params + colliders) |
-| Manifest total | 122 assets, 29.3 MB |
+| New pinned assets | 25 (+2.3 MB GLB + params + colliders) |
+| Manifest total | 121 assets, 29.2 MB |
 | New triangles | 298-1 668 per asset, 1-12 primitives |
 | Remix bakes used | **0** (quota left 100/100 this month) |
 
@@ -56,7 +56,6 @@ Already vendored and named in the bible: `rice_paddy`, `fallen_log`, `driftwood`
 | coin_pouch | coin-pouch-be4dd8 | single asset | 340 | 0.29·0.34·0.29 | coins on the ground |
 | camp_drying_rack | drying-net-rack-93ec3b | Pirate Cove | 576 | 2.2·1.66·0.82 | pole frame with a hanging `net` (the band's meat rack) |
 | sleeping_mat | straw-pile-ebd54d | Dungeon & Crypt | 627 | 1.2·0.25·0.9 | straw bedding for band mats |
-| loom | jinmaku-camp-curtain-8efdbe | Medieval Japan | 670 | 2.11·1.8·0.3 | **stand-in**: cloth on a pole frame (no loom exists) |
 | field_barricade | field-barricade-a646b9 | Medieval Japan | 626 | 2·1.4·0.84 | pieces of the gaol pen |
 
 Backend footprints for these kinds (R1's `data/town/kinds.yaml`, P1's `data/world/kinds.yaml`) take x·z from the
@@ -98,7 +97,7 @@ The Medieval Japan kit's `buddhist-monk-39f498`, `ashigaru-foot-soldier-806707` 
 
 | Bible need | Catalogue | Covered by |
 |---|---|---|
-| loom | none ("loom", "weaving", "spinning", "textile": no match) | jinmaku curtain stand-in (above) |
+| loom | none ("loom", "weaving", "spinning", "textile": no match; the kit's jinmaku camp curtain reads as a banner) | procedural, as the bible's slot table says (L4/M1); no asset |
 | gaol | no cage or stocks in a fitting style | a pen of `field_barricade` (kit piece) around the gaol place |
 | sickle, gold pan, stone axe, knapping stone, cup, cloth bolt, meat, hide | none or out of style | M1/L4: procedural or tinted stand-ins (stone axe = hand axe with a grey head) |
 | sapling | no broadleaf sapling | the node's own tree kind drawn at growth scale (L3) |
