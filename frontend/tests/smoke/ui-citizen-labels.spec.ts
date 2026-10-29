@@ -1,0 +1,110 @@
+import { expect, test } from '@playwright/test';
+
+import type { LiveCitizen } from '../../src/lib/live/live-contract';
+import { citizenLabels } from '../../src/lib/world/citizen-labels';
+
+/* What the globe's citizen chips and bubbles say (no browser). */
+
+function citizen(overrides: Partial<LiveCitizen> = {}): LiveCitizen {
+  return {
+    id: 'genzo',
+    name: 'Genzo',
+    look: 'town-farmer',
+    appearance: 'a broad man in a straw hat',
+    role: 'Rice farmer',
+    region: 'town',
+    heading_deg: 0,
+    route: [],
+    speed_mps: 0,
+    activity: 'working',
+    position: { unit: [0, 0, 1], height_m: 8, lat: 35, lon: 12 },
+    cell: 1,
+    alive: true,
+    asleep: false,
+    action: 'work',
+    action_label: 'tending the rice paddies',
+    state: [],
+    cause_of_death: null,
+    ...overrides,
+  };
+}
+
+const ringOf = (state: string[]) =>
+  citizenLabels([citizen({ state })], [])[0].ring;
+
+test('a chip names the citizen, says what they do and shows its icon', () => {
+  expect(citizenLabels([citizen()], [])).toEqual([
+    {
+      id: 'npc-genzo',
+      subject: 'genzo',
+      kind: 'name',
+      text: 'Genzo',
+      detail: 'tending the rice paddies',
+      icon: 'work',
+      ring: undefined,
+    },
+  ]);
+  const walking = citizen({ activity: 'walking', action_label: 'the well' });
+  expect(citizenLabels([walking], [])[0].detail).toBe('walking to the well');
+  const icons = (
+    [
+      ['idle', 'stand'],
+      ['walking', 'walk'],
+      ['running', 'run'],
+      ['sleeping', 'sleep'],
+      ['resting', 'rest'],
+      ['gathering', 'gather'],
+      ['eating', 'eat'],
+      ['drinking', 'drink'],
+      ['hunting', 'hunt'],
+      ['fishing', 'fish'],
+      ['tending_fire', 'fire'],
+      ['talking', 'talk'],
+      ['dead', 'dead'],
+    ] as const
+  ).map(([activity]) => citizenLabels([citizen({ activity })], [])[0].icon);
+  expect(icons).toEqual([
+    'stand',
+    'walk',
+    'run',
+    'sleep',
+    'rest',
+    'gather',
+    'eat',
+    'drink',
+    'hunt',
+    'fish',
+    'fire',
+    'talk',
+    'dead',
+  ]);
+});
+
+test('hungry or thirsty rings orange, hurt rings red and wins, mild words ring nothing', () => {
+  expect(ringOf([])).toBeUndefined();
+  expect(
+    ringOf(['a little hungry', 'a little thirsty', 'tired']),
+  ).toBeUndefined();
+  expect(ringOf(['a little weak'])).toBeUndefined();
+  expect(ringOf(['hungry'])).toBe('need');
+  expect(ringOf(['starving'])).toBe('need');
+  expect(ringOf(['thirsty'])).toBe('need');
+  expect(ringOf(['terribly thirsty'])).toBe('need');
+  expect(ringOf(['weak and aching'])).toBe('hurt');
+  expect(ringOf(['starving', 'close to death'])).toBe('hurt');
+});
+
+test('each speaker gets one bubble with their latest words, over their own anchor', () => {
+  const labels = citizenLabels(
+    [citizen(), citizen({ id: 'hana', name: 'Hana' })],
+    [
+      { id: 'e1', actorId: 'hana', words: 'Good morning!', at: 1 },
+      { id: 'e2', actorId: 'genzo', words: 'Rain soon.', at: 2 },
+      { id: 'e3', actorId: 'hana', words: 'Father, look!', at: 3 },
+    ],
+  );
+  expect(labels.filter((label) => label.kind === 'speech')).toEqual([
+    { id: 'say-hana', subject: 'hana', kind: 'speech', text: 'Father, look!' },
+    { id: 'say-genzo', subject: 'genzo', kind: 'speech', text: 'Rain soon.' },
+  ]);
+});
