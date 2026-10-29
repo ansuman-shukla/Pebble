@@ -27,6 +27,13 @@ from app.sim.world import SimWorld
 from tests.sim_helpers import real_world
 
 TEST_DATABASE = os.environ["POSTGRES_DB"]
+if settings.POSTGRES_DB != TEST_DATABASE or engine.url.database != TEST_DATABASE:
+    pytest.exit(
+        f"app settings were built before tests/conftest.py set POSTGRES_DB={TEST_DATABASE!r}: they point at "
+        f"{settings.POSTGRES_DB!r} (engine: {engine.url.database!r}). Something imported app modules first "
+        "(a `-p` plugin, a script importing tests before pytest.main); refusing to migrate or truncate it.",
+        returncode=pytest.ExitCode.USAGE_ERROR,
+    )
 MIGRATIONS = Path(__file__).resolve().parents[1] / "app" / "alembic"
 SETUP_LOCK = 20261028  # advisory lock id: concurrent test runs (other worktrees) set the database up one at a time
 

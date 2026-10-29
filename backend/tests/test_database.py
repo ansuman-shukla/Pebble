@@ -1,5 +1,9 @@
 """The suite's own database: never the dev one, migrated to head, and emptied by `truncate_all`."""
 
+import os
+import subprocess
+import sys
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -15,6 +19,7 @@ from app.db.models import World
 from tests.conftest import MIGRATIONS, TEST_DATABASE, truncate_all
 
 DEV_DATABASE = Settings.model_fields["POSTGRES_DB"].default
+BACKEND = Path(__file__).resolve().parents[1]
 UNREACHABLE = {"POSTGRES_SERVER": "127.0.0.1", "POSTGRES_PORT": "1"}  # nothing listens there: no run can touch a DB
 
 
@@ -75,3 +80,23 @@ def test_truncate_all_checks_the_database_it_is_really_connected_to() -> None:
             truncate_all(lying_engine)
     finally:
         lying_engine.dispose()
+
+
+def test_settings_built_before_conftest_abort_the_run(tmp_path: Path) -> None:
+    """A `-p` plugin loads before tests/conftest.py; if it builds app settings they point at the dev database."""
+    (tmp_path / "early_settings.py").write_text("import app.core.config  # noqa: F401\n")
+    env = {name: value for name, value in os.environ.items() if name not in {"POSTGRES_DB", "PEBBLE_TEST_DB"}}
+    env |= UNREACHABLE | {"PYTHONPATH": str(tmp_path)}
+    run = subprocess.run(
+        [sys.executable, "-m", "pytest", "-p", "early_settings", "-q", "tests/test_database_name.py"],
+        cwd=BACKEND,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    output = run.stdout + run.stderr
+    assert run.returncode == pytest.ExitCode.USAGE_ERROR, output
+    assert "app settings were built before tests/conftest.py" in output
+    assert f"they point at '{DEV_DATABASE}'" in output
+    assert "OperationalError" not in output  # aborted before anything tried to connect
