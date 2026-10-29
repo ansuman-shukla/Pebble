@@ -1022,6 +1022,15 @@ export type LiveEventDetail = {
     payload: {
         [key: string]: unknown;
     };
+    /**
+     * Line
+     */
+    line: string;
+    /**
+     * Importance
+     */
+    importance: 0 | 1 | 2 | 3;
+    position: Position | null;
 };
 
 /**

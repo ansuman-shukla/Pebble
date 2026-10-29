@@ -2981,6 +2981,30 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Payload"
+          },
+          "line": {
+            "type": "string",
+            "title": "Line"
+          },
+          "importance": {
+            "type": "integer",
+            "enum": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "title": "Importance"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Position"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -2988,7 +3012,10 @@
           "id",
           "type",
           "actor_id",
-          "payload"
+          "payload",
+          "line",
+          "importance",
+          "position"
         ],
         "title": "LiveEventDetail"
       },

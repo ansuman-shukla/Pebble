@@ -13,6 +13,7 @@ from sqlmodel import Session, col, select
 
 from app.db.models import Event
 from app.observability.events import (
+    WORLD_V1_TYPES,
     ActionEnded,
     ActionStarted,
     Died,
@@ -26,6 +27,7 @@ from app.observability.events import (
     Said,
     Visibility,
 )
+from app.observability.lines import Names, Resident, Told, namer, tell
 from app.services.clock import run_or_latest
 from app.services.entities import Activity, Position, citizen_entity, world_at
 from app.services.places import PlaceIndex, PlaceRef
@@ -47,6 +49,7 @@ TIMELINE_TYPES: tuple[EventType, ...] = (
     "item_moved",
     "knowledge_changed",
     "intervention",
+    *WORLD_V1_TYPES,
 )  # `perceived` (every look around, long) only when asked for
 RECENT_ENTRIES = 8
 MAX_TIMELINE = 500
@@ -191,6 +194,16 @@ def roster(session: Session, run_id: str) -> dict[str, PersonRef]:
     }
 
 
+def residents(session: Session, run_id: str) -> dict[str, Resident]:
+    """Everyone who ever lived in the run with their home and age, by id (for naming households in lines)."""
+    statement = select(Event.actor_id, Event.payload).where(Event.run_id == run_id, Event.type == "citizen_spawned")
+    return {
+        actor_id: Resident(payload["name"], payload.get("home"), payload["age"])
+        for actor_id, payload in session.exec(statement).all()
+        if actor_id is not None
+    }
+
+
 def list_citizens(
     session: Session, places: PlaceIndex, run_id: str | None = None, at: int | None = None
 ) -> CitizensView | None:
@@ -323,7 +336,8 @@ def citizen_timeline(
     seq = col(Event.seq)
     rows = session.exec(statement.order_by(seq if order == "asc" else seq.desc()).limit(limit)).all()
     labels = start_labels(session, run.id, citizen_id, rows)
-    entries = [timeline_entry(row, citizen_id, people, places, labels) for row in rows]
+    names = namer(residents(session, run.id))
+    entries = [timeline_entry(row, citizen_id, people, places, labels, names) for row in rows]
     next_cursor = rows[-1].seq if len(rows) == limit else None
     return TimelinePage(run_id=run.id, citizen_id=citizen_id, entries=entries, next_cursor=next_cursor)
 
@@ -516,7 +530,7 @@ def _moved(moved: ItemMoved, me: str, people: dict[str, PersonRef], places: Plac
 
 
 def _summary(
-    row: Event, me: str, people: dict[str, PersonRef], places: PlaceIndex, labels: dict[int, str]
+    row: Event, me: str, people: dict[str, PersonRef], places: PlaceIndex, labels: dict[int, str], names: Names
 ) -> tuple[str, str | None, list[str]]:
     payload = row.payload
     match row.type:
@@ -542,9 +556,20 @@ def _summary(
             return f"feels {changed.level}{'' if changed.worse else ' again'}", None, []
         case "injured":
             injured = Injured.model_validate(payload)
-            return f"is hurt: {injured.cause}", f"lost {injured.amount:.0f} health", []
+            lost = f"lost {injured.amount:.0f} health"
+            if injured.attacker is None:
+                return f"is hurt: {injured.cause}", lost, []
+            how = "struck" if injured.cause == "violence" else "attacked"
+            return (
+                f"is {how} by {names(injured.attacker)}",
+                lost,
+                [injured.attacker] if injured.attacker in people else [],
+            )
         case "died":
-            return f"dies: {Died.model_validate(payload).cause}", None, []
+            died = Died.model_validate(payload)
+            if died.attacker is None:
+                return f"dies: {died.cause}", None, []
+            return f"is killed by {names(died.attacker)}", None, [died.attacker] if died.attacker in people else []
         case "item_moved":
             return _moved(ItemMoved.model_validate(payload), me, people, places), None, []
         case "knowledge_changed":
@@ -558,13 +583,15 @@ def _summary(
             return f"hears of {name}", None, []
         case "perceived":
             return "looks around", Perceived.model_validate(payload).text, []
-    return row.type.replace("_", " "), None, []
+
+    told = Told(type=row.type, actor_kind=row.actor_kind, actor_id=row.actor_id, payload=payload)
+    return tell(told, names, own=True)[0], None, []
 
 
 def timeline_entry(
-    row: Event, me: str, people: dict[str, PersonRef], places: PlaceIndex, labels: dict[int, str]
+    row: Event, me: str, people: dict[str, PersonRef], places: PlaceIndex, labels: dict[int, str], names: Names
 ) -> TimelineEntry:
-    summary, detail, related = _summary(row, me, people, places, labels)
+    summary, detail, related = _summary(row, me, people, places, labels, names)
     day, time = town_clock(row.tick)
     return TimelineEntry(
         id=row.id,

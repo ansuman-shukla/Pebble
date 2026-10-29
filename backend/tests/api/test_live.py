@@ -18,8 +18,9 @@ from starlette.websockets import WebSocketDisconnect
 
 from app.core.config import settings
 from app.engine import Clock, EngineLoop, open_loop
+from app.observability.events import GoalSet, Stole, Traded
 from app.observability.store import queue_command
-from app.services.live import LiveEvent, LiveState
+from app.services.live import LIVE_EVENT_TYPES, LiveEvent, LiveState
 from app.sim.citizens import CITIZENS
 from app.sim.world import SimWorld
 from app.world.store import WorldKey
@@ -80,7 +81,10 @@ def test_the_live_feed_streams_snapshot_events_and_ticks(client: TestClient, com
         kinds = [m["event"]["type"] if m["type"] == "event" else m["type"] for m in messages]
         assert kinds.index("said") < kinds.index("tick")  # events come before the tick they belong to
         assert any(e.event.type == "action_started" and e.event.actor_id == "hana" for e in events)
-        assert {e.event.type for e in events} <= {"said", "died", "action_started", "action_finished"}
+        # actions and speech always come; anything else only when its line is worth telling
+        assert all(e.event.type in LIVE_EVENT_TYPES or e.event.importance > 0 for e in events)
+        assert said[0].event.line == "Genzo: “Good morning, Aiko!”" and said[0].event.importance == 1
+        assert said[0].event.position is not None
         hana = next(c for c in ticks[0].citizens if c.id == "hana")
         start = next(c for c in snapshot.citizens if c.id == "hana")
         assert hana.activity == "walking" and hana.position.unit != start.position.unit
@@ -130,3 +134,49 @@ def test_unknown_runs_close_the_socket_and_the_schema_route_answers(
     schema = client.get(f"{API}/openapi.json").json()["components"]["schemas"]
     assert {"LiveState", "LiveEvent", "LiveEventDetail", "CitizenEntity"} <= set(schema)
     assert {"heading_deg", "activity", "role", "region"} <= set(schema["CitizenEntity"]["properties"])
+
+
+def test_a_death_reaches_the_feed_within_its_tick_with_its_line_and_place(
+    client: TestClient, committed_run: EngineLoop
+) -> None:
+    loop = committed_run
+    with client.websocket_connect(f"{API}/live?run_id={loop.run.id}") as ws:
+        assert _receive(ws)["type"] == "snapshot"
+        genzo = loop.sim.citizen("genzo")
+        loop.sim.core.injure(genzo, 500.0, "violence", "Kaz strikes you", attacker="kaz")
+        loop.run_ticks(1, headless=True)
+        messages = _until_tick(ws, 1)
+    events = [LiveEvent.model_validate(m).event for m in messages if m["type"] == "event"]
+    died = next(e for e in events if e.type == "died")
+    assert (died.actor_id, died.line, died.importance) == ("genzo", "Kaz kills Genzo", 3)
+    assert died.payload == {"cause": "violence", "attacker": "kaz"}
+    assert died.position is not None and died.position.unit == genzo.position
+    struck = next(e for e in events if e.type == "injured")
+    assert (struck.line, struck.importance) == ("Kaz strikes Genzo", 3)
+    assert messages[-1]["type"] == "tick" and messages[-1]["tick"] == 1
+
+
+def test_the_feed_sends_public_events_worth_telling_and_names_animals_and_households(
+    client: TestClient, committed_run: EngineLoop
+) -> None:
+    loop = committed_run
+    core = loop.sim.core
+    genzo, kaz = loop.sim.citizen("genzo"), loop.sim.citizen("kaz")
+    wolf = next(a for a in loop.sim.state.animals.values() if a.kind == "wolf")
+    sale = {"item": "rice", "count": 4, "lots": 2, "coins": 8, "stall": "stall", "merchant": "fumiko"}
+    with client.websocket_connect(f"{API}/live?run_id={loop.run.id}") as ws:
+        assert _receive(ws)["type"] == "snapshot"
+        core.emit("goal_set", GoalSet(text="sell rice", driver="ambition"), actor=genzo)  # public, importance 0
+        core.emit("bought", Traded.model_validate(sale), actor=genzo)  # public, importance 2
+        core.emit("sold", Traded.model_validate(sale), actor=genzo, visibility="private")
+        core.emit("stole", Stole(owner="farmhouse-1", store="rack-1", item="rice", count=5), actor=kaz)
+        core.injure(genzo, 5.0, "animal attack", "a wolf attacks you", attacker=wolf.id)
+        loop.run_ticks(1, headless=True)
+        messages = _until_tick(ws, 1)
+    told = {e.type: e for e in (LiveEvent.model_validate(m).event for m in messages if m["type"] == "event")}
+    assert "goal_set" not in told and "sold" not in told
+    bought = told["bought"]
+    assert (bought.actor_id, bought.line, bought.importance) == ("genzo", "Genzo buys 4 rice for 8 mon", 2)
+    assert bought.position is not None and bought.position.unit == genzo.position
+    assert (told["stole"].line, told["stole"].importance) == ("Kaz steals 5 rice from Genzo's house", 2)
+    assert (told["injured"].line, told["injured"].importance) == ("A wolf attacks Genzo", 3)

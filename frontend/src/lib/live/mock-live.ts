@@ -23,7 +23,13 @@ import {
   tickMs,
 } from './live-contract';
 import { MockWild } from './mock-wild';
-import type { RoutePoint, Site, WorldView } from '@/lib/client/types.gen';
+import type {
+  LiveEventDetail,
+  Position,
+  RoutePoint,
+  Site,
+  WorldView,
+} from '@/lib/client/types.gen';
 import { CITIZEN_LOOKS } from '@/lib/world/citizen-looks';
 import {
   anchorMapping,
@@ -562,7 +568,9 @@ export class MockLiveServer {
 
   /** Someone says something right now (tests): the `said` event goes out at once. */
   sayNow(actor: string, words: string) {
-    this.say(actor, words);
+    const speaker = this.states.find((state) => state.person.id === actor);
+    if (!speaker) throw new Error(`no mock citizen ${actor}`);
+    this.say(speaker, words);
     const events = this.pending.splice(0);
     for (const socket of this.sockets)
       events.forEach((event) => socket.deliver(event));
@@ -575,14 +583,16 @@ export class MockLiveServer {
     for (const socket of this.sockets) socket.deliver(frame);
   }
 
-  /** Queues an event of any type for the next tick, like the engine's own (tests: a death, a sale); `extra` adds
-   * fields of the line registry (`line`, `importance`, `position`). */
+  /** Queues an event of any type for the next tick, like the engine's own (tests: a death, a sale), told as the
+   * backend's line registry would tell it; it happens where its citizen actor stands unless `told` says where. */
   queueEvent(
     type: string,
     actor: string | null,
     payload: Record<string, unknown>,
-    extra: Record<string, unknown> = {},
+    told: Pick<LiveEventDetail, 'line' | 'importance'> &
+      Partial<Pick<LiveEventDetail, 'position'>>,
   ) {
+    const state = this.states.find((one) => one.person.id === actor);
     this.events += 1;
     this.pending.push({
       type: 'event',
@@ -593,7 +603,8 @@ export class MockLiveServer {
         type,
         actor_id: actor,
         payload,
-        ...extra,
+        position: state ? placeOf(state) : null,
+        ...told,
       },
     });
   }
@@ -691,10 +702,10 @@ export class MockLiveServer {
     state.step = (state.step + 1) % plan.length;
     const step = plan[state.step];
     state.left = stepTicks(step);
-    if ('say' in step && step.say) this.say(state.person.id, step.say);
+    if ('say' in step && step.say) this.say(state, step.say);
   }
 
-  private say(actor: string, words: string) {
+  private say(state: PersonState, words: string) {
     this.events += 1;
     this.pending.push({
       type: 'event',
@@ -703,8 +714,11 @@ export class MockLiveServer {
       event: {
         id: `mock-said-${this.events}`,
         type: 'said',
-        actor_id: actor,
+        actor_id: state.person.id,
         payload: { words, volume: 'normal', heard_by: [] },
+        line: `${state.person.name}: “${words}”`,
+        importance: 1,
+        position: placeOf(state),
       },
     });
   }
@@ -739,10 +753,7 @@ export class MockLiveServer {
       const step = person.plan[state.step];
       const look = ROLES.get(person.look);
       if (!look) throw new Error(`unknown look ${person.look}`);
-      const unitAt = ([x, z]: Spot) =>
-        state.mapping.toWorld(x, 0, z, new Vector3()).normalize().toArray();
-      const unit = unitAt(state.at);
-      const { lat, lon } = latLonFromDirection(new Vector3(...unit));
+      const position = placeOf(state);
       const activity: Activity = night
         ? 'sleeping'
         : 'walk' in step
@@ -756,7 +767,7 @@ export class MockLiveServer {
         name: person.name,
         look: person.look,
         appearance: person.appearance,
-        position: { unit, height_m: state.height, lat, lon },
+        position,
         route,
         // the arc of the first leg over its time (the site's local metres stretch a little away from its anchor)
         speed_mps:
@@ -812,6 +823,15 @@ export class MockLiveServer {
 }
 
 const stepTicks = (step: Step) => ('walk' in step ? 0 : step.ticks);
+
+/** Where someone stands, as the feed says it. */
+function placeOf(state: PersonState): Position {
+  const { x, y, z } = state.mapping
+    .toWorld(state.at[0], 0, state.at[1], new Vector3())
+    .normalize();
+  const { lat, lon } = latLonFromDirection(new Vector3(x, y, z));
+  return { unit: [x, y, z], height_m: state.height, lat, lon };
+}
 
 /** Where `metres` of walking from `from` towards `to` ends (at `to` if it is closer). */
 function walkAhead([x, z]: Spot, [tx, tz]: Spot, metres: number): Spot {

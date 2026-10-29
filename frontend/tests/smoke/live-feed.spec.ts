@@ -77,7 +77,15 @@ const said = (id: string, actor: string, words: unknown, run = 'run-1') => ({
   type: 'event' as const,
   run_id: run,
   tick: 3,
-  event: { id, type: 'said', actor_id: actor, payload: { words } },
+  event: {
+    id,
+    type: 'said',
+    actor_id: actor,
+    payload: { words },
+    line: `${actor}: “${String(words)}”`,
+    importance: 1 as const,
+    position: null,
+  },
 });
 
 test('frames replace the citizens; stale ticks are ignored; a snapshot or a new run resyncs', () => {

@@ -822,10 +822,9 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   const { animals } = live;
   const feedSubjects = useMemo(
     () => ({
-      names: new Map(citizens.map((citizen) => [citizen.id, citizen.name])),
       animals: new Map(animals.map((animal) => [animal.id, animal.kind])),
     }),
-    [citizens, animals],
+    [animals],
   );
   // an entry flies to where it happened, else to its actor as drawn: a citizen or an animal
   const canFly = useCallback(
