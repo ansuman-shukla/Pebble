@@ -43,6 +43,6 @@ export const tickMs = (speed: number) => (TICK_SECONDS * 1000) / speed;
 export const LIVE_CLOSE = {
   /** There is no run yet: try again later. */
   noRun: 4404,
-  /** A newer run started: reconnect at once and take its snapshot. */
+  /** A newer run started or the run's history was rewritten: reconnect at once for a fresh snapshot. */
   newRun: 1012,
 } as const;

@@ -19,9 +19,9 @@ import { type LiveSocket, MockLiveServer } from '@/lib/live/mock-live';
 /*
  * The citizens live: `GET /api/v1/entities` first, then the engine's feed (WebSocket `/api/v1/live`, one `tick`
  * per engine tick plus `event`s). A dropped socket reconnects with backoff and resyncs from the `snapshot` the
- * server sends on connect; "no run yet" (4404) keeps retrying with backoff; "a newer run started" (1012)
- * reconnects at once and takes the new run's snapshot. The `mock` source is the dev/test mock server (the same
- * socket path); `off`: no feed.
+ * server sends on connect; "no run yet" (4404) keeps retrying with backoff; "resync" (1012: a newer run started,
+ * or a resumed engine rewrote the run's history) reconnects at once and takes a fresh snapshot. The `mock` source
+ * is the dev/test mock server (the same socket path); `off`: no feed.
  */
 
 /**
