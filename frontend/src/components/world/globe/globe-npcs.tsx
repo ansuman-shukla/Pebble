@@ -44,7 +44,6 @@ import type { LabelStore } from '@/lib/world/label-store';
 import { animateHumanoid } from '@/lib/world/humanoid-clips';
 import {
   type GroundProbe,
-  holdPosture,
   layToRest,
   type Resting,
   restOf,
@@ -221,7 +220,6 @@ function NpcModel({
         viewRef.current,
       );
     animation.update(Math.min(delta, MAX_FRAME));
-    holdPosture(rest, pose.pose);
     layToRest(resting.current, shapeOf(pose.pose, playing.current, actions), {
       character,
       rest,
@@ -446,6 +444,7 @@ function Npc({
     {
       standing: LABEL_HEIGHT,
       sitting: SITTING_LABEL_HEIGHT,
+      sleeping: LYING_LABEL_HEIGHT,
       lying: LYING_LABEL_HEIGHT,
     }[pose.pose] * (AGE_LABEL_SCALE[look.config.age ?? 'adult'] ?? 1);
   return (

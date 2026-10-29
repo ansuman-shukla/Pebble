@@ -42,7 +42,7 @@ export const PLANTED_CLIPS: ReadonlySet<string> = new Set(
   Object.keys(STANDING),
 );
 
-type NpcPose = 'standing' | 'sitting' | 'lying';
+type NpcPose = 'standing' | 'sitting' | 'sleeping' | 'lying';
 
 export interface NpcLook {
   clip: NpcClip;
@@ -87,7 +87,7 @@ const STANDING_CLIPS: Record<
   drinking: { clip: 'Drinking', pose: 'standing', still: false },
   talking: { clip: 'Talking', pose: 'standing', still: false },
   resting: { clip: 'Sitting', pose: 'sitting', still: false },
-  sleeping: { clip: 'Idle', pose: 'lying', still: true },
+  sleeping: { clip: 'Idle', pose: 'sleeping', still: true },
   dead: { clip: 'Idle', pose: 'lying', still: true },
 };
 

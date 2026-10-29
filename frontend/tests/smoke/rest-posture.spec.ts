@@ -48,6 +48,7 @@ const LOOKS = ['town-farmer', 'band-a-hunter', 'town-child', 'band-a-healer'];
 /** The clip each posture plays under it (`npc-activity.ts`). */
 const CLIP: Record<Exclude<Posture, 'standing'>, string> = {
   sitting: 'Sitting',
+  sleeping: 'Idle',
   lying: 'Idle',
 };
 
@@ -93,7 +94,7 @@ const boneHeight = (
   return at.y - (sx * at.x + sz * at.z);
 };
 
-for (const posture of ['sitting', 'lying'] as const) {
+for (const posture of ['sitting', 'sleeping', 'lying'] as const) {
   for (const id of LOOKS) {
     test(`${id} ${posture} rests on the ground, flat and on slopes`, async () => {
       const look = CITIZEN_LOOKS.find((candidate) => candidate.id === id)!;
@@ -102,7 +103,8 @@ for (const posture of ['sitting', 'lying'] as const) {
       const animation = await animateHumanoid(character, {
         clips: [CLIP[posture]],
       });
-      animation.play(CLIP[posture]).paused = posture === 'lying';
+      const onBack = posture !== 'sitting';
+      animation.play(CLIP[posture]).paused = onBack;
       animation.update(0.4);
       holdPosture(rest, posture);
       showWorn(character, posture);
@@ -118,11 +120,23 @@ for (const posture of ['sitting', 'lying'] as const) {
         if (object.name.startsWith('attach-') && object.name.endsWith('hand'))
           held += shown(object) ? 1 : 0;
       });
-      expect(held, 'held tools put away').toBe(0);
+      expect(held, 'held tools hidden').toBe(0);
+      const worn = ['attach-hat', 'attach-neck'].flatMap(
+        (name) => character.getObjectByName(name) ?? [],
+      );
+      if (id === 'town-farmer') expect(worn.length, 'hat and cape').toBe(2);
+      for (const item of worn)
+        expect(shown(item), `${item.name} shown`).toBe(!onBack);
       // the ground is read under the body's ends: lying, the head lies behind the hips and the feet ahead
       const tall = look.config.age === 'kid' ? 0.6 : 1;
       expect(print.front).toBeGreaterThan(0.4 * tall);
-      if (posture === 'lying') expect(print.back).toBeLessThan(-0.5 * tall);
+      if (onBack) expect(print.back).toBeLessThan(-0.5 * tall);
+      // a sleeper turns its head aside, the dead look straight up
+      const face = new Vector3(0, 0, 1).applyQuaternion(
+        rest.head.getWorldQuaternion(new Quaternion()),
+      );
+      if (posture === 'sleeping') expect(Math.abs(face.x)).toBeGreaterThan(0.3);
+      if (posture === 'lying') expect(Math.abs(face.x)).toBeLessThan(0.15);
       // the body turns about its hips: they stay over the spot the citizen is at
       const hipsAt = world.worldToLocal(
         rest.hips.getWorldPosition(new Vector3()),
@@ -149,8 +163,12 @@ for (const posture of ['sitting', 'lying'] as const) {
           // on the ground (on a fold of cape or tunic at most), not on a chair of air (the clip's hips: 0.56 m)
           expect(hips, `${ground}: hips`).toBeGreaterThan(0.04);
           expect(hips, `${ground}: hips`).toBeLessThan(0.27);
-        } else
-          for (const bone of ['Head', 'Hips', 'LeftFoot', 'RightFoot']) {
+        } else {
+          const flat =
+            posture === 'lying'
+              ? ['Head', 'Hips', 'LeftFoot', 'RightLeg', 'RightFoot']
+              : ['Head', 'Hips', 'LeftFoot'];
+          for (const bone of flat) {
             // an elder's stoop and long hair pillow the head a little higher
             const above = boneHeight(character, world, bone, sx, sz);
             expect(above, `${ground}: ${bone}`).toBeGreaterThan(0.02);
@@ -158,6 +176,17 @@ for (const posture of ['sitting', 'lying'] as const) {
               bone === 'Head' ? 0.3 : 0.25,
             );
           }
+          if (posture === 'sleeping') {
+            // the right knee drawn up, its foot standing flat on the ground (the ankle at its height over the sole)
+            const knee = boneHeight(character, world, 'RightLeg', sx, sz);
+            expect(knee, `${ground}: knee`).toBeGreaterThan(0.3 * tall);
+            const ankle = boneHeight(character, world, 'RightFoot', sx, sz);
+            expect(
+              Math.abs(ankle - rest.ankle),
+              `${ground}: ankle ${ankle}`,
+            ).toBeLessThan(TOUCH);
+          }
+        }
       }
       tilt.quaternion.copy(new Quaternion());
     });
@@ -176,7 +205,7 @@ test('a sleeper keeps still: its hips stay put while the clip under it would swa
   const seen: Vector3[] = [];
   for (let k = 0; k < 20; k++) {
     animation.update(0.5); // the Idle shifts its weight over ~10 s
-    holdPosture(rest, 'lying');
+    holdPosture(rest, 'sleeping');
     seen.push(hips.position.clone());
   }
   for (const at of seen) expect(at.distanceTo(rest.hipsAt)).toBeLessThan(1e-6);
@@ -259,7 +288,6 @@ for (const step of [1 / 60, 0.25]) {
     const frames = (seconds: number) => {
       for (let t = 0; t < seconds; t += step) {
         animation.update(step);
-        holdPosture(rest, 'sitting');
         const print = state.print;
         layToRest(
           state,
