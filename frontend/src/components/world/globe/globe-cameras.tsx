@@ -217,6 +217,8 @@ const ORBIT_START_DISTANCE = 6000;
 /** Zooming in below this altitude within HANDOVER_REACH of the player switches to follow. */
 const HANDOVER_ALTITUDE = 400;
 const HANDOVER_REACH = 600;
+/** When the clock goes past ×10 the orbit camera eases up to at least this altitude, to see the trails (10 §4.2.3). */
+const TIME_LAPSE_ALTITUDE = 150;
 
 const orbitTurn = new Quaternion();
 const AXIS_X = new Vector3(1, 0, 0);
@@ -229,12 +231,14 @@ export function GlobeOrbitCamera({
   terrain,
   playerRef,
   focusRef,
+  timeLapse,
   onHandover,
 }: {
   radius: number;
   terrain: GlobeTerrain;
   playerRef: RefObject<GlobePlayerState>;
   focusRef: RefObject<Vector3>;
+  timeLapse: boolean;
   onHandover: () => void;
 }) {
   const camera = useThree((state) => state.camera);
@@ -255,6 +259,12 @@ export function GlobeOrbitCamera({
     start.distance = Math.max(camera.position.length(), radius + 50);
     start.target = ORBIT_START_DISTANCE;
   }, [camera, radius, playerRef]);
+
+  useEffect(() => {
+    const current = view.current;
+    if (timeLapse)
+      current.target = Math.max(current.target, radius + TIME_LAPSE_ALTITUDE);
+  }, [timeLapse, radius]);
 
   useDrag(
     useCallback(

@@ -5,6 +5,8 @@ import {
   type Doing,
   FADE_S,
   follow,
+  keepRight,
+  LANE_M,
   moveOn,
   newTrack,
   shownDoing,
@@ -417,4 +419,134 @@ test('the walk on along the plan is not held: once the drawn body is where the f
   play(track, 6.5, 10); // a tick late: on into the plan ahead
   follow(track, tick([83.3, 0], [], { activity: 'idle' }), R, 10);
   expect(shownDoing(track).activity).toBe('idle');
+});
+
+/** Draws `seconds` of real time at ×1 in the keep-right lane: the drawn spots, frame by frame. */
+function inLane(track: ReturnType<typeof newTrack>, seconds: number) {
+  const spots: Vector3[] = [];
+  for (let frame = 0; frame < Math.round(seconds / FRAME); frame++)
+    spots.push(
+      keepRight(
+        track,
+        FRAME,
+        moveOn(track, FRAME, 1, new Vector3()),
+        R,
+      ).clone(),
+    );
+  return spots;
+}
+
+/** Metres south (negative: north) of the east-west street through the origin. */
+const south = (spot: Vector3) => -(spot.y / spot.z) * R;
+
+test('a walker keeps right of its route, stepping into the lane and back onto its spot without a jump', () => {
+  const track = newTrack(shortWalk({}), R); // 20 m east in 14.4 s
+  const spots = [
+    moveOn(track, 0, 1, new Vector3()).clone(),
+    ...inLane(track, 15),
+  ];
+  const steps = spots.slice(1).map((spot, i) => metres(spots[i], spot));
+  expect(Math.max(...steps)).toBeLessThan(0.04); // a side step on top of its pace, never a jump
+  // walking east: its right is south
+  const second = (s: number) => spots[Math.round(s / FRAME)];
+  expect(south(spots[0])).toBeCloseTo(0, 9); // set off from where it stood
+  expect(south(second(5))).toBeCloseTo(LANE_M, 2);
+  expect(south(second(13))).toBeCloseTo(LANE_M, 2); // 1.9 m to go
+  expect(south(second(13.9))).toBeGreaterThan(0.05); // stepping back over its last 1.5 m...
+  expect(south(second(13.9))).toBeLessThan(0.25);
+  expect(Math.abs(south(spots.at(-1)!))).toBeLessThan(1e-6); // ...it stops exactly on its spot
+  expect(metres(spots.at(-1)!, new Vector3(...at(20, 0)))).toBeLessThan(1e-3);
+  const after = inLane(track, 2); // and stays there, standing
+  expect(
+    Math.max(...after.map((spot) => metres(spot, spots.at(-1)!))),
+  ).toBeLessThan(1e-6);
+});
+
+test('two walkers passing on one street are drawn at least 0.6 m apart', () => {
+  const east = newTrack(
+    tick(
+      [20, 0],
+      [
+        [0, 0, 0],
+        [20, 0, 14.4],
+      ],
+    ),
+    R,
+  );
+  const west = newTrack(
+    tick(
+      [0, 0],
+      [
+        [20, 0, 0],
+        [0, 0, 14.4],
+      ],
+    ),
+    R,
+  );
+  const [a, b] = [inLane(east, 7.2), inLane(west, 7.2)];
+  expect(metres(a.at(-1)!, b.at(-1)!)).toBeGreaterThanOrEqual(0.6); // side by side mid-street
+  expect(south(a.at(-1)!)).toBeGreaterThan(0.3);
+  expect(south(b.at(-1)!)).toBeLessThan(-0.3);
+});
+
+/** Metres east of the north-south street through the origin. */
+const east = (spot: Vector3) => (spot.x / spot.z) * R;
+
+const TURNS: {
+  turn: string;
+  end: [number, number];
+  /** How far right of the way it turned the walker is drawn. */
+  settled: (spot: Vector3) => number;
+}[] = [
+  { turn: 'a corner', end: [20, 20], settled: (spot) => east(spot) - 20 },
+  { turn: 'a U-turn', end: [0, 0], settled: (spot) => -south(spot) },
+];
+
+for (const { turn, end, settled } of TURNS)
+  test(`a walker eases across into its new lane at ${turn}, never jumping`, () => {
+    const track = newTrack(
+      tick(end, [
+        [0, 0, 0],
+        [20, 0, 14.4],
+        [...end, 28.8],
+      ]),
+      R,
+    );
+    const spots = [
+      moveOn(track, 0, 1, new Vector3()).clone(),
+      ...inLane(track, 30),
+    ];
+    const steps = spots.slice(1).map((spot, i) => metres(spots[i], spot));
+    expect(Math.max(...steps)).toBeLessThan(0.04); // at ×1 and 60 fps a pace is 0.023 m a frame
+    const second = (s: number) => spots[Math.round(s / FRAME)];
+    expect(south(second(14))).toBeCloseTo(LANE_M, 2); // right of the way east...
+    expect(settled(second(24))).toBeCloseTo(LANE_M, 2); // ...then right of the way it turned
+    expect(metres(spots.at(-1)!, new Vector3(...at(...end)))).toBeLessThan(
+      1e-3,
+    );
+  });
+
+test('a walk cut short mid-street eases the walker out of its lane onto its spot, never jumping', () => {
+  const track = newTrack(shortWalk({}), R); // 20 m east in 14.4 s
+  const before = inLane(track, 7.2);
+  expect(south(before.at(-1)!)).toBeCloseTo(LANE_M, 2); // in its lane, 10 m along
+  follow(track, tick([10, 0], [], { activity: 'idle' }), R, 1); // it stopped there
+  const spots = [before.at(-1)!, ...inLane(track, 3)];
+  const steps = spots.slice(1).map((spot, i) => metres(spots[i], spot));
+  expect(Math.max(...steps)).toBeLessThan(0.04);
+  expect(Math.abs(south(spots.at(-1)!))).toBeLessThan(0.001); // on its spot
+  expect(metres(spots.at(-1)!, new Vector3(...at(10, 0)))).toBeLessThan(0.01);
+});
+
+test('a walker a little behind whose walk ends just ahead eases out of its lane onto its spot, never jumping', () => {
+  const track = newTrack(walkingEast(1), R); // 83.3 m east in the tick, its plan going on east
+  const before = inLane(track, 59.4); // drawn 0.6 s short of where the tick ends
+  expect(south(before.at(-1)!)).toBeCloseTo(LANE_M, 2);
+  follow(track, tick([83.3, 0], [], { activity: 'idle' }), R, 1); // it stopped there: walk the last 0.8 m
+  expect(track.fade).toBeNull();
+  const spots = [before.at(-1)!, ...inLane(track, 3)];
+  const steps = spots.slice(1).map((spot, i) => metres(spots[i], spot));
+  expect(Math.max(...steps)).toBeLessThan(0.04);
+  expect(Math.abs(south(spots.at(-1)!))).toBeLessThan(0.001);
+  expect(metres(spots.at(-1)!, new Vector3(...at(83.3, 0)))).toBeLessThan(0.01);
 });

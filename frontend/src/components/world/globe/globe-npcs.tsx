@@ -24,6 +24,7 @@ import { MAX_FRAME, smoothing } from '@/components/world/player/motion';
 import type { LiveCitizen } from '@/lib/live/live-contract';
 import {
   follow,
+  keepRight,
   moveOn,
   newTrack,
   shownDoing,
@@ -278,7 +279,12 @@ function placeAlong(
 ) {
   const { terrain, town, scratch, heading, rate, delta } = context;
   const radius = terrain.globe.radius;
-  const direction = moveOn(track, delta, rate, scratch.direction);
+  const direction = keepRight(
+    track,
+    delta,
+    moveOn(track, delta, rate, scratch.direction),
+    radius,
+  );
   const onward = walking(track.path);
   const ground = groundUnder(terrain, town, direction, scratch.local);
   const { east, south, up } = tangentFrame(direction);
