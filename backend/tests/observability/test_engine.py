@@ -115,6 +115,26 @@ def test_a_resumed_run_catches_up_its_lost_tail_without_waiting(db_session: Sess
     assert run is not None and run.tick == 91
 
 
+def test_a_paused_resumed_run_still_catches_up_until_a_stop(db_session: Session, sim_world: SimWorld) -> None:
+    first = open_loop(db_session, sim_world, KEY, new_run=True, citizens=None, clock=Clock(paused=True), brains=False)
+    first.run_ticks(90, headless=True)  # headless ignores the pause; an unclean stop at 90
+
+    resumed = open_loop(db_session, sim_world, KEY, new_run=False, citizens=None, clock=Clock(), brains=False)
+    assert resumed.clock.paused and (resumed.sim.tick, resumed.catch_up_to) == (60, 90)
+    fake = FakeTime()
+    fake.at.append((600.0, lambda: setattr(resumed, "stopping", True)))  # a catch-up held by the pause ends here
+
+    def interrupt_at_75(sim: Simulation) -> None:
+        if sim.tick == 75:
+            resumed.stopping = True  # what the SIGINT handler does
+
+    resumed.now, resumed.idle_sleep, resumed.brains = fake.now, fake.sleep, [fake.brain, interrupt_at_75]
+    resumed.run_ticks(None, headless=False)
+    resumed.shut_down()
+    assert fake.ticked_at == [0.0] * 16  # 61..76 at once despite the pause; the stop ends the catch-up there
+    assert _snapshot_ticks(db_session, first.run.id) == [0, 60, 76]
+
+
 def test_clock_commands_reach_the_engine(db_session: Session, sim_world: SimWorld) -> None:
     loop = open_loop(db_session, sim_world, KEY, new_run=True, citizens=None, clock=Clock())
     command = queue_command(db_session, loop.run.id, "clock", {"paused": True, "speed": 30})
