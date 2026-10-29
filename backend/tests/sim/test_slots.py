@@ -21,7 +21,6 @@ from app.sim.slots import (
     held_slot,
     layout,
     load_slots_spec,
-    occupancy_words,
     ring_spot,
     step_to,
     walkable,
@@ -177,7 +176,6 @@ def test_rest_takes_a_free_bench_seat_nearby_else_the_ground(new_sim: Callable[.
     assert _apart(sim, people) >= PERSONAL_M  # the third sits on the ground beside them
     texts = sorted(run_until_done(sim, rest, 10).text for rest in rests)
     assert texts == ["You rest a while on the bench."] * 2 + ["You rest a while on the ground."]
-    assert occupancy_words(sim.core, "market-bench-1", "seat") == "both taken"
 
 
 def test_a_family_sleeps_inside_and_steps_out_apart_in_the_morning(new_sim: Callable[..., Simulation]) -> None:
@@ -268,7 +266,7 @@ def test_claims_let_go_when_a_walk_is_cut_short_or_the_walker_dies(new_sim: Call
     rester = sim.add_citizen(make_spec("rester", at=(24.0, 53.5), knows_people=["idler"]))
     WorldApi(sim, rester.id).rest(30)
     sim.step()
-    assert occupancy_words(sim.core, "market-bench-2", "seat") == "one free"
+    assert _slot(sim, rester).owner == "market-bench-2"
     WorldApi(sim, idler.id).walk_towards("west", "a long walk")
     WorldApi(sim, rester.id).follow("idler")  # gets up and goes after them: the seat is free again
     sim.step()
@@ -304,15 +302,6 @@ def test_the_claims_round_trip_through_a_snapshot_and_runs_repeat(new_sim: Calla
     assert state_hash(sim.state) == state_hash(again.state)
     restored = restore(take_snapshot(sim.state))
     assert SLOTS.of(restored) == SLOTS.of(sim.state) and SLOTS.of(restored) is not SLOTS.of(sim.state)
-
-
-def test_occupancy_words_tell_how_full_a_thing_is(new_sim: Callable[..., Simulation]) -> None:
-    sim = _sim(new_sim)
-    assert occupancy_words(sim.core, "market-bench-2", "seat") == "free"
-    sitter = sim.add_citizen(make_spec("solo", at=(24.0, 53.5)))
-    WorldApi(sim, sitter.id).rest(30)
-    sim.step()
-    assert occupancy_words(sim.core, "market-bench-2", "seat") == "one free"
 
 
 def test_bodies_closer_than_personal_space_step_apart(new_sim: Callable[..., Simulation]) -> None:

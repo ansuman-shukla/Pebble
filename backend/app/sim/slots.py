@@ -560,19 +560,6 @@ def take_work_slot(core: SimCore, citizen: Citizen, task: str, area: tuple[Vec3,
     return "all taken"
 
 
-def occupancy_words(core: SimCore, owner_id: str, kind: SlotKind) -> str:
-    """How full an owner's slots of a kind are, in words ("both seats taken", "one free", "free")."""
-    slots = [slot for slot in layout(core).owners.get(owner_id, ()) if slot.kind == kind]
-    spots = _taken(core, "")
-    taken = sum(not _clear(core, slot.position, spots) for slot in slots)
-    if not slots or taken == 0:
-        return "free"
-    if taken == len(slots):
-        return "both taken" if len(slots) == 2 else "all taken"
-    free = len(slots) - taken
-    return "one free" if free == 1 else f"{free} free"
-
-
 # --- the tick's end ---
 
 
