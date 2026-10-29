@@ -5,14 +5,18 @@ import {
   cameraOf,
   drawn,
   goToPerson,
+  inView,
   type MockLiveWindow,
   openHeld,
+  viewOf,
 } from './ui-helpers';
 
 /* The globe's chips in the browser: tiers by distance, icons, clusters that never cover each other. */
 
 /** Distances this close to a tier's edge are skipped: the chip hangs a little above the feet. */
 const EDGE_M = 4;
+/** A chip hangs at most this high above the drawn feet. */
+const CHIP_LIFT_M = 2.2;
 
 test('near citizens get full chips, farther ones icon chips, none past 150 m', async ({
   page,
@@ -26,6 +30,7 @@ test('near citizens get full chips, farther ones icon chips, none past 150 m', a
     .toBeGreaterThan(0);
 
   const camera = await cameraOf(world);
+  const view = await viewOf(page, world);
   const people = await drawn(page);
   const chips = await page
     .locator('[data-label^="npc-"]:visible')
@@ -55,9 +60,22 @@ test('near citizens get full chips, farther ones icon chips, none past 150 m', a
       expect(shown.has(id), `${id} at ${distance(id).toFixed(0)} m`).toBe(
         false,
       );
+  // drawn a tick behind the sim, someone close by can stand behind the camera or beside the view: only those in
+  // view must have a chip
+  const seen = (id: string) => {
+    const feet = people.get(id)!.at;
+    const head = feet
+      .clone()
+      .addScaledVector(feet.clone().normalize(), CHIP_LIFT_M);
+    return inView(view, [feet, head]);
+  };
+  let near = 0;
   for (const [id] of people)
-    if (distance(id) < ICON_M - EDGE_M)
+    if (distance(id) < ICON_M - EDGE_M && seen(id)) {
       expect(shown.has(id), `${id} at ${distance(id).toFixed(0)} m`).toBe(true);
+      near++;
+    }
+  expect(near, 'someone near in view').toBeGreaterThan(0);
   let tiers = 0;
   for (const chip of chips) {
     const far = distance(chip.leader);

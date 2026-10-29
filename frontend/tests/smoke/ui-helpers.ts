@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
-import { Vector3 } from 'three';
+import { PerspectiveCamera, Quaternion, Vector3 } from 'three';
 
 import type { EntitiesView } from '../../src/lib/client/types.gen';
 import { openGlobe } from './globe-helpers';
@@ -45,6 +45,28 @@ export const cameraOf = async (world: Locator) =>
   new Vector3(
     ...(await world.getAttribute('data-camera'))!.split(',').map(Number),
   );
+
+/** The globe's camera as it is now (fov 50, as globe-page.tsx sets it up), sized like the scene's canvas. */
+export async function viewOf(page: Page, world: Locator) {
+  const pose = (await world.getAttribute('data-camera'))!
+    .split(',')
+    .map(Number);
+  const { width, height } = (await page
+    .locator('canvas[data-engine]')
+    .boundingBox())!;
+  const camera = new PerspectiveCamera(50, width / height, 0.1, 3000);
+  camera.position.set(pose[0], pose[1], pose[2]);
+  camera.quaternion.copy(new Quaternion(pose[3], pose[4], pose[5], pose[6]));
+  camera.updateMatrixWorld();
+  return camera;
+}
+
+/** Whether `points` all project inside the view (a margin short of the chip projector's 1.1 edge). */
+export const inView = (camera: PerspectiveCamera, points: Vector3[]) =>
+  points.every((point) => {
+    const { x, y, z } = point.clone().project(camera);
+    return z < 1 && Math.abs(x) < 1 && Math.abs(y) < 1;
+  });
 
 /** Where each citizen is drawn (world metres) and what they do, from the page's hidden hooks. */
 export async function drawn(page: Page) {
