@@ -1069,7 +1069,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
         {(clockLive || replay) && (
           <span className="basis-full" data-testid="spectator-keys">
             Tab select, F follow, G go to, I inspector
-            {clockLive && ', Space pause, 1-4 speed'}, Esc let go
+            {clockLive && ', L events, Space pause, 1-4 speed'}, Esc let go
           </span>
         )}
       </div>
