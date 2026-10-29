@@ -32,7 +32,7 @@ from sqlalchemy import Engine
 from sqlmodel import Session
 
 from app.db.models import Event, Run
-from app.observability.lines import GROUP_NAMES, Importance, Told, tell
+from app.observability.lines import Importance, Names, Resident, Told, namer, tell
 from app.observability.replay import ReplayEvent, ReplayState, apply_event, replay
 from app.observability.store import EVENTS_CHANNEL, event_id_at, events_after, latest_run, latest_snapshot
 from app.services.entities import (
@@ -46,7 +46,6 @@ from app.services.entities import (
     wild_entities,
 )
 from app.sim.clock import town_clock
-from app.sim.fauna import SPECIES
 from app.sim.snapshot import SimSnapshot
 
 log = logging.getLogger("pebble.live")
@@ -152,7 +151,7 @@ class RunFeed:
     def detail(self, row: Event) -> LiveEventDetail:
         """The event as spectators get it: its payload plus its line, importance and place."""
         told = Told(type=row.type, actor_kind=row.actor_kind, actor_id=row.actor_id, payload=row.payload)
-        line, importance = tell(told, self.name)
+        line, importance = tell(told, self.names())
         return LiveEventDetail(
             id=row.id,
             type=row.type,
@@ -163,13 +162,9 @@ class RunFeed:
             position=self.where(row),
         )
 
-    def name(self, ref: str) -> str:
-        """A citizen's name, "a deer" for an animal, a group's name, else the id in plain words."""
-        if (citizen := self.state.citizens.get(ref)) is not None:
-            return citizen.name
-        if (animal := self.state.animals.get(ref)) is not None:
-            return SPECIES[animal.kind].one
-        return GROUP_NAMES.get(ref, ref.replace("_", " "))
+    def names(self) -> Names:
+        """Ids in words for the lines (citizens by name, households, animals, groups: `lines.namer`)."""
+        return namer({c.id: Resident(c.name, c.home, c.age) for c in self.state.citizens.values()})
 
     def where(self, row: Event) -> Position | None:
         """Where the payload says (fires, spawns), else where the actor is (after the event)."""
