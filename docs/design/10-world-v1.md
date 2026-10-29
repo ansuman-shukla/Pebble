@@ -14,7 +14,9 @@ streams in the plan. Numbers are v1 defaults; they live in data files (`backend/
 
 Principles (unchanged from 00, sharpened): the world is the authority (everything enforced in sim code, never in
 prompts); minds get exactly the actions and perceptions scripted brains use; every state change is one event;
-**visible = simulated**; something must always be happening (needs, scarcity, ambition, threats).
+**visible = simulated**; something must always be happening (needs, scarcity, ambition, threats); flows close on
+paper (rice §1.4, coins §2.7, hunts §4.6) before a run has to prove them; every system rolls on its own RNG stream
+(§6.5).
 
 ---
 
@@ -423,8 +425,10 @@ thief.
 ### 4.2 Drawing at ×1 / ×10 / ×60 / ×600 (supersedes the glide parts of D61, D72)
 1. **Paths are streamed from where the motion starts.** A new walk, flee, follow or stalk sends its route at once
    (with its `action_started`), and every tick summary carries the path walked this tick plus the path ahead, with
-   `speed_mps` and `gait`, for citizens, stalks and **animals**. (Audit F1: today the route is computed only after
-   the tick's step, so 46 % of moves were never drawn as walking and ~500 teleports a day of 30-83 m happened.)
+   `speed_mps` and `gait`, for citizens, stalks and **animals**. (Audit F1: the route was computed only after the
+   tick's step, so 46 % of moves were never drawn as walking and ~500 teleports a day of 30-83 m happened. The
+   fix-now PR `walker-motion` (D100-D104) does this for citizens, 1-tick walks and stalks, paces legs from the drawn
+   speed and caps playback; World v1 extends it to animals and to the time-lapse rules below.)
    The client walks each body from where it is drawn toward its goal at `speed_mps × rate` and stops at the goal.
 2. **Time-lapse rule:** every clip and procedural motion (gaits, work, transitions, prop clips, smoke, doors, tree
    fall) plays at natural speed × `visualRate = min(rate, 10)`. Gait choice comes from game speed, never drawn
@@ -474,6 +478,8 @@ thief.
   prey); no animal ends a step within 1.0 m of a citizen.
 
 ### 4.4 Ground contact (client, measured)
+The fix-now PR `rest-poses` (D100-D104) already puts sitters and sleepers on the ground (audit F5/F6); v1 adds
+seats, mats, `inside` and slope fitting on top.
 - Standing: feet on the ground under the origin. Seat: `Sit down` → `Sitting` → `Stand up`, hips on the slot's
   `height_m`, body faces the slot heading. Ground sit: `Sitting` + leg override (thighs −85°, hips 0.12 m).
 - Lying (sleep, collapse, dead): pivot at the hips; pitch/roll from a plane fit to ground under head, hips and feet;
@@ -646,22 +652,25 @@ looks, stage and motion rules key on node-name conventions (`fruit-N`, `yield-N`
 
 ## 6. Contract v1 (supersedes v0, D74 → D96)
 
-### 6.1 Actions (33 = v0's 22 + 11)
+C1 publishes these models as a **draft** in wave 1; streams implement behind them and ask C1 for changes; Q1
+**freezes** `contract_v1.json` once the World v1 critic checklist passes, and Phase B builds on the frozen file.
+
+### 6.1 Actions (32 = v0's 22 + 10)
 | Action | Kind | v1 rule |
 |---|---|---|
 | look_around, check_self, say, recall | instant | as v0 (`recall` agent-only) |
 | walk_to(target, pace?) / follow(person, pace?) | durative | `pace: walk \| run` (run: §4.1 limits); destinations resolve to free slots/spots |
 | gather(resource) | durative | at a node spot within 3 m; resources: berries, roots, nuts, reeds, wood, rice, flint, obsidian, iron sand, gold |
 | fish() / hunt(animal) | durative | fish at a fishing spot; hunt stalks along a route |
-| eat, drink, pick_up, drop, give | as v0 | `pick_up` reads stores in reach incl. chests and the stall (theft allowed); bad water rule |
+| eat, drink, pick_up, drop, give | as v0 | `pick_up` reads stores in reach incl. chests and the stall (theft allowed) |
 | make_fire, feed_fire, rest, sleep, attack, flee, wait | as v0 | rest/sleep take slots; flee runs |
 | work(task) | durative | farm (paddy spot), store food (pays tax first), guard, trade (opens the stall), weave (= craft cloth), govern, **ring bell**, **pray** |
 | **buy(item, amount)** / **sell(item, amount)** | instant | at an open stall |
 | **stash(item, amount)** | instant | into your own chest (or the stall, merchant) within reach |
 | **craft(recipe)** | durative | §2.3 |
 | **accuse(person, to)** | instant | §3.4 |
-| **seize(person)** / **release(person)** | durative 1 min / instant | §3.4 |
-| **judge(person, sentence)** | durative 15 min | §3.4 |
+| **seize(person)** | durative 1 min | §3.4 |
+| **judge(person, sentence)** | durative 15 min | sentence: fine N or confine H (§3.4) |
 | **tend(person)** | durative 30 min | §3.4 |
 | **gesture(kind, to?)** | instant | wave, bow, nod, shake_head, point, laugh, jump; seen within sight → `gestured` |
 | **set_goal(text, driver)** | free (0 ticks) | ≤ 80 chars; driver ∈ hunger, thirst, rest, danger, duty, ambition, social, night; spectator-only, never perceived by others → `goal_set` |
@@ -685,9 +694,9 @@ looks, stage and motion rules key on node-name conventions (`fruit-N`, `yield-N`
 ### 6.3 Events (new types; each registers a `line` template + `importance` in one registry)
 `node_changed` (replaces `resource_changed`), `tree_felled`, `trespassed`, `stole`, `bought`, `sold`, `crafted`,
 `spoiled`, `tool_broke`, `tax_assessed`, `tax_paid`, `tax_overdue`, `ledger`, `prices_changed`, `accused`, `seized`,
-`released`, `escaped`, `confined`, `judged`, `sentence_served`, `standing_changed`, `bonds_changed`,
-`leader_changed`, `bell_rang`, `tended`, `gestured`, `goal_set`. Existing `injured`/`died` gain causes `bad water`,
-`violence` (with attacker). Snapshot version 3 (nodes, slots, ledger, stores, society, animal phases).
+`released` (cause: judged, timeout, seizer down), `confined`, `judged`, `sentence_served`, `standing_changed`,
+`leader_changed`, `bell_rang`, `tended`, `gestured`, `goal_set`. Existing `injured`/`died` gain cause `violence`
+(with the attacker). Snapshot version 3: core state plus one versioned block per system (§6.5).
 
 ### 6.4 Spectator feed (not the mind contract)
 Citizen `motion`, `posture`, `slot_heading`, `goal`, `driver`, `target {kind, id, name, position}`, `needs`,
@@ -695,11 +704,23 @@ Citizen `motion`, `posture`, `slot_heading`, `goal`, `driver`, `target {kind, id
 route-ahead for stalks; changed node stages per tick; every live event gains `line`, `importance`, `position`.
 New endpoints: `GET /world/flora`, `GET /world/places` (hotspots, roads, dens, markers), `GET /scoreboard?at=`.
 
+### 6.5 Determinism
+Same seed + same inputs → same events, as in v0. Every system rolls only on its own **named RNG stream**
+(`Rng.for_subsystem(seed, "<system>.<purpose>")`, e.g. `animals.hunt`, `wear.breakage`, `justice.seize`); a new roll
+gets a new stream name and never draws from an existing one, so adding a feature doesn't reshuffle unrelated
+outcomes. Each system owns its state dataclass and its snapshot block with its own version number.
+
 ---
 
-## 7. What citizens maximize (spectator scoreboard; never shown to minds as a score)
-Derived per request by replay (D62) plus the daily `ledger`. Minds and brains only perceive the underlying facts in
-words (purse, hunger, standing word); the numbers are for spectators and research.
+## 7. What citizens maximize
+**What a mind strives for** is its own: its persona's **ambition** (§3.1) plus its **needs**, **purse**, **rank** and
+**standing**, all perceived in words every look ("very hungry", "a short string of coins", "your lord", "People here
+regard you well"), so each mind has a world it can measure for itself and act to improve. Scripted brains weigh the
+same facts.
+
+**The spectator scoreboard** turns those facts into numbers for spectators and research only; it is **never shown to
+minds as a score** (a score in the prompt would make them optimise our metric instead of living). Derived per
+request by replay (D62) plus the daily `ledger`.
 
 | Axis | Fields | Definition |
 |---|---|---|
@@ -721,11 +742,15 @@ words (purse, hunger, standing word); the numbers are for spectators and researc
 | `claim(place)` and contested claims | static claims already make trespass and poaching meaningful; contests need territory AI |
 | Barter action `trade(person, give, get)` with pending offers | the stall covers cross-group exchange; speech + two gives covers swaps |
 | Money as learned knowledge (`concepts`, `learned`) | doubles perception wording for one research metric; v1.1 with RQ2 |
+| `release` action, sanctuary, escape rolls, `restore`/`confiscate`/`pardon` sentences | fine (paying the victim first) and confine close the loop; held ends by judgement, timeout or a downed seizer |
+| Bad-water sickness | a rule that only punishes; raw-meat sickness already exists |
+| A bonds event | bonds are derived from existing events by replay |
+| Rules for the Hot springs and Standing stones | they stay named landmarks; no system needs them yet |
 | `grant`/`revoke`, promotions, an heir (Sayo), licences | titles static; only succession and band leadership change rank |
 | Banishment / outcasts | removes a citizen from the story; needs readmission rules |
 | Alarm drum, wrongful-seizure deed, hostages, bounties, appeals | nothing in v1 needs them; shouts already raise the alarm |
 | Shin the courier and other extra roles (24 → 22) | contact is covered by band A trips, Nim's obsidian, Daisuke at the falls; fewer Phase B sessions |
-| Work accidents (felling hits, rockfall, slips), herbs, hot-spring healing, thorn rings | RNG damage without decisions; tend covers healing |
+| Work accidents (felling hits, rockfall, slips), herbs, thorn rings | RNG damage without decisions; tend covers healing |
 | Bear raids on berry bushes, outlaws / Thieves' hollow | dens and band B raids already carry the threat |
 | Duck flight, bird flocks | sim-backed life first; ducks paddle away |
 | Vaulting jump, block, swimming people, climbing | the sim has no obstacles or defence rules; jump exists as a gesture |
