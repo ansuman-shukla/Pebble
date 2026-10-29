@@ -99,16 +99,29 @@ def test_walkers_to_one_place_take_separate_stands_then_a_queue_in_reach(new_sim
     assert crowded(sim.core) == []
 
     stander = next(p for p in people if round(sim.world.distance_m(p.position, well), 1) == WELL_STAND_M)
-    queued = [p for p in people if round(sim.world.distance_m(p.position, well), 1) == WELL_QUEUE_M]
-    waiting = [WorldApi(sim, p.id).wait(30) for p in queued]
+    first, second = sorted(
+        (p for p in people if round(sim.world.distance_m(p.position, well), 1) == WELL_QUEUE_M),
+        key=lambda p: _slot(sim, p).id,
+    )
+    assert [_slot(sim, first).id, _slot(sim, second).id] == ["well#queue-1", "well#queue-2"]  # in order, not nearest
+    waiting = [WorldApi(sim, p.id).wait(30) for p in (first, second)]
     freed = held_slot(sim.core, stander)
-    WorldApi(sim, stander.id).walk_to_place("the main gate")
+    assert freed is not None
+    WorldApi(sim, stander.id).walk_to_place("the main gate")  # the stand is free from now...
+    late = sim.add_citizen(make_spec("late", at=GATE))
+    late_walk = WorldApi(sim, late.id).walk_to_place("the well")
+    assert _slot(sim, late).id == "well#queue-3"  # ...but kept for those queueing: the newcomer joins the end
+    sim.drain()
     sim.step()
-    assert freed is not None and sum(held_slot(sim.core, p) == freed for p in queued) == 1  # one moves up...
-    mover = next(p for p in queued if held_slot(sim.core, p) == freed)
-    assert sim.world.distance_m(mover.position, freed.position) < 0.01
-    assert _summary(sim).moved[mover.id].route  # ...drawn walking there
+    assert held_slot(sim.core, first) == freed  # the first in line moves up...
+    assert sim.world.distance_m(first.position, freed.position) < 0.01
+    assert _summary(sim).moved[first.id].route  # ...drawn walking there
+    assert _slot(sim, second).id == "well#queue-1"  # and the next one up behind them
     assert all(w.result is None for w in waiting)  # still waiting, now at the well itself
+    assert run_until_done(sim, late_walk, 30).text == "You arrive at the well."
+    WorldApi(sim, late.id).wait(30)
+    sim.step()
+    assert _slot(sim, late).id == "well#queue-2" and crowded(sim.core) == []
 
 
 def test_a_weaver_walks_home_to_the_loom_and_weaves_there(new_sim: Callable[..., Simulation]) -> None:

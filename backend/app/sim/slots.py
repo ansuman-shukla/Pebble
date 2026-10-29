@@ -437,26 +437,65 @@ def free_round(core: SimCore, citizen: Citizen, centre: Vec3, radius: float, bea
 
 def _arrival(core: SimCore, citizen: Citizen, slots: tuple[Slot, ...], anchor: Vec3, with_centre: bool) -> Vec3:
     """Where someone walking to these slots ends, claimed on the way: the nearest free work slot of theirs (the loom
-    for a weaver, the stall for the merchant), else the first owner's free stands, then its queue, then the next
-    owner's (the granary before the other storehouses), else a ring spot round the anchor. Seats and mats are taken
-    by resting and sleeping, not by walking. Anyone in a queue or round about waits for the first owner's stands."""
+    for a weaver, the stall for the merchant), else the first owner's free stands (unless others queue for them),
+    then the end of its queue, then the next owner's (the granary before the other storehouses), else a ring spot
+    round the anchor, waiting for the first owner's stands. Seats and mats are taken by resting and sleeping, not by
+    walking."""
     chosen = nearest_free(core, citizen, [slot for slot in slots if slot.kind == "work"])
-    for owner in dict.fromkeys(slot.owner for slot in slots):
-        for kind in ("stand", "queue"):
-            if chosen is None:
-                chosen = nearest_free(
-                    core, citizen, [slot for slot in slots if slot.owner == owner and slot.kind == kind]
-                )
-    if chosen is not None and chosen.kind != "queue":
-        return _walk_claim(core, citizen, chosen, chosen.position)
-    waits_for = next((slot.owner for slot in slots if slot.kind == "stand"), None)
     if chosen is not None:
-        return _walk_claim(core, citizen, chosen, chosen.position, waits_for)
+        return _walk_claim(core, citizen, chosen, chosen.position)
+    for owner in dict.fromkeys(slot.owner for slot in slots):
+        if not _line(core, owner, but=citizen.id):  # first come, first served: nobody jumps the queue
+            stand = nearest_free(
+                core, citizen, [slot for slot in slots if slot.owner == owner and slot.kind == "stand"]
+            )
+            if stand is not None:
+                return _walk_claim(core, citizen, stand, stand.position)
+        last = _queue_end(core, citizen, owner)
+        if last is not None:
+            return _walk_claim(core, citizen, last, last.position, waits_for=owner)
+    waits_for = next((slot.owner for slot in slots if slot.kind == "stand"), None)
     spot = ring_spot(core, citizen, anchor, with_centre)
     if spot is None:
         release(core, citizen)
         return anchor
     return _walk_claim(core, citizen, None, spot, waits_for)
+
+
+def _queue(core: SimCore, owner: str) -> tuple[Slot, ...]:
+    """An owner's queue slots, first to last."""
+    return tuple(slot for slot in layout(core).owners.get(owner, ()) if slot.kind == "queue")
+
+
+def _rank(queue: tuple[Slot, ...], claimed: Claim) -> int:
+    """Where a waiter stands in line: their queue slot's place, or behind the queue (round about)."""
+    return next((index for index, slot in enumerate(queue) if slot.id == claimed.slot), len(queue))
+
+
+def _in_line(citizen: Citizen, claimed: Claim) -> bool:
+    """Waiting their turn: on the way to their place in line, or standing in it with nothing else to do."""
+    action = citizen.action
+    if is_moving(citizen):
+        return action is not None and action.goal == claimed.position
+    return action is None or action.kind == "wait"
+
+
+def _line(core: SimCore, owner: str, but: str) -> list[tuple[int, str]]:
+    """Who queues for an owner's stands, in order (rank, citizen id); ties round about by id."""
+    queue = _queue(core, owner)
+    return sorted(
+        (_rank(queue, claimed), citizen_id)
+        for citizen_id, claimed in slot_state(core).claims.items()
+        if claimed.waits_for == owner and citizen_id != but and _in_line(core.state.citizens[citizen_id], claimed)
+    )
+
+
+def _queue_end(core: SimCore, citizen: Citizen, owner: str) -> Slot | None:
+    """The first free queue slot behind everyone already queueing for the owner, or None (the queue is full)."""
+    queue = _queue(core, owner)
+    behind = max((rank + 1 for rank, _ in _line(core, owner, but=citizen.id) if rank < len(queue)), default=0)
+    spots = _taken(core, citizen.id)
+    return next((slot for slot in queue[behind:] if _clear(core, slot.position, spots)), None)
 
 
 def _walk_claim(core: SimCore, citizen: Citizen, slot: Slot | None, spot: Vec3, waits_for: str | None = None) -> Vec3:
@@ -586,10 +625,9 @@ def settle(core: SimCore) -> None:
             if not step_to(core, citizen, claimed.position, straight=inside):
                 del state.claims[citizen_id]
                 continue
-        elif claimed.waits_for is not None and citizen.id not in core.strides:
-            slot = _move_up(core, citizen, claimed.waits_for) or slot
         if slot is not None and citizen.id in core.strides:  # turned as they arrive (a turn is told with a move)
             citizen.heading_deg = slot.heading_deg
+    _move_queues(core)
     _keep_apart(core)
 
 
@@ -598,16 +636,25 @@ def _come_out(core: SimCore, citizen: Citizen, home: Structure) -> None:
     step_to(core, citizen, reserve_home(core, citizen, home), straight=True)
 
 
-def _move_up(core: SimCore, citizen: Citizen, owner: str) -> Slot | None:
-    """Someone standing about in a queue (or round about) steps up to a stand of the owner once one frees."""
-    if citizen.action is not None and citizen.action.kind != "wait":
-        return None
-    stands = [slot for slot in layout(core).owners.get(owner, ()) if slot.kind == "stand"]
-    stand = nearest_free(core, citizen, stands, APPROACH_M)
-    if stand is None or not step_to(core, citizen, stand.position):
-        return None
-    claim(core, citizen, stand, stand.position)
-    return stand
+def _move_queues(core: SimCore) -> None:
+    """Lines move up in order: the first waiting their turn, standing in line, steps to a freed stand of the owner,
+    the next ones each to the free queue slot nearest the front ahead of them."""
+    state = slot_state(core)
+    for owner in sorted({claimed.waits_for for claimed in state.claims.values() if claimed.waits_for is not None}):
+        queue = _queue(core, owner)
+        stands = [slot for slot in layout(core).owners.get(owner, ()) if slot.kind == "stand"]
+        for rank, citizen_id in _line(core, owner, but=""):
+            citizen = core.state.citizens[citizen_id]
+            if is_moving(citizen) or citizen.id in core.strides:  # not there yet, or only just arrived
+                continue
+            spots = _taken(core, citizen_id)
+            ahead = [slot for slot in queue[:rank] if _clear(core, slot.position, spots)]
+            stand = nearest_free(core, citizen, stands, APPROACH_M)
+            target = stand if stand is not None else (ahead[0] if ahead else None)
+            if target is None or not step_to(core, citizen, target.position):
+                continue
+            claim(core, citizen, target, target.position, waits_for=None if target is stand else owner)
+            citizen.heading_deg = target.heading_deg
 
 
 def _still_held(core: SimCore, citizen: Citizen, claimed: Claim, slot: Slot | None) -> bool:
