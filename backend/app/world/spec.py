@@ -14,23 +14,6 @@ from app.world.town import KindSpec, PlacementSpec, load_kinds
 
 WORLD_SPEC_DIR = WORLD_DATA_DIR / "world"
 
-BIOME_NAMES: tuple[str, ...] = (
-    "deep_ocean",
-    "shallow_ocean",
-    "beach",
-    "grassland",
-    "broadleaf_forest",
-    "taiga",
-    "wetland",
-    "hills",
-    "mountain",
-    "savanna",
-    "tundra",
-    "snow",
-    "ice",
-    "lake",
-    "volcanic",
-)
 BiomeName = Literal[
     "deep_ocean",
     "shallow_ocean",
@@ -48,6 +31,23 @@ BiomeName = Literal[
     "lake",
     "volcanic",
 ]
+BIOME_NAMES: tuple[BiomeName, ...] = (
+    "deep_ocean",
+    "shallow_ocean",
+    "beach",
+    "grassland",
+    "broadleaf_forest",
+    "taiga",
+    "wetland",
+    "hills",
+    "mountain",
+    "savanna",
+    "tundra",
+    "snow",
+    "ice",
+    "lake",
+    "volcanic",
+)
 SiteKind = Literal["town", "camp", "landmark"]
 SITE_IDS: tuple[str, ...] = (
     "town",

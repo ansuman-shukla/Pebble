@@ -2732,6 +2732,16 @@
             "additionalProperties": {
               "type": "integer"
             },
+            "propertyNames": {
+              "enum": [
+                "tree",
+                "nut_tree",
+                "berry_bush",
+                "root_patch",
+                "reed_bed",
+                "deadwood"
+              ]
+            },
             "type": "object",
             "title": "Flora",
             "default": {}

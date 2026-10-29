@@ -7,6 +7,7 @@ import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel
 
+from app.world.spec import FloraNode
 from app.world.town import TownPlacement
 
 Vector = tuple[float, float, float]
@@ -50,7 +51,7 @@ class Hotspot(BaseModel):
     danger: str
     thirst: float = 1.0  # thirst factor while inside
     woodland: float = 1.0  # tree density factor inside
-    flora: dict[str, int] = {}  # node kind -> exact count inside
+    flora: dict[FloraNode, int] = {}  # node kind -> exact count inside
     hunting: list[str] = []  # animal kinds whose hunting ground it is
 
 

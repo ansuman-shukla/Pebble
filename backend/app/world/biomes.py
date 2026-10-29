@@ -9,7 +9,7 @@ from app.world.spec import BIOME_NAMES, BiomeThresholds, ClimateSpec
 from app.world.sphere import FloatArray
 from app.world.terrain import BoolArray
 
-BIOME_IDS = {name: index for index, name in enumerate(BIOME_NAMES)}
+BIOME_IDS: dict[str, int] = {name: index for index, name in enumerate(BIOME_NAMES)}
 WATER_BIOMES = frozenset({BIOME_IDS["deep_ocean"], BIOME_IDS["shallow_ocean"], BIOME_IDS["lake"]})
 UInt8Array = NDArray[np.uint8]
 

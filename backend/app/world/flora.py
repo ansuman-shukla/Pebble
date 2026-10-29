@@ -29,13 +29,14 @@ import hashlib
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import cached_property
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
 
 from app.world.biomes import BIOME_IDS, mean_spacing_m
 from app.world.grid import Grid, IntArray
-from app.world.spec import BIOME_NAMES, CAMPS, FloraSpec, HotspotsSpec, WorldSpec
+from app.world.spec import BIOME_NAMES, CAMPS, FloraNode, FloraSpec, HotspotsSpec, WorldSpec
 from app.world.sphere import FloatArray, angle_between, tangent_frame, tangent_frames
 from app.world.surface import Surface, surface_from_view
 from app.world.terrain import BoolArray
@@ -99,15 +100,16 @@ class Flora:
         if len(data) % BYTES_PER_ITEM:
             raise ValueError(f"a flora table is a multiple of {BYTES_PER_ITEM} bytes, got {len(data)}")
         count = len(data) // BYTES_PER_ITEM
-        fields: dict[str, NDArray[np.generic]] = {}
+        columns: list[NDArray[Any]] = []
         offset = 0
-        for name, dtype in _PACKED_FIELDS:
+        for _, dtype in _PACKED_FIELDS:
             size = np.dtype(dtype).itemsize * count
-            fields[name] = np.frombuffer(data[offset : offset + size], dtype=dtype).astype(
-                np.dtype(dtype).newbyteorder("=")
+            columns.append(
+                np.frombuffer(data[offset : offset + size], dtype=dtype).astype(np.dtype(dtype).newbyteorder("="))
             )
             offset += size
-        return cls(**fields, grid=grid, radius_m=radius_m)  # type: ignore[arg-type]
+        cell, east, north, kind, scale, yaw = columns
+        return cls(cell=cell, east=east, north=north, kind=kind, scale=scale, yaw=yaw, grid=grid, radius_m=radius_m)
 
 
 @dataclass(frozen=True)
@@ -316,7 +318,7 @@ class _FloraPlacer:
     def _place_counted(
         self,
         region: "_Annulus",
-        node: str,
+        node: FloraNode,
         count: int,
         outside_rings_m: float | None,
         placed: _Items,
@@ -369,7 +371,7 @@ class _FloraPlacer:
         v += np.outer(np.sin(angle) * distance, frame.north)
         return np.asarray(v / np.linalg.norm(v, axis=1, keepdims=True), dtype=np.float64)
 
-    def _at(self, units: FloatArray, node: str, region: "_Annulus") -> _Items:
+    def _at(self, units: FloatArray, node: FloraNode, region: "_Annulus") -> _Items:
         """Items of the node kind at the points, each in its nearest cell (the kind its biome grows)."""
         nearby = np.flatnonzero(self.surface.distances_m(region.centre) <= region.outer_m + 2 * self.spacing)
         cells = nearby[np.argmax(units @ self.grid.positions[nearby].T, axis=1)]
@@ -377,7 +379,7 @@ class _FloraPlacer:
         offsets = units * self.surface.radius_m / np.einsum("ij,ij->i", units, self.grid.positions[cells])[:, None]
         east_m, north_m = np.einsum("ij,ij->i", offsets, east_axis), np.einsum("ij,ij->i", offsets, north_axis)
         biomes = [BIOME_NAMES[biome] for biome in self.surface.biomes[cells]]
-        codes = np.array([self.codes[self.flora.kind_of(node, biome)] for biome in biomes])  # type: ignore[arg-type]
+        codes = np.array([self.codes[self.flora.kind_of(node, biome)] for biome in biomes])
         return self._items(cells, east_m, north_m, codes)
 
     # ground rules ----------------------------------------------------------------------------------------------
