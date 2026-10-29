@@ -1,8 +1,16 @@
 import { expect, type Locator, type Page, test } from '@playwright/test';
 import { Vector3 } from 'three';
 
-import type { EntitiesView, WorldView } from '../../src/lib/client/types.gen';
-import { type Activity, tickMs } from '../../src/lib/live/live-contract';
+import type {
+  CitizenEntity,
+  EntitiesView,
+  WorldView,
+} from '../../src/lib/client/types.gen';
+import {
+  type Activity,
+  TICK_SECONDS,
+  tickMs,
+} from '../../src/lib/live/live-contract';
 import { npcLook } from '../../src/lib/live/npc-activity';
 import {
   anchorMapping,
@@ -288,19 +296,35 @@ const standing = async (page: Page) =>
     (npc) => npc.clip && npc.clip !== 'Walk' && npc.feet.length,
   );
 
+/** The activities of someone on the move. */
+const MOVING: Activity[] = ['walking', 'running', 'hunting'];
+/** The fastest anyone moves (game m/s): fleeing, 5 km/h × 1.6 (backend `FLEE_PACE`). */
+const FLEE_MPS = (5000 / 3600) * 1.6;
+/** How late a tick's frame may come (real seconds): until it does, a drawn mover walks on into its plan ahead. */
+const LATE_S = 0.5;
+
+/**
+ * What a citizen walked in its tick (unit directions): its route up to a tick in (`t_s` ≤ 60, from where it stood
+ * when the tick began to where it is), not the plan ahead; where it stands when it didn't move.
+ */
+function walkedPart({ route, position }: CitizenEntity) {
+  const walked = route.filter(
+    ({ t_s }) => t_s != null && t_s <= TICK_SECONDS + 1e-6,
+  );
+  return (
+    walked.length > 0 ? walked.map(({ unit }) => unit) : [position.unit]
+  ).map((unit) => new Vector3(...unit));
+}
+
+/** Metres from a drawn spot to the nearest of what a citizen walked in the given ticks. */
+const offWalked = (position: Vector3, ticks: CitizenEntity[]) =>
+  Math.min(...ticks.map((citizen) => offPath(position, walkedPart(citizen))));
+
 /**
  * How far an idle or talking citizen's feet may slide in 3 s (m): with the hips pinned, Idle slid them 5-10 cm;
  * planted they stay within ~2 cm. (Work clips like Fixing step about in the capture itself, so they aren't
  * held to this.)
  */
-/**
- * How far behind the engine a mover may be drawn (m): a tick of fleeing (5 km/h × 1.6, backend `FLEE_PACE`), two
- * for a page opened mid-tick (its walkers finish the tick before's route first).
- */
-const DRAWN_BEHIND_M = 2 * (5000 / 60) * 1.6;
-/** The activities of someone on the move. */
-const MOVING: Activity[] = ['walking', 'running', 'hunting'];
-
 const FOOT_DRIFT = 0.025;
 const CALM_CLIPS = ['Idle', 'Talking'];
 
@@ -780,7 +804,9 @@ test('the real feed: the 15 citizens stand where the engine says, on the ground,
     )
     .toBeGreaterThan(0);
 
-  // the engine's positions (at most a tick of walking apart while frames glide in, two for a page opened mid-tick)
+  // the engine's citizens, each drawn on the ground on what it walked in the page's tick (one tick behind) or the
+  // tick before (a page opened mid-tick finishes that walk first), never on the plan ahead: a frame that comes a
+  // little late (LATE_S) lets a mover walk on into it
   const api = await page.request.get(ENTITIES_URL);
   expect(api.status()).toBe(200);
   const entities = (await api.json()) as EntitiesView;
@@ -788,29 +814,45 @@ test('the real feed: the 15 citizens stand where the engine says, on the ground,
   expect(new Set(entities.citizens.map((citizen) => citizen.region))).toEqual(
     new Set(['town', 'band_a', 'band_b']),
   );
-  const drawn = await npcs(page);
-  for (const citizen of entities.citizens) {
-    const npc = drawn.find((candidate) => candidate.id === citizen.id)!;
-    expect(npc, citizen.id).toBeDefined();
-    const unit = new Vector3(...citizen.position.unit);
-    expect(npc.position.clone().normalize().angleTo(unit) * R).toBeLessThan(
-      DRAWN_BEHIND_M,
-    );
-    const direction = npc.position.clone().normalize();
-    expect(
-      Math.abs(npc.position.length() - (R + groundUnder(direction))),
-    ).toBeLessThan(0.5);
-  }
-
-  // the engine ticks on and the drawn citizens follow it: at the page's tick, everyone who stood still since the
-  // tick before is exactly where the engine has them, and everyone does what the engine says
-  await expect.poll(tick, { timeout: nextTick }).toBeGreaterThan(startTick);
   const at = async (when: number) =>
     (
       (await (
         await page.request.get(`${ENTITIES_URL}?at=${when}`)
       ).json()) as EntitiesView
     ).citizens;
+  const lateM = 0.5 + FLEE_MPS * clock.speed * LATE_S;
+  await expect
+    .poll(
+      async () => {
+        const when = await tick();
+        const [now, previous] = await Promise.all([at(when), at(when - 1)]);
+        await page.waitForTimeout(150); // the hooks refresh every 100 ms
+        const shown = await npcs(page);
+        if ((await tick()) !== when) return ['the page moved on'];
+        return now.flatMap((citizen) => {
+          const npc = shown.find((candidate) => candidate.id === citizen.id);
+          if (!npc) return [`${citizen.id}: not drawn`];
+          const before = previous.find((old) => old.id === citizen.id)!;
+          const off = offWalked(npc.position, [citizen, before]);
+          const direction = npc.position.clone().normalize();
+          const above = npc.position.length() - (R + groundUnder(direction));
+          return [
+            ...(off < lateM
+              ? []
+              : [`${citizen.id}: ${off.toFixed(2)} m off its walk`]),
+            ...(Math.abs(above) < 0.5
+              ? []
+              : [`${citizen.id}: ${above.toFixed(2)} m off the ground`]),
+          ];
+        });
+      },
+      { timeout: 15_000 },
+    )
+    .toEqual([]);
+
+  // the engine ticks on and the drawn citizens follow it: at the page's tick, everyone who stood still since the
+  // tick before is exactly where the engine has them, and everyone does what the engine says
+  await expect.poll(tick, { timeout: nextTick }).toBeGreaterThan(startTick);
   await expect
     .poll(
       async () => {
@@ -829,13 +871,17 @@ test('the real feed: the 15 citizens stand where the engine says, on the ground,
           // (one still walking to where the engine has them shows the moving activity it had until it gets there)
           const onTheWay =
             !still && MOVING.includes(npc.activity) && off > 0.01;
+          // (one who stood still is exactly there, a mover on what it walked)
+          const drift = still
+            ? off
+            : offWalked(npc.position, [citizen, before]);
           return [
             ...(npc.activity === citizen.activity || onTheWay
               ? []
               : [`${citizen.id}: ${npc.activity} ≠ ${citizen.activity}`]),
-            ...(off < (still ? 0.5 : DRAWN_BEHIND_M)
+            ...(drift < (still ? 0.5 : lateM)
               ? []
-              : [`${citizen.id}: ${off.toFixed(2)} m off`]),
+              : [`${citizen.id}: ${drift.toFixed(2)} m off`]),
           ];
         });
       },
@@ -843,8 +889,8 @@ test('the real feed: the 15 citizens stand where the engine says, on the ground,
     )
     .toEqual([]);
 
-  // between ticks the walkers walk the routes the engine streamed: they never cut off them (through a wall). A page
-  // opened mid-tick draws its walkers that much later, finishing the tick before's route first. Only checked with
+  // between ticks the walkers walk what the engine streamed they walked: they never cut off it (through a wall). A
+  // page opened mid-tick draws its walkers that much later, finishing the tick before's walk first. Only checked with
   // ticks far apart (×1 real time, up to ×6): at ×60 a tick lasts a second and the drawn spot is still easing onto
   // the new route
   if (tickMs(clock.speed) >= 10_000)
@@ -862,17 +908,10 @@ test('the real feed: the 15 citizens stand where the engine says, on the ground,
               const npc = shown.find(
                 (candidate) => candidate.id === citizen.id,
               )!;
-              const routes = [
+              const metres = offWalked(npc.position, [
                 citizen,
                 previous.find((old) => old.id === citizen.id)!,
-              ]
-                .map(({ route }) =>
-                  route.map(({ unit }) => new Vector3(...unit)),
-                )
-                .filter((route) => route.length > 0);
-              const metres = Math.min(
-                ...routes.map((route) => offPath(npc.position, route)),
-              );
+              ]);
               if (metres > 0.5)
                 off.push(`${citizen.id}: ${metres.toFixed(2)} m`);
             }
