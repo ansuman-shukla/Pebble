@@ -22,13 +22,14 @@ import type { GlobePlayerState } from './globe-player';
 import { LabelAnchor } from '@/components/world/labels';
 import { MAX_FRAME, smoothing } from '@/components/world/player/motion';
 import type { LiveCitizen } from '@/lib/live/live-contract';
-import type { Cue } from '@/lib/live/live-state';
+import { type Cue, type TickClock, tickElapsed } from '@/lib/live/live-state';
 import {
   follow,
   keepRight,
   moveOn,
   newTrack,
   shownDoing,
+  type Doing,
   type Track,
 } from '@/lib/live/drawn-track';
 import {
@@ -45,6 +46,14 @@ import {
   motionOf,
   type NpcClip,
 } from '@/lib/live/motion';
+import {
+  type Crowd,
+  type CrowdBody,
+  giveOf,
+  newCrowdBody,
+  separate,
+  standsUntilBack,
+} from '@/lib/live/separation';
 import type { ShownDoings } from '@/lib/live/shown-doings';
 import { groundSpeed, headingAt, walking } from '@/lib/live/walk-path';
 import { CITIZEN_LOOKS, type CitizenLook } from '@/lib/world/citizen-looks';
@@ -109,6 +118,8 @@ import { createCharacter } from '@/vendor/polyfork/humanoid.mjs';
  * up to ×10: past that legs would blur, so they keep that cadence and the body glides. Models load only within NEAR
  * metres of the camera (and hide again past it); clips load per motion as first needed, props within PROP_NEAR.
  * The labels hang over the head bone (priority 1), over the body before the model is there.
+ * Drawn bodies are kept apart (`separation.ts`): walkers part as they meet and people drawn on one spot stand
+ * round it; sitters and sleepers never move.
  */
 
 /** Full models within this distance of the camera (they hide past HIDE). */
@@ -538,12 +549,32 @@ interface PlaceContext {
   town: WalkTown;
   scratch: { direction: Vector3; local: Vector3; going: Vector3 };
   heading: number;
+  /** Everyone drawn, and this citizen among them, to keep the bodies apart. */
+  crowd: Crowd;
+  self: CrowdBody;
   /** Game seconds per real second (0 paused). */
   rate: number;
   delta: number;
 }
 
-/** Walks the citizen on along its path, onto the ground, turning the way it walks (its heading standing). */
+/**
+ * Walks the citizen on along its path, in its lane, clear of the others, onto the ground, turning the way it walks
+ * (its heading standing).
+ */
+/** The body pose a doing takes, whoever does it (separation reads it: a sitter is never pushed). */
+function poseOf(doing: Doing): BodyPose {
+  const anyone = {
+    look: '',
+    region: 'town',
+    spear: false,
+    dark: false,
+  } as const;
+  return motionLook(motionOf(doing), anyone, {
+    dead: doing.activity === 'dead',
+    posture: doing.posture,
+  }).pose;
+}
+
 function placeAlong(
   track: Track,
   view: NpcView,
@@ -552,13 +583,22 @@ function placeAlong(
 ) {
   const { terrain, town, scratch, heading, rate, delta } = context;
   const radius = terrain.globe.radius;
-  const direction = keepRight(
+  const inLane = keepRight(
     track,
     delta,
     moveOn(track, delta, rate, scratch.direction),
     radius,
   );
   const onward = walking(track.path);
+  const direction = separate(
+    context.crowd,
+    context.self,
+    inLane,
+    // by the posture it is to take: someone about to sit is never pushed, and eases back before sitting
+    giveOf(poseOf(shownDoing(track)), onward),
+    delta * visualRate(rate),
+    radius,
+  );
   const ground = groundUnder(terrain, town, direction, scratch.local);
   const { east, south, up } = tangentFrame(direction);
   const going = onward ? headingAt(track.path, scratch.going) : null;
@@ -628,7 +668,9 @@ function Npc({
   clockRef,
   townLon,
   replay,
+  tickElapsed,
   peopleRef,
+  crowd,
   views,
   followId,
   subjectRef,
@@ -645,7 +687,10 @@ function Npc({
   townLon: number;
   /** A replayed moment: drawn where it says, not a tick behind (no tick follows). */
   replay: boolean;
+  /** Game seconds into the current tick now (a citizen first seen mid-tick is drawn that far along). */
+  tickElapsed: () => number;
   peopleRef: RefObject<Map<string, Vector3>>;
+  crowd: Crowd;
   views: NpcViews;
   followId: string | null;
   subjectRef: RefObject<GlobePlayerState>;
@@ -655,9 +700,12 @@ function Npc({
   if (!look) throw new Error(`unknown citizen look ${citizen.look}`);
   const group = useRef<Group>(null);
   const [mounted, setMounted] = useState(false);
-  const [firstTrack] = useState(() => newTrack(citizen, radius, replay));
+  const [firstTrack] = useState(() =>
+    newTrack(citizen, radius, replay, tickElapsed()),
+  );
   const trackRef = useRef<Track>(firstTrack);
   const viewRef = useRef<NpcView>(newView(citizen));
+  const [self] = useState(() => newCrowdBody(citizen.id));
   // what the body is shown doing: the frame's activity, or a moving one while it walks there (drawn-track)
   const [doing, setDoing] = useState(() => shownDoing(firstTrack));
   const [dark, setDark] = useState(false);
@@ -706,9 +754,16 @@ function Npc({
     [doing, look, citizen.region, dark, gesture],
   );
 
-  // the activity shown changes when a frame comes or the drawn body gets where the frame says it is
+  // the activity shown changes when a frame comes or the drawn body gets where the frame says it is; someone sitting
+  // or lying down while drawn stepped aside stands until back on their spot (separation.ts), never sliding seated
   const showDoing = () => {
-    const now = shownDoing(trackRef.current);
+    const next = shownDoing(trackRef.current);
+    const now =
+      next !== doing &&
+      shown.pose === 'standing' &&
+      standsUntilBack(self, poseOf(next) !== 'standing')
+        ? doing
+        : next;
     viewRef.current.activity = now.activity;
     if (now !== doing) setDoing(now);
   };
@@ -721,6 +776,13 @@ function Npc({
   });
   useLayoutEffect(() => onFrame(citizen), [citizen]);
   useEffect(() => doings.show(citizen.id, doing), [doings, citizen.id, doing]);
+
+  useEffect(() => {
+    crowd.add(self);
+    return () => {
+      crowd.delete(self);
+    };
+  }, [crowd, self]);
 
   useEffect(() => {
     const id = citizen.id;
@@ -741,6 +803,8 @@ function Npc({
       town,
       scratch,
       heading: doing.slot_heading ?? citizen.heading_deg,
+      crowd,
+      self,
       rate,
       delta: Math.min(frameDelta, MAX_FRAME),
     });
@@ -807,6 +871,7 @@ export function GlobeNpcs({
   cues = [],
   speed,
   paused,
+  tickClock,
   replay = false,
   clockRef,
   townLon,
@@ -825,6 +890,8 @@ export function GlobeNpcs({
   /** The feed's clock: game seconds per real second, and whether it is paused. */
   speed: number;
   paused: boolean;
+  /** How far into the current tick the feed was, and when. */
+  tickClock: TickClock;
   /** The citizens of a replayed moment (`?tick=`), which no tick follows. */
   replay?: boolean;
   /** The sky's clock and the town's longitude: where the sun is down, guards hold torches. */
@@ -844,6 +911,11 @@ export function GlobeNpcs({
   subjectRef: RefObject<GlobePlayerState>;
 }) {
   const latest = useMemo(() => latestCues(cues), [cues]);
+  const [crowd] = useState<Crowd>(() => new Set());
+  // read when a citizen is first drawn (not during later renders)
+  const elapsed = () =>
+    tickElapsed({ tickClock, speed, paused }, performance.now());
+
   return (
     <>
       {citizens.map((citizen) => (
@@ -859,7 +931,9 @@ export function GlobeNpcs({
           clockRef={clockRef}
           townLon={townLon}
           replay={replay}
+          tickElapsed={elapsed}
           peopleRef={peopleRef}
+          crowd={crowd}
           views={views}
           followId={followId}
           subjectRef={subjectRef}

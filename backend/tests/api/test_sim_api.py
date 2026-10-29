@@ -16,7 +16,7 @@ from app.main import app
 from app.observability.replay import from_snapshot
 from app.observability.store import latest_snapshot
 from app.services.clock import read_clock
-from app.services.entities import world_at
+from app.services.entities import entities_at, world_at
 from app.sim.citizens import DEV_CITIZENS
 from app.sim.feed_citizens import streamed_route
 from app.sim.snapshot import SimSnapshot
@@ -125,6 +125,16 @@ def test_entities_now_match_the_simulation(client: TestClient, loop: EngineLoop)
     pit = fires["band_a_camp:fire-pit"]
     assert (pit["kind"], pit["lit"], pit["strength"]) == ("pit", True, 1.0)  # camps start with their fire burning
     assert (fires["main-gate-fire-w"]["kind"], fires["main-gate-fire-w"]["lit"]) == ("basket", False)
+
+
+def test_entities_now_say_how_far_into_the_tick_the_world_is(api_session: Session, loop: EngineLoop) -> None:
+    world = world_at(api_session)
+    assert world is not None and world.tick == loop.sim.tick and world.tick_written_at is not None
+    written = world.tick_written_at
+    now = entities_at(api_session, now=written + timedelta(seconds=4))  # the loop's clock runs at ×3
+    assert now is not None and now.tick_elapsed_s == pytest.approx(12.0)
+    past = entities_at(api_session, at=60, now=written + timedelta(seconds=4))
+    assert past is not None and past.tick_elapsed_s == 0.0  # a replayed moment is drawn where it was
 
 
 def test_entities_carry_the_streamed_route_even_at_a_snapshot_tick(

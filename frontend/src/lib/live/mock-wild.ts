@@ -5,7 +5,12 @@
  */
 import { Vector3 } from 'three';
 
-import type { AnimalActivity, LiveAnimal, LiveFire } from './live-contract';
+import {
+  type AnimalActivity,
+  type LiveAnimal,
+  type LiveFire,
+  TICK_SECONDS,
+} from './live-contract';
 import type { Site, WorldView } from '@/lib/client/types.gen';
 import {
   anchorMapping,
@@ -87,6 +92,8 @@ interface AnimalState {
   next: number;
   /** Ticks left grazing at the waypoint reached. */
   left: number;
+  /** Where it stood when the last tick began, when it moved in it. */
+  from: Spot | null;
 }
 
 export class MockWild {
@@ -109,12 +116,14 @@ export class MockWild {
       heading: 0,
       next: 1,
       left: animal.graze,
+      from: null,
     }));
   }
 
   step(night: boolean) {
     for (const state of this.states) {
       const { animal } = state;
+      state.from = null;
       if (night !== Boolean(animal.nocturnal)) continue; // asleep
       if (state.left > 0) {
         state.left -= 1;
@@ -125,6 +134,7 @@ export class MockWild {
       const distance = Math.hypot(tx - x, tz - z);
       if (distance > 1e-6)
         state.heading = (Math.atan2(tx - x, tz - z) * 180) / Math.PI;
+      state.from = [x, z];
       if (distance <= animal.pace) {
         state.at = [tx, tz];
         state.next = (state.next + 1) % animal.route.length;
@@ -138,7 +148,7 @@ export class MockWild {
   }
 
   animals(night: boolean): LiveAnimal[] {
-    return this.states.map(({ animal, at, heading, left }) => {
+    return this.states.map(({ animal, at, heading, left, from }) => {
       const asleep = night !== Boolean(animal.nocturnal);
       const activity: AnimalActivity = asleep
         ? 'sleeping'
@@ -154,8 +164,36 @@ export class MockWild {
         position: this.position(animal.site, at),
         heading_deg: heading,
         activity,
+        // the engine's drawn path (D100): from where it stood when the tick began, timed at its pace
+        route: from ? this.route(animal, from, at) : [],
+        speed_mps: from ? animal.pace / TICK_SECONDS : 0,
+        gait: 'walk',
+        goal: asleep
+          ? 'asleep'
+          : animal.nocturnal
+            ? 'prowling'
+            : left > 0
+              ? 'grazing'
+              : 'wandering',
+        target: null,
       };
     });
+  }
+
+  private route(animal: MockAnimal, from: Spot, at: Spot) {
+    const metres = Math.hypot(at[0] - from[0], at[1] - from[1]);
+    return [
+      { ...this.point(animal.site, from), t_s: 0 },
+      {
+        ...this.point(animal.site, at),
+        t_s: (metres / animal.pace) * TICK_SECONDS,
+      },
+    ];
+  }
+
+  private point(site: SiteId, spot: Spot) {
+    const { unit, height_m } = this.position(site, spot);
+    return { unit, height_m };
   }
 
   fires(night: boolean): LiveFire[] {

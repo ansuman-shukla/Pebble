@@ -24,7 +24,14 @@ import {
 } from './live-contract';
 import { MockWild } from './mock-wild';
 import type { FedBody } from './motion';
-import type { RoutePoint, Site, WorldView } from '@/lib/client/types.gen';
+import type {
+  CitizenEntity,
+  LiveEventDetail,
+  Position,
+  RoutePoint,
+  Site,
+  WorldView,
+} from '@/lib/client/types.gen';
 import { CITIZEN_LOOKS } from '@/lib/world/citizen-looks';
 import {
   anchorMapping,
@@ -67,6 +74,71 @@ interface MockPerson {
 }
 
 const WELL: Spot = [-21, 52];
+
+type Motion = CitizenEntity['motion'];
+type Posture = CitizenEntity['posture'];
+
+/** The backend's motion table (`app/sim/motion.py`) for the mock's doings; work and gathering go by their label. */
+const MOTIONS: Record<Exclude<Activity, 'walking'>, Motion> = {
+  dead: 'lie',
+  idle: 'idle',
+  running: 'run',
+  sleeping: 'lie',
+  resting: 'sit_ground',
+  gathering: 'gather_low',
+  eating: 'eat',
+  drinking: 'drink',
+  working: 'idle',
+  hunting: 'stalk',
+  fishing: 'fish',
+  tending_fire: 'tend',
+  talking: 'talk',
+};
+const LABEL_MOTIONS: Record<string, Motion> = {
+  berries: 'gather_high',
+  nuts: 'gather_high',
+  'tending the rice paddies': 'farm',
+  'planting the seed beds': 'farm',
+  'weaving at the loom': 'craft',
+  'mending the drying rack': 'craft',
+  'filling the storehouse': 'pick_up',
+  'chopping firewood': 'chop',
+};
+const POSTURES: Partial<Record<Motion, Posture>> = {
+  sit: 'sitting',
+  sit_ground: 'sitting_ground',
+  lie: 'lying',
+  inside: 'inside',
+  gather_low: 'crouching',
+  pan: 'crouching',
+  tend: 'crouching',
+  craft: 'crouching',
+  pray: 'sitting_ground',
+};
+/** Why they do what they do (the feed's `goal` and `driver`), by doing. */
+const GOALS: Partial<Record<Activity, [string, CitizenEntity['driver']]>> = {
+  working: ['get the day’s work done', 'duty'],
+  gathering: ['bring food home', 'hunger'],
+  eating: ['eat something', 'hunger'],
+  drinking: ['have a drink', 'thirst'],
+  resting: ['get my strength back', 'rest'],
+  sleeping: ['sleep till morning', 'night'],
+  talking: ['hear the news', 'social'],
+};
+/** Rank, titles, purse and standing (10-world-v1 §3.1-3.2); everyone else is a rank-2 adult with no coins. */
+const SOCIETY: Record<
+  string,
+  Pick<CitizenEntity, 'rank' | 'titles' | 'coins' | 'standing'>
+> = {
+  tadamasa: { rank: 5, titles: ['lord'], coins: 2015, standing: 70 },
+  kenji: { rank: 4, titles: ['samurai'], coins: 60, standing: 55 },
+  genzo: { rank: 2, titles: [], coins: 60, standing: 50 },
+  aiko: { rank: 2, titles: [], coins: 60, standing: 50 },
+  sora: { rank: 1, titles: [], coins: 5, standing: 50 },
+  oru: { rank: 4, titles: ['leader'], coins: 0, standing: 70 },
+  brak: { rank: 4, titles: ['leader'], coins: 0, standing: 70 },
+};
+const COMMONER = { rank: 2, titles: [], coins: 0, standing: 50 };
 
 const PEOPLE: MockPerson[] = [
   {
@@ -383,12 +455,15 @@ const PEOPLE: MockPerson[] = [
     appearance: 'a wiry man with a shovel',
     site: 'town',
     pace: 1,
+    // on the cross street in front of his townhouse (cross-n-8): he goes in through its door first
     home: [36, 60],
     plan: [
+      { walk: [36, 56], to: 'home' },
+      { activity: 'resting', label: 'home', ticks: 8 },
       { walk: [58, 72], to: 'the storehouse' },
       { activity: 'working', label: 'filling the storehouse', ticks: 5 },
-      { walk: [36, 60], to: 'home' },
-      { activity: 'resting', label: 'home', ticks: 8 },
+      { walk: [36, 60], to: 'the cross street' },
+      { activity: 'idle', label: 'the cross street', ticks: 1 },
     ],
   },
   {
@@ -438,6 +513,43 @@ const PEOPLE: MockPerson[] = [
   },
 ];
 
+/**
+ * The band A camp as the engine's first dawn showed it (tests, audit F2/F22): four people talking and eating on one
+ * spot by the fire while two walk straight through them back and forth, head-on.
+ */
+const CROWDED_CAMP: Record<string, Pick<MockPerson, 'home' | 'plan'>> = {
+  oru: {
+    home: [1, 1],
+    plan: [{ activity: 'talking', label: 'Mena', ticks: 60 }],
+  },
+  mena: {
+    home: [1, 1],
+    plan: [{ activity: 'eating', label: 'roasted roots', ticks: 60 }],
+  },
+  lio: {
+    home: [1, 1],
+    plan: [{ activity: 'eating', label: 'berries', ticks: 60 }],
+  },
+  bo: {
+    home: [1, 1],
+    plan: [{ activity: 'talking', label: 'Oru', ticks: 60 }],
+  },
+  tak: {
+    home: [-12, 1],
+    plan: [
+      { walk: [14, 1], to: 'the drying rack' },
+      { walk: [-12, 1], to: 'the water' },
+    ],
+  },
+  ana: {
+    home: [14, 1],
+    plan: [
+      { walk: [-12, 1], to: 'the water' },
+      { walk: [14, 1], to: 'the drying rack' },
+    ],
+  },
+};
+
 const ROLES = new Map(CITIZEN_LOOKS.map((look) => [look.id, look]));
 
 interface PersonState {
@@ -476,6 +588,12 @@ class MockSocket implements LiveSocket {
   }
 }
 
+/** TEST ONLY, set before the page loads: the mock starts `ticks` in, held at `speed`, `elapsed` game seconds into its
+ * tick (a page opened mid-tick). */
+export interface MockStartHook {
+  __pebbleMockStart?: { ticks: number; speed: number; elapsed: number };
+}
+
 export interface MockClock {
   speed: number;
   paused: boolean;
@@ -486,6 +604,10 @@ export class MockLiveServer {
   /** Like a new engine run: tick 0 is 08:00 on day 0. */
   private tick = 0;
   private clock: MockClock = { speed: 1, paused: false };
+  /** When (performance.now) the current tick began counting: its tick, or the last clock change (it restarts the timer). */
+  private beat = performance.now();
+  /** Game seconds of the tick passed before the clock was held (`__pebbleMockStart`); a running timer starts afresh. */
+  private held = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
   private sockets = new Set<MockSocket>();
   private states: PersonState[];
@@ -497,6 +619,8 @@ export class MockLiveServer {
   private feelings = new Map<string, string[]>();
   /** What a test made someone do (`perform`), over their plan. */
   private performing = new Map<string, Partial<LiveCitizen> & FedBody>();
+  /** Homes and plans a test scene gives some (`crowdCamp`); everyone else lives their own. */
+  private scene: Record<string, Pick<MockPerson, 'home' | 'plan'>> = {};
   /** Connections so far (tests read it to see a reconnect). */
   connects = 0;
   /** Like a backend without a run (tests): every connection is accepted, then closed with 4404. */
@@ -506,13 +630,20 @@ export class MockLiveServer {
     this.world = world;
     this.states = this.freshStates();
     this.wild = new MockWild(world);
+    const { __pebbleMockStart: start } = globalThis as MockStartHook;
+    if (start) {
+      this.advanceTicks(start.ticks);
+      this.clock = { speed: start.speed, paused: true };
+      this.held = start.elapsed;
+    }
   }
 
   private freshStates(): PersonState[] {
     const sites = new Map<string, Site>(
       this.world.sites.map((site) => [site.id, site]),
     );
-    return PEOPLE.map((person) => {
+    return PEOPLE.map((own) => {
+      const person = { ...own, ...this.scene[own.id] };
       const site = sites.get(person.site);
       if (!site) throw new Error(`the world has no ${person.site} site`);
       return {
@@ -535,6 +666,7 @@ export class MockLiveServer {
       tick: this.tick,
       day,
       time,
+      tick_elapsed_s: this.tickElapsed(),
       citizens: this.citizens(),
       animals: this.wild.animals(isDark(this.tick)),
       fires: this.wild.fires(isDark(this.tick)),
@@ -565,7 +697,9 @@ export class MockLiveServer {
 
   /** Someone says something right now (tests): the `said` event goes out at once. */
   sayNow(actor: string, words: string) {
-    this.say(actor, words);
+    const speaker = this.states.find((state) => state.person.id === actor);
+    if (!speaker) throw new Error(`no mock citizen ${actor}`);
+    this.say(speaker, words);
     const events = this.pending.splice(0);
     for (const socket of this.sockets)
       events.forEach((event) => socket.deliver(event));
@@ -591,21 +725,31 @@ export class MockLiveServer {
   }
 
   /** An event of any type goes out right now (tests: a gesture, a blow), with anything queued. */
-  sendNow(type: string, actor: string, payload: Record<string, unknown>) {
-    this.queueEvent(type, actor, payload);
+  sendNow(
+    type: string,
+    actor: string,
+    payload: Record<string, unknown>,
+    told: Pick<LiveEventDetail, 'line' | 'importance'> = {
+      line: type,
+      importance: 0,
+    },
+  ) {
+    this.queueEvent(type, actor, payload, told);
     const events = this.pending.splice(0);
     for (const socket of this.sockets)
       events.forEach((event) => socket.deliver(event));
   }
 
-  /** Queues an event of any type for the next tick, like the engine's own (tests: a death, a sale); `extra` adds
-   * fields of the line registry (`line`, `importance`, `position`). */
+  /** Queues an event of any type for the next tick, like the engine's own (tests: a death, a sale), told as the
+   * backend's line registry would tell it; it happens where its citizen actor stands unless `told` says where. */
   queueEvent(
     type: string,
     actor: string | null,
     payload: Record<string, unknown>,
-    extra: Record<string, unknown> = {},
+    told: Pick<LiveEventDetail, 'line' | 'importance'> &
+      Partial<Pick<LiveEventDetail, 'position'>>,
   ) {
+    const state = this.states.find((one) => one.person.id === actor);
     this.events += 1;
     this.pending.push({
       type: 'event',
@@ -616,19 +760,16 @@ export class MockLiveServer {
         type,
         actor_id: actor,
         payload,
-        ...extra,
+        position: state ? placeOf(state) : null,
+        ...told,
       },
     });
   }
 
   /** Jumps the feed `ticks` ahead at once (tests: to the evening): one `tick` frame with where everything is. */
   skip(ticks: number) {
-    for (let k = 0; k < ticks; k++) {
-      this.tick += 1;
-      const night = isNight(this.tick);
-      for (const state of this.states) this.advance(state, night);
-      this.wild.step(isDark(this.tick));
-    }
+    this.advanceTicks(ticks);
+    this.held = 0;
     this.pending.splice(0);
     const frame = this.frame('tick');
     for (const socket of this.sockets) socket.deliver(frame);
@@ -639,10 +780,17 @@ export class MockLiveServer {
     for (const socket of [...this.sockets]) this.detach(socket, code);
   }
 
+  /** A new run whose band A camp is crowded like the engine's first dawn (CROWDED_CAMP; tests). */
+  crowdCamp() {
+    this.scene = CROWDED_CAMP;
+    this.restartRun();
+  }
+
   /** A new run starts (like the engine's `--new-run`): open sockets close with 1012, the clock starts at 08:00. */
   restartRun() {
     this.runId = `mock-run-${Number(this.runId.split('-').pop()) + 1}`;
     this.tick = 0;
+    this.held = 0;
     this.states = this.freshStates();
     this.wild = new MockWild(this.world);
     this.feelings.clear();
@@ -661,13 +809,32 @@ export class MockLiveServer {
     this.timer = null;
   }
 
+  private advanceTicks(ticks: number) {
+    for (let k = 0; k < ticks; k++) {
+      this.tick += 1;
+      const night = isNight(this.tick);
+      for (const state of this.states) this.advance(state, night);
+      this.wild.step(isDark(this.tick));
+    }
+  }
+
+  /** Game seconds of the current tick passed, like the backend's `tick_elapsed_s`. */
+  private tickElapsed() {
+    if (this.clock.paused) return this.held;
+    const seconds = ((performance.now() - this.beat) / 1000) * this.clock.speed;
+    return Math.min(seconds, TICK_SECONDS);
+  }
+
   private schedule() {
     this.stop();
+    this.beat = performance.now();
     if (this.clock.paused || this.sockets.size === 0) return;
+    this.held = 0;
     this.timer = setInterval(() => this.step(), tickMs(this.clock.speed));
   }
 
   private step() {
+    this.beat = performance.now();
     this.tick += 1;
     const night = isNight(this.tick);
     for (const state of this.states) this.advance(state, night);
@@ -716,10 +883,10 @@ export class MockLiveServer {
     state.step = (state.step + 1) % plan.length;
     const step = plan[state.step];
     state.left = stepTicks(step);
-    if ('say' in step && step.say) this.say(state.person.id, step.say);
+    if ('say' in step && step.say) this.say(state, step.say);
   }
 
-  private say(actor: string, words: string) {
+  private say(state: PersonState, words: string) {
     this.events += 1;
     this.pending.push({
       type: 'event',
@@ -728,8 +895,11 @@ export class MockLiveServer {
       event: {
         id: `mock-said-${this.events}`,
         type: 'said',
-        actor_id: actor,
+        actor_id: state.person.id,
         payload: { words, volume: 'normal', heard_by: [] },
+        line: `${state.person.name}: “${words}”`,
+        importance: 1,
+        position: placeOf(state),
       },
     });
   }
@@ -751,6 +921,7 @@ export class MockLiveServer {
       ...this.clockWords(),
       speed: this.clock.speed,
       paused: this.clock.paused,
+      tick_elapsed_s: this.tickElapsed(),
       citizens: this.citizens(),
       animals: this.wild.animals(isDark(this.tick)),
       fires: this.wild.fires(isDark(this.tick)),
@@ -764,10 +935,7 @@ export class MockLiveServer {
       const step = person.plan[state.step];
       const look = ROLES.get(person.look);
       if (!look) throw new Error(`unknown look ${person.look}`);
-      const unitAt = ([x, z]: Spot) =>
-        state.mapping.toWorld(x, 0, z, new Vector3()).normalize().toArray();
-      const unit = unitAt(state.at);
-      const { lat, lon } = latLonFromDirection(new Vector3(...unit));
+      const position = placeOf(state);
       const activity: Activity = night
         ? 'sleeping'
         : 'walk' in step
@@ -781,7 +949,7 @@ export class MockLiveServer {
         name: person.name,
         look: person.look,
         appearance: person.appearance,
-        position: { unit, height_m: state.height, lat, lon },
+        position,
         route,
         // the arc of the first leg over its time (the site's local metres stretch a little away from its anchor)
         speed_mps:
@@ -807,9 +975,67 @@ export class MockLiveServer {
         activity,
         role: look.role,
         region: look.region,
-        ...this.performing.get(person.id),
+        ...this.spectator(state, activity, route.length > 1),
+        ...this.performed(person.id),
       };
     });
+  }
+
+  /** The feed's spectator fields (10-world-v1 §6.4) for what someone is doing. */
+  /** What a test made someone do, its posture told from its motion (as the backend tells it) unless given. */
+  private performed(id: string): Partial<LiveCitizen> & FedBody {
+    const doing = this.performing.get(id);
+    if (!doing?.motion) return doing ?? {};
+    return { posture: POSTURES[doing.motion] ?? 'standing', ...doing };
+  }
+
+  private spectator(
+    state: PersonState,
+    activity: Activity,
+    moved: boolean,
+  ): Pick<
+    CitizenEntity,
+    | 'motion'
+    | 'posture'
+    | 'slot_heading'
+    | 'goal'
+    | 'driver'
+    | 'target'
+    | 'needs'
+    | 'carrying'
+    | 'coins'
+    | 'rank'
+    | 'standing'
+    | 'titles'
+  > {
+    const step = state.person.plan[state.step];
+    const motion = mockMotion(activity, labelOf(step), moved);
+    const [goal, driver] = GOALS[activity] ?? ['', null];
+    const target =
+      'walk' in step && activity === 'walking'
+        ? {
+            kind: 'place' as const,
+            id: null,
+            name: step.to,
+            position: placeOf({ ...state, at: step.walk }).unit,
+          }
+        : null;
+    return {
+      motion,
+      posture: POSTURES[motion] ?? 'standing',
+      slot_heading: null,
+      goal,
+      driver,
+      target,
+      needs: {
+        hunger: activity === 'eating' ? 55 : 20,
+        thirst: activity === 'drinking' ? 55 : 15,
+        energy: activity === 'sleeping' || activity === 'resting' ? 35 : 80,
+        health: 100,
+      },
+      carrying: activity === 'gathering' ? { [labelOf(step)]: 3 } : {},
+      ...(SOCIETY[state.person.id] ?? COMMONER),
+    };
   }
 
   /** This tick's step from where they stood, then (still walking) the next ticks of the walk, timed. */
@@ -845,6 +1071,29 @@ const MOVING: ReadonlySet<Activity> = new Set([
 ]);
 
 const stepTicks = (step: Step) => ('walk' in step ? 0 : step.ticks);
+
+const labelOf = (step: Step) => ('label' in step && step.label) || '';
+
+/** Like the backend: the dead and sleepers lie whatever their step is about; a mover walks; else by label or doing. */
+export function mockMotion(
+  activity: Activity,
+  label: string,
+  moved: boolean,
+): Motion {
+  if (activity !== 'walking' && MOTIONS[activity] === 'lie') return 'lie';
+  if (moved) return 'walk';
+  if (activity === 'walking') return 'idle';
+  return LABEL_MOTIONS[label] ?? MOTIONS[activity];
+}
+
+/** Where someone stands, as the feed says it. */
+function placeOf(state: PersonState): Position {
+  const { x, y, z } = state.mapping
+    .toWorld(state.at[0], 0, state.at[1], new Vector3())
+    .normalize();
+  const { lat, lon } = latLonFromDirection(new Vector3(x, y, z));
+  return { unit: [x, y, z], height_m: state.height, lat, lon };
+}
 
 /** Where `metres` of walking from `from` towards `to` ends (at `to` if it is closer). */
 function walkAhead([x, z]: Spot, [tx, tz]: Spot, metres: number): Spot {

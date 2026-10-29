@@ -5,6 +5,7 @@
 import {
   BoxGeometry,
   type BufferGeometry,
+  CylinderGeometry,
   DoubleSide,
   Group,
   Mesh,
@@ -88,6 +89,36 @@ function warpGeometry(): BufferGeometry {
   return mergeGeometries(threads);
 }
 
+/** How much of the warp is already woven (from the breast beam back), and the cloth rolled on the beam. */
+const WOVEN = 0.35;
+const CLOTH_ROLL = 0.035;
+
+/** The cloth woven so far: a panel over the front of the warp and the roll it winds onto at the breast beam. */
+function clothGeometry(): BufferGeometry {
+  const [fy, fz] = BREAST_BEAM;
+  const [by, bz] = WARP_BEAM;
+  const length = Math.hypot(by - fy, bz - fz) * WOVEN;
+  const tilt = Math.atan2(bz - fz, by - fy);
+  const along = [
+    (bz - fz) / Math.hypot(by - fy, bz - fz),
+    (by - fy) / Math.hypot(by - fy, bz - fz),
+  ];
+  // just above the threads (towards the weaver's side of the plane) so it hides them where it lies
+  const panel = new PlaneGeometry(WARP_WIDTH, length)
+    .rotateX(tilt)
+    .translate(
+      0,
+      fy + (along[1] * length) / 2 + 0.01,
+      fz + (along[0] * length) / 2 + 0.01,
+    );
+  const roll = new CylinderGeometry(CLOTH_ROLL, CLOTH_ROLL, WARP_WIDTH, 10)
+    .rotateZ(Math.PI / 2)
+    .translate(0, fy, fz);
+  roll.deleteAttribute('uv');
+  panel.deleteAttribute('uv');
+  return mergeGeometries([panel.toNonIndexed(), roll.toNonIndexed()]);
+}
+
 function buildLoom(): Group {
   const wood = new Mesh(
     mergeGeometries(loomFrame().map(boxGeometry)),
@@ -103,8 +134,17 @@ function buildLoom(): Group {
     }),
   );
   warp.name = 'loom-warp';
+  const cloth = new Mesh(
+    clothGeometry(),
+    new MeshStandardMaterial({
+      color: '#3d5a8a',
+      roughness: 1,
+      side: DoubleSide,
+    }),
+  );
+  cloth.name = 'loom-cloth';
   const loom = new Group();
-  loom.add(wood, warp);
+  loom.add(wood, warp, cloth);
   return loom;
 }
 

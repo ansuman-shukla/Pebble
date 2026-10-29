@@ -5,6 +5,7 @@ from collections.abc import Callable
 
 import pytest
 
+from app.observability.events import TickSummary
 from app.sim import movement
 from app.sim.core import Stride
 from app.sim.locomotion import load_bodies
@@ -128,6 +129,19 @@ def test_a_run_lasts_three_minutes_then_jogs_and_comes_back_with_rest(new_sim: C
     assert movement.run_left_s(sim.core, citizen) == 60.0  # ...two minutes of walking give a minute of running
     _walk(sim, citizen, "run")
     assert [_stride(sim, citizen).gait for _ in range(3)] == ["run", "jog", "jog"]
+
+
+def test_the_feed_draws_each_move_at_the_gait_it_was_made(new_sim: Callable[..., Simulation]) -> None:
+    sim, citizen = _walker(new_sim)
+    _walk(sim, citizen, "run")
+    sim.drain()
+    gaits = []
+    for _ in range(4):
+        sim.step()
+        (summary,) = [event.payload for event in sim.drain() if event.type == "tick_summary"]
+        assert isinstance(summary, TickSummary)
+        gaits.append(summary.moved[citizen.id].gait)
+    assert gaits == ["run", "run", "run", "jog"]
 
 
 def test_a_fleeing_adult_runs_until_the_endurance_is_spent_then_jogs(new_sim: Callable[..., Simulation]) -> None:

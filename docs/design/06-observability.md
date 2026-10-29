@@ -25,6 +25,10 @@ Event types (v0): `tick_summary`, `perceived`, `action_started`, `action_finishe
 `resource_changed`, `knowledge_changed` (places/people learned), `citizen_spawned`, `animal_spawned`,
 `fire_changed`, `intervention`, `snapshot`. Continuous change (walkers' positions, needs drifting) is the tick's
 single `tick_summary` (D46).
+World v1 adds (10 §6.3, payloads D111): `node_changed`, `tree_felled`, `trespassed`, `stole`, `bought`, `sold`,
+`crafted`, `spoiled`, `tool_broke`, `tax_assessed`, `tax_paid`, `tax_overdue`, `ledger`, `prices_changed`, `accused`,
+`seized`, `released`, `confined`, `judged`, `sentence_served`, `standing_changed`, `leader_changed`, `bell_rang`,
+`tended`, `gestured`, `goal_set`; `injured`/`died` name their `attacker`.
 Phase B adds: `mind_turn` (latency, tool calls), `mind_unavailable`, `memory_written`, `belief_updated`,
 `relationship_changed`, `self_disclosure`.
 

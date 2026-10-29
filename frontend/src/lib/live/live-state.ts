@@ -3,11 +3,12 @@
  * speech, and the recent gestures and blows bodies show (cues). Pure: the hook feeds it the entities answer and every
  * feed message.
  */
-import type {
-  LiveAnimal,
-  LiveCitizen,
-  LiveFire,
-  LiveMessage,
+import {
+  type LiveAnimal,
+  type LiveCitizen,
+  type LiveFire,
+  type LiveMessage,
+  TICK_SECONDS,
 } from './live-contract';
 import { GESTURES, type GestureKind } from './motion';
 
@@ -36,6 +37,12 @@ export interface Cue {
   at: number;
 }
 
+/** How far into the current tick the world was (game seconds) at a client time (ms, performance.now). */
+export interface TickClock {
+  elapsed: number;
+  at: number;
+}
+
 export interface LiveState {
   runId: string | null;
   tick: number;
@@ -43,6 +50,8 @@ export interface LiveState {
   time: string;
   speed: number;
   paused: boolean;
+  /** The feed's `tick_elapsed_s` when its frame arrived: a walker first seen is drawn that far into the tick. */
+  tickClock: TickClock;
   citizens: LiveCitizen[];
   animals: LiveAnimal[];
   fires: LiveFire[];
@@ -57,6 +66,7 @@ export const EMPTY_LIVE: LiveState = {
   time: '08:00',
   speed: 1,
   paused: false,
+  tickClock: { elapsed: 0, at: 0 },
   citizens: [],
   animals: [],
   fires: [],
@@ -69,6 +79,7 @@ export interface EntitiesAnswer {
   tick: number;
   day: number;
   time: string;
+  tick_elapsed_s: number;
   citizens: LiveCitizen[];
   animals: LiveAnimal[];
   fires: LiveFire[];
@@ -78,6 +89,7 @@ export interface EntitiesAnswer {
 export function applyEntities(
   state: LiveState,
   view: EntitiesAnswer,
+  now: number,
 ): LiveState {
   const sameRun = view.run_id === state.runId;
   if (sameRun && view.tick <= state.tick) return state;
@@ -87,6 +99,7 @@ export function applyEntities(
     tick: view.tick,
     day: view.day,
     time: view.time,
+    tickClock: { elapsed: view.tick_elapsed_s, at: now },
     citizens: view.citizens,
     animals: view.animals,
     fires: view.fires,
@@ -140,7 +153,12 @@ export function applyMessage(
   if (message.type === 'tick' && sameRun) {
     if (message.tick < state.tick) return state;
     if (message.tick === state.tick)
-      return { ...state, speed: message.speed, paused: message.paused };
+      return {
+        ...state,
+        speed: message.speed,
+        paused: message.paused,
+        tickClock: { elapsed: message.tick_elapsed_s, at: now },
+      };
   }
   return {
     runId: message.run_id,
@@ -149,12 +167,27 @@ export function applyMessage(
     time: message.time,
     speed: message.speed,
     paused: message.paused,
+    tickClock: { elapsed: message.tick_elapsed_s, at: now },
     citizens: message.citizens,
     animals: message.animals,
     fires: message.fires,
     speech: sameRun ? state.speech : [],
     cues: sameRun ? state.cues : [],
   };
+}
+
+/** Game seconds into the current tick at client time `now` (ms): what the feed said, plus what passed since at the
+ * clock's speed, never past the tick's end. */
+export function tickElapsed(
+  {
+    tickClock,
+    speed,
+    paused,
+  }: Pick<LiveState, 'tickClock' | 'speed' | 'paused'>,
+  now: number,
+) {
+  const passed = paused ? 0 : ((now - tickClock.at) / 1000) * speed;
+  return Math.min(Math.max(tickClock.elapsed + passed, 0), TICK_SECONDS);
 }
 
 /** Drops speech older than SPEECH_MS (same state when nothing expired). */

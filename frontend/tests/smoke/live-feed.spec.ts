@@ -9,6 +9,7 @@ import type {
 } from '../../src/lib/live/live-contract';
 import {
   applyEntities,
+  tickElapsed,
   applyMessage,
   EMPTY_LIVE,
   feedMinutes,
@@ -16,7 +17,8 @@ import {
   SPEECH_MS,
   speedWords,
 } from '../../src/lib/live/live-state';
-import { MockLiveServer } from '../../src/lib/live/mock-live';
+import { newTrack } from '../../src/lib/live/drawn-track';
+import { MockLiveServer, mockMotion } from '../../src/lib/live/mock-live';
 import { activityWords } from '../../src/lib/live/npc-activity';
 import { advance, citizenPath, pointAt } from '../../src/lib/live/walk-path';
 import { CITIZEN_LOOKS } from '../../src/lib/world/citizen-looks';
@@ -50,6 +52,18 @@ function entity(overrides: Partial<LiveCitizen> = {}): LiveCitizen {
     action_label: '',
     state: [],
     cause_of_death: null,
+    motion: 'idle',
+    posture: 'standing',
+    slot_heading: null,
+    goal: '',
+    driver: null,
+    target: null,
+    needs: { hunger: 10, thirst: 10, energy: 90, health: 100 },
+    carrying: {},
+    coins: 0,
+    rank: null,
+    standing: null,
+    titles: [],
     ...overrides,
   };
 }
@@ -67,6 +81,7 @@ function frame(
     tick,
     day: 0,
     time: '08:00',
+    tick_elapsed_s: 0,
     speed: 1,
     paused: false,
     citizens,
@@ -78,7 +93,15 @@ const said = (id: string, actor: string, words: unknown, run = 'run-1') => ({
   type: 'event' as const,
   run_id: run,
   tick: 3,
-  event: { id, type: 'said', actor_id: actor, payload: { words } },
+  event: {
+    id,
+    type: 'said',
+    actor_id: actor,
+    payload: { words },
+    line: `${actor}: “${String(words)}”`,
+    importance: 1 as const,
+    position: null,
+  },
 });
 
 test('frames replace the citizens; stale ticks are ignored; a snapshot or a new run resyncs', () => {
@@ -114,15 +137,22 @@ test('frames replace the citizens; stale ticks are ignored; a snapshot or a new 
     tick: 6,
     day: 0,
     time: '08:06',
+    tick_elapsed_s: 0,
     animals: [],
     fires: [],
   };
-  expect(applyEntities(state, { ...answer, citizens: [entity()] })).toBe(state);
-  const later = applyEntities(state, {
-    ...answer,
-    tick: 7,
-    citizens: [entity({ action: 'eat', activity: 'eating' })],
-  });
+  expect(applyEntities(state, { ...answer, citizens: [entity()] }, 0)).toBe(
+    state,
+  );
+  const later = applyEntities(
+    state,
+    {
+      ...answer,
+      tick: 7,
+      citizens: [entity({ action: 'eat', activity: 'eating' })],
+    },
+    0,
+  );
   expect(later.citizens[0].activity).toBe('eating');
 });
 
@@ -134,6 +164,11 @@ test('frames carry the animals and the fires', () => {
     position: { unit: [AT.x, AT.y, AT.z], height_m: 10, lat: 35, lon: 12 },
     heading_deg: 90,
     activity: 'grazing',
+    route: [],
+    speed_mps: 0,
+    gait: 'walk',
+    goal: 'grazing',
+    target: null,
   };
   const pit: LiveFire = {
     id: 'band_a_camp:fire-pit',
@@ -297,4 +332,105 @@ test('the mock feed streams each move like the engine: from where it stood, time
     }
   }
   expect(moves).toBeGreaterThan(5);
+});
+
+test('the mock feed carries the spectator fields: motion, why, needs, purse, rank and the animals’ paths', () => {
+  const world = createMockWorld();
+  const server = new MockLiveServer(world);
+  server.skip(3);
+  const { citizens, animals } = server.entities();
+  const byId = new Map(citizens.map((citizen) => [citizen.id, citizen]));
+  // Genzo starts in the paddies, Aiko at her loom: their motion says so, not their label
+  expect(byId.get('genzo')).toMatchObject({
+    activity: 'working',
+    motion: 'farm',
+    posture: 'standing',
+    goal: 'get the day’s work done',
+    driver: 'duty',
+    coins: 60,
+  });
+  expect(byId.get('aiko')).toMatchObject({
+    motion: 'craft',
+    posture: 'crouching',
+  });
+  expect(byId.get('tadamasa')).toMatchObject({ rank: 5, titles: ['lord'] });
+  for (const citizen of citizens) {
+    expect(Object.keys(citizen.needs).sort()).toEqual([
+      'energy',
+      'health',
+      'hunger',
+      'thirst',
+    ]);
+    if (citizen.activity === 'walking') {
+      expect(citizen.motion).toBe(citizen.route.length > 1 ? 'walk' : 'idle');
+      expect(citizen.target).toMatchObject({ kind: 'place' });
+    }
+  }
+  server.skip(20);
+  const walking = server
+    .entities()
+    .animals.filter((animal) => animal.route.length > 0);
+  expect(walking.length).toBeGreaterThan(0);
+  for (const animal of walking) {
+    expect(animal.route[0].t_s).toBe(0);
+    expect(animal.speed_mps).toBeGreaterThan(0);
+    expect(['grazing', 'wandering', 'prowling']).toContain(animal.goal); // what it does once there
+  }
+  expect(animals.every((animal) => animal.gait === 'walk')).toBe(true);
+});
+
+test('in the mock feed, the dead and sleepers lie like the backend says, whatever their step is about', () => {
+  expect(mockMotion('dead', 'tending the rice paddies', false)).toBe('lie');
+  expect(mockMotion('sleeping', 'weaving at the loom', false)).toBe('lie');
+  expect(mockMotion('working', 'tending the rice paddies', false)).toBe('farm');
+  expect(mockMotion('dead', '', true)).toBe('lie');
+  expect(mockMotion('working', '', true)).toBe('walk');
+  const server = new MockLiveServer(createMockWorld());
+  server.skip(14 * 60 + 5); // 22:05: everyone is asleep
+  for (const citizen of server.entities().citizens)
+    expect([citizen.activity, citizen.motion, citizen.posture]).toEqual([
+      'sleeping',
+      'lie',
+      'lying',
+    ]);
+});
+
+test('a walker first seen mid-tick is drawn as far along its path as the tick has gone', () => {
+  const radius = 2000;
+  const start = directionFromLatLon(35, 12);
+  const end = directionFromLatLon(35, 12.02); // ~10 m east
+  const walker = entity({
+    activity: 'walking',
+    position: { unit: end.toArray(), height_m: 8, lat: 35, lon: 12.02 },
+    route: [
+      { unit: start.toArray(), height_m: 8, t_s: 0 },
+      { unit: end.toArray(), height_m: 8, t_s: 40 },
+    ],
+    speed_mps: 0.25,
+  });
+  // the feed said 10 s into the tick 2 real s ago at ×5: 20 game s, half way along
+  let state = applyMessage(
+    EMPTY_LIVE,
+    { ...frame('snapshot', 9, [walker]), speed: 5, tick_elapsed_s: 10 },
+    1000,
+  );
+  expect(tickElapsed(state, 3000)).toBeCloseTo(20);
+  expect(
+    newTrack(walker, radius, false, tickElapsed(state, 3000)).path.time,
+  ).toBeCloseTo(20);
+  expect(newTrack(walker, radius, false, 59).path.time).toBe(40); // never past where the tick says it is
+  expect(newTrack(walker, radius).path.time).toBe(0);
+  expect(tickElapsed(state, 60_000)).toBe(60); // a late tick: the end of this one
+  // paused: what was said stays; a same-tick clock frame re-anchors
+  state = applyMessage(
+    state,
+    {
+      ...frame('tick', 9, [walker]),
+      speed: 5,
+      paused: true,
+      tick_elapsed_s: 30,
+    },
+    4000,
+  );
+  expect(tickElapsed(state, 9000)).toBe(30);
 });

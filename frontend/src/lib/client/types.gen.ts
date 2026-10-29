@@ -63,6 +63,23 @@ export type AnimalEntity = {
      * Activity
      */
     activity: 'idle' | 'grazing' | 'walking' | 'running' | 'hunting' | 'sleeping' | 'dead';
+    /**
+     * Route
+     */
+    route: Array<RoutePoint>;
+    /**
+     * Speed Mps
+     */
+    speed_mps: number;
+    /**
+     * Gait
+     */
+    gait: 'walk' | 'trot' | 'run' | 'stalk' | 'swim';
+    /**
+     * Goal
+     */
+    goal: string;
+    target: Target | null;
 };
 
 /**
@@ -168,6 +185,50 @@ export type CitizenEntity = {
      * Cause Of Death
      */
     cause_of_death: string | null;
+    /**
+     * Motion
+     */
+    motion: 'idle' | 'walk' | 'jog' | 'run' | 'carry_walk' | 'stalk' | 'sit' | 'sit_ground' | 'lie' | 'inside' | 'gather_low' | 'gather_high' | 'pick_up' | 'chop' | 'mine' | 'pan' | 'farm' | 'fish' | 'craft' | 'eat' | 'drink' | 'talk' | 'trade' | 'gesture' | 'attack' | 'tend' | 'pray' | 'ring_bell';
+    /**
+     * Posture
+     */
+    posture: 'standing' | 'crouching' | 'sitting' | 'sitting_ground' | 'lying' | 'inside';
+    /**
+     * Slot Heading
+     */
+    slot_heading: number | null;
+    /**
+     * Goal
+     */
+    goal: string;
+    /**
+     * Driver
+     */
+    driver: 'hunger' | 'thirst' | 'rest' | 'danger' | 'duty' | 'ambition' | 'social' | 'night' | null;
+    target: Target | null;
+    needs: Needs;
+    /**
+     * Carrying
+     */
+    carrying: {
+        [key: string]: number;
+    };
+    /**
+     * Coins
+     */
+    coins: number;
+    /**
+     * Rank
+     */
+    rank: number | null;
+    /**
+     * Standing
+     */
+    standing: number | null;
+    /**
+     * Titles
+     */
+    titles: Array<string>;
 };
 
 /**
@@ -528,6 +589,10 @@ export type EntitiesView = {
      */
     time: string;
     /**
+     * Tick Elapsed S
+     */
+    tick_elapsed_s: number;
+    /**
      * Citizens
      */
     citizens: Array<CitizenEntity>;
@@ -584,7 +649,7 @@ export type EventView = {
     /**
      * Type
      */
-    type: 'tick_summary' | 'citizen_spawned' | 'perceived' | 'action_started' | 'action_finished' | 'action_interrupted' | 'said' | 'thought' | 'need_changed' | 'injured' | 'died' | 'item_moved' | 'resource_changed' | 'knowledge_changed' | 'animal_spawned' | 'fire_changed' | 'intervention' | 'snapshot';
+    type: 'tick_summary' | 'citizen_spawned' | 'perceived' | 'action_started' | 'action_finished' | 'action_interrupted' | 'said' | 'thought' | 'need_changed' | 'injured' | 'died' | 'item_moved' | 'resource_changed' | 'knowledge_changed' | 'animal_spawned' | 'fire_changed' | 'intervention' | 'snapshot' | 'node_changed' | 'tree_felled' | 'trespassed' | 'stole' | 'bought' | 'sold' | 'crafted' | 'spoiled' | 'tool_broke' | 'tax_assessed' | 'tax_paid' | 'tax_overdue' | 'ledger' | 'prices_changed' | 'accused' | 'seized' | 'released' | 'confined' | 'judged' | 'sentence_served' | 'standing_changed' | 'leader_changed' | 'bell_rang' | 'tended' | 'gestured' | 'goal_set';
     /**
      * Cell
      */
@@ -1022,6 +1087,15 @@ export type LiveEventDetail = {
     payload: {
         [key: string]: unknown;
     };
+    /**
+     * Line
+     */
+    line: string;
+    /**
+     * Importance
+     */
+    importance: 0 | 1 | 2 | 3;
+    position: Position | null;
 };
 
 /**
@@ -1058,6 +1132,10 @@ export type LiveState = {
      * Paused
      */
     paused: boolean;
+    /**
+     * Tick Elapsed S
+     */
+    tick_elapsed_s: number;
     /**
      * Citizens
      */
@@ -1114,6 +1192,30 @@ export type NeedReading = {
      * Word
      */
     word: string;
+};
+
+/**
+ * Needs
+ *
+ * 0-100: hunger and thirst grow, energy and health run down.
+ */
+export type Needs = {
+    /**
+     * Hunger
+     */
+    hunger: number;
+    /**
+     * Thirst
+     */
+    thirst: number;
+    /**
+     * Energy
+     */
+    energy: number;
+    /**
+     * Health
+     */
+    health: number;
 };
 
 /**
@@ -1407,6 +1509,34 @@ export type StatsView = {
 };
 
 /**
+ * Target
+ *
+ * What an action is about, for spectators (a person, an animal, a node, a store, a place...).
+ */
+export type Target = {
+    /**
+     * Kind
+     */
+    kind: 'person' | 'animal' | 'node' | 'store' | 'structure' | 'fire' | 'stack' | 'place' | 'direction';
+    /**
+     * Id
+     */
+    id?: string | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Position
+     */
+    position?: [
+        number,
+        number,
+        number
+    ] | null;
+};
+
+/**
  * Thread
  */
 export type Thread = {
@@ -1473,7 +1603,7 @@ export type TimelineEntry = {
     /**
      * Type
      */
-    type: 'tick_summary' | 'citizen_spawned' | 'perceived' | 'action_started' | 'action_finished' | 'action_interrupted' | 'said' | 'thought' | 'need_changed' | 'injured' | 'died' | 'item_moved' | 'resource_changed' | 'knowledge_changed' | 'animal_spawned' | 'fire_changed' | 'intervention' | 'snapshot';
+    type: 'tick_summary' | 'citizen_spawned' | 'perceived' | 'action_started' | 'action_finished' | 'action_interrupted' | 'said' | 'thought' | 'need_changed' | 'injured' | 'died' | 'item_moved' | 'resource_changed' | 'knowledge_changed' | 'animal_spawned' | 'fire_changed' | 'intervention' | 'snapshot' | 'node_changed' | 'tree_felled' | 'trespassed' | 'stole' | 'bought' | 'sold' | 'crafted' | 'spoiled' | 'tool_broke' | 'tax_assessed' | 'tax_paid' | 'tax_overdue' | 'ledger' | 'prices_changed' | 'accused' | 'seized' | 'released' | 'confined' | 'judged' | 'sentence_served' | 'standing_changed' | 'leader_changed' | 'bell_rang' | 'tended' | 'gestured' | 'goal_set';
     /**
      * Visibility
      */
@@ -1907,7 +2037,7 @@ export type CitizensReadCitizenTimelineData = {
          *
          * default: everything but tick summaries and looking around
          */
-        type?: Array<'tick_summary' | 'citizen_spawned' | 'perceived' | 'action_started' | 'action_finished' | 'action_interrupted' | 'said' | 'thought' | 'need_changed' | 'injured' | 'died' | 'item_moved' | 'resource_changed' | 'knowledge_changed' | 'animal_spawned' | 'fire_changed' | 'intervention' | 'snapshot'> | null;
+        type?: Array<'tick_summary' | 'citizen_spawned' | 'perceived' | 'action_started' | 'action_finished' | 'action_interrupted' | 'said' | 'thought' | 'need_changed' | 'injured' | 'died' | 'item_moved' | 'resource_changed' | 'knowledge_changed' | 'animal_spawned' | 'fire_changed' | 'intervention' | 'snapshot' | 'node_changed' | 'tree_felled' | 'trespassed' | 'stole' | 'bought' | 'sold' | 'crafted' | 'spoiled' | 'tool_broke' | 'tax_assessed' | 'tax_paid' | 'tax_overdue' | 'ledger' | 'prices_changed' | 'accused' | 'seized' | 'released' | 'confined' | 'judged' | 'sentence_served' | 'standing_changed' | 'leader_changed' | 'bell_rang' | 'tended' | 'gestured' | 'goal_set'> | null;
         /**
          * Order
          */
@@ -2122,7 +2252,7 @@ export type EventsReadEventsData = {
         /**
          * Type
          */
-        type?: Array<'tick_summary' | 'citizen_spawned' | 'perceived' | 'action_started' | 'action_finished' | 'action_interrupted' | 'said' | 'thought' | 'need_changed' | 'injured' | 'died' | 'item_moved' | 'resource_changed' | 'knowledge_changed' | 'animal_spawned' | 'fire_changed' | 'intervention' | 'snapshot'> | null;
+        type?: Array<'tick_summary' | 'citizen_spawned' | 'perceived' | 'action_started' | 'action_finished' | 'action_interrupted' | 'said' | 'thought' | 'need_changed' | 'injured' | 'died' | 'item_moved' | 'resource_changed' | 'knowledge_changed' | 'animal_spawned' | 'fire_changed' | 'intervention' | 'snapshot' | 'node_changed' | 'tree_felled' | 'trespassed' | 'stole' | 'bought' | 'sold' | 'crafted' | 'spoiled' | 'tool_broke' | 'tax_assessed' | 'tax_paid' | 'tax_overdue' | 'ledger' | 'prices_changed' | 'accused' | 'seized' | 'released' | 'confined' | 'judged' | 'sentence_served' | 'standing_changed' | 'leader_changed' | 'bell_rang' | 'tended' | 'gestured' | 'goal_set'> | null;
         /**
          * Since Tick
          */

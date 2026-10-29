@@ -284,7 +284,7 @@ def _bite(core: SimCore, animal: Animal, person: Citizen) -> None:
     low, high = species.bite
     amount = low + (high - low) * rng.random()
     animal.heading_deg = _heading(animal.position, person.position, animal.heading_deg)
-    core.injure(person, amount, "animal attack", f"{species.one} attacks you")
+    core.injure(person, amount, "animal attack", f"{species.one} attacks you", attacker=animal.id)
     animal.bites += 1
     animal.hunger = max(0.0, animal.hunger - FED_BY_BITE)
     if not person.body.alive:

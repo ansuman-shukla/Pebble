@@ -160,27 +160,42 @@ class SimCore:
         citizen.cell = self.world.nearest_cell(position, citizen.cell)
         citizen.height_m = self.world.ground_height(position, citizen.cell)
 
-    def injure(self, citizen: Citizen, amount: float, cause: str, words: str, cause_seq: int | None = None) -> int:
+    def injure(
+        self,
+        citizen: Citizen,
+        amount: float,
+        cause: str,
+        words: str,
+        cause_seq: int | None = None,
+        attacker: str | None = None,
+    ) -> int:
         """Hurt a living citizen (an `injured` event); at no health left they die of it. `words` say what happened
-        to them ("a wolf bites you") for the interrupt (03: being hurt ends what you are doing)."""
+        to them ("a wolf bites you") for the interrupt (03: being hurt ends what you are doing); `attacker` is the
+        citizen or animal that struck."""
         body = citizen.body
         if not body.alive:
             raise ValueError(f"{citizen.id} is dead and can't be hurt")
         amount = min(amount, body.health)  # health heals by fractions: rounding first could leave a sliver of it
         body.health = max(0.0, body.health - amount)
-        seq = self.emit("injured", Injured(amount=round(amount, 2), cause=cause), actor=citizen, cause_seq=cause_seq)
+        seq = self.emit(
+            "injured",
+            Injured(amount=round(amount, 2), cause=cause, attacker=attacker),
+            actor=citizen,
+            cause_seq=cause_seq,
+        )
         if body.health <= 0:
-            self.die(citizen, cause, seq)
+            self.die(citizen, cause, seq, attacker=attacker)
         else:
             self.hurt[citizen.id] = (words, seq)
         return seq
 
-    def die(self, citizen: Citizen, cause: str, cause_seq: int | None = None) -> int:
+    def die(self, citizen: Citizen, cause: str, cause_seq: int | None = None, attacker: str | None = None) -> int:
         """The citizen dies of the cause (a `died` event); the one place a death ends the running action, so whoever
-        set off the death (an eat that made them sick, a blow) must not end it again."""
+        set off the death (an eat that made them sick, a blow) must not end it again. `attacker` is who struck the
+        killing blow."""
         body = citizen.body
         body.alive, body.asleep, body.cause_of_death = False, False, cause
-        died = self.emit("died", Died(cause=cause), actor=citizen, cause_seq=cause_seq)
+        died = self.emit("died", Died(cause=cause, attacker=attacker), actor=citizen, cause_seq=cause_seq)
         if citizen.action is not None:
             self.end_action(citizen, "interrupted", "Everything goes dark.", cause_seq=died)
         citizen.in_view, citizen.animals_in_view, citizen.threats = set(), set(), set()
