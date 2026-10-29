@@ -1,18 +1,19 @@
-"""Spoilage (10-world-v1 §2.4): food goes off at each holder's local dawn by its share, rounded up, and what is lost
-replays exactly."""
+"""Wear and spoilage (10-world-v1 §2.4): food goes off at each holder's local dawn by its share, rounded up; tools
+break per use and packs per dawn carried, at their chances; whatever is lost replays exactly."""
 
+import math
 from collections.abc import Callable
 
 import pytest
 
-from app.observability.events import EventDraft, ItemMoved, Spoiled
+from app.observability.events import EventDraft, ItemMoved, Spoiled, ToolBroke
 from app.observability.replay import ReplayEvent, replay
 from app.sim.economy import load_economy
 from app.sim.simulation import Simulation
 from app.sim.snapshot import take_snapshot
 from app.sim.systems import REGISTRY, dawn_at
 from app.sim.vec import Vec3
-from app.sim.wear import spoil_at_dawn, spoilage, store_spot
+from app.sim.wear import spoil_at_dawn, spoilage, store_spot, use_tool, wear_packs_at_dawn
 from app.sim.world import SimWorld
 from tests.sim_helpers import GATE, make_spec, without_animals
 
@@ -144,4 +145,71 @@ def test_every_store_stands_somewhere(sim_world: SimWorld) -> None:
 
 
 def test_wear_hooks_are_registered_at_dawn() -> None:
-    assert spoil_at_dawn in REGISTRY.at_dawn
+    assert spoil_at_dawn in REGISTRY.at_dawn and wear_packs_at_dawn in REGISTRY.at_dawn
+
+
+@pytest.mark.parametrize(
+    ("item", "chance"),
+    [
+        ("flint spear", 0.08),  # 4 % a strike, stone × 2
+        ("obsidian spear", 0.08),
+        ("iron spear", 0.02),  # iron × 0.5
+        ("stone axe", 0.02),
+        ("iron axe", 0.02),
+        ("sickle", 0.015),
+    ],
+)
+def test_tools_break_per_use_at_their_chance(new_sim: Callable[..., Simulation], item: str, chance: float) -> None:
+    sim = _sim(new_sim)
+    tek = sim.citizen("tek")
+    broke = 0
+    for _ in range(USES):
+        tek.inventory[item] = 1
+        broke += use_tool(sim.core, tek, item)
+    mean, sd = USES * chance, math.sqrt(USES * chance * (1 - chance))
+    assert abs(broke - mean) <= 4 * sd, (broke, mean)
+    events = sim.drain()
+    broken = [e.payload for e in events if isinstance(e.payload, ToolBroke)]
+    assert len(broken) == broke and set(broken) == {ToolBroke(item=item, use=load_economy().breakage[item].use)}
+
+
+def test_a_broken_tool_is_gone_and_replays(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim, inventory={"flint spear": 2})
+    tek = sim.citizen("tek")
+    snapshot = take_snapshot(sim.state)
+    while not use_tool(sim.core, tek, "flint spear", cause_seq=7):
+        pass
+    events = sim.drain()
+    assert tek.inventory == {"flint spear": 1}
+    broke, moved = events[-2], events[-1]
+    assert (broke.type, broke.actor_id, broke.cause_seq) == ("tool_broke", "tek", 7)
+    assert broke.payload == ToolBroke(item="flint spear", use="hunt")
+    assert isinstance(moved.payload, ItemMoved) and moved.cause_seq == broke.seq
+    assert (moved.payload.item, moved.payload.count, moved.payload.destination.kind) == ("flint spear", 1, "world")
+    replayed = replay(
+        snapshot, [ReplayEvent(e.tick, e.type, e.actor_id, e.payload.model_dump(mode="json")) for e in events]
+    )
+    assert replayed.citizens["tek"].inventory == {"flint spear": 1}
+
+
+def test_a_tool_must_be_carried_to_be_used(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    with pytest.raises(ValueError, match="no iron axe"):
+        use_tool(sim.core, sim.citizen("tek"), "iron axe")
+
+
+def test_a_carried_pack_wears_out_at_dawn(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    tek = sim.citizen("tek")
+    broke = 0
+    for _ in range(USES // 2):
+        tek.inventory["pack"] = 2  # each pack carried rolls
+        wear_packs_at_dawn(sim.core, lambda _unit: True)
+        broke += 2 - tek.inventory.get("pack", 0)
+    mean, sd = USES * 0.03, math.sqrt(USES * 0.03 * 0.97)
+    assert abs(broke - mean) <= 4 * sd, (broke, mean)
+    assert {e.payload for e in sim.drain() if isinstance(e.payload, ToolBroke)} == {ToolBroke(item="pack", use="carry")}
+    tek.inventory["pack"] = 1
+    for _ in range(200):
+        wear_packs_at_dawn(sim.core, lambda _unit: False)  # not their dawn: no wear
+    assert tek.inventory["pack"] == 1 and not sim.drain()
