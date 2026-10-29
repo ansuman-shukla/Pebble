@@ -103,3 +103,22 @@ def test_a_death_fails_the_deaths_check(new_sim: Callable[..., Simulation]) -> N
     sim.core.injure(victim, 200.0, "animal attack", "a wolf attacks you")
     check.after_step(sim, sim.drain())
     assert check.outcome(sim) == Outcome(1, False, "victim")
+
+
+def test_stall_and_need_damage_read_none_until_something_happens(new_sim: Callable[..., Simulation]) -> None:
+    sim = new_sim()
+    idle = sim.add_citizen(make_spec("idle"))
+    stall, damage = x0.Stall(), x0.NeedDamage()
+    stall.start(sim)
+    damage.start(sim)
+    assert stall.outcome(sim) == Outcome(0.0, True, "none")
+    assert damage.outcome(sim) == Outcome(0.0, True, "none")
+    stall.before_step(sim)
+    damage.before_step(sim)
+    sim.step()
+    idle.body.health -= 2.5  # as if hunger took it this tick
+    events = sim.drain()
+    stall.after_step(sim, events)
+    damage.after_step(sim, events)
+    assert stall.outcome(sim).words == "0.0 h (idle)"
+    assert damage.outcome(sim) == Outcome(2.5, True, "2.5 health (idle)")

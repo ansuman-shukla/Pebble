@@ -48,7 +48,7 @@ class Stall(Check):
     def outcome(self, sim: Simulation) -> Outcome:
         who, ticks = max(self.worst.items(), key=lambda item: item[1])
         hours = ticks / 60
-        return Outcome(hours, hours < MAX_STALL_H, f"{hours:.1f} h ({who})")
+        return Outcome(hours, hours < MAX_STALL_H, f"{hours:.1f} h ({who})" if ticks else "none")
 
 
 class NeedDamage(Check):
@@ -75,7 +75,7 @@ class NeedDamage(Check):
     @override
     def outcome(self, sim: Simulation) -> Outcome:
         who, lost = max(self.lost.items(), key=lambda item: item[1])
-        return Outcome(lost, lost <= MAX_NEED_DAMAGE, f"{lost:.1f} health ({who})")
+        return Outcome(lost, lost <= MAX_NEED_DAMAGE, f"{lost:.1f} health ({who})" if lost else "none")
 
 
 class Deaths(Check):
