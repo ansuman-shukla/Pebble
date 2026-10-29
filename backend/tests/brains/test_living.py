@@ -8,26 +8,29 @@ fire, hunters hunt, the camp fires burn through the nights and the guard lights 
 """
 
 from collections import Counter, defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 import pytest
 
 from app.engine import citizen_brains
-from app.observability.events import Injured
+from app.observability.events import Injured, TickSummary
 from app.sim.animals import DUSK_ALTITUDE_DEG, GROUP_M, GROUP_SAFE
 from app.sim.citizens import CITIZENS, load_citizens
-from app.sim.clock import DAY_MINUTES
+from app.sim.clock import DAY_MINUTES, SECONDS_PER_TICK
 from app.sim.fauna import HERBIVORES, PREDATORS
 from app.sim.fire import SAFE_M, near_lit_fire
 from app.sim.navigation import Planner
 from app.sim.perception import HOME_RADIUS_M
 from app.sim.simulation import Simulation
+from app.sim.vec import Vec3
 from app.sim.world import SimWorld
-from tests.sim_helpers import local_hour
+from tests.sim_helpers import drawn_on, local_hour
 
 DAYS = 10
 SEED = 20261028
 PROGRESS = frozenset({"walk_to", "gather", "eat", "drink", "work", "sleep"})
+DRAWN_M = 0.01  # a spectator draws every move from where the last one ended, to where the sim has them
 MAX_STALL_TICKS = 6 * 60  # awake, nobody stands about (only waiting or resting) longer than this
 STORE = "store-2"
 
@@ -52,6 +55,8 @@ class Life:
     baskets_lit: list[int] = field(default_factory=list)  # gate baskets burning at local midnight, each night
     actions: Counter[str] = field(default_factory=Counter)  # durative actions started, by name
     gifts: int = 0  # items handed from one citizen to another
+    moves: Counter[str] = field(default_factory=Counter)  # citizens' moves in a tick, by the action that moved them
+    off_drawn: list[tuple[int, str, float]] = field(default_factory=list)  # (tick, citizen, metres) drawn elsewhere
 
 
 @pytest.fixture(scope="module")
@@ -68,15 +73,20 @@ def life(sim_world: SimWorld, planner: Planner) -> Life:
     out = Life(sim=sim, stall=dict.fromkeys(sim.state.citizens, 0), rice=[sim.state.stores[STORE]["rice"]])
     walk = sim_world.town.walk
     last_progress = dict.fromkeys(sim.state.citizens, 0)
+    drawn = {c.id: c.position for c in sim.state.citizens.values()}  # where a spectator draws them as a tick begins
     for _ in range(DAYS * DAY_MINUTES):
         brains(sim)
         before = {c.id: c.position for c in sim.state.citizens.values()}
         health = {c.id: c.body.health for c in sim.state.citizens.values()}
         injured: set[str] = set()
+        moving = {c.id: c.action.kind for c in sim.state.citizens.values() if c.action is not None}
         sim.step()
         day = (sim.tick - 1) // DAY_MINUTES
         for event in sim.drain():
-            if event.type == "died" and event.actor_kind == "citizen" and event.actor_id is not None:
+            if event.type == "tick_summary":
+                assert isinstance(event.payload, TickSummary)
+                _draw(out, event.payload, drawn, before, moving)
+            elif event.type == "died" and event.actor_kind == "citizen" and event.actor_id is not None:
                 out.deaths.append((event.actor_id, str(getattr(event.payload, "cause", ""))))
             elif isinstance(event.payload, Injured) and event.actor_kind == "citizen" and event.actor_id is not None:
                 injured.add(event.actor_id)
@@ -135,6 +145,26 @@ def life(sim_world: SimWorld, planner: Planner) -> Life:
     return out
 
 
+def _draw(
+    out: Life, summary: TickSummary, drawn: dict[str, Vec3], before: dict[str, Vec3], moving: Mapping[str, str]
+) -> None:
+    """Draws the tick as the globe does: each move along its streamed route for a tick from where it starts."""
+    sim = out.sim
+    for citizen in sim.state.citizens.values():
+        gaps = [sim.world.distance_m(drawn[citizen.id], before[citizen.id])]
+        moved = summary.moved.get(citizen.id)
+        if moved is None or not moved.route:  # (a move of less than a millimetre is drawn standing)
+            drawn[citizen.id] = citizen.position
+            gaps.append(sim.world.distance_m(before[citizen.id], citizen.position))
+        else:
+            out.moves[moving[citizen.id]] += 1
+            gaps.append(sim.world.distance_m(moved.route[0].unit, before[citizen.id]))
+            drawn[citizen.id] = drawn_on(moved.route, SECONDS_PER_TICK)
+            gaps.append(sim.world.distance_m(drawn[citizen.id], citizen.position))
+        if max(gaps) > DRAWN_M:
+            out.off_drawn.append((sim.tick, citizen.id, max(gaps)))
+
+
 def test_nobody_dies_in_ten_days(life: Life) -> None:
     assert life.deaths == []
     assert all(c.body.alive and c.body.health > 50 for c in life.sim.state.citizens.values())
@@ -142,6 +172,12 @@ def test_nobody_dies_in_ten_days(life: Life) -> None:
     # aren't counted here (game turning on a hunter is a hunter's risk, D70; predators have their own test)
     worst = max(life.need_damage.items(), key=lambda item: item[1], default=("nobody", 0.0))
     assert worst[1] <= 10, f"{worst[0]} lost {worst[1]:.0f} health to hunger and thirst"
+
+
+def test_every_move_is_drawn_as_walking_from_where_the_last_one_ended(life: Life) -> None:
+    """Walks (one tick long or many), follows and hunts alike: no move is ever drawn as a jump."""
+    assert life.off_drawn == [], sorted(life.off_drawn, key=lambda g: -g[2])[:20]
+    assert life.moves["walk_to"] > 5000 and life.moves["follow"] > 0 and life.moves["hunt"] > 0
 
 
 def test_everyone_keeps_doing_things_and_moving(life: Life) -> None:

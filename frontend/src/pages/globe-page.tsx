@@ -259,6 +259,8 @@ type GlobeSceneProps = {
   town: TownView;
   walkTown: WalkTown;
   live: LiveFeed['state'];
+  /** `live` is a replayed moment (`?tick=`). */
+  replay: boolean;
   peopleRef: RefObject<Map<string, Vector3>>;
   npcViews: NpcViews;
   animalViews: AnimalViews;
@@ -290,6 +292,7 @@ const GlobeScene = memo(function GlobeScene({
   town,
   walkTown,
   live,
+  replay,
   peopleRef,
   npcViews,
   animalViews,
@@ -374,6 +377,7 @@ const GlobeScene = memo(function GlobeScene({
         citizens={live.citizens}
         speed={live.speed}
         paused={live.paused}
+        replay={replay}
         speech={live.speech}
         terrain={terrain}
         town={walkTown}
@@ -732,6 +736,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
         town={town}
         walkTown={walkTown}
         live={live}
+        replay={replay !== null}
         peopleRef={peopleRef}
         npcViews={npcViews}
         animalViews={animalViews}

@@ -3,6 +3,7 @@ from typing import Any, get_args
 
 import numpy as np
 
+from app.observability.events import RoutePoint
 from app.sim.citizens import CitizenSpec
 from app.sim.clock import local_minute, sun_altitude_deg, sun_direction
 from app.sim.fauna import terrain
@@ -23,6 +24,21 @@ HOME = "main-w-3"
 @cache
 def real_world() -> SimWorld:
     return sim_world_from_view(GENERATOR.generate(load_world_spec(), load_site_kinds()))
+
+
+def drawn_on(route: list[RoutePoint], seconds: float) -> Vec3:
+    """Where a spectator draws a mover `seconds` (game) after the tick began: along the streamed route by its times,
+    straight between its points (as the globe does), standing at its end once there."""
+    times = [point.t_s for point in route]
+    if any(t is None for t in times):
+        raise ValueError("an untimed route")
+    for a, b in zip(route, route[1:], strict=False):
+        if a.t_s is not None and b.t_s is not None and seconds <= b.t_s:
+            share = max(0.0, (seconds - a.t_s) / (b.t_s - a.t_s))
+            mixed = np.array(a.unit) + (np.array(b.unit) - np.array(a.unit)) * share
+            x, y, z = (mixed / np.linalg.norm(mixed)).tolist()
+            return (x, y, z)
+    return route[-1].unit
 
 
 def make_spec(citizen_id: str = "tester", **overrides: Any) -> CitizenSpec:

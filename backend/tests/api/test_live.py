@@ -84,7 +84,9 @@ def test_the_live_feed_streams_snapshot_events_and_ticks(client: TestClient, com
         hana = next(c for c in ticks[0].citizens if c.id == "hana")
         start = next(c for c in snapshot.citizens if c.id == "hana")
         assert hana.activity == "walking" and hana.position.unit != start.position.unit
-        assert hana.route[0].unit == hana.position.unit and len(hana.route) >= 2 and hana.speed_mps > 0
+        # drawn walking from where she stood, through where she is now
+        assert hana.route[0].unit == start.position.unit and hana.route[0].t_s == 0.0 and hana.speed_mps > 0
+        assert any(point.unit == hana.position.unit for point in hana.route[1:])
         assert (start.route, start.speed_mps) == ([], 0.0)
         assert all(c.route == [] for c in ticks[0].citizens if c.activity != "walking")
         talker = next(c for c in ticks[0].citizens if c.id == "genzo")
@@ -101,7 +103,9 @@ def test_the_live_feed_streams_snapshot_events_and_ticks(client: TestClient, com
         assert (changed.type, changed.tick, changed.speed, changed.paused) == ("tick", 3, 7.0, False)
 
 
-def test_joining_at_a_snapshot_tick_still_shows_the_walks_ahead(client: TestClient, committed_run: EngineLoop) -> None:
+def test_joining_at_a_snapshot_tick_still_shows_the_streamed_routes(
+    client: TestClient, committed_run: EngineLoop
+) -> None:
     loop = committed_run
     loop.run_ticks(59, headless=True)
     WorldApi(loop.sim, "hana").walk_to_place("the storehouses")
@@ -110,7 +114,8 @@ def test_joining_at_a_snapshot_tick_still_shows_the_walks_ahead(client: TestClie
         snapshot = LiveState.model_validate(_receive(ws))
     hana = next(c for c in snapshot.citizens if c.id == "hana")
     assert snapshot.tick == 60 and hana.activity == "walking"
-    assert hana.route[0].unit == hana.position.unit and len(hana.route) >= 2 and hana.speed_mps > 0
+    assert hana.route[0].t_s == 0.0 and hana.speed_mps > 0
+    assert any(point.unit == hana.position.unit for point in hana.route[1:])
 
 
 def test_unknown_runs_close_the_socket_and_the_schema_route_answers(

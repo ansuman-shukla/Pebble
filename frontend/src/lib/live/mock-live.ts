@@ -2,7 +2,8 @@
  * DEV/TEST ONLY: a deterministic stand-in for the engine's live feed (`?mockLive=1`). Fifteen citizens with the
  * 15 look ids live around the town and the two camps of whatever world is loaded: they work, gather, eat, drink,
  * rest, talk (emitting `said` events) and walk straight between spots at the engine's pace (5 km/h = 83 m per
- * tick), streaming the next two ticks of the walk as the engine does (`route`, `speed_mps`); animals graze and prowl
+ * tick), streaming each tick's step and the next two ticks of the walk, timed, as the engine does (`route`, its
+ * `t_s`, `speed_mps`); animals graze and prowl
  * and fires burn (`mock-wild.ts`). Like a new engine run
  * it starts at ×1 (a tick a real minute); tests speed it up with `setClock`.
  * Messages have the contract's shapes; sockets are fake WebSockets driven by the same tick loop, so the client's
@@ -22,7 +23,7 @@ import {
   tickMs,
 } from './live-contract';
 import { MockWild } from './mock-wild';
-import type { Site, WorldView } from '@/lib/client/types.gen';
+import type { RoutePoint, Site, WorldView } from '@/lib/client/types.gen';
 import { CITIZEN_LOOKS } from '@/lib/world/citizen-looks';
 import {
   anchorMapping,
@@ -337,6 +338,8 @@ interface PersonState {
   step: number;
   /** Ticks left in the current (non-walking) step. */
   left: number;
+  /** The last tick they walked in: from where, and the game seconds it took to get where they are. */
+  walked?: { tick: number; from: Spot; seconds: number };
 }
 
 /** A WebSocket's client side as the live hook uses it (the real one and the mock's). */
@@ -521,6 +524,11 @@ export class MockLiveServer {
       const reach = WALK_M_PER_TICK * state.person.pace;
       if (distance > 1e-6)
         state.heading = (Math.atan2(tx - x, tz - z) * 180) / Math.PI;
+      state.walked = {
+        tick: this.tick,
+        from: [x, z],
+        seconds: (Math.min(distance, reach) / reach) * TICK_SECONDS,
+      };
       if (distance <= reach) {
         state.at = [tx, tz];
         this.next(state);
@@ -597,29 +605,25 @@ export class MockLiveServer {
         : 'walk' in step
           ? 'walking'
           : step.activity;
-      const ahead = activity === 'walking' && 'walk' in step;
-      const reach = WALK_M_PER_TICK * person.pace;
+      const walked =
+        state.walked?.tick === this.tick ? state.walked : undefined;
+      const route = walked ? this.route(state, walked) : [];
       return {
         id: person.id,
         name: person.name,
         look: person.look,
         appearance: person.appearance,
         position: { unit, height_m: state.height, lat, lon },
-        route: ahead
-          ? [state.at, walkAhead(state.at, step.walk, WALK_AHEAD_TICKS * reach)]
-              .map(unitAt)
-              .map((point) => ({ unit: point, height_m: state.height }))
-          : [],
-        // the arc of a full tick's walk that way (the site's local metres stretch a little away from its anchor)
-        speed_mps: ahead
-          ? (new Vector3(...unit).angleTo(
-              new Vector3(
-                ...unitAt(walkAhead(state.at, step.walk, reach, false)),
-              ),
-            ) *
-              this.world.radius_m) /
-            TICK_SECONDS
-          : 0,
+        route,
+        // the arc of the first leg over its time (the site's local metres stretch a little away from its anchor)
+        speed_mps:
+          route.length > 1
+            ? (new Vector3(...route[0].unit).angleTo(
+                new Vector3(...route[1].unit),
+              ) *
+                this.world.radius_m) /
+              (route[1].t_s ?? TICK_SECONDS)
+            : 0,
         cell: 0,
         alive: true,
         asleep: activity === 'sleeping',
@@ -638,19 +642,38 @@ export class MockLiveServer {
       };
     });
   }
+
+  /** This tick's step from where they stood, then (still walking) the next ticks of the walk, timed. */
+  private route(
+    state: PersonState,
+    walked: NonNullable<PersonState['walked']>,
+  ): RoutePoint[] {
+    const step = state.person.plan[state.step];
+    const reach = WALK_M_PER_TICK * state.person.pace;
+    const spots: [Spot, number][] = [
+      [walked.from, 0],
+      [state.at, walked.seconds],
+    ];
+    if ('walk' in step) {
+      const end = walkAhead(state.at, step.walk, WALK_AHEAD_TICKS * reach);
+      const metres = Math.hypot(end[0] - state.at[0], end[1] - state.at[1]);
+      if (metres > 1e-6)
+        spots.push([end, walked.seconds + (metres / reach) * TICK_SECONDS]);
+    }
+    return spots.map(([[x, z], seconds]) => ({
+      unit: state.mapping.toWorld(x, 0, z, new Vector3()).normalize().toArray(),
+      height_m: state.height,
+      t_s: seconds,
+    }));
+  }
 }
 
 const stepTicks = (step: Step) => ('walk' in step ? 0 : step.ticks);
 
-/** Where `metres` of walking from `from` towards `to` ends (at `to` if it is closer, unless `stop` is false). */
-function walkAhead(
-  [x, z]: Spot,
-  [tx, tz]: Spot,
-  metres: number,
-  stop = true,
-): Spot {
+/** Where `metres` of walking from `from` towards `to` ends (at `to` if it is closer). */
+function walkAhead([x, z]: Spot, [tx, tz]: Spot, metres: number): Spot {
   const distance = Math.hypot(tx - x, tz - z);
-  if (distance < 1e-9 || (stop && distance <= metres)) return [tx, tz];
+  if (distance <= metres) return [tx, tz];
   return [
     x + ((tx - x) * metres) / distance,
     z + ((tz - z) * metres) / distance,

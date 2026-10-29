@@ -11,8 +11,10 @@ import {
 import {
   type AnimationAction,
   type Group,
+  type Material,
   Matrix4,
   type Mesh,
+  type Object3D,
   Vector3,
 } from 'three';
 
@@ -22,17 +24,17 @@ import { MAX_FRAME, smoothing } from '@/components/world/player/motion';
 import type { LiveCitizen } from '@/lib/live/live-contract';
 import type { Speech } from '@/lib/live/live-state';
 import {
-  advance,
-  citizenPath,
-  headingAt,
-  joinAt,
-  pointAt,
-  type WalkPath,
-  walking,
-} from '@/lib/live/walk-path';
+  follow,
+  moveOn,
+  newTrack,
+  shownDoing,
+  type Track,
+} from '@/lib/live/drawn-track';
+import { groundSpeed, headingAt, walking } from '@/lib/live/walk-path';
 import {
   activityWords,
   BASE_CLIPS,
+  clipLapse,
   type NpcClip,
   type NpcLook,
   npcLook,
@@ -54,13 +56,17 @@ import type { CharacterAnimation } from '@/vendor/polyfork/clips.mjs';
 import { createCharacter } from '@/vendor/polyfork/humanoid.mjs';
 
 /*
- * The citizens on the planet, where the live feed says they are. Between ticks a walker walks the path the tick
- * streamed ahead (`route`) at its ground speed × the clock's speed (`walk-path.ts`): at ×1 that's a real 1.4 m/s
- * for a real minute, along the route's corners; a new tick eases the drawn spot onto the new path. Each one faces
- * the way it walks (its heading when standing),
- * turns smoothly to its heading and stands on the rendered ground (the town's plateau on its disc, else the
- * terrain); sitters and sleepers rest on it, tilted to the ground under them (`rest-posture.ts`). Models load
- * only within NEAR metres of the camera (and hide again past it); clips load per activity as first needed.
+ * The citizens on the planet, where the live feed says they are. Between ticks a mover walks the timed path its
+ * tick streamed (`route`, from where it stood when the tick began) with game seconds passing at the clock's speed
+ * (`walk-path.ts`): at ×1 a real 1.4 m/s for a real minute, along the route's corners, so every move is drawn as
+ * walking, one tick behind the sim. A new tick joins the drawn spot onto its path (normally where the last one
+ * ended); one drawn far off (a reconnect, a hidden tab) fades out and back in on its path instead of jumping. Each
+ * one faces the way it walks (its heading when standing), turns smoothly to its heading and stands on the rendered
+ * ground (the town's plateau on its disc, else the terrain); sitters and sleepers rest on it, tilted to the ground
+ * under them (`rest-posture.ts`). The gait is paced to the drawn ground speed and every clip plays sped up with the
+ * clock (a fast-forwarded film, `clipLapse`), up to ×10: past that legs would blur, so they keep that cadence and
+ * the body glides. Models load only within NEAR metres of the camera (and hide again past it); clips load per
+ * activity as first needed.
  */
 
 /** Full models within this distance of the camera (they hide past HIDE). */
@@ -79,10 +85,6 @@ const AGE_LABEL_SCALE: Partial<Record<string, number>> = {
 };
 /** Turning rate towards the heading (1/s). */
 const TURN_RATE = 8;
-/** How fast the drawn spot eases onto a new tick's path, or a standing citizen onto a new spot (1/s). */
-const CATCH_UP_RATE = 3;
-/** Drawn farther off than this (a resync, a hidden tab), the citizen is put on the spot at once. */
-const SNAP_M = 30;
 
 const LOOKS = new Map(CITIZEN_LOOKS.map((look) => [look.id, look]));
 const basis = new Matrix4();
@@ -95,6 +97,8 @@ interface NpcView {
   /** World position of the feet and the facing tangent (the follow camera reads these). */
   pose: GlobePlayerState;
   activity: string;
+  /** How the body is posed (from the activity shown). */
+  posture: NpcLook['pose'];
   /** The clip playing, '' until the model is loaded (or while it is far). */
   clip: string;
   loaded: boolean;
@@ -102,34 +106,28 @@ interface NpcView {
   near: boolean;
   /** Left then right foot in the model's own frame (x, y, z each), while it is animated. */
   feet: number[];
+  /** Seconds of clip time its animation has played (clips run sped up with the clock). */
+  clipClock: number;
 }
 
 export type NpcViews = Map<string, NpcView>;
 
-interface Track {
-  /** The path the feed streamed for this tick (one point when standing) and how far along it the citizen is. */
-  path: WalkPath;
-  /** Drawn spot minus the spot on the path (unit-sphere vector), easing to zero after a new tick. */
-  offset: Vector3;
-  /** Rendered yaw (radians, the heading convention). */
-  yaw: number;
-  /** Game metres per second of the gait: the path's speed while walking on, else 0. */
-  pace: number;
-}
-
 const wrapAngle = (angle: number) =>
   Math.atan2(Math.sin(angle), Math.cos(angle));
 
-/** Plays the clip of the citizen's look (the gait paced to its walk), records it for the page and returns it. */
+/**
+ * Plays the gait while the body is drawn moving (paced to its ground speed, game metres per second), else the
+ * clip of the citizen's look, records it for the page and returns it.
+ */
 function playLook(
   animation: CharacterAnimation,
   look: NpcLook,
-  pace: number,
+  speed: number,
   view: NpcView,
 ): AnimationAction {
   const action =
-    look.clip === 'Walk'
-      ? animation.locomotion(pace)
+    speed > 0 || look.clip === 'Walk'
+      ? animation.locomotion(speed)
       : animation.play(animation.actions[look.clip] ? look.clip : 'Idle');
   if (look.still) action.time = 0;
   action.paused = look.still;
@@ -140,15 +138,32 @@ function playLook(
 
 const visibleClip = (view: NpcView, clip: string) => (view.near ? clip : '');
 
+/** Draws the character's materials this opaque (transparent only while below 1). */
+function setOpacity(character: Object3D, opacity: number) {
+  character.traverse((object) => {
+    const material = (object as Mesh).material as Material | undefined;
+    if (!material) return;
+    const transparent = opacity < 1;
+    if (material.transparent !== transparent) {
+      material.transparent = transparent;
+      material.needsUpdate = true;
+    }
+    material.opacity = opacity;
+  });
+}
+
 function NpcModel({
   look,
   pose,
+  rate,
   trackRef,
   viewRef,
   ground,
 }: {
   look: CitizenLook;
   pose: NpcLook;
+  /** The clock: game seconds per real second (0 paused). */
+  rate: number;
   trackRef: RefObject<Track>;
   viewRef: RefObject<NpcView>;
   ground: GroundProbe;
@@ -204,22 +219,27 @@ function NpcModel({
       playing.current = playLook(
         animation,
         pose,
-        currentPace(trackRef.current),
+        groundSpeed(trackRef.current.path),
         viewRef.current,
       );
   }, [animation, pose, trackRef, viewRef]);
 
+  const shown = useRef(1);
   useFrame((_, delta) => {
+    const track = trackRef.current;
+    if (track.opacity !== shown.current) {
+      setOpacity(character, track.opacity);
+      shown.current = track.opacity;
+    }
     if (!animation || !viewRef.current.near || !tilt.current || !posed.current)
       return;
-    if (pose.clip === 'Walk')
-      playing.current = playLook(
-        animation,
-        pose,
-        currentPace(trackRef.current),
-        viewRef.current,
-      );
-    animation.update(Math.min(delta, MAX_FRAME));
+    playing.current = playLook(
+      animation,
+      pose,
+      groundSpeed(track.path),
+      viewRef.current,
+    );
+    animation.update(Math.min(delta, MAX_FRAME) * clipLapse(rate));
     layToRest(resting.current, shapeOf(pose.pose, playing.current, actions), {
       character,
       rest,
@@ -227,6 +247,7 @@ function NpcModel({
       posed: posed.current,
       ground,
     });
+    viewRef.current.clipClock = animation.mixer.time;
     viewRef.current.feet = feet.flatMap((bone) =>
       character.worldToLocal(bone.getWorldPosition(foot)).toArray(),
     );
@@ -239,22 +260,6 @@ function NpcModel({
       </group>
     </group>
   );
-}
-
-const currentPace = (track: Track) => track.pace;
-
-/** Where the citizen is drawn: on its path, eased by the catch-up offset (a unit direction into `out`). */
-const drawnAt = (track: Track, out: Vector3) =>
-  pointAt(track.path, out).add(track.offset).normalize();
-
-/** Puts a new frame's path under the citizen, joined where it is drawn now (no jump, no step back). */
-function follow(track: Track, citizen: LiveCitizen, radius: number) {
-  const drawn = drawnAt(track, new Vector3());
-  const path = citizenPath(citizen, radius);
-  const off = joinAt(path, drawn, radius);
-  track.path = path;
-  if (off > SNAP_M) track.offset.set(0, 0, 0);
-  else track.offset.subVectors(drawn, pointAt(path, new Vector3()));
 }
 
 interface PlaceContext {
@@ -276,11 +281,8 @@ function placeAlong(
 ) {
   const { terrain, town, scratch, heading, rate, delta } = context;
   const radius = terrain.globe.radius;
-  advance(track.path, delta * rate);
-  track.offset.multiplyScalar(Math.exp(-CATCH_UP_RATE * delta));
+  const direction = moveOn(track, delta, rate, scratch.direction);
   const onward = walking(track.path);
-  track.pace = onward && rate > 0 ? track.path.speed : 0;
-  const direction = drawnAt(track, scratch.direction);
   const ground = groundUnder(terrain, town, direction, scratch.local);
   const { east, south, up } = tangentFrame(direction);
   const going = onward ? headingAt(track.path, scratch.going) : null;
@@ -315,24 +317,17 @@ function copyPose(from: GlobePlayerState, to: GlobePlayerState) {
   to.ground = from.ground;
 }
 
-function newTrack(citizen: LiveCitizen, radius: number): Track {
-  return {
-    path: citizenPath(citizen, radius),
-    offset: new Vector3(),
-    yaw: (citizen.heading_deg * Math.PI) / 180,
-    pace: 0,
-  };
-}
-
 function newView(citizen: LiveCitizen): NpcView {
   return {
     id: citizen.id,
     pose: { position: new Vector3(), facing: new Vector3(), ground: 0 },
     activity: citizen.activity,
+    posture: 'standing',
     clip: '',
     loaded: false,
     near: false,
     feet: [],
+    clipClock: 0,
   };
 }
 
@@ -343,6 +338,7 @@ function Npc({
   town,
   labels,
   rate,
+  replay,
   peopleRef,
   views,
   followId,
@@ -355,6 +351,8 @@ function Npc({
   labels: LabelStore;
   /** The clock: game seconds per real second (0 paused). */
   rate: number;
+  /** A replayed moment: drawn where it says, not a tick behind (no tick follows). */
+  replay: boolean;
   peopleRef: RefObject<Map<string, Vector3>>;
   views: NpcViews;
   followId: string | null;
@@ -365,8 +363,11 @@ function Npc({
   if (!look) throw new Error(`unknown citizen look ${citizen.look}`);
   const group = useRef<Group>(null);
   const [mounted, setMounted] = useState(false);
-  const trackRef = useRef<Track>(newTrack(citizen, radius));
+  const [firstTrack] = useState(() => newTrack(citizen, radius, replay));
+  const trackRef = useRef<Track>(firstTrack);
   const viewRef = useRef<NpcView>(newView(citizen));
+  // what the body is shown doing: the frame's activity, or a moving one while it walks there (drawn-track)
+  const [doing, setDoing] = useState(() => shownDoing(firstTrack));
   // the ground around the drawn body, for laying a sitter or a sleeper along it
   const ground = useMemo<GroundProbe>(() => {
     const spot = new Vector3();
@@ -391,17 +392,20 @@ function Npc({
     }),
     [],
   );
-  const { activity, action_label: label } = citizen;
-  const pose = useMemo(
-    () => npcLook({ activity, action_label: label }),
-    [activity, label],
-  );
+  const pose = useMemo(() => npcLook(doing), [doing]);
 
-  // every new frame: the walk ahead it streams, joined where the citizen is drawn (a speed change alone sends the
-  // same citizens and keeps the path)
+  // the activity shown changes when a frame comes or the drawn body gets where the frame says it is
+  const showDoing = () => {
+    const now = shownDoing(trackRef.current);
+    viewRef.current.activity = now.activity;
+    if (now !== doing) setDoing(now);
+  };
+
+  // every new frame: the move it streams, joined where the citizen is drawn (a speed change alone sends the same
+  // citizens and keeps the path)
   const onFrame = useEffectEvent((next: LiveCitizen) => {
-    follow(trackRef.current, next, radius);
-    viewRef.current.activity = next.activity;
+    follow(trackRef.current, next, radius, rate);
+    showDoing();
   });
   useLayoutEffect(() => onFrame(citizen), [citizen]);
 
@@ -427,6 +431,8 @@ function Npc({
       rate,
       delta: Math.min(frameDelta, MAX_FRAME),
     });
+    showDoing();
+    view.posture = pose.pose;
     const people = peopleRef.current;
     const feet = people.get(citizen.id);
     if (feet) feet.copy(view.pose.position);
@@ -453,6 +459,7 @@ function Npc({
         <NpcModel
           look={look}
           pose={pose}
+          rate={rate}
           trackRef={trackRef}
           viewRef={viewRef}
           ground={ground}
@@ -461,7 +468,7 @@ function Npc({
       <Label
         store={labels}
         id={`npc-${citizen.id}`}
-        text={`${citizen.name} · ${activityWords(citizen)}`}
+        text={`${citizen.name} · ${activityWords(doing)}`}
         height={labelHeight}
       />
       {speech && (
@@ -482,6 +489,7 @@ export function GlobeNpcs({
   citizens,
   speed,
   paused,
+  replay = false,
   speech,
   terrain,
   town,
@@ -495,6 +503,8 @@ export function GlobeNpcs({
   /** The feed's clock: game seconds per real second, and whether it is paused. */
   speed: number;
   paused: boolean;
+  /** The citizens of a replayed moment (`?tick=`), which no tick follows. */
+  replay?: boolean;
   speech: Speech[];
   terrain: GlobeTerrain;
   town: WalkTown;
@@ -524,6 +534,7 @@ export function GlobeNpcs({
           town={town}
           labels={labels}
           rate={paused ? 0 : speed}
+          replay={replay}
           peopleRef={peopleRef}
           views={views}
           followId={followId}

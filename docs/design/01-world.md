@@ -83,9 +83,9 @@ Each is a named place citizens can learn about, travel to and talk about.
 - One global game clock that runs in **real time by default**: speed = game seconds per real second, so at ×1 a game
   day lasts a real day and citizens walk at the player's pace (D65). Spectators can pause or pick ×10, ×60 (a game
   hour per real minute, a day in 24 real minutes) or ×600 for a time-lapse (a day in 2.4 real minutes).
-- The simulation still ticks once per game minute (every 60 / speed real seconds); clients draw walkers moving along
-  the path each tick streams ahead (`route`, `speed_mps`), so motion stays smooth even with a real minute between
-  ticks.
+- The simulation still ticks once per game minute (every 60 / speed real seconds); each tick streams every move as a
+  timed path from where the mover stood when it began (`route`), and clients draw it over the next tick, one tick
+  behind the sim, so every move is drawn as walking even with a real minute between ticks (D100).
 - The sun lights one side of the planet: **local time depends on longitude**, so the town can be in daylight while a
   band on the far side sleeps. Night is dark and dangerous (predators hunt at dusk and night).
 - v0 has no seasons or weather. v1 adds axial tilt (seasons, winter, snow line moving) and simple weather.
