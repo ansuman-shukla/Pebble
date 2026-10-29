@@ -488,3 +488,40 @@ test('two walkers passing on one street are drawn at least 0.6 m apart', () => {
   expect(south(a.at(-1)!)).toBeGreaterThan(0.3);
   expect(south(b.at(-1)!)).toBeLessThan(-0.3);
 });
+
+/** Metres east of the north-south street through the origin. */
+const east = (spot: Vector3) => (spot.x / spot.z) * R;
+
+for (const { turn, end, settled } of [
+  {
+    turn: 'a corner',
+    end: [20, 20],
+    settled: (spot: Vector3) => east(spot) - 20,
+  },
+  { turn: 'a U-turn', end: [0, 0], settled: (spot: Vector3) => -south(spot) },
+] as const)
+  test(`a walker eases across into its new lane at ${turn}, never jumping`, () => {
+    const track = newTrack(
+      tick(
+        [...end],
+        [
+          [0, 0, 0],
+          [20, 0, 14.4],
+          [...end, 28.8],
+        ],
+      ),
+      R,
+    );
+    const spots = [
+      moveOn(track, 0, 1, new Vector3()).clone(),
+      ...inLane(track, 30),
+    ];
+    const steps = spots.slice(1).map((spot, i) => metres(spots[i], spot));
+    expect(Math.max(...steps)).toBeLessThan(0.04); // at ×1 and 60 fps a pace is 0.023 m a frame
+    const second = (s: number) => spots[Math.round(s / FRAME)];
+    expect(south(second(14))).toBeCloseTo(LANE_M, 2); // right of the way east...
+    expect(settled(second(24))).toBeCloseTo(LANE_M, 2); // ...then right of the way it turned
+    expect(metres(spots.at(-1)!, new Vector3(...at(...end)))).toBeLessThan(
+      1e-3,
+    );
+  });

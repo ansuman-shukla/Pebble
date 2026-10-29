@@ -40,6 +40,8 @@ export const LANE_M = 0.35;
 const LANE_RATE = 4;
 /** ...and over how many metres before the end of its path it steps back onto the route. */
 const LANE_OUT_M = 1.5;
+/** How fast its lane swings to the new side at a corner (1/s, real time): a U-turn crosses two lane widths. */
+const SIDE_RATE = 2;
 
 /** What a citizen is shown doing (the label's words and the pose come from it). */
 export type Doing = Pick<
@@ -91,7 +93,7 @@ export interface Track {
   held: Doing | null;
   /** How far into its keep-right lane the body is drawn (0 on its spot standing, 1 walking)... */
   lane: number;
-  /** ...towards this side (unit, right of the way it last walked). */
+  /** ...towards this side: right of the way it last walked (unit; shorter while it swings across at a corner). */
   side: Vector3;
 }
 
@@ -189,9 +191,10 @@ const going = new Vector3();
 
 /**
  * Shifts the drawn spot `at` (a unit direction, changed in place) into the walker's keep-right lane: LANE_M right of
- * the way it walks, stepped into over a fraction of a second as it sets off and left over the last LANE_OUT_M of its
- * path, so it stops (and sits, works...) exactly where the feed says. Drawn only: the sim's walkers may pass
- * through each other, and the path and its joins stay on the route.
+ * the way it walks, stepped into over a fraction of a second as it sets off, eased across to the new side at a corner
+ * (through the route on a U-turn, never a jump) and left over the last LANE_OUT_M of its path, so it stops (and sits,
+ * works...) exactly where the feed says. Drawn only: the sim's walkers may pass through each other, and the path and
+ * its joins stay on the route.
  */
 export function keepRight(
   track: Track,
@@ -199,13 +202,17 @@ export function keepRight(
   at: Vector3,
   radius: number,
 ) {
-  const onward = walking(track.path) && headingAt(track.path, going);
-  if (onward) {
+  if (walking(track.path) && headingAt(track.path, going)) {
     going.crossVectors(going, at); // right of the way it walks, on the tangent plane
-    if (going.lengthSq() > 1e-18) track.side.copy(going).normalize();
+    if (going.lengthSq() > 1e-18) {
+      going.normalize();
+      // out of its lane it takes the new side at once; in it, it eases across (through the route on a U-turn)
+      if (track.lane < 1e-4) track.side.copy(going);
+      else track.side.lerp(going, 1 - Math.exp(-SIDE_RATE * delta));
+    }
   }
-  track.lane +=
-    ((onward ? 1 : 0) - track.lane) * (1 - Math.exp(-LANE_RATE * delta));
+  // standing or at the end of its path nothing is left to walk, so the lane closes
+  track.lane += (1 - track.lane) * (1 - Math.exp(-LANE_RATE * delta));
   track.lane = Math.min(track.lane, metresLeft(track.path) / LANE_OUT_M);
   if (track.lane < 1e-4) return at;
   return at
