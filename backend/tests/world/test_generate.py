@@ -1,15 +1,16 @@
 import hashlib
+from collections import Counter
 
 import numpy as np
 import pytest
 
 from app.world.biomes import BIOME_IDS, WATER_BIOMES, hop_distance, mean_spacing_m, walkable
+from app.world.flora import generate_flora
 from app.world.generate import GENERATOR_VERSION, GeneratedWorld, generate_world
 from app.world.hydrology import components
 from app.world.paths import reachable
 from app.world.spec import BIOME_NAMES, SITE_IDS, WorldSpec, load_site_kinds, load_world_spec
 from app.world.sphere import angle_between, lat_lon
-from app.world.terrain import base_terrain
 from app.world.view import decode_array
 
 LAND_BIOMES = sorted(set(range(len(BIOME_NAMES))) - WATER_BIOMES)
@@ -50,11 +51,20 @@ def test_same_seed_and_spec_give_identical_worlds(spec: WorldSpec, world: Genera
     assert again.view().model_dump() == world.view().model_dump()
 
 
-def test_another_seed_gives_another_terrain(spec: WorldSpec, world: GeneratedWorld) -> None:
-    # (only the terrain: the hotspots are laid out for this seed's ground and may not fit another's)
-    other = base_terrain(spec.model_copy(update={"seed": spec.seed + 1}), world.grid)
+@pytest.mark.parametrize("seed", [20261029, 7])
+def test_another_seed_gives_another_full_world(spec: WorldSpec, world: GeneratedWorld, seed: int) -> None:
+    other_spec = spec.model_copy(update={"seed": seed})
+    other = generate_world(other_spec, load_site_kinds())
 
-    assert not np.array_equal(other.heights, base_terrain(spec, world.grid).heights)
+    assert not np.array_equal(other.heights, world.heights)
+    assert _digest(other) != _digest(world)
+    assert [hotspot.id for hotspot in other.places.hotspots] == [hotspot.id for hotspot in spec.hotspots.hotspots]
+    features = Counter((feature.hotspot, feature.kind) for feature in other.places.features)
+    for hotspot in spec.hotspots.hotspots:
+        for feature in hotspot.features:
+            assert features[(hotspot.id, feature.kind)] == feature.count, (hotspot.id, feature.kind)
+        assert features[(hotspot.id, "den")] == (hotspot.den is not None), hotspot.id
+    assert len(generate_flora(other.view(), other_spec)) > 40_000
 
 
 def test_world_view_carries_the_generator_version_and_sizes(world: GeneratedWorld) -> None:
