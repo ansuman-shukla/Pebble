@@ -9,6 +9,7 @@ from collections.abc import Callable
 from app.observability.events import ActionStarted
 from app.observability.replay import from_snapshot
 from app.sim.simulation import Simulation
+from app.sim.slots import PERSONAL_M
 from app.sim.snapshot import take_snapshot
 from app.world_api.facade import WorldApi, run_until_done
 from tests.sim_helpers import HOME, compass_towards, local_hour, make_spec, nearest_cell_of, without_animals
@@ -142,6 +143,6 @@ def test_a_band_rests_round_its_fire_each_on_their_own_seat(new_sim: Callable[..
 
     seats = [citizen.position for citizen in band]
     for seat in seats:
-        assert 1.5 <= sim.world.distance_m(seat, pit) <= 2.5
+        assert 2.1 <= sim.world.distance_m(seat, pit) <= 2.3  # on the log seats round the pit
     gaps = [sim.world.distance_m(a, b) for k, a in enumerate(seats) for b in seats[k + 1 :]]
-    assert min(gaps) > 1.0  # seats 1.5 m apart, one each
+    assert min(gaps) >= PERSONAL_M  # one each

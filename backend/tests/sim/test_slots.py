@@ -11,8 +11,11 @@ from app.sim.slots import (
     PERSONAL_M,
     Slot,
     build_layout,
+    crowded,
     held_slot,
+    layout,
     load_slots_spec,
+    occupancy_words,
     ring_spot,
     step_to,
     walkable,
@@ -21,7 +24,8 @@ from app.sim.state import Citizen
 from app.sim.work import WORK_BY_NAME
 from app.sim.world import SimWorld
 from app.world.town import load_town
-from tests.sim_helpers import GATE, make_spec, without_animals
+from app.world_api.facade import WorldApi, run_until_done
+from tests.sim_helpers import GATE, make_spec, skip_to, without_animals
 
 FUTURE_TASKS = {"forge", "dry", "ring bell", "confined"}  # slots laid out for tasks their streams bring later
 SLOTTED_TASKS = {"farm", "weave", "trade", "guard", "govern", "pray"}  # every v0 task done at a thing
@@ -71,6 +75,50 @@ def test_the_layout_keeps_personal_space_and_stands_on_walkable_ground(sim_world
     assert [slot.id for slot in lay.places["storehouses"]][:2] == ["store-2#door-1", "store-2#door-2"]  # granary
 
 
+def test_rest_takes_a_free_bench_seat_nearby_else_the_ground(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    people = [sim.add_citizen(make_spec(f"r{k}", at=(16.0, 53.5))) for k in range(3)]
+    rests = [WorldApi(sim, p.id).rest(5) for p in people]
+    sim.step()
+    bench = {slot.id for slot in layout(sim.core).owners["market-bench-1"]}
+    seated = [p for p in people if held_slot(sim.core, p) is not None]
+    assert {_slot(sim, p).id for p in seated} == bench
+    for person in seated:
+        assert sim.world.distance_m(person.position, _slot(sim, person).position) < 0.01
+    assert _apart(sim, people) >= PERSONAL_M  # the third sits on the ground beside them
+    texts = sorted(run_until_done(sim, rest, 10).text for rest in rests)
+    assert texts == ["You rest a while on the bench."] * 2 + ["You rest a while on the ground."]
+    assert occupancy_words(sim.core, "market-bench-1", "seat") == "both taken"
+
+
+def test_band_sleepers_take_their_lean_tos_mats_then_the_fires_by_their_door(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    sim = _sim(new_sim)
+    home = sim.world.structures["band_a_camp:shelter-n"]
+    band = [
+        sim.add_citizen(
+            make_spec(f"b{k}", site="band_a_camp", at=home.door_xz, region="band_a", home="band_a_camp:shelter-n")
+        )
+        for k in range(10)
+    ]
+    skip_to(sim, band[0].position, night=True)
+    for member in band[:3]:
+        WorldApi(sim, member.id).sleep()
+    sim.step()
+    first = sorted(_slot(sim, m).owner for m in band[:3])
+    assert first == ["band_a_camp:fire-pit", "band_a_camp:shelter-n", "band_a_camp:shelter-n"]  # the roof first
+    for member in band[3:]:
+        WorldApi(sim, member.id).sleep()
+    sim.step()
+    beds = [held_slot(sim.core, m) for m in band]
+    owners = sorted(bed.owner for bed in beds if bed is not None)
+    assert owners == ["band_a_camp:fire-pit"] * 7 + ["band_a_camp:shelter-n"] * 2  # the fire's mats on their side
+    assert all(bed is None or bed.kind == "mat" for bed in beds) and beds.count(None) == 1  # the last lies down
+    assert all(sim.world.distance_m(m.position, home.door) <= 6.0 for m in band)
+    assert _apart(sim, band) >= PERSONAL_M and crowded(sim.core) == []
+
+
 def test_bodies_on_one_spot_step_apart_the_later_comer_drawn_walking(new_sim: Callable[..., Simulation]) -> None:
     sim = _sim(new_sim)
     first = sim.add_citizen(make_spec("ana", at=(-40.0, 61.0)))
@@ -83,6 +131,15 @@ def test_bodies_on_one_spot_step_apart_the_later_comer_drawn_walking(new_sim: Ca
     route = _summary(sim).moved["bo"].route
     assert route[0].unit == spot and route[-1].unit == second.position
     assert walkable(sim.core, second.position)
+
+
+def test_occupancy_words_tell_how_full_a_thing_is(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    assert occupancy_words(sim.core, "market-bench-2", "seat") == "free"
+    sitter = sim.add_citizen(make_spec("solo", at=(24.0, 53.5)))
+    WorldApi(sim, sitter.id).rest(30)
+    sim.step()
+    assert occupancy_words(sim.core, "market-bench-2", "seat") == "one free"
 
 
 def test_bodies_closer_than_personal_space_step_apart(new_sim: Callable[..., Simulation]) -> None:
