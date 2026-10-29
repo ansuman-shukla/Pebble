@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { Vector3 } from 'three';
+import { BufferAttribute, Vector3 } from 'three';
 
 import {
   pruneTrails,
@@ -8,6 +8,7 @@ import {
   trailStep,
   trailVertices,
   type Trails,
+  uploadTrails,
   writeTrails,
 } from '../../src/lib/live/trails';
 
@@ -140,4 +141,24 @@ test('trails stop where the buffers end', () => {
     for (let i = 0; i < 1000; i++) walk(trails, id, i, i / 100);
   const room = buffers(2);
   expect(write(trails, 10, 1000, room).vertices).toBe(trailVertices(2));
+});
+
+test('only the written vertices are uploaded, and nothing at all when no trail is drawn', () => {
+  const positions = new BufferAttribute(new Float32Array(30), 3);
+  const colors = new BufferAttribute(new Float32Array(40), 4);
+  uploadTrails([positions, colors], 0); // an empty range would upload the whole buffer
+  for (const attribute of [positions, colors]) {
+    expect(attribute.version).toBe(0);
+    expect(attribute.updateRanges).toEqual([]);
+  }
+  uploadTrails([positions, colors], 4);
+  expect(positions.version).toBe(1);
+  expect(positions.updateRanges).toEqual([{ start: 0, count: 12 }]);
+  expect(colors.updateRanges).toEqual([{ start: 0, count: 16 }]);
+  uploadTrails([positions, colors], 2);
+  expect(positions.version).toBe(2);
+  expect(positions.updateRanges).toEqual([{ start: 0, count: 6 }]);
+  uploadTrails([positions, colors], 0); // a pending upload keeps its range
+  expect(positions.version).toBe(2);
+  expect(positions.updateRanges).toEqual([{ start: 0, count: 6 }]);
 });

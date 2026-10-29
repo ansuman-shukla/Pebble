@@ -15,6 +15,7 @@ import {
   trailStep,
   trailVertices,
   type Trails,
+  uploadTrails,
   writeTrails,
 } from '@/lib/live/trails';
 import { snapMetres } from '@/lib/live/walk-path';
@@ -110,11 +111,7 @@ export function TimeLapseTrails({
       rgba[v * 4 + 2] = COLOR[2];
       rgba[v * 4 + 3] = alphas[v] * OPACITY;
     }
-    for (const attribute of [positions, colors]) {
-      attribute.clearUpdateRanges();
-      attribute.addUpdateRange(0, vertices * attribute.itemSize);
-      attribute.needsUpdate = true;
-    }
+    uploadTrails([positions, colors], vertices);
     mesh.geometry.setDrawRange(0, vertices);
   });
 

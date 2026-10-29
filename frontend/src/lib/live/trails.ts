@@ -6,7 +6,7 @@
  * metres (a resync that faded the body across) is left out. Pure (no DOM, no React): `time-lapse-trails.tsx` drives
  * it and the tests too.
  */
-import type { Vector3 } from 'three';
+import type { BufferAttribute, Vector3 } from 'three';
 
 /** Real seconds of drawn path a trail shows. */
 export const TRAIL_S = 20;
@@ -121,4 +121,20 @@ export function writeTrails(
     }
   }
   return vertices;
+}
+
+/**
+ * Asks three to upload only the first `vertices` vertices of each attribute. With none written there is nothing to
+ * upload: an empty update range would make three send the whole buffer.
+ */
+export function uploadTrails(
+  attributes: readonly BufferAttribute[],
+  vertices: number,
+) {
+  if (vertices === 0) return;
+  for (const attribute of attributes) {
+    attribute.clearUpdateRanges();
+    attribute.addUpdateRange(0, vertices * attribute.itemSize);
+    attribute.needsUpdate = true;
+  }
 }
