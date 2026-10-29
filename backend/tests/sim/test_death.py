@@ -135,3 +135,44 @@ def test_every_death_ends_every_running_action_once(
     kill(sim, victim_id)
     events = sim.drain() + _run_until_dead(sim, victim_id, 1)
     _assert_died_once_ending(sim, events, victim_id, cause, number)
+
+
+def _eat_then_collapse(sim: Simulation, victim_id: str) -> None:
+    sim.citizen(victim_id).body.energy = 0.0
+    sim.step()
+
+
+def _eat_then_get_bitten(sim: Simulation, victim_id: str) -> None:
+    _wolf_at(sim, victim_id)  # a bite only hurts; the interrupt stops the meal and what was eaten so far makes sick
+    sim.step()
+
+
+def _eat_then_do_something_else(sim: Simulation, victim_id: str) -> None:
+    number = sim.start(victim_id, Wait(minutes=10))
+    result = sim.result(victim_id, number)
+    assert result is not None and (result.action, result.outcome, result.text) == ("wait", "failed", DARK)
+
+
+def _eat_to_the_end(sim: Simulation, _victim_id: str) -> None:
+    sim.run(10)
+
+
+@pytest.mark.parametrize(
+    "ending",
+    [_eat_to_the_end, _eat_then_get_bitten, _eat_then_do_something_else, _eat_then_collapse],
+    ids=["finishes", "is bitten", "starts something else", "collapses"],
+)
+def test_raw_food_that_kills_ends_the_meal_once(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch, ending: Callable[[Simulation, str], None]
+) -> None:
+    """Bad food kills from inside the meal (via `injure`), so whoever stops the meal must not end it again (#60)."""
+    monkeypatch.setattr(doing, "RAW_SICK_CHANCE", 1.0)
+    monkeypatch.setattr(doing, "RAW_SICKNESS", (500.0, 500.0))
+    sim, victim_id = _scene(new_sim)
+    number = sim.start(victim_id, Eat(item="meat"))
+    sim.step()  # a minute into the meal
+    assert sim.citizen(victim_id).body.alive
+    ending(sim, victim_id)
+    events = sim.drain()
+    _assert_died_once_ending(sim, events, victim_id, "bad food", number)
+    assert sim.citizen(victim_id).inventory.get("meat", 0) < 5  # some was eaten: that is what made them sick
