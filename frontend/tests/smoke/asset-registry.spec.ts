@@ -127,12 +127,37 @@ test('wardrobe hand props are items the pinned humanoid engine carries in the ri
   }
 });
 
-test('kit looks build rigged humanoids wearing every garment they name', () => {
+// the garments each kit character wears in its module: dropping or moving one must fail
+const KIT_LOOK_SLOTS: Record<keyof typeof KIT_LOOKS, string[]> = {
+  buddhist_monk: [
+    'hair',
+    'coat',
+    'bottom',
+    'feet',
+    'neck',
+    'hands',
+    'righthand',
+  ],
+  ashigaru: [
+    'hair',
+    'hat',
+    'top',
+    'coat',
+    'bottom',
+    'feet',
+    'hands',
+    'righthand',
+  ],
+  farmer: ['hair', 'hat', 'top', 'bottom', 'feet', 'neck'],
+};
+
+test('kit looks build rigged humanoids wearing every garment of their kit character', () => {
   expect(Object.keys(KIT_LOOKS).sort()).toEqual(
-    ['ashigaru', 'buddhist_monk', 'farmer'].sort(),
+    Object.keys(KIT_LOOK_SLOTS).sort(),
   );
-  for (const [id, config] of Object.entries(KIT_LOOKS)) {
-    const slots = Object.keys(config.wear);
+  for (const [id, slots] of Object.entries(KIT_LOOK_SLOTS)) {
+    const config = KIT_LOOKS[id as keyof typeof KIT_LOOKS];
+    expect(Object.keys(config.wear).sort(), id).toEqual([...slots].sort());
     expect(meshNames(config), id).toEqual(
       ['body', ...slots.map((slot) => `attach-${slot}-mesh`)].sort(),
     );
