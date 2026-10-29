@@ -6,6 +6,7 @@ database afterwards).
 
 import queue
 import threading
+import time
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -18,7 +19,8 @@ from starlette.testclient import WebSocketTestSession
 from starlette.websockets import WebSocketDisconnect
 
 from app.core.config import settings
-from app.engine import Clock, EngineLoop, open_loop
+from app.engine import Clock, EngineLoop, open_loop, resume_run
+from app.lib.ulid import UlidFactory
 from app.observability.events import GoalSet, NodeChanged, Stole, Traded
 from app.observability.store import queue_command
 from app.services.live import LIVE_EVENT_TYPES, LiveEvent, LiveState
@@ -219,3 +221,22 @@ def test_a_clock_change_keeps_what_passed_of_the_tick_at_the_old_speed(
         changed = LiveState.model_validate(_receive(ws))
     assert (changed.tick, changed.speed) == (1, 6.0)
     assert 19.0 < changed.tick_elapsed_s < 30.0  # 20 s passed at ×1, not 20 s at ×6 (past the tick's end)
+
+
+def test_a_resumed_engine_counts_its_first_tick_from_the_resume(
+    client: TestClient, committed_run: EngineLoop, sim_world: SimWorld
+) -> None:
+    loop = committed_run
+    loop.store.clock = lambda: datetime.now(UTC) - timedelta(seconds=30)  # tick 1 was written 30 s ago (at ×1)
+    loop.run_ticks(1, headless=True)
+    with client.websocket_connect(f"{API}/live?run_id={loop.run.id}") as ws:
+        assert 29.0 < LiveState.model_validate(_receive(ws)).tick_elapsed_s < 40.0
+        loop.shut_down()
+        stopped = LiveState.model_validate(_receive(ws))  # the feed notices the engine stopped
+        time.sleep(2.0)
+        with client.websocket_connect(f"{API}/live?run_id={loop.run.id}") as late:  # a stopped engine counts nothing
+            assert LiveState.model_validate(_receive(late)).tick_elapsed_s == pytest.approx(stopped.tick_elapsed_s)
+        resume_run(loop.store.session, sim_world, loop.run, UlidFactory(), Clock(), brains=False)
+        resumed = LiveState.model_validate(_receive(ws))
+    assert stopped.tick == resumed.tick == 1 and stopped.tick_elapsed_s > 29.0
+    assert resumed.tick_elapsed_s < 5.0  # the engine waits a whole tick after a resume, not 30 s less

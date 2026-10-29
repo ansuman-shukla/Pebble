@@ -109,13 +109,19 @@ class RunFeed:
     last_id: str | None  # the id of the event at last_seq (None: there is none yet)
     speed: float
     paused: bool
+    running: bool = True  # the engine runs the run (a stopped engine counts no game time)
     # the tick's game seconds counted at the speed in force until `counted_at` (reset when a tick is written)
     counted_s: float = 0.0
     counted_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
+    @property
+    def counting(self) -> bool:
+        return self.running and not self.paused
+
     def message(self, kind: Literal["snapshot", "tick"], now: datetime | None = None) -> LiveState:
         day, time = town_clock(self.state.tick)
-        elapsed = tick_elapsed(self.counted_s, self.counted_at, self.speed, self.paused, now or datetime.now(UTC))
+        now = now or datetime.now(UTC)
+        elapsed = tick_elapsed(self.counted_s, self.counted_at, self.speed, not self.counting, now)
         citizens = [citizen_entity(citizen, self.state.tick) for _, citizen in sorted(self.state.citizens.items())]
         animals, fires = wild_entities(self.state)
         return LiveState(
@@ -144,12 +150,16 @@ class RunFeed:
         if (seen.id if seen is not None else None) != self.last_id:
             return None
         messages: list[LiveMessage] = []
-        clock_changed = (float(run.speed), run.paused) != (self.speed, self.paused)
-        if clock_changed:  # what passed at the old speed stays counted
+        running = run.status == "running"
+        clock_changed = (float(run.speed), run.paused, running) != (self.speed, self.paused, self.running)
+        if clock_changed:
             now = datetime.now(UTC)
-            self.counted_s = tick_elapsed(self.counted_s, self.counted_at, self.speed, self.paused, now)
+            if running and not self.running:  # a resumed engine counts its first tick afresh
+                self.counted_s = 0.0
+            else:  # what passed at the old speed stays counted
+                self.counted_s = tick_elapsed(self.counted_s, self.counted_at, self.speed, not self.counting, now)
             self.counted_at = now
-        self.speed, self.paused = float(run.speed), run.paused
+        self.speed, self.paused, self.running = float(run.speed), run.paused, running
         for row in rows[1:] if seen is not None else rows:
             apply_event(self.state, _replayable(row))
             self.last_seq, self.last_id = row.seq, row.id
@@ -204,7 +214,13 @@ def load_feed(session: Session, run: Run) -> RunFeed:
     last_seq = rows[-1].seq if rows else snapshot_row.last_seq
     last_id = rows[-1].id if rows else event_id_at(session, run.id, last_seq)
     feed = RunFeed(
-        run_id=run.id, state=state, last_seq=last_seq, last_id=last_id, speed=float(run.speed), paused=run.paused
+        run_id=run.id,
+        state=state,
+        last_seq=last_seq,
+        last_id=last_id,
+        speed=float(run.speed),
+        paused=run.paused,
+        running=run.status == "running",
     )
     written = next((row.real_time for row in reversed(rows) if row.type == "tick_summary"), None)
     if written is not None:
