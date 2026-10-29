@@ -483,7 +483,7 @@ thief.
 | gate | 2 guard stands facing out |
 | castle court | lord's seat (facing the court) + 2 retainer stands + 4 petitioner stands facing the seat |
 | market stall | 1 seller + 2 buyer stands |
-| forge + anvil | 1 work stand (smith) + 1 stand |
+| forge (the model's own anvil) | 1 work stand (smith, at the anvil) + 1 stand |
 | drying rack | 1 work stand |
 | loom (procedural, each weaving house veranda) | 1 seat |
 | gaol | 2 `confined` seats on the ground |
