@@ -1,6 +1,9 @@
 import { expect, type Page, test } from '@playwright/test';
 import { PerspectiveCamera, Vector3 } from 'three';
 
+import type { WorldView } from '../../src/lib/client/types.gen';
+import { latLonFromDirection } from '../../src/lib/world/globe';
+import { WORLD_URL } from './globe-helpers';
 import { cameraOf, drawn, goToPerson, landed, openHeld } from './ui-helpers';
 
 /*
@@ -199,8 +202,21 @@ test('at 1280x800 the toolbar with its key lines ends above the inspector and th
 
 test('going to a site stops following (F18); footer and clock tell the camera place and its time (F19, F20)', async ({
   page,
+  request,
 }) => {
   const errors: string[] = [];
+  const view = (await (await request.get(WORLD_URL)).json()) as WorldView;
+  const lonOf = (id: string) =>
+    latLonFromDirection(
+      new Vector3(
+        ...view.sites.find((site) => site.id === id)!.anchor.position,
+      ),
+    ).lon;
+  const DAY = 24 * 60;
+  // local time runs 4 minutes behind per degree of longitude west of the town
+  const bandBBehind =
+    ((((lonOf('town') - lonOf('band_b_camp')) * 4) % DAY) + DAY) % DAY;
+  expect(bandBBehind).toBeGreaterThan(60);
   const world = await openHeld(page, errors);
   const footer = page.getByTestId('camera-place');
   // in town: town time only
@@ -215,7 +231,7 @@ test('going to a site stops following (F18); footer and clock tell the camera pl
   await expect(footer).toHaveText(new RegExp(`^${townTime}`));
   await page.getByRole('button', { name: 'people', exact: true }).click();
 
-  // following Pip at band B's camp, 11 hours behind the town
+  // following Pip at band B's camp, behind the town by its longitude
   await page.getByRole('button', { name: 'people', exact: true }).click();
   await page
     .locator('[data-person="pip"]')
@@ -233,10 +249,9 @@ test('going to a site stops following (F18); footer and clock tell the camera pl
     .map(Number);
   const [townHours, townMinutes] = townTime.split(':').map(Number);
   const behind =
-    (townHours * 60 + townMinutes - (hours * 60 + minutes) + 24 * 60) %
-    (24 * 60);
-  expect(behind / 60).toBeGreaterThan(9);
-  expect(behind / 60).toBeLessThan(13);
+    (townHours * 60 + townMinutes - (hours * 60 + minutes) + DAY) % DAY;
+  // both clocks show whole minutes
+  expect(Math.abs(behind - bandBBehind)).toBeLessThanOrEqual(1);
   // the footer starts with the same local time (the clock is held)
   const pad = (value: number) => String(value).padStart(2, '0');
   await expect(footer).toHaveText(new RegExp(`^${pad(hours)}:${pad(minutes)}`));
