@@ -319,17 +319,34 @@ function walkedPart({ route, position }: CitizenEntity) {
   ).map((unit) => new Vector3(...unit));
 }
 
+/** How close a walker or runner comes before it pushes others aside (m): a runner's second of look-ahead and more. */
+const PASSING_M = 5;
+
 /**
- * How far the drawing may part a body from where the engine has it (D192): up to KEEP_M for each body drawn close
- * enough to push it (a crowd of n spreads over about KEEP_M √n), nothing with nobody about.
+ * How far the drawing may part a body from where the engine has it (D192): KEEP_M for each body that can push it,
+ * nothing with nobody about (a crowd of n spreads over about KEEP_M √n). Pushers are those the engine puts within
+ * KEEP_M of it, and walkers drawn passing by (a walker of its own is pushed by anyone drawn by).
  */
-function parted(npc: Npc, shown: Npc[]) {
-  const near = shown.filter(
+function parted(
+  citizen: CitizenEntity,
+  now: CitizenEntity[],
+  npc: Npc,
+  shown: Npc[],
+) {
+  const unit = new Vector3(...citizen.position.unit);
+  const crowding = now.filter(
+    (other) =>
+      other.id !== citizen.id &&
+      unit.angleTo(new Vector3(...other.position.unit)) * R < KEEP_M,
+  ).length;
+  const moving = MOVING.includes(npc.activity);
+  const passing = shown.filter(
     (other) =>
       other.id !== npc.id &&
-      other.position.distanceTo(npc.position) < KEEP_M + 2,
+      (moving || MOVING.includes(other.activity)) &&
+      other.position.distanceTo(npc.position) < PASSING_M,
   ).length;
-  return KEEP_M * Math.sqrt(near);
+  return KEEP_M * Math.sqrt(crowding + passing);
 }
 
 /** Metres from a drawn spot to the nearest of what a citizen walked in the given ticks. */
@@ -958,7 +975,7 @@ test('the real feed: the 22 citizens stand where the engine says, on the ground,
           const direction = npc.position.clone().normalize();
           const above = npc.position.length() - (R + groundUnder(direction));
           return [
-            ...(off < lateM + parted(npc, shown)
+            ...(off < lateM + parted(citizen, now, npc, shown)
               ? []
               : [`${citizen.id}: ${off.toFixed(2)} m off its walk`]),
             ...(Math.abs(above) < 0.5
@@ -1001,7 +1018,7 @@ test('the real feed: the 22 citizens stand where the engine says, on the ground,
             ...(npc.activity === citizen.activity || onTheWay
               ? []
               : [`${citizen.id}: ${npc.activity} ≠ ${citizen.activity}`]),
-            ...(drift < (still ? 0.5 : lateM) + parted(npc, shown)
+            ...(drift < (still ? 0.5 : lateM) + parted(citizen, now, npc, shown)
               ? []
               : [`${citizen.id}: ${drift.toFixed(2)} m off`]),
           ];
@@ -1034,7 +1051,7 @@ test('the real feed: the 22 citizens stand where the engine says, on the ground,
                 citizen,
                 previous.find((old) => old.id === citizen.id)!,
               ]);
-              if (metres > 0.5 + parted(npc, shown))
+              if (metres > 0.5 + parted(citizen, now, npc, shown))
                 off.push(`${citizen.id}: ${metres.toFixed(2)} m`);
             }
             await page.waitForTimeout(100);
