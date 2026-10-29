@@ -476,7 +476,7 @@ test('go to drops the player next to a citizen, who is labelled and solid', asyn
   expect(errors).toEqual([]);
 });
 
-test('the labels of citizens standing close together do not cover each other', async ({
+test('the chips of citizens standing close together cluster instead of covering each other', async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -495,7 +495,19 @@ test('the labels of citizens standing close together do not cover each other', a
     .click();
   await landed(world);
   const tags = page.locator('[data-label^="npc-"]:visible');
-  await expect(page.locator('[data-label="npc-ana"]')).toBeVisible();
+  // both are drawn: each on a chip of their own or in one cluster chip
+  await expect
+    .poll(async () =>
+      (
+        await Promise.all(
+          (await tags.all()).map((tag) => tag.getAttribute('data-members')),
+        )
+      )
+        .flatMap((members) => members?.split(' ') ?? [])
+        .filter((id) => id === 'ana' || id === 'tak')
+        .sort(),
+    )
+    .toEqual(['ana', 'tak']);
   // the clock is held and the camera has landed: the labels stand still while they are read
   const boxes = await Promise.all(
     (await tags.all()).map(async (tag) => {
@@ -516,7 +528,7 @@ test('the labels of citizens standing close together do not cover each other', a
       )
       .map((b) => `${a.id} / ${b.id}`),
   );
-  expect(boxes.length).toBeGreaterThanOrEqual(2);
+  expect(boxes.length).toBeGreaterThanOrEqual(1);
   expect(covered).toEqual([]);
   expect(errors).toEqual([]);
 });

@@ -26,15 +26,42 @@ export interface LabelAnchor {
 
 type LabelKind = 'name' | 'speech';
 
+/** What a chip's icon shows (components/world/labels.tsx draws each). */
+export type ChipIcon =
+  | 'stand'
+  | 'walk'
+  | 'run'
+  | 'sleep'
+  | 'rest'
+  | 'gather'
+  | 'eat'
+  | 'drink'
+  | 'work'
+  | 'hunt'
+  | 'fish'
+  | 'fire'
+  | 'talk'
+  | 'dead'
+  /** A cluster of people doing different things. */
+  | 'people';
+
+/** A ring around the chip's icon: someone hungry or thirsty, or hurt. */
+export type NeedRing = 'need' | 'hurt';
+
 /** One label: a DOM element over its subject's anchor. */
 export interface LabelContent {
   /** Unique among labels (e.g. `npc-pip`, `say-pip`). */
   id: string;
   /** Whose anchor it hangs over (e.g. a citizen id). */
   subject: string;
-  /** A name tag or a speech bubble (white, wraps long text, drawn above the tags). */
+  /** A name tag (a chip on the globe) or a speech bubble (white, wraps long text, drawn above the tags). */
   kind: LabelKind;
+  /** The name (speech: the words). */
   text: string;
+  /** Chips: what they are doing, in short words ("gathering roots"); clusters of one doing show it too. */
+  detail?: string;
+  icon?: ChipIcon;
+  ring?: NeedRing;
 }
 
 export class LabelStore {

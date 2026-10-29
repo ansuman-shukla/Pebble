@@ -1,8 +1,14 @@
 /*
- * Keeps screen labels from covering each other: a greedy pass that leaves the nearest label where it is and
- * nudges each farther one straight up until it clears every label already placed. Speech bubbles are placed
- * after every name tag, so they always end up above the tags they would cover.
+ * Keeps screen labels from covering each other.
+ * - Name tags (town and gallery pages): a greedy pass that leaves the nearest label where it is and nudges each
+ *   farther one straight up until it clears every label already placed. Speech bubbles are placed after every
+ *   name tag, so they always end up above the tags they would cover.
+ * - Chips (the globe, 10-world-v1 §5.4): full chips near the camera, icon chips farther, none beyond. Chips that
+ *   would overlap merge into one cluster chip ("3 · asleep") instead of stacking into towers; selected and
+ *   followed chips stay whole (others cluster above them). At most MAX_CHIPS chips and MAX_BUBBLES speech bubbles,
+ *   nearest first.
  */
+import type { ChipIcon, LabelContent, NeedRing } from '@/lib/world/label-store';
 
 /** A label on screen, in CSS pixels: anchored at its bottom centre. */
 export interface LabelBox {
@@ -59,4 +65,281 @@ export function stackLabels(boxes: readonly LabelBox[]): number[] {
     });
   }
   return bottoms;
+}
+
+/** Full chips (icon, name, what they do) nearer than this (m); icon chips up to ICON_M; none beyond. */
+export const FULL_M = 30;
+export const ICON_M = 150;
+export const MAX_CHIPS = 14;
+export const MAX_BUBBLES = 3;
+
+/** How a chip is drawn: whole, icon only, or a cluster of several (with names near, a count farther). */
+export type ChipView = 'full' | 'icon' | 'cluster' | 'cluster-icon';
+
+/** A subject's anchor on screen (CSS px, the chip's bottom centre). */
+export interface ChipAnchor {
+  id: string;
+  x: number;
+  y: number;
+  /** From the camera (m). */
+  distance: number;
+  /** Selected or followed: always a full chip of its own. */
+  pinned: boolean;
+}
+
+export interface ChipSize {
+  width: number;
+  height: number;
+}
+
+/** The size a chip takes for its members in a view (measured, or estimated from what it says). */
+export type ChipSizer = (
+  chip: Pick<PlacedChip, 'leader' | 'members' | 'view'>,
+) => ChipSize;
+
+/** An element's last measured size in a view, with the text it said then. */
+export interface MeasuredSize {
+  text: string;
+  size: ChipSize;
+}
+
+/** Rough sizes (px) of a chip or bubble saying `text` in a view, until it is measured saying it. */
+const CHAR_PX = 6.5;
+const CHIP_PX = 24;
+const BUBBLE_WIDTH_PX = 224;
+const BUBBLE_LINE_PX = 16;
+
+function estimate(text: string, view: ChipView | 'speech'): ChipSize {
+  const chars = text.length + 3;
+  switch (view) {
+    case 'icon':
+      return { width: CHIP_PX, height: CHIP_PX };
+    case 'cluster-icon':
+      return { width: CHIP_PX * 2, height: CHIP_PX };
+    case 'full':
+    case 'cluster':
+      return { width: chars * CHAR_PX + CHIP_PX + 12, height: CHIP_PX };
+    case 'speech': {
+      const width = Math.min(BUBBLE_WIDTH_PX, chars * CHAR_PX + 16);
+      const lines = Math.ceil((chars * CHAR_PX) / (BUBBLE_WIDTH_PX - 16));
+      return { width, height: lines * BUBBLE_LINE_PX + 8 };
+    }
+  }
+}
+
+/** The size to lay out `text` at: its `last` measurement while that said the same text, else an estimate. */
+export function sizeFor(
+  last: MeasuredSize | undefined,
+  text: string,
+  view: ChipView | 'speech',
+): ChipSize {
+  return last?.text === text ? last.size : estimate(text, view);
+}
+
+export interface PlacedChip {
+  /** The subject drawn: the nearest of the cluster (or the pinned one). */
+  leader: string;
+  /** Every subject the chip stands for, the leader first. */
+  members: string[];
+  pinned: boolean;
+  near: boolean;
+  view: ChipView;
+  x: number;
+  bottom: number;
+  width: number;
+  height: number;
+}
+
+const viewOf = (chip: Pick<PlacedChip, 'near' | 'members'>): ChipView =>
+  chip.members.length > 1
+    ? chip.near
+      ? 'cluster'
+      : 'cluster-icon'
+    : chip.near
+      ? 'full'
+      : 'icon';
+
+const placedBox = (chip: PlacedChip): Placed => ({
+  x: chip.x,
+  width: chip.width,
+  top: chip.bottom - chip.height,
+  bottom: chip.bottom,
+});
+
+const meets = (a: Placed, b: Placed) =>
+  Math.abs(a.x - b.x) < (a.width + b.width) / 2 &&
+  a.top < b.bottom &&
+  b.top < a.bottom;
+
+/**
+ * The chips to draw for anchors on screen: pinned ones first (stacked if they meet), then the rest nearest first,
+ * each joining the cluster it would overlap (a cluster that grows into others swallows them; one that meets a
+ * pinned chip moves up above it). Anchors beyond ICON_M and new chips past MAX_CHIPS are left out (pinned ones
+ * always show).
+ */
+export function layoutChips(
+  anchors: readonly ChipAnchor[],
+  sizeOf: ChipSizer,
+): PlacedChip[] {
+  const order = anchors
+    .filter((anchor) => anchor.pinned || anchor.distance <= ICON_M)
+    .sort(
+      (a, b) => Number(b.pinned) - Number(a.pinned) || a.distance - b.distance,
+    );
+  const rank = new Map(order.map((anchor, index) => [anchor.id, index]));
+  const chips: PlacedChip[] = [];
+  const resize = (chip: PlacedChip) => {
+    chip.view = viewOf(chip);
+    Object.assign(chip, sizeOf(chip));
+  };
+  const liftPastPinned = (chip: PlacedChip) => {
+    for (
+      let hit = chips.find(
+        (other) =>
+          other.pinned &&
+          other !== chip &&
+          meets(placedBox(chip), placedBox(other)),
+      );
+      hit;
+      hit = chips.find(
+        (other) =>
+          other.pinned &&
+          other !== chip &&
+          meets(placedBox(chip), placedBox(other)),
+      )
+    )
+      chip.bottom = hit.bottom - hit.height - GAP;
+  };
+  for (const anchor of order) {
+    let chip: PlacedChip = {
+      leader: anchor.id,
+      members: [anchor.id],
+      pinned: anchor.pinned,
+      near: anchor.pinned || anchor.distance < FULL_M,
+      view: 'full',
+      x: anchor.x,
+      bottom: anchor.y,
+      width: 0,
+      height: 0,
+    };
+    resize(chip);
+    if (chip.pinned) {
+      liftPastPinned(chip);
+      chips.push(chip);
+      continue;
+    }
+    let placed = false;
+    // ends: each pass either moves the chip up past a pinned chip (finitely many) or removes a chip by merging
+    for (;;) {
+      liftPastPinned(chip);
+      const box = placedBox(chip);
+      const hit = chips.find(
+        (other) =>
+          !other.pinned && other !== chip && meets(box, placedBox(other)),
+      );
+      if (!hit) break;
+      if (!placed) {
+        hit.members.push(...chip.members);
+        chip = hit;
+        placed = true;
+      } else {
+        // the nearer leader leads the merged cluster, from its own spot
+        const [lead, swallowed] =
+          rank.get(hit.leader)! < rank.get(chip.leader)!
+            ? [hit, chip]
+            : [chip, hit];
+        lead.members.push(...swallowed.members);
+        chips.splice(chips.indexOf(swallowed), 1);
+        chip = lead;
+      }
+      resize(chip);
+    }
+    if (!placed && chips.length < MAX_CHIPS) chips.push(chip);
+  }
+  return chips;
+}
+
+/** What a cluster chip shows: its words, one icon and the worst need ring among its members. */
+export interface ClusterFace {
+  words: string;
+  icon?: ChipIcon;
+  ring?: NeedRing;
+}
+
+const RING_RANK: Record<NeedRing, number> = { need: 1, hurt: 2 };
+
+/**
+ * A cluster chip's face: "3 · asleep" when all do the same, else "3 people" (farther, just the count); the icon
+ * they share, or a neutral one when they do different things; a ring when any of them needs one, hurt over need.
+ */
+export function clusterFace(
+  members: readonly LabelContent[],
+  view: ChipView,
+): ClusterFace {
+  const count = members.length;
+  const doing = new Set(members.map((member) => member.detail));
+  const [detail] = doing;
+  const icons = new Set(members.map((member) => member.icon));
+  const [icon] = icons;
+  const ring = members
+    .map((member) => member.ring)
+    .reduce<NeedRing | undefined>(
+      (worst, next) =>
+        next && (!worst || RING_RANK[next] > RING_RANK[worst]) ? next : worst,
+      undefined,
+    );
+  return {
+    words:
+      view === 'cluster-icon'
+        ? String(count)
+        : doing.size === 1 && detail
+          ? `${count} · ${detail}`
+          : `${count} people`,
+    icon: icons.size === 1 ? icon : 'people',
+    ring,
+  };
+}
+
+/** A speech bubble's anchor on screen and its measured size. */
+export interface BubbleAnchor extends ChipAnchor, ChipSize {}
+
+export interface PlacedBubble {
+  id: string;
+  x: number;
+  bottom: number;
+}
+
+/**
+ * Up to MAX_BUBBLES speech bubbles (pinned speakers first, then the nearest, none beyond ICON_M), each nudged up
+ * above every chip and bubble it would cover.
+ */
+export function layoutBubbles(
+  bubbles: readonly BubbleAnchor[],
+  chips: readonly PlacedChip[],
+): PlacedBubble[] {
+  const taken = chips.map(placedBox);
+  return bubbles
+    .filter((bubble) => bubble.pinned || bubble.distance <= ICON_M)
+    .sort(
+      (a, b) => Number(b.pinned) - Number(a.pinned) || a.distance - b.distance,
+    )
+    .slice(0, MAX_BUBBLES)
+    .map((bubble) => {
+      const box = {
+        x: bubble.x,
+        width: bubble.width,
+        top: bubble.y - bubble.height,
+        bottom: bubble.y,
+      };
+      for (
+        let hit = taken.find((other) => meets(box, other));
+        hit;
+        hit = taken.find((other) => meets(box, other))
+      ) {
+        box.bottom = hit.top - GAP;
+        box.top = box.bottom - bubble.height;
+      }
+      taken.push(box);
+      return { id: bubble.id, x: bubble.x, bottom: box.bottom };
+    });
 }

@@ -382,6 +382,8 @@ export class MockLiveServer {
   private readonly world: WorldView;
   private events = 0;
   private pending: LiveEventMessage[] = [];
+  /** Body words a test gave someone (`feel`); everyone else feels fine. */
+  private feelings = new Map<string, string[]>();
   /** Connections so far (tests read it to see a reconnect). */
   connects = 0;
   /** Like a backend without a run (tests): every connection is accepted, then closed with 4404. */
@@ -456,6 +458,13 @@ export class MockLiveServer {
       events.forEach((event) => socket.deliver(event));
   }
 
+  /** Someone feels `words` (tests: "hungry", "weak and aching"): a snapshot carries it at once. */
+  feel(actor: string, words: string[]) {
+    this.feelings.set(actor, words);
+    const frame = this.frame('snapshot');
+    for (const socket of this.sockets) socket.deliver(frame);
+  }
+
   /** Jumps the feed `ticks` ahead at once (tests: to the evening): one `tick` frame with where everything is. */
   skip(ticks: number) {
     for (let k = 0; k < ticks; k++) {
@@ -480,6 +489,7 @@ export class MockLiveServer {
     this.tick = 0;
     this.states = this.freshStates();
     this.wild = new MockWild(this.world);
+    this.feelings.clear();
     this.dropConnections(LIVE_CLOSE.newRun);
   }
 
@@ -633,7 +643,7 @@ export class MockLiveServer {
           : 'walk' in step
             ? step.to
             : (step.label ?? ''),
-        state: [],
+        state: this.feelings.get(person.id) ?? [],
         cause_of_death: null,
         heading_deg: state.heading,
         activity,

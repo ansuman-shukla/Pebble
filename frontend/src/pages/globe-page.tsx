@@ -57,7 +57,7 @@ import {
 } from '@/components/world/globe/live-ui';
 import { VolcanoSmoke } from '@/components/world/globe/volcano-smoke';
 import { Waterfalls } from '@/components/world/globe/waterfalls';
-import { LabelOverlay, LabelProjector } from '@/components/world/labels';
+import { ChipOverlay, ChipProjector } from '@/components/world/labels';
 import {
   CAMERA_MODES,
   type CameraMode,
@@ -126,7 +126,7 @@ const TOWN_CLEARING = 300;
 const SITE_CLEARING = 45;
 /** The readout names a camp or landmark within this many metres of its anchor (the town: its clearing). */
 const SITE_NEARBY = 100;
-const LABEL_DISTANCE = 40;
+const NOBODY: readonly string[] = [];
 /** Labels lift away from the planet's centre. */
 const PLANET_UP: UpAt = (at, out) => out.copy(at).normalize();
 
@@ -422,7 +422,7 @@ const GlobeScene = memo(function GlobeScene({
         onPlayerMove={onPlayerMove}
         onReady={onWalkReady}
       />
-      <LabelProjector store={labels} maxDistance={LABEL_DISTANCE} />
+      <ChipProjector store={labels} pinned={followId ? [followId] : NOBODY} />
       <RenderStatsProbe
         key={cameraMode}
         active={ready}
@@ -768,7 +768,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
         onStats={setStats}
         onWaterfalls={markWaterfalls}
       />
-      <LabelOverlay store={labels} />
+      <ChipOverlay store={labels} />
       <CitizenLabels
         store={labels}
         citizens={live.citizens}
