@@ -1,7 +1,8 @@
-"""Brains greet and answer people loud enough for them to hear (03: normal speech ~30 m, a shout ~150 m).
+"""Brains greet and answer only people near enough to hear a normal voice (03: speech carries ~30 m).
 
-Regression (#25): brains greeted anyone known up to "close by" (under 50 m) in a normal voice, so about one greeting
-in seven went to someone out of earshot and nobody heard it.
+Regression (#25): brains greeted anyone known up to "close by" (under 50 m), so about one greeting in seven went to
+someone out of earshot and nobody heard it. They don't shout instead: a shout carries 150 m and stops everyone's
+work and sleep there.
 """
 
 from collections.abc import Callable
@@ -36,7 +37,7 @@ def pair(new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch) ->
         bo = sim.add_citizen(make_spec("bo", at=_north_of_aiko(apart_m), knows_people=["aiko"]))
         profile = BrainProfile(citizen_id=aiko.id, name=aiko.name, role="farmer", region="town", home_area="the town")
         brain = UtilityBrain(WorldApi(sim, aiko.id), profile, SEED)
-        monkeypatch.setattr(brain, "chance", lambda _odds: True)  # always greet: the test is about how loud
+        monkeypatch.setattr(brain, "chance", lambda _odds: True)  # always greet: the test is about who
         sim.drain()
         return sim, brain, WorldApi(sim, bo.id)
 
@@ -47,19 +48,19 @@ def _said(sim: Simulation) -> list[Said]:
     return [event.payload for event in sim.drain() if isinstance(event.payload, Said)]
 
 
-@pytest.mark.parametrize(("apart_m", "volume"), [(10.0, "normal"), (40.0, "shout")])
-def test_a_greeting_reaches_the_person_greeted(pair: Pair, apart_m: float, volume: str) -> None:
-    sim, aiko, _ = pair(apart_m)
+def test_a_greeting_reaches_the_person_greeted(pair: Pair) -> None:
+    sim, aiko, _ = pair(10.0)
     assert aiko.socialise(aiko.api.look_around())
     [said] = _said(sim)
     assert "Bo" in said.words
-    assert (said.volume, said.heard_by) == (volume, ["bo"])
+    assert (said.volume, said.heard_by) == ("normal", ["bo"])
 
 
-def test_nobody_out_of_earshot_is_greeted(pair: Pair) -> None:
-    sim, aiko, _ = pair(100.0)
+@pytest.mark.parametrize(("apart_m", "nearness"), [(40.0, "close by"), (100.0, "some way off")])
+def test_nobody_out_of_earshot_is_greeted(pair: Pair, apart_m: float, nearness: str) -> None:
+    sim, aiko, _ = pair(apart_m)
     seen = aiko.api.look_around()
-    assert [(person.label, person.nearness) for person in seen.people] == [("Bo", "some way off")]
+    assert [(person.label, person.nearness) for person in seen.people] == [("Bo", nearness)]
     assert not aiko.socialise(seen)
     assert _said(sim) == []
 
@@ -68,16 +69,15 @@ def test_a_reply_reaches_the_greeter_or_waits_until_they_are_near_again(pair: Pa
     sim, aiko, bo = pair(10.0)
     bo.say("Good morning, Aiko!")
     sim.drain()
-    sim.core.place_at(sim.citizen("bo"), sim.world.town.to_unit(*_north_of_aiko(40.0)))
     assert aiko.socialise(aiko.api.look_around())
     [reply] = _said(sim)
     assert "Bo" in reply.words
-    assert (reply.volume, reply.heard_by) == ("shout", ["bo"])
+    assert (reply.volume, reply.heard_by) == ("normal", ["bo"])
 
     sim, aiko, bo = pair(10.0)
     bo.say("Good morning, Aiko!")
     sim.drain()
-    sim.core.place_at(sim.citizen("bo"), sim.world.town.to_unit(*_north_of_aiko(100.0)))
+    sim.core.place_at(sim.citizen("bo"), sim.world.town.to_unit(*_north_of_aiko(40.0)))
     assert not aiko.socialise(aiko.api.look_around())  # gone out of earshot: no answer into thin air
     assert _said(sim) == []
     greeted = aiko.api.notes["greeted"]

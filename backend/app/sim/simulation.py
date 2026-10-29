@@ -295,7 +295,7 @@ class Simulation:
         core.hurt.clear()
         before = {citizen.id: citizen.position for citizen in core.living()}
         poses = {a.id: (a.position, a.heading_deg, a.activity) for a in core.state.animals.values() if a.alive}
-        headings = {citizen.id: actions.walk_heading(citizen) for citizen in core.living()}
+        walk_targets = {citizen.id: actions.walking_to(citizen) for citizen in core.living()}
 
         # followers move last, after the people they follow have taken this minute's steps
         for citizen in sorted(core.living(), key=lambda c: c.action is not None and c.action.kind == "follow"):
@@ -316,7 +316,7 @@ class Simulation:
             groups_seen[citizen.id] = _groups(sightings[citizen.id])
             stalkers[citizen.id] = {a.id for a, _ in sightings[citizen.id] if a.alive and a.target == citizen.id}
             strangers = sorted(other for other in seen[citizen.id] - citizen.in_view if other not in citizen.people)
-            coming = actions.approaching(core, citizen, seen[citizen.id], before, headings)
+            coming = actions.approaching(core, citizen, seen[citizen.id], before, walk_targets)
             night = actions.night_fell(core, citizen)
             news = actions.AnimalNews(
                 hurt=core.hurt.get(citizen.id),

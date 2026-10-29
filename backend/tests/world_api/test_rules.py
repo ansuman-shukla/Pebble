@@ -467,6 +467,37 @@ def test_a_known_person_walking_up_to_you_interrupts_once_close(new_sim: Callabl
     assert run_until_done(sim, again, 12).text == "You wait a while."
 
 
+def test_someone_coming_to_the_same_place_doesnt_stop_your_work(new_sim: Callable[..., Simulation]) -> None:
+    """Regression (#30): a walk to a place that ends where you stand counted as walking up to you, so everyone
+    arriving at the rice fields stopped the farmer's hour of work there. Walking up to someone beside you doesn't
+    either; only walking up to you does."""
+    sim = new_sim()
+    fields = ["town", "rice-fields"]
+    sim.add_citizen(make_spec("helper", name="Aiko", at=(-60.0, 61.0), knows_places=fields))
+    sim.add_citizen(make_spec("friend", name="Kenji", at=(-80.0, 61.0)))
+    sim.add_citizen(make_spec("sister", name="Mio", at=(-76.0, 61.0), knows_people=["helper"]))
+    known = ["helper", "friend", "sister"]
+    farmer = sim.add_citizen(
+        make_spec("farmer", at=(-90.0, 61.0), knows_places=fields, skills=["farming"], knows_people=known)
+    )
+    me = WorldApi(sim, "farmer")
+    assert run_until_done(sim, me.walk_to_place("the rice fields"), 10).text == "You arrive at the rice fields."
+    work = me.work("farm")
+    helper = WorldApi(sim, "helper").walk_to_place("the rice fields")
+    assert run_until_done(sim, helper, 30).text == "You arrive at the rice fields."
+    assert sim.world.distance_m(farmer.position, sim.citizen("helper").position) < 3.0  # right where he works
+    assert work.result is None
+
+    to_aiko = WorldApi(sim, "sister").walk_to_person("Aiko")
+    assert run_until_done(sim, to_aiko, 30).text == "You reach Aiko."
+    assert sim.world.distance_m(farmer.position, sim.citizen("sister").position) < 6.0  # beside both of them
+    assert work.result is None
+
+    WorldApi(sim, "friend").walk_to_person("Farmer")  # walking up to him still does
+    result = run_until_done(sim, work, 30)
+    assert result.text == "You stop working: Kenji is coming toward you."
+
+
 def test_follow_keeps_beside_a_walker_until_they_stop(new_sim: Callable[..., Simulation]) -> None:
     sim = without_animals(new_sim())
     leader = sim.add_citizen(make_spec("leader", name="Aiko", home=None))
