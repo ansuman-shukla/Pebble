@@ -12,7 +12,7 @@ from app.services.live import LiveMessage, LiveState, Queue, live_hub, load_feed
 
 router = APIRouter(prefix="/live", tags=["live"])
 NO_RUN = 4404  # close code: there is no such run (yet)
-RUN_SWITCHED = 1012  # close code: a newer run started; reconnect for its snapshot
+RESYNC = 1012  # close code: a newer run started or the run's history was rewritten; reconnect for a fresh snapshot
 
 
 @router.websocket("")
@@ -37,7 +37,7 @@ async def live(websocket: WebSocket, db_engine: EngineDep, run_id: str | None = 
                 return
             text = message.result()
             if text is None:
-                await websocket.close(code=RUN_SWITCHED, reason="a new run started")
+                await websocket.close(code=RESYNC, reason="reconnect for a fresh snapshot")
                 return
             await websocket.send_text(text)
     except WebSocketDisconnect:
