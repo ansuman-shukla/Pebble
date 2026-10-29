@@ -36,6 +36,17 @@ import { CITIZEN_LOOKS, type CitizenLook } from '@/lib/world/citizen-looks';
 import { type GlobeTerrain, tangentFrame } from '@/lib/world/globe';
 import type { LabelStore } from '@/lib/world/label-store';
 import { animateHumanoid } from '@/lib/world/humanoid-clips';
+import {
+  type Footprint,
+  groundTilt,
+  holdPosture,
+  type Posture,
+  type Rest,
+  restOf,
+  settle,
+  showWorn,
+  type Under,
+} from '@/lib/world/rest-posture';
 import { groundUnder, type WalkTown } from '@/lib/world/walk-charts';
 import type { CharacterAnimation } from '@/vendor/polyfork/clips.mjs';
 import { createCharacter } from '@/vendor/polyfork/humanoid.mjs';
@@ -46,8 +57,8 @@ import { createCharacter } from '@/vendor/polyfork/humanoid.mjs';
  * for a real minute, along the route's corners; a new tick eases the drawn spot onto the new path. Each one faces
  * the way it walks (its heading when standing),
  * turns smoothly to its heading and stands on the rendered ground (the town's plateau on its disc, else the
- * terrain). Models load only within NEAR metres of the camera (and hide again past it); clips load per activity
- * as first needed.
+ * terrain); sitters and sleepers rest on it, tilted to the ground under them (`rest-posture.ts`). Models load
+ * only within NEAR metres of the camera (and hide again past it); clips load per activity as first needed.
  */
 
 /** Full models within this distance of the camera (they hide past HIDE). */
@@ -56,12 +67,11 @@ const HIDE = 420;
 const LABEL_HEIGHT = 2.1;
 /** Speech bubbles hang this far above the name label. */
 const SPEECH_ABOVE = 0.45;
-/** Lying bodies (sleeping, dead): the back rests this far above the ground, labels hang low. */
-const LYING_LIFT = 0.12;
+/** Labels hang lower over lying and sitting bodies. */
 const LYING_LABEL_HEIGHT = 0.7;
-/** The seated clip lowers the hips onto a seat; on the ground the body sits this much lower. */
-const SITTING_DROP = 0.42;
-const SITTING_LABEL_HEIGHT = 1.5;
+const SITTING_LABEL_HEIGHT = 1.2;
+/** A new posture is measured again while the clips cross-fade into it (real seconds). */
+const SETTLE_S = 0.5;
 /** Children and teens are shorter: their labels hang lower. */
 const AGE_LABEL_SCALE: Partial<Record<string, number>> = {
   kid: 0.7,
@@ -121,6 +131,7 @@ function playLook(
     look.clip === 'Walk'
       ? animation.locomotion(pace)
       : animation.play(animation.actions[look.clip] ? look.clip : 'Idle');
+  if (look.still) action.time = 0;
   action.paused = look.still;
   view.clip = visibleClip(view, action.getClip().name);
   view.loaded = true;
@@ -128,18 +139,38 @@ function playLook(
 
 const visibleClip = (view: NpcView, clip: string) => (view.near ? clip : '');
 
+/** Heights of the ground under a body (m, relative to the ground under it) `forward` along its facing, `side` across. */
+type GroundProbe = (forward: number, side: number) => number;
+
+/** A resting body's measured footprint, the posture it is for, and how long ago that posture began (real s). */
+interface Settled {
+  posture: Posture;
+  print: Footprint | null;
+  since: number;
+}
+
 function NpcModel({
   look,
   pose,
   trackRef,
   viewRef,
+  ground,
 }: {
   look: CitizenLook;
   pose: NpcLook;
   trackRef: RefObject<Track>;
   viewRef: RefObject<NpcView>;
+  ground: GroundProbe;
 }) {
   const character = useMemo(() => createCharacter(look.config), [look]);
+  const rest = useMemo(() => restOf(character), [character]);
+  const tilt = useRef<Group>(null);
+  const posed = useRef<Group>(null);
+  const settled = useRef<Settled>({
+    posture: 'standing',
+    print: null,
+    since: 0,
+  });
   const feet = useMemo(
     () =>
       ['LeftFoot', 'RightFoot'].flatMap(
@@ -182,29 +213,74 @@ function NpcModel({
   }, [animation, pose, trackRef, viewRef]);
 
   useFrame((_, delta) => {
-    if (!animation || !viewRef.current.near) return;
+    if (!animation || !viewRef.current.near || !tilt.current || !posed.current)
+      return;
     if (pose.clip === 'Walk')
       playLook(animation, pose, currentPace(trackRef.current), viewRef.current);
     animation.update(Math.min(delta, MAX_FRAME));
+    holdPosture(rest, pose.pose);
+    layToRest(settled.current, pose.pose, delta, {
+      character,
+      rest,
+      tilt: tilt.current,
+      posed: posed.current,
+      ground,
+    });
     viewRef.current.feet = feet.flatMap((bone) =>
       character.worldToLocal(bone.getWorldPosition(foot)).toArray(),
     );
   });
 
   return (
-    <group
-      rotation-x={pose.pose === 'lying' ? -Math.PI / 2 : 0}
-      position-y={
-        pose.pose === 'lying'
-          ? LYING_LIFT
-          : pose.pose === 'sitting'
-            ? -SITTING_DROP
-            : 0
-      }
-    >
-      <primitive object={character} />
+    <group ref={tilt}>
+      <group ref={posed}>
+        <primitive object={character} />
+      </group>
     </group>
   );
+}
+
+const under: Under = { back: 0, front: 0, left: 0, right: 0 };
+
+/**
+ * Lays a sitting or lying body on the ground: puts away what it doesn't hold at rest, measures its footprint while
+ * the clips cross-fade into the posture, and tilts it to the ground under its ends every frame.
+ */
+function layToRest(
+  state: Settled,
+  posture: Posture,
+  delta: number,
+  body: {
+    character: Group;
+    rest: Rest;
+    tilt: Group;
+    posed: Group;
+    ground: GroundProbe;
+  },
+) {
+  const { character, rest, tilt, posed, ground } = body;
+  if (posture !== state.posture) {
+    Object.assign(state, { posture, print: null, since: 0 });
+    showWorn(character, posture);
+  }
+  if (posture === 'standing') {
+    if (state.print === null) return;
+    posed.position.set(0, 0, 0);
+    posed.rotation.set(0, 0, 0);
+    character.position.set(0, 0, 0);
+    tilt.quaternion.identity();
+    state.print = null;
+    return;
+  }
+  if (state.print === null || state.since < SETTLE_S)
+    state.print = settle(posed, character, rest, posture);
+  state.since += delta;
+  const { print } = state;
+  under.back = ground(print.back, 0);
+  under.front = ground(print.front, 0);
+  under.left = ground(0, -print.half);
+  under.right = ground(0, print.half);
+  groundTilt(print, under, tilt.quaternion);
 }
 
 const currentPace = (track: Track) => track.pace;
@@ -333,6 +409,22 @@ function Npc({
   const [mounted, setMounted] = useState(false);
   const trackRef = useRef<Track>(newTrack(citizen, radius));
   const viewRef = useRef<NpcView>(newView(citizen));
+  // the ground around the drawn body, for laying a sitter or a sleeper along it
+  const ground = useMemo<GroundProbe>(() => {
+    const spot = new Vector3();
+    const local = new Vector3();
+    const across = new Vector3();
+    return (forward, side) => {
+      const { position, facing, ground: here } = viewRef.current.pose;
+      across.copy(position).normalize().cross(facing);
+      spot
+        .copy(position)
+        .addScaledVector(facing, forward)
+        .addScaledVector(across, side)
+        .normalize();
+      return groundUnder(terrain, town, spot, local) - here;
+    };
+  }, [terrain, town]);
   const scratch = useMemo(
     () => ({
       direction: new Vector3(),
@@ -404,6 +496,7 @@ function Npc({
           pose={pose}
           trackRef={trackRef}
           viewRef={viewRef}
+          ground={ground}
         />
       )}
       <Label
