@@ -90,11 +90,15 @@ def move_animal(sim: Simulation, animal: Animal, position: Vec3) -> None:
     animal.height_m = float(terrain(sim.world).surface_m[animal.cell])
 
 
-def wild_cell(sim: Simulation, biome: str = "grassland", clear_m: float = 1000.0) -> int:
-    """A walkable cell of the biome at least `clear_m` from every site (nobody lives there)."""
+def wild_cell(sim: Simulation, biome: str = "grassland", clear_m: float = 1000.0, flat_m: float | None = None) -> int:
+    """A walkable cell of the biome at least `clear_m` from every site (nobody lives there); with `flat_m`, one whose
+    neighbours and theirs lie within that many metres of its height (walks from it don't climb)."""
     world = sim.world
     for cell in range(world.cell_count):
         if world.biome(cell) != biome or not sim.core.planner.outer.allowed[cell] or world.river[cell]:
+            continue
+        around = {far for near in world.neighbours[cell] for far in world.neighbours[near]}
+        if flat_m is not None and any(abs(world.heights[other] - world.heights[cell]) > flat_m for other in around):
             continue
         if all(world.distance_m(world.unit(cell), place.centre) >= clear_m for place in world.places.values()):
             if all(sim.core.planner.outer.allowed[other] for other in world.neighbours[cell]):

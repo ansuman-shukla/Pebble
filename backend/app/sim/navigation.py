@@ -9,7 +9,10 @@ combined planner that hands over between them at portals on the town chart's edg
 Inside the chart walkers move 8-connected without cutting corners, so a straight leg between two grid cells never
 touches a blocked cell; the gnomonic mapping sends local straight lines to great circles, so walking the great
 circle between two mapped points walks the straight local line. Outside, edges cost metres × the mean terrain cost
-of their ends; water cells and the cells inside the town chart are not in the graph.
+of their ends (roads, paths and bridges included) × the slope factor of the climb (Tobler, so uphill and downhill
+differ); water cells and the cells inside the town chart are not in the graph. A route's legs carry what walking them
+costs per metre, the same terrain and slope but never below 1: cheap ground shapes the route, it never lifts a walker
+past their gait (`locomotion.py`).
 """
 
 import heapq
@@ -28,16 +31,32 @@ _SNAP_CELLS = 8
 # Weighted A* in town: ~8x fewer expansions around walls for paths ~2 % longer than the shortest (measured on all
 # pairs of town places and homes); routes are still never longer than twice the shortest.
 TOWN_HEURISTIC_WEIGHT = 2.0  # a start or goal in a blocked town cell snaps to a walkable cell this close
+# Tobler's hiking function as a cost factor on a leg of grade g (10-world-v1 §4.1): e^(k (|g + offset| − offset))
+TOBLER_K = 3.5
+TOBLER_OFFSET = 0.05
+# ...capped: past about +31 % (or -41 %) a climb is a scramble at a third of the pace. The 30-44 m cells exaggerate
+# grades (median 12 %, 90th percentile 43 %, some past 140 %), so uncapped Tobler would crawl at 1/180 of the pace.
+SLOPE_MAX = 3.0
+
+
+def slope_factor(rise_m: float, length_m: float) -> float:
+    """How much a climb of `rise_m` over `length_m` multiplies a leg's cost: 1 on the flat, 1.42 at +10 %, 2 at
+    +20 %, 0.84 at its easiest (-5 %), rising again on steeper descents, at most SLOPE_MAX."""
+    if length_m <= 0:
+        return 1.0
+    return min(SLOPE_MAX, math.exp(TOBLER_K * (abs(rise_m / length_m + TOBLER_OFFSET) - TOBLER_OFFSET)))
 
 
 @dataclass(frozen=True)
 class Route:
     points: tuple[Vec3, ...]  # unit vectors; the first is where the walk starts
-    costs: tuple[float, ...]  # walking cost per metre of each leg (len(points) - 1)
+    costs: tuple[float, ...]  # walking cost per metre of each leg (len(points) - 1), at least 1
 
     def __post_init__(self) -> None:
         if len(self.points) < 1 or len(self.costs) != len(self.points) - 1:
             raise ValueError("a route needs one cost per leg")
+        if any(cost < 1.0 for cost in self.costs):
+            raise ValueError("no leg of a route costs less than 1 per metre")
 
 
 @dataclass(frozen=True)
@@ -190,13 +209,15 @@ class TownPlanner:
 
 
 class OuterGraph:
-    """The walkable cells outside the town chart; edge cost = metres × mean terrain cost of both ends."""
+    """The walkable cells outside the town chart; edge cost = metres × mean terrain cost of both ends × the slope
+    factor of the climb from one to the other."""
 
     def __init__(self, world: SimWorld) -> None:
         self.radius_m = world.radius_m
         self.units: list[Vec3] = [as_vec(row) for row in world.grid.positions]
         cost = world.terrain_cost
         self.cost: list[float] = [float(value) for value in cost]
+        self.heights: list[float] = [float(value) for value in world.heights]
         self.allowed: list[bool] = [
             math.isfinite(self.cost[cell]) and not bool(world.in_town[cell]) for cell in range(world.cell_count)
         ]
@@ -207,8 +228,22 @@ class OuterGraph:
                 for other in others:
                     if self.allowed[other]:
                         length = angle(self.units[cell], self.units[other]) * self.radius_m
-                        row.append((other, length * (self.cost[cell] + self.cost[other]) / 2))
+                        row.append((other, length * self.leg_cost(cell, other, length)))
             self.edges.append(row)
+        # the cheapest cost per metre of any edge keeps the A* heuristic (straight metres × it) from overestimating
+        self.cheapest = min(
+            (
+                edge / (angle(self.units[cell], self.units[other]) * self.radius_m)
+                for cell, row in enumerate(self.edges)
+                for other, edge in row
+            ),
+            default=1.0,
+        )
+
+    def leg_cost(self, cell: int, other: int, length_m: float) -> float:
+        """Cost per metre from one cell to a neighbour: the mean terrain cost × the slope factor of the climb."""
+        terrain = (self.cost[cell] + self.cost[other]) / 2
+        return terrain * slope_factor(self.heights[other] - self.heights[cell], length_m)
 
     def _chord_m(self, a: int, b: int) -> float:
         ua, ub = self.units[a], self.units[b]
@@ -220,7 +255,7 @@ class OuterGraph:
             return None
         best = {start: 0.0}
         came_from: dict[int, int] = {}
-        heap = [(self._chord_m(start, goal), 0.0, start)]
+        heap = [(self._chord_m(start, goal) * self.cheapest, 0.0, start)]
         while heap:
             _, spent, cell = heapq.heappop(heap)
             if cell == goal:
@@ -235,7 +270,7 @@ class OuterGraph:
                 if total < best.get(other, math.inf):
                     best[other] = total
                     came_from[other] = cell
-                    heapq.heappush(heap, (total + self._chord_m(other, goal), total, other))
+                    heapq.heappush(heap, (total + self._chord_m(other, goal) * self.cheapest, total, other))
         return None
 
     def costs_to(self, source: int, targets: set[int]) -> dict[int, float]:
@@ -303,6 +338,10 @@ class Planner:
     def _town_up(self) -> Vec3:
         return as_vec(self.world.town.frame.up)
 
+    def height_at(self, unit: Vec3, hint: int | None = None) -> float:
+        """The ground height under a point (the town's plateau inside its chart)."""
+        return self.world.ground_height(unit, self.world.nearest_cell(unit, hint))
+
     def outer_cell_for(self, unit: Vec3, hint: int | None = None) -> int | None:
         """The graph cell a point outside the town belongs to (the nearest allowed one around it)."""
         cell = self.world.nearest_cell(unit, hint)
@@ -332,9 +371,9 @@ class Planner:
         cells = self.outer.astar(start_cell, goal_cell)
         if cells is None:
             return None
-        builder = _RouteBuilder(start)
-        builder.outer(self, cells, entry_cost=self.outer.cost[start_cell])
-        builder.add(goal, self.outer.cost[goal_cell])
+        builder = _RouteBuilder(self, start, start_cell)
+        builder.outer(self, self._ends_between(start, cells, goal), entry_cost=self.outer.cost[start_cell])
+        builder.add(goal, self.outer.cost[goal_cell], self.outer.heights[goal_cell])
         return builder.route()
 
     def _town_to_town(
@@ -346,10 +385,29 @@ class Planner:
         cells = self.town.search({start_cell: 0.0}, goal_cell)
         if cells is None:
             return None
-        builder = _RouteBuilder(start)
+        builder = _RouteBuilder(self, start)
         builder.town(self, cells)
-        builder.add(goal if goal_cell == self._cell_under(goal_local) else builder.last, 1.0)
+        builder.add(goal if goal_cell == self._cell_under(goal_local) else builder.last, 1.0, self.world.town.height_m)
         return builder.route()
+
+    def _ends_between(self, start: Vec3 | None, cells: list[int], goal: Vec3 | None) -> list[int]:
+        """The cell path without its first cell when the start already lies past it towards the second (a walker
+        replanning mid-leg goes on, not back to a cell centre), and likewise without its last cell when the goal lies
+        short of it."""
+        units = self.outer.units
+        if (
+            start is not None
+            and len(cells) >= 2
+            and angle(start, units[cells[1]]) < angle(units[cells[0]], units[cells[1]])
+        ):
+            cells = cells[1:]
+        if (
+            goal is not None
+            and len(cells) >= 2
+            and angle(units[cells[-2]], goal) < angle(units[cells[-2]], units[cells[-1]])
+        ):
+            cells = cells[:-1]
+        return cells
 
     def _cell_under(self, local: tuple[float, float]) -> int | None:
         cell = self.world.town.walk.cell_of(*local)
@@ -371,10 +429,11 @@ class Planner:
         outer_cells = self.outer.astar(portal.outer_cell, goal_cell)
         if outer_cells is None:
             return None
-        builder = _RouteBuilder(start)
+        builder = _RouteBuilder(self, start)
         builder.town(self, town_cells)
-        builder.outer(self, outer_cells, entry_cost=self.outer.cost[portal.outer_cell])
-        builder.add(goal, self.outer.cost[goal_cell])
+        cells = self._ends_between(None, outer_cells, goal)
+        builder.outer(self, cells, entry_cost=self.outer.cost[portal.outer_cell])
+        builder.add(goal, self.outer.cost[goal_cell], self.outer.heights[goal_cell])
         return builder.route()
 
     def _outer_to_town(self, start: Vec3, goal: Vec3, start_cell: int, goal_local: tuple[float, float]) -> Route | None:
@@ -392,39 +451,46 @@ class Planner:
         outer_cells = self.outer.astar(start_cell, portal.outer_cell)
         if outer_cells is None:
             return None
-        builder = _RouteBuilder(start)
-        builder.outer(self, outer_cells, entry_cost=self.outer.cost[start_cell])
-        builder.add(portal.unit, self.outer.cost[portal.outer_cell])
+        builder = _RouteBuilder(self, start, start_cell)
+        builder.outer(self, self._ends_between(start, outer_cells, None), entry_cost=self.outer.cost[start_cell])
+        builder.add(portal.unit, self.outer.cost[portal.outer_cell], self.world.town.height_m)
         builder.town(self, town_cells)
-        builder.add(goal if goal_cell == self._cell_under(goal_local) else builder.last, 1.0)
+        builder.add(goal if goal_cell == self._cell_under(goal_local) else builder.last, 1.0, self.world.town.height_m)
         return builder.route()
 
 
 class _RouteBuilder:
-    def __init__(self, start: Vec3) -> None:
+    """Collects a route's points with the ground height at each, and costs every leg per metre as its terrain × the
+    slope factor of its climb, never below 1."""
+
+    def __init__(self, planner: Planner, start: Vec3, start_hint: int | None = None) -> None:
+        self.world = planner.world
         self.points: list[Vec3] = [start]
+        self.heights: list[float] = [planner.height_at(start, start_hint)]
         self.costs: list[float] = []
 
     @property
     def last(self) -> Vec3:
         return self.points[-1]
 
-    def add(self, point: Vec3, cost: float) -> None:
+    def add(self, point: Vec3, cost: float, height_m: float) -> None:
         if point == self.points[-1]:
             return
+        length = angle(self.points[-1], point) * self.world.radius_m
+        self.costs.append(max(1.0, cost * slope_factor(height_m - self.heights[-1], length)))
         self.points.append(point)
-        self.costs.append(cost)
+        self.heights.append(height_m)
 
     def town(self, planner: Planner, cells: list[int]) -> None:
         chart = planner.world.town
         for cell in planner.town.corners(cells):
-            self.add(chart.to_unit(*planner.town.centre(cell)), 1.0)
+            self.add(chart.to_unit(*planner.town.centre(cell)), 1.0, chart.height_m)
 
     def outer(self, planner: Planner, cells: list[int], entry_cost: float) -> None:
         graph = planner.outer
-        self.add(graph.units[cells[0]], entry_cost)
+        self.add(graph.units[cells[0]], entry_cost, graph.heights[cells[0]])
         for previous, cell in zip(cells, cells[1:], strict=False):
-            self.add(graph.units[cell], (graph.cost[previous] + graph.cost[cell]) / 2)
+            self.add(graph.units[cell], (graph.cost[previous] + graph.cost[cell]) / 2, graph.heights[cell])
 
     def route(self) -> Route:
         return Route(points=tuple(self.points), costs=tuple(self.costs))
