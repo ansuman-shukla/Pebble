@@ -52,7 +52,7 @@ CAMP_CLEARING_M = 12.0  # a camp's worn ground
 PROP_CLEARANCE_M = 1.0  # beyond a site prop's footprint
 FEATURE_CLEARANCE_M = 3.0
 COUNTED_SPACING_M = 2.0  # counted items of one hotspot or ring keep this far apart
-DEN_BUSH_M = (30.0, 36.0)  # a den's nearest berry bush: at least, and where the first is put
+DEN_FIRST_BUSH_M = 36.0  # from an edge den to its grove's first berry bush
 _ATTEMPTS = 40  # candidates drawn per counted item before giving up
 _REDRAWS = 6  # times a natural item off good ground is moved within its cell before it is dropped
 _EDGE_MARGIN_M = 0.5  # counted items stay this far inside their annulus (offsets are rounded to OFFSET_STEP_M)
@@ -302,16 +302,16 @@ class _FloraPlacer:
         den: FloatArray | None,
         avoid: Sequence[Hotspot] = (),
     ) -> _Items:
-        """Exactly `count` items of the node kind in the annulus, each on good ground. Berry bushes of a hotspot
-        with a den keep DEN_BUSH_M[0] from it and the first stands DEN_BUSH_M[1] from it, inside its defence ring
-        (10 §1.6: the Elder grove's bushes lie within the bear den's 40 m)."""
+        """Exactly `count` items of the node kind in the annulus, each on good ground. The first berry bush of a
+        hotspot with an edge den (DEN_EDGE_M outside it, so no bush is nearer) stands DEN_FIRST_BUSH_M from the den,
+        inside its defence ring even in a sparse grove (10 §1.6: the Elder grove's bushes lie within its 40 m)."""
         if count == 0:
             return _Items.empty()
         units = self._annulus_points(region, count * _ATTEMPTS)
         if den is not None:
             towards = region.centre - den * float(region.centre @ den)
-            first = den * np.cos(DEN_BUSH_M[1] / self.surface.radius_m) + towards / np.linalg.norm(towards) * np.sin(
-                DEN_BUSH_M[1] / self.surface.radius_m
+            first = den * np.cos(DEN_FIRST_BUSH_M / self.surface.radius_m) + towards / np.linalg.norm(towards) * np.sin(
+                DEN_FIRST_BUSH_M / self.surface.radius_m
             )
             near_first = self._annulus_points(_Annulus(first, 0.0, 3.0), _ATTEMPTS)
             units = np.concatenate([near_first, units])
@@ -322,8 +322,6 @@ class _FloraPlacer:
         if outside_rings_m is not None:
             for camp in self.camps:
                 ok &= self.surface.distances_m(camp, candidate_units) > outside_rings_m
-        if den is not None:
-            ok &= self.surface.distances_m(den, candidate_units) >= DEN_BUSH_M[0]
         for hotspot in avoid:
             ok &= self.surface.distances_m(np.array(hotspot.centre), candidate_units) > hotspot.radius_m
         taken: list[int] = []

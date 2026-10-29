@@ -310,8 +310,9 @@ def _beside(hotspot: Hotspot, surface: Surface, road: Road, roads: Sequence[Road
         heading = float(bearing_deg(before, after[None])[0])
         for side in (90.0, -90.0):
             point = destination(points[index], heading + side, middle / surface.radius_m)
-            off = float(road_distance_m(point, roads, surface)[0])
-            if _standable(surface, point) and DEN_BESIDE_M[0] <= off <= DEN_BESIDE_M[1]:
+            off = float(road_distance_m(point, [road], surface)[0])
+            clear = float(road_distance_m(point, roads, surface)[0]) >= DEN_BESIDE_M[0]
+            if _standable(surface, point) and clear and DEN_BESIDE_M[0] <= off <= DEN_BESIDE_M[1]:
                 return point
     return None
 
