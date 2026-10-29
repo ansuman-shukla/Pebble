@@ -1,5 +1,8 @@
 # 03 · Actions and perception (the world contract)
 
+> This is contract v0 (frozen, D74). Contract v1 (33 actions, new perception fields and events) is defined in
+> `10-world-v1.md` §6 (D96); stream C1 rewrites this doc when it freezes `contract_v1.json`.
+
 This is the only interface between a mind and the world. Scripted brains call it through Python; agent minds call
 the same thing through the `world` MCP server. Everything is phrased in-world: no numbers they wouldn't know, no paths,
 no technical errors.

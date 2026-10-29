@@ -35,6 +35,11 @@ checklist, not a date. Each milestone is a separate branch/PR with small commits
 - [x] Every state change is an event; replay works from snapshots.
 - [x] 15 citizens run stably for 10+ game days.
 
+## World v1: make the world real (between M9 and M10)
+
+The M9 world passed its checklist but not the owner's look (D77). World v1 (`10-world-v1.md`, plan
+`plans/2026-10-29-world-v1.md`) runs in four waves and ends with the World v1 critic checklist; M10 starts after it.
+
 ## Phase B: the minds
 
 | Milestone | Delivers | Done when |
@@ -45,6 +50,7 @@ checklist, not a date. Each milestone is a separate branch/PR with small commits
 | **M13 All 15 agents** | roster from `04-minds.md`, run, observe | a multi-day run with full archive; findings note |
 
 ## Later versions (one layer of realism each)
-- **v1:** seasons and winter, weather, crafting + discovery, boats, the human player avatar, public hosting on your domain.
-- **v2:** aging, births and generations, language barrier and emergent language, money/ownership/hierarchy rules,
+- **v1.1+** (was "v1"; World v1 is above): seasons and winter, weather, discovery (basic crafting moved to World v1),
+  boats, the human player avatar, public hosting on your domain.
+- **v2:** aging, births and generations, language barrier and emergent language, (money, ownership and hierarchy moved to World v1),
   "acts of god" panel, in-world writing/painting and the library, seeds/snapshots for A/B worlds.

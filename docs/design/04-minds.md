@@ -15,6 +15,8 @@ Both sit behind one `MindBackend` interface: `start_day(citizen, context) → se
 
 ## Roster v0 (proposal: names and exact roles TBD in the citizens spec)
 
+> World v1 grows the cast to 22 (10 §3.1, D91); the 7 new citizens need models assigned before M13.
+
 Smarter models mostly sit higher, with deliberate mismatches, because real life isn't fair either.
 
 | # | Region | Role | Age | Model | Backend |
