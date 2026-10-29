@@ -1,23 +1,23 @@
 import { useGLTF } from '@react-three/drei';
-import { useEffect, useMemo } from 'react';
-import { InstancedMesh, Matrix4, type Object3D, Vector3 } from 'three';
+import { useFrame } from '@react-three/fiber';
+import { useEffect, useId, useMemo } from 'react';
+import { Matrix4, Vector3 } from 'three';
 
-import { kindParts } from '@/components/world/kind-parts';
+import { kindModel, type KindModel } from '@/components/world/kind-parts';
+import { LivingKind } from '@/components/world/living-kind';
 import type { TownPlacement } from '@/lib/client/types.gen';
 import { assetBaseY, assetUrl, kindScale } from '@/lib/world/assets';
 import { assetIdForKind } from '@/lib/world/collision';
 import { FLAT_MAPPING, type LocalMapping } from '@/lib/world/local-mapping';
 import { isProcedural, proceduralScene } from '@/lib/world/procedural-props';
+import { advanceProps } from '@/lib/world/prop-motion';
 
 /*
- * Every placement of one kind is drawn as instances: one InstancedMesh per sub-mesh of the kind's GLB, with
- * the sub-mesh's transform inside the model baked into each instance matrix. Doors are opened on the source
- * first and models sit at assetBaseY, exactly like the walker's colliders, so what you see is what blocks you.
- * The mapping places local metres in the world (flat on the town page, wrapped onto the planet on the globe).
+ * Every placement of one kind is drawn as instances: one InstancedMesh per part of the kind's model (kind-parts:
+ * its sub-meshes merged per material, so mostly one), placed at assetBaseY with the gatehouse's doors open,
+ * exactly like the walker's colliders, so what you see is what blocks you. The mapping places local metres in the
+ * world (flat on the town page, wrapped onto the planet on the globe). Their moving parts live (living-kind.ts).
  */
-
-/** Kinds lying flat on the ground: their shadows would be invisible, so they skip the shadow pass. */
-const FLAT_KINDS = new Set(['rice_paddy', 'paving_tile']);
 
 type PlacementsProps = {
   placements: TownPlacement[];
@@ -29,24 +29,31 @@ type PlacementsProps = {
 type KindProps = PlacementsProps & { kind: string; id: string };
 
 function ModelInstances(props: KindProps) {
-  const { scene } = useGLTF(assetUrl(props.id));
-  return <KindInstances {...props} scene={scene} />;
+  const { scene, animations } = useGLTF(assetUrl(props.id));
+  return (
+    <KindInstances {...props} model={kindModel(scene, props.id, animations)} />
+  );
 }
 
 function ProceduralInstances(props: KindProps) {
-  return <KindInstances {...props} scene={proceduralScene(props.id)} />;
+  return (
+    <KindInstances
+      {...props}
+      model={kindModel(proceduralScene(props.id), props.id)}
+    />
+  );
 }
 
 function KindInstances({
   kind,
   id,
-  scene,
+  model,
   placements,
   mapping,
   lift,
-}: KindProps & { scene: Object3D }) {
-  const meshes = useMemo(() => {
-    const parts = kindParts(scene, id);
+}: KindProps & { model: KindModel }) {
+  const key = useId();
+  const living = useMemo(() => {
     const baseY = assetBaseY(id);
     const scale = kindScale(kind);
     const placed = placements.map((placement) =>
@@ -60,31 +67,20 @@ function KindInstances({
         )
         .scale(new Vector3(scale, scale, scale)),
     );
-    const matrix = new Matrix4();
-    return parts.map(({ geometry, material, inModel }) => {
-      const instances = new InstancedMesh(geometry, material, placed.length);
-      placed.forEach((placementMatrix, index) =>
-        instances.setMatrixAt(
-          index,
-          matrix.multiplyMatrices(placementMatrix, inModel),
-        ),
-      );
-      instances.computeBoundingSphere();
-      instances.castShadow = !FLAT_KINDS.has(kind);
-      instances.receiveShadow = true;
-      return instances;
-    });
-  }, [scene, id, kind, placements, mapping, lift]);
+    return new LivingKind(key, kind, model, placements, placed);
+  }, [key, model, id, kind, placements, mapping, lift]);
 
-  // the geometry and material belong to the cached GLB (or procedural scene); only the instance buffers are ours
-  useEffect(
-    () => () => meshes.forEach((instances) => instances.dispose()),
-    [meshes],
-  );
+  // the geometry and material belong to the shared model (kind-parts); only the instance buffers are ours
+  useEffect(() => () => living.dispose(), [living]);
+
+  useFrame(({ camera, clock }, delta) => {
+    advanceProps(clock.elapsedTime);
+    living.frame(camera.position, clock.elapsedTime, Math.min(delta, 0.1));
+  });
 
   return (
     <>
-      {meshes.map((instances) => (
+      {living.meshes.map((instances) => (
         <primitive key={instances.uuid} object={instances} />
       ))}
     </>
