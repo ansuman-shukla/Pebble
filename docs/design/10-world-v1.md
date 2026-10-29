@@ -129,8 +129,13 @@ full at start). Far ring: minerals, gold, the best game.
 
 - **Labour:** per day 2 harvest-and-replant paddies (2 × (2 h + 1 h) = 6 h; 4.7 h with sickles) + 4 tending hours
   (Tokuji's at 1.5 h) ≈ 10 h: Genzo 6 h, Tokuji 3 h, Aiko 2 h in the afternoons.
+- **The price pulls the balance back** (scripted, BR1): farmers sell 1.5 × their daily surplus while rice is *dear*
+  at the stall and 0.5 × while it is *cheap*; the lord sells granary surplus only while rice is *dear* or *fair* and
+  keeps it in the granary while *cheap*. The stall starts at its target (120) and sits in the *fair* band (stock
+  119-211, exactly 4 mon a lot of 2) at equilibrium, which is the price the coin table (§2.7) uses.
 - **Shocks show fast:** a hurt farmer, a raid on the racks (they hold a day's harvest overnight) or a missed harvest
-  drops the stall's rice stock below target within 2 days, and its price rises up to ×2 (§2.5).
+  drops the stall's rice stock below 119 within a day; the price factor peaks (up to ×2 below 29 measures), farmers
+  sell more and the lord releases granary rice until the stock is back in the fair band.
 
 ### 1.5 Territory (`sim/territory.py`)
 - **Home ground:** town chart + 400 m; each camp 400 m. Owned by that group; one constant `HOME_GROUND_M = 400`.
@@ -222,10 +227,12 @@ Every iron craft also burns 2 wood at the forge. Tools are separate item kinds p
   **Sell price per lot = ⌈base × factor × lot⌉; buy price per lot = max(1, ⌊0.75 × sell price per lot⌋).** At
   target stock: rice lot 2 sells for 4 and is bought for 3; wood lot 4: 4 / 3; hide 15 / 11; obsidian 6 / 4; iron
   sand 4 / 3; gold 20 / 15; cloth 25 / 18; pack 30 / 22; sickle 50 / 37; iron axe 60 / 45; iron spear 40 / 30.
-- The stall buys only goods it sells (table 2.2), only with coins it holds, up to 2 × target. Seed stock: rice 60,
-  cloth 2, dried meat 10, wood 20, one iron spear.
-- At the stall a citizen perceives each item as "dear / fair / cheap" + the price in words. `prices_changed` when an
-  item's word changes.
+- The stall buys only goods it sells (table 2.2), only with coins it holds, up to 2 × target. Seed stock: **every
+  sold good at its target** (rice 120, dried meat 20, wood 40, hide 6, obsidian 6, iron sand 20, gold 0, cloth 6,
+  pack 3, 2 of each iron tool), so prices open at the base values.
+- At the stall a citizen perceives each item's price in words and as **dear** (the lot's sell price is above its base
+  value × lot), **fair** (equal) or **cheap** (below). For rice: dear below 119 in stock (5+ mon a lot), fair 119-211
+  (4), cheap from 212 (3 or less). `prices_changed` when an item's word changes.
 - No person-to-person barter action in v1: swaps are agreed in speech and done with two `give`s.
 
 ### 2.6 Ownership and theft (`sim/ownership.py`)
@@ -272,7 +279,8 @@ witnesses}` (witnesses = citizens who had the thief in view that tick). The owne
   The loop: treasury → wages, orders, gold and cloth → stall and producers → rice, iron sand, hides, gold → farmers,
   digger, bands → dues and the lord's granary sales → treasury. Gold leaves the loop into the lord's hoard (≈ 0.9 a
   day; the 40 grains run out in ~6 weeks, ending the gold race); packs and cloth beyond these flows are small and
-  price-limited (Aiko's ≈ 1 pack every 4 days is left out). No holder only receives: the stall pays out its margin through purchases and dues.
+  price-limited (Aiko's ≈ 1 pack every 4 days is left out). At these flows the stall's rice stock is steady (45 in,
+  45 out), so the price stays fair; a shock moves it to dear for a day or two, which the price rule in §1.4 undoes. No holder only receives: the stall pays out its margin through purchases and dues.
 - Daily `ledger` event per citizen at local midnight: coins, wealth, income/spend 24 h, rice and coin owed.
 
 ---
