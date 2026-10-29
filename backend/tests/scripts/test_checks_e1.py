@@ -37,7 +37,8 @@ def test_the_spoilage_check_needs_some_food_to_spoil(new_sim: Callable[..., Simu
     check.after_step(sim, sim.drain())
     assert check.outcome(sim) == Outcome(0.0, False, "0.0/day (nothing)")
     sim.citizen("tek").inventory["meat"] = 9
-    wear.spoil_at_dawn(sim.core, lambda unit: unit == sim.citizen("tek").position)
+    wear.WEAR.of(sim.state).rising = {"tek"}  # tek's dawn, as wear.watch_sun would find it
+    wear.spoil_at_dawn(sim.core, lambda _unit: False)
     check.after_step(sim, sim.drain())
     assert check.outcome(sim) == Outcome(720.0, True, "720.0/day (5 meat)")  # one in two ticks
     outcomes = {1: Outcome(3.0, True, "a"), 2: Outcome(0.0, False, "b")}

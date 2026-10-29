@@ -12,8 +12,17 @@ from app.sim.economy import load_economy
 from app.sim.simulation import Simulation
 from app.sim.snapshot import restore, take_snapshot
 from app.sim.systems import REGISTRY, dawn_at
-from app.sim.vec import Vec3
-from app.sim.wear import DAWN_GAP, WEAR, spoil_at_dawn, spoilage, store_spot, use_tool, wear_packs_at_dawn
+from app.sim.vec import Vec3, step_towards
+from app.sim.wear import (
+    DAWN_GAP,
+    WEAR,
+    spoil_at_dawn,
+    spoilage,
+    store_spot,
+    use_tool,
+    watch_sun,
+    wear_packs_at_dawn,
+)
 from app.sim.world import SimWorld
 from tests.sim_helpers import GATE, make_spec, without_animals
 
@@ -53,6 +62,11 @@ def _dawn_tick(sim: Simulation, position: Vec3) -> int:
         if dawn_at(sim.core, position):
             return tick
         tick += 1
+
+
+def _dawn_for(sim: Simulation, *citizen_ids: str) -> None:
+    """Make it these citizens' dawn this tick, as `watch_sun` would, for calling a dawn hook directly."""
+    WEAR.of(sim.state).rising = set(citizen_ids)
 
 
 def _run_over(sim: Simulation, dawn: int, before: int = 3, after: int = 3) -> list[EventDraft]:
@@ -114,16 +128,80 @@ def test_nothing_spoils_away_from_dawn_and_nothing_twice_a_day(new_sim: Callable
     assert tek.inventory == {"meat": 20}
 
 
-def test_a_citizen_s_dawn_counts_once_in_half_a_day(new_sim: Callable[..., Simulation]) -> None:
+def test_a_citizen_s_dawn_is_stepping_from_the_dark_into_the_light_once_in_half_a_day(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sim = _sim(new_sim)
+    sky = {"altitude": -1.0}
+    monkeypatch.setattr(sim.core, "altitude", lambda _unit: sky["altitude"])
+    dawns = []
+    for tick, altitude in (
+        (1000, 5.0),  # never seen in the dark: no dawn
+        (1001, -1.0),
+        (1002, 0.0),  # the sun on the horizon is still down
+        (1003, 2.0),  # dawn
+        (1004, 3.0),
+        (1100, -1.0),
+        (1101, 1.0),  # the sun set and rose again: too soon
+        (1003 + DAWN_GAP - 2, -1.0),
+        (1003 + DAWN_GAP - 1, 1.0),  # a minute short of half a day
+        (1003 + DAWN_GAP + 4, -1.0),
+        (1003 + DAWN_GAP + 5, 1.0),  # dawn
+    ):
+        sim.state.tick, sky["altitude"] = tick, altitude
+        watch_sun(sim.core)
+        dawns += [tick] * len(WEAR.of(sim.state).rising)
+    assert dawns == [1003, 1003 + DAWN_GAP + 5]
+    assert WEAR.of(sim.state).last == {"tek": 1003 + DAWN_GAP + 5}
+    sim.citizen("tek").body.alive = False  # the dead see no sun
+    sim.state.tick, sky["altitude"] = sim.state.tick + DAWN_GAP, -1.0
+    watch_sun(sim.core)
+    assert not WEAR.of(sim.state).dark
+
+
+@pytest.mark.parametrize(
+    ("start_m", "bearing", "speed", "start", "spoils"),
+    [
+        (-1000.0, 90.0, 84.0, -30, 1),  # east at a walk (sunrise moves 7 m a minute), out of the night
+        (0.0, 0.0, 0.0, -30, 1),  # standing still
+        (0.0, 270.0, 2.0, -30, 1),  # west, slower than the sunrise: it catches them
+        (0.0, 270.0, 84.0, 5, 0),  # west at a walk after sunrise: into the night, no dawn
+    ],
+)
+def test_a_walker_s_food_spoils_at_the_dawn_they_walk_into(
+    new_sim: Callable[..., Simulation], start_m: float, bearing: float, speed: float, start: int, spoils: int
+) -> None:
+    sim = _sim(new_sim, inventory={"meat": 16})
+    tek = sim.citizen("tek")
+    gate = tek.position
+    dawn = _dawn_tick(sim, gate)
+    radius = sim.world.radius_m
+    position = step_towards(gate, 90.0, start_m, radius) if start_m else gate
+    sim.state.tick = dawn + start - 1
+    spoiled, seam_dawns = [], 0
+    while sim.tick < dawn + 60:
+        position = step_towards(position, bearing, speed, radius) if speed else position
+        sim.core.place_at(tek, position)
+        sim.step()
+        spoiled += [e.tick for e in sim.drain() if e.type == "spoiled"]
+        seam_dawns += dawn_at(sim.core, position)
+    assert len(spoiled) == spoils and tek.inventory["meat"] == 16 // 2**spoils
+    if speed == 84.0 and spoils:
+        assert seam_dawns == 0  # the sun never rose at their spot within a tick: why it watches their sun instead
+
+
+def test_a_dawn_with_nothing_to_spoil_still_counts(new_sim: Callable[..., Simulation]) -> None:
     sim = _sim(new_sim)
     tek = sim.citizen("tek")
-    spoiled = []
-    for tick in (1000, 1000, 1100, 1000 + DAWN_GAP - 1, 1000 + DAWN_GAP, 1000 + DAWN_GAP + 5):
-        sim.state.tick = tick
-        tek.inventory["meat"] = 2
-        spoil_at_dawn(sim.core, lambda _unit: True)
-        spoiled += [e.tick for e in sim.drain() if e.type == "spoiled"]
-    assert spoiled == [1000, 1000, 1000 + DAWN_GAP]  # again in the same tick (another hook), then not till noon
+    dawn = _dawn_tick(sim, tek.position)
+    assert not [e for e in _run_over(sim, dawn, before=2, after=2) if e.type == "spoiled"]
+    assert WEAR.of(sim.state).last == {"tek": dawn}
+    tek.inventory["meat"] = 6
+    west = sim.world.structures["band_b_camp:fire-pit"].door  # still night there: a second sunrise this morning
+    sim.core.place_at(tek, west)
+    second = _dawn_tick(sim, west)
+    assert not [e for e in _run_over(sim, second, before=second - dawn - 2, after=2) if e.type == "spoiled"]
+    assert tek.inventory == {"meat": 6}
 
 
 def test_a_walker_heading_west_into_the_night_doesn_t_spoil_at_the_second_sunrise(
@@ -145,16 +223,21 @@ def test_a_walker_heading_west_into_the_night_doesn_t_spoil_at_the_second_sunris
 
 def test_the_wear_block_round_trips_a_snapshot(new_sim: Callable[..., Simulation]) -> None:
     sim = _sim(new_sim, inventory={"meat": 4})
-    sim.state.tick = 77
-    spoil_at_dawn(sim.core, lambda _unit: True)
+    wear = WEAR.of(sim.state)
+    wear.last, wear.dark, wear.rising = {"tek": 77}, {"tek", "ora"}, {"tek"}
     snapshot = take_snapshot(sim.state)
-    assert WEAR.of(restore(snapshot)).last == {"tek": 77}
-    assert (snapshot.systems["wear"].version, snapshot.systems["wear"].data) == (1, {"last": {"tek": 77}})
+    restored = WEAR.of(restore(snapshot))
+    assert (restored.last, restored.dark, restored.rising) == ({"tek": 77}, {"tek", "ora"}, set())
+    assert (snapshot.systems["wear"].version, snapshot.systems["wear"].data) == (
+        1,
+        {"last": {"tek": 77}, "dark": ["ora", "tek"]},
+    )
 
 
 def test_the_dead_keep_what_they_carried(new_sim: Callable[..., Simulation]) -> None:
     sim = _sim(new_sim, inventory={"meat": 4})
     sim.citizen("tek").body.alive = False
+    _dawn_for(sim, "tek")
     spoil_at_dawn(sim.core, lambda _unit: True)
     assert not sim.drain() and sim.citizen("tek").inventory == {"meat": 4}
 
@@ -165,6 +248,7 @@ def test_stores_spoil_at_their_own_dawn(new_sim: Callable[..., Simulation]) -> N
     sim.stock_store("band_a_camp:drying-rack", "meat", 6)
     sim.drain()
     camp = store_spot(sim.world, "band_a_camp:drying-rack")
+    _dawn_for(sim)
     spoil_at_dawn(sim.core, lambda unit: unit == camp)
     events = sim.drain()
     assert [e.payload for e in events if isinstance(e.payload, Spoiled)] == [
@@ -184,6 +268,7 @@ def test_every_store_stands_somewhere(sim_world: SimWorld) -> None:
 
 def test_wear_hooks_are_registered_at_dawn() -> None:
     assert spoil_at_dawn in REGISTRY.at_dawn and wear_packs_at_dawn in REGISTRY.at_dawn
+    assert watch_sun in REGISTRY.every_tick
     assert WEAR in REGISTRY.systems
 
 
@@ -241,14 +326,16 @@ def test_a_carried_pack_wears_out_at_dawn(new_sim: Callable[..., Simulation]) ->
     sim = _sim(new_sim)
     tek = sim.citizen("tek")
     broke = 0
+    _dawn_for(sim, "tek")
     for _ in range(USES // 2):
         tek.inventory["pack"] = 2  # each pack carried rolls
-        wear_packs_at_dawn(sim.core, lambda _unit: True)
+        wear_packs_at_dawn(sim.core, lambda _unit: False)  # a citizen's dawn is watch_sun's, not the spot's
         broke += 2 - tek.inventory.get("pack", 0)
     mean, sd = USES * 0.03, math.sqrt(USES * 0.03 * 0.97)
     assert abs(broke - mean) <= 4 * sd, (broke, mean)
     assert {e.payload for e in sim.drain() if isinstance(e.payload, ToolBroke)} == {ToolBroke(item="pack", use="carry")}
     tek.inventory["pack"] = 1
+    _dawn_for(sim)
     for _ in range(200):
-        wear_packs_at_dawn(sim.core, lambda _unit: False)  # not their dawn: no wear
+        wear_packs_at_dawn(sim.core, lambda _unit: True)  # not their dawn: no wear
     assert tek.inventory["pack"] == 1 and not sim.drain()
