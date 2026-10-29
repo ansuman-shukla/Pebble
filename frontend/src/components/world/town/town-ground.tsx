@@ -11,9 +11,9 @@ import { mapGeometry } from '@/lib/world/map-geometry';
 import { waterMaterial } from '@/lib/world/water-material';
 
 /*
- * The town ground: grass (on the ground shader) with holes where water is (an island inside a moat ring is land again), water
- * surfaces a little below it with bank walls around every edge so the sky never shows through, and the areas
- * (streets, plazas, courtyards, fields) as coloured polygons just above the grass. Built in local metres and
+ * The town ground: grass (on the ground shader) with holes where water is (an island inside a moat ring is land
+ * again), water surfaces a little below it with bank walls around every edge so the sky never shows through, and the
+ * areas (streets, plazas, courtyards, fields) as coloured polygons just above the grass. Built in local metres and
  * carried through the mapping (flat on the town page, wrapped onto the planet on the globe).
  */
 
