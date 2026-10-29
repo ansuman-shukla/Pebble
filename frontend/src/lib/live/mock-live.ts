@@ -24,6 +24,7 @@ import {
 } from './live-contract';
 import { MockWild } from './mock-wild';
 import type {
+  LiveEventDetail,
   Position,
   RoutePoint,
   Site,
@@ -582,14 +583,16 @@ export class MockLiveServer {
     for (const socket of this.sockets) socket.deliver(frame);
   }
 
-  /** Queues an event of any type for the next tick, like the engine's own (tests: a death, a sale); `extra` adds
-   * fields of the line registry (`line`, `importance`, `position`). */
+  /** Queues an event of any type for the next tick, like the engine's own (tests: a death, a sale), told as the
+   * backend's line registry would tell it; it happens where its citizen actor stands unless `told` says where. */
   queueEvent(
     type: string,
     actor: string | null,
     payload: Record<string, unknown>,
-    extra: Record<string, unknown> = {},
+    told: Pick<LiveEventDetail, 'line' | 'importance'> &
+      Partial<Pick<LiveEventDetail, 'position'>>,
   ) {
+    const state = this.states.find((one) => one.person.id === actor);
     this.events += 1;
     this.pending.push({
       type: 'event',
@@ -600,7 +603,8 @@ export class MockLiveServer {
         type,
         actor_id: actor,
         payload,
-        ...extra,
+        position: state ? placeOf(state) : null,
+        ...told,
       },
     });
   }
