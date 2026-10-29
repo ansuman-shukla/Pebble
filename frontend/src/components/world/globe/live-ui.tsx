@@ -267,6 +267,8 @@ export function NpcHooks({
         node.dataset.npcFeet = view.feet
           .map((value) => value.toFixed(4))
           .join(',');
+        node.dataset.npcHead = fixed(view.heights.head);
+        node.dataset.npcLabelHeight = fixed(view.heights.label);
       }
     }, 100);
     return () => window.clearInterval(timer);

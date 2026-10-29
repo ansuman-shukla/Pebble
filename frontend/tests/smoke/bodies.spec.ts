@@ -808,6 +808,8 @@ async function drawn(page: Page, id: string) {
     motion: data.npcMotion ?? '',
     clip: data.npcClip ?? '',
     loaded: data.npcLoaded === 'true',
+    head: Number(data.npcHead),
+    label: Number(data.npcLabelHeight),
     prop: data.npcProp ?? '',
     layer: data.npcLayer ?? '',
     posture: data.npcPosture ?? '',
@@ -999,6 +1001,59 @@ test.describe('on the globe', () => {
     await expect
       .poll(() => drawn(page, 'tetsu'), { timeout: 20_000 })
       .toMatchObject({ hidden: true });
+    expect(errors).toEqual([]);
+  });
+
+  test("labels hang over the head bone: a sitter's lower by its head's drop", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    await openGlobe(page, errors, '?mockLive=1&follow=tetsu');
+    await expect(page.getByTestId('npcs')).toHaveAttribute(
+      'data-npcs-ready',
+      '22',
+    );
+    const perform = (doing: Record<string, unknown>) =>
+      page.evaluate(
+        (next) =>
+          (globalThis as unknown as Performer).__pebbleMockLive.perform(
+            'tetsu',
+            next,
+          ),
+        doing,
+      );
+    /** Once settled (two reads 0.5 s apart agree): the head bone's and the label's heights over the feet. */
+    const settled = async (posture: string) => {
+      let last = { head: NaN, label: NaN };
+      await expect
+        .poll(
+          async () => {
+            const now = await drawn(page, 'tetsu');
+            const same =
+              now.posture === posture &&
+              Math.abs(now.head - last.head) < 0.015 &&
+              Math.abs(now.label - last.label) < 0.015;
+            last = now;
+            return same;
+          },
+          { timeout: 20_000, intervals: [500] },
+        )
+        .toBe(true);
+      return last;
+    };
+    await perform({ activity: 'idle', motion: 'idle' });
+    const standing = await settled('standing');
+    await perform({ activity: 'resting', motion: 'sit_ground' });
+    const sitting = await settled('sitting');
+    // the label rides the head bone (0.55 m above it), not the body's fixed heights (2.1 m, 1.2 m sitting)
+    for (const body of [standing, sitting])
+      expect(body.label - body.head).toBeCloseTo(0.55, 1);
+    const drop = standing.head - sitting.head;
+    expect(drop).toBeGreaterThan(0.4);
+    expect(standing.label - sitting.label).toBeCloseTo(drop, 1);
+    expect(Math.abs(standing.label - sitting.label - 0.9)).toBeGreaterThan(
+      0.05,
+    );
     expect(errors).toEqual([]);
   });
 

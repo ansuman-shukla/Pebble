@@ -137,6 +137,8 @@ const basis = new Matrix4();
 const side = new Vector3();
 const foot = new Vector3();
 const sun = new Vector3();
+const up = new Vector3();
+const anchored = new Vector3();
 
 /** What the page and the tests can read of a drawn citizen (mutated every frame). */
 interface NpcView {
@@ -162,6 +164,8 @@ interface NpcView {
   feet: number[];
   /** Seconds of clip time its animation has played (clips run sped up with the clock). */
   clipClock: number;
+  /** How high its head bone and its labels' anchor are above its feet (m), while it is animated. */
+  heights: { head: number; label: number };
 }
 
 export type NpcViews = Map<string, NpcView>;
@@ -512,6 +516,12 @@ function NpcModel({
     view.feet = feet.flatMap((bone) =>
       character.worldToLocal(bone.getWorldPosition(foot)).toArray(),
     );
+    const { position } = view.pose;
+    up.copy(position).normalize();
+    const above = (at: Vector3) => at.sub(position).dot(up);
+    view.heights.head = above(rig.head.getWorldPosition(anchored));
+    if (labels.anchorPosition(subject, anchored))
+      view.heights.label = above(anchored);
   });
 
   return (
@@ -598,6 +608,7 @@ function newView(citizen: LiveCitizen): NpcView {
     near: false,
     feet: [],
     clipClock: 0,
+    heights: { head: 0, label: 0 },
   };
 }
 
