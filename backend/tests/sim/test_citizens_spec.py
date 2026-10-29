@@ -193,13 +193,13 @@ def test_ambitions_need_words_and_a_check(ambition: dict[str, Any], error: str) 
 
 
 def test_starting_coins_and_the_treasury_make_the_money_supply(cast: CitizensSpec) -> None:
-    by_id = {c.id: c for c in cast.citizens}
     assert cast.coins() == MONEY_SUPPLY
     assert cast.chests["castle-keep"] == {"coins": TREASURY}
-    assert by_id["masanori"].coins == 0 and by_id["fumiko"].coins == 500 and by_id["hana"].coins == 5
+    purse = {c.id: c.inventory.get("coins", 0) for c in cast.citizens}
+    assert purse["masanori"] == 0 and purse["fumiko"] == 500 and purse["hana"] == 5
     others = [c for c in cast.citizens if c.region == "town" and c.age >= 13 and c.id not in ("masanori", "fumiko")]
-    assert len(others) == 8 and {c.coins for c in others} == {60}
-    assert all(c.coins == 0 for c in cast.citizens if c.region != "town")  # bands start with none
+    assert len(others) == 8 and {purse[c.id] for c in others} == {60}
+    assert all(purse[c.id] == 0 for c in cast.citizens if c.region != "town")  # bands start with none
     assert cast.chests["farmhouse-1"] == cast.chests["farmhouse-2"] == {"rice": 20}
 
 
@@ -258,6 +258,10 @@ def test_the_rice_fields_stand_lies_inside_a_paddy() -> None:
         (lambda c: c["nim"]["ambition"]["all_of"][0]["args"].update(who="nobody"), "unknown who"),
         (lambda c: c["tetsu"]["ambition"]["all_of"][0]["args"].update(to="nobody"), "unknown to"),
         (lambda c: c["barro"]["ambition"]["all_of"][0]["args"].update(group="band_c"), "unknown group"),
+        (lambda c: c["tetsu"]["ambition"]["all_of"][0]["args"].update(item="spear"), "unknown item 'spear'"),
+        (lambda c: c["bo"]["ambition"]["all_of"][0]["args"].update(item="iron axes"), "unknown item"),
+        (lambda c: c["goro"]["inventory"].update(spear=1), "goro can't start with \\['spear'\\]"),
+        (lambda c: c["goro"]["inventory"].update(coins=0), "goro can't start with \\['coins'\\]"),
     ],
 )
 def test_the_cast_refuses_broken_links(change: Callable[[dict[str, dict[str, Any]]], None], error: str) -> None:
@@ -271,6 +275,20 @@ def test_citizen_ids_are_unique() -> None:
     raw = _raw_cast()
     raw["citizens"].append({**raw["citizens"][4], "family": {}, "bonds": {}})  # a second genzo
     with pytest.raises(ValidationError, match="citizen ids must be unique"):
+        CitizensSpec.model_validate(raw)
+
+
+@pytest.mark.parametrize(
+    ("where", "stock", "error"),
+    [
+        ("chests", {"castle-keep": {"coin": 5}}, "castle-keep-chest can't start with \\['coin'\\]"),
+        ("stores", {"store-2": {"rice": -1}}, "store-2 can't start with \\['rice'\\]"),
+    ],
+)
+def test_stores_and_chests_start_with_item_kinds(where: str, stock: dict[str, Any], error: str) -> None:
+    raw = _raw_cast()
+    raw[where].update(stock)
+    with pytest.raises(ValidationError, match=error):
         CitizensSpec.model_validate(raw)
 
 

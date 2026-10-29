@@ -277,12 +277,7 @@ def start_run(
     sim = Simulation.new(world, seed=key.seed)
     store = EventStore(session, run, ids)
     if citizens is not None:
-        cast = load_citizens(citizens)
-        for store_id, items in sorted(cast.stores.items()):
-            for item, count in sorted(items.items()):
-                sim.stock_store(store_id, item, count)
-        for spec in cast.citizens:
-            sim.add_citizen(spec)
+        sim.add_cast(load_citizens(citizens))
     store.write(sim.drain())
     store.snapshot(take_snapshot(sim.state))
     store.commit(0, clock.speed, clock.paused)

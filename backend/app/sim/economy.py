@@ -1,8 +1,8 @@
-"""The goods table (10-world-v1 §2.2; `data/economy.yaml`).
+"""The goods table and the closed money supply (10-world-v1 §2.1-2.2; `data/economy.yaml`).
 
 One table of values in mon per unit (the town's and the bands'), where each good comes from and goes, and how the
 market stall sells it. Every item kind has one row, so a new item can't enter the world without a value, a source and
-a sink.
+a sink. The money supply is closed: the coins held in inventories, stores and on the ground always add up to it.
 """
 
 from functools import cache
@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.config import WORLD_DATA_DIR
 from app.sim.items import ITEMS
-from app.sim.state import Region
+from app.sim.state import Region, WorldState
 
 ECONOMY = WORLD_DATA_DIR / "economy.yaml"
 Use = Literal["hunt", "fell", "harvest", "carry", "craft"]  # what wears a tool out (the `tool_broke` payload's)
@@ -77,3 +77,23 @@ def value_of(item: str, region: Region) -> float:
     good = load_economy().goods[item]
     value = good.town if region == "town" else good.band
     return value or 0.0
+
+
+def coins_held(state: WorldState) -> int:
+    """Every coin in the world: carried (by the living and the dead), in stores and on the ground."""
+    carried = sum(citizen.inventory.get("coins", 0) for citizen in state.citizens.values())
+    stored = sum(items.get("coins", 0) for items in state.stores.values())
+    ground = sum(stack.count for stack in state.ground.values() if stack.item == "coins")
+    return carried + stored + ground
+
+
+class MoneyLeak(AssertionError):
+    """Coins were minted or destroyed: the supply no longer adds up (a bug in whatever moved them)."""
+
+
+def check_money_supply(state: WorldState, supply: int | None = None) -> None:
+    """Raise `MoneyLeak` unless the world holds exactly the money supply (by default the economy's 3 000)."""
+    expected = load_economy().money_supply if supply is None else supply
+    held = coins_held(state)
+    if held != expected:
+        raise MoneyLeak(f"tick {state.tick}: the world holds {held} coins, not {expected} ({held - expected:+d})")

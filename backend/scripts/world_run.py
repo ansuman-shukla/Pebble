@@ -51,12 +51,7 @@ def select(checks: Sequence[type[Check]], only: str | None) -> list[type[Check]]
 def populated(seed: int, planner: Planner) -> tuple[Simulation, CitizenBrains]:
     """A new run on the real world: the cast and their stores in, each with their scripted brain."""
     sim = Simulation.new(planner.world, seed=seed, planner=planner)
-    cast = load_citizens(CITIZENS)
-    for store_id, items in cast.stores.items():
-        for item, count in items.items():
-            sim.stock_store(store_id, item, count)
-    for spec in cast.citizens:
-        sim.add_citizen(spec)
+    sim.add_cast(load_citizens(CITIZENS))
     brains = citizen_brains(sim, seed)
     sim.drain()
     return sim, brains
