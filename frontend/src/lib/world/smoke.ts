@@ -228,6 +228,8 @@ export class SmokeCloud {
       if (thick > 0 && camera.distanceTo(fire.position) < SMOKE_REACH)
         smoking.push({ fire, thick, seed: clipPhase(id, 1) });
     }
+    // a fire gone from the feed is forgotten
+    for (const id of this.seen.keys()) if (!fires.has(id)) this.seen.delete(id);
     smoking.sort(
       (a, b) =>
         camera.distanceTo(a.fire.position) - camera.distanceTo(b.fire.position),

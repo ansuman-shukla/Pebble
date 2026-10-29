@@ -98,6 +98,17 @@ test('the cloud carries every fire within 300 m in two objects, puffs drifting u
   expect(cloud.puffs.count).toBe(0);
   expect(cloud.puffs.visible).toBe(false);
 
+  // a fire gone from the feed is forgotten: back out, it was never seen burning and doesn't smoulder
+  fires.set('near', fireAt(10, true));
+  cloud.frame(camera, fires);
+  fires.set('near', fireAt(10, false));
+  cloud.frame(camera, fires);
+  expect(cloud.puffs.count).toBe(10);
+  fires.delete('near');
+  cloud.frame(camera, fires);
+  fires.set('near', fireAt(10, false));
+  cloud.frame(camera, fires);
+  expect(cloud.puffs.count).toBe(0);
   cloud.dispose();
   expect([propViews.puffs, propViews.sparks]).toEqual([0, 0]);
 });
