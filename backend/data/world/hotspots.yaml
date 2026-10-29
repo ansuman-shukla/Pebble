@@ -1,0 +1,212 @@
+# Hotspots (10-world-v1 §1.2): named clusters of nodes in three rings around each settlement. `at` is the target
+# [lat, lon] (the bible's table where it gives one); generation puts each hotspot at its target or the nearest cell
+# within 150 m where it keeps every rule: on land of one of its biomes, outside the town chart, reachable on foot,
+# in its ring, min_spacing_m from the hotspots above it, with room for its features. `flora` counts are exact
+# (natural flora of those kinds stays out of the hotspot);
+# `features` are fixed nodes placed by rule; `paint` gives its land an authored biome like a site's; `called` is the
+# name mid-sentence ("the path from Band A camp to the River marsh").
+
+min_spacing_m: 40
+rings: {home_m: 400, middle_m: 1000, far_m: 1200}
+# each camp's home ring holds exactly these (10 §1.2 ring budget); nut trees stay out so foragers must travel
+home_ring_flora: {berry_bush: 8, root_patch: 8, deadwood: 6, nut_tree: 0}
+
+hotspots:
+  - id: gulf_shore
+    name: Gulf shore
+    called: the Gulf shore
+    at: [38, 20]
+    radius_m: 120
+    of: town
+    ring: home
+    biomes: [beach, grassland]
+    danger: low
+    flora: {deadwood: 6}
+    features:
+      - {kind: fishing_spot, water: sea, count: 3}
+
+  - id: south_marsh
+    name: South marsh
+    called: the South marsh
+    at: [30, 12]
+    radius_m: 100
+    of: town
+    ring: home
+    biomes: [wetland]
+    paint: wetland
+    danger: low
+    flora: {reed_bed: 6, root_patch: 4}
+    features:
+      - {kind: iron_sand_bar, river: Mill river}
+
+  - id: north_woods
+    name: North woods
+    called: the North woods
+    at: [46, 10]
+    radius_m: 120
+    of: town
+    ring: home
+    biomes: [broadleaf_forest]
+    paint: broadleaf_forest
+    woodland: 1.5
+    danger: wolves at night
+    flora: {deadwood: 10}
+
+  - id: lords_woods
+    name: Lord's woods
+    called: the Lord's woods
+    at: [33, -7]
+    radius_m: 150
+    of: town
+    ring: middle
+    biomes: [broadleaf_forest]
+    paint: broadleaf_forest
+    woodland: 1.5
+    claim: town
+    danger: a wolf den off the road
+    features:
+      - {kind: waterhole}
+    den: {animal: wolf, place: beside, road: west_road}
+    hunting: [deer, boar]
+
+  - id: elder_grove
+    name: Elder grove
+    called: the Elder grove
+    at: [12, 6]
+    radius_m: 50
+    of: town
+    ring: middle
+    biomes: [broadleaf_forest]
+    paint: broadleaf_forest
+    danger: a bear den at the grove's edge
+    flora: {berry_bush: 25, nut_tree: 10}
+    den: {animal: bear, place: edge}
+
+  - id: obsidian_field
+    name: Obsidian field
+    called: the Obsidian field
+    at: [18, -20] # the smoking mountain's crater
+    radius_m: 80
+    of: band_b_camp
+    ring: middle
+    biomes: [volcanic]
+    danger: heat
+    thirst: 1.5
+    features:
+      - {kind: obsidian_field, count: 3}
+
+  - id: falls_pool
+    name: Falls pool
+    called: the Falls pool
+    at: [-2, 15]
+    radius_m: 120
+    of: town
+    ring: far
+    biomes: [broadleaf_forest, grassland, beach]
+    danger: wolves
+    features:
+      - {kind: gold_pool}
+      - {kind: fishing_spot, water: lake, count: 3}
+
+  - id: a_savanna
+    name: A savanna
+    called: the A savanna
+    at: [20, 98]
+    radius_m: 120
+    of: band_a_camp
+    ring: home
+    biomes: [savanna]
+    paint: savanna
+    danger: a lion den to the north
+    flora: {root_patch: 8} # the home ring's 8
+    features:
+      - {kind: waterhole}
+    den: {animal: lion, place: bearing, site: band_a_camp, bearing_deg: 0, distance_m: 1000, biomes: [savanna, grassland]}
+    hunting: [antelope, rabbit]
+
+  - id: river_marsh
+    name: River marsh
+    called: the River marsh
+    at: [10, 88]
+    radius_m: 110
+    of: band_a_camp
+    ring: middle
+    biomes: [wetland]
+    paint: wetland
+    danger: low
+    flora: {reed_bed: 5, berry_bush: 6}
+    features:
+      - {kind: fishing_spot, water: river, count: 2}
+
+  - id: bridge_meadows
+    name: Bridge meadows
+    called: the Bridge meadows
+    at: [8, 82]
+    radius_m: 120
+    of: band_a_camp
+    ring: middle
+    biomes: [grassland]
+    paint: grassland
+    danger: a wolf den beside the trail
+    flora: {deadwood: 10}
+    features:
+      - {kind: waterhole}
+    den: {animal: wolf, place: beside, road: great_trail}
+    hunting: [deer]
+
+  - id: painted_cave_flint
+    name: Painted cave flint
+    called: the painted cave
+    at: [20, 108]
+    radius_m: 40
+    of: band_a_camp
+    ring: home
+    biomes: [grassland, hills]
+    danger: none
+    features:
+      - {kind: flint_seam, cap: 30}
+
+  - id: eastern_wall_scar
+    name: Eastern wall scar
+    called: the Eastern wall scar
+    at: [10, 125]
+    radius_m: 100
+    of: band_a_camp
+    ring: middle
+    biomes: [mountain, hills]
+    claim: band_a
+    danger: none
+    features:
+      - {kind: flint_seam, cap: 40}
+    hunting: [goat]
+
+  - id: b_wood
+    name: B wood
+    called: B wood
+    at: [14, -48]
+    radius_m: 130
+    of: band_b_camp
+    ring: middle
+    biomes: [broadleaf_forest]
+    paint: broadleaf_forest
+    claim: band_b
+    danger: a bear den at the wood's edge
+    flora: {berry_bush: 15, nut_tree: 8, root_patch: 8}
+    den: {animal: bear, place: edge}
+
+  - id: b_shore
+    name: B shore
+    called: B shore
+    at: [36.6, -49.4]
+    radius_m: 120
+    of: band_b_camp
+    ring: middle
+    biomes: [beach, grassland]
+    danger: low
+    flora: {deadwood: 6}
+    features:
+      - {kind: fishing_spot, water: sea, count: 3}
+      - {kind: flint_seam, cap: 10}
+
+grounds:
+  - {id: band_b_grass, name: Band B's grass, site: band_b_camp, radius_m: 400, hunting: [deer]}
