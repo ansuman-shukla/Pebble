@@ -8,6 +8,7 @@ import {
   type FeedEntry,
   feedEntry,
   type FeedSubjects,
+  flightTarget,
   shows,
 } from '../../src/lib/live/event-feed';
 import { cameraOf, landed, type MockLiveWindow, openHeld } from './ui-helpers';
@@ -165,6 +166,33 @@ test('filters: People, Danger, Economy; All shows everything', () => {
   expect(kinds('judged')).toEqual(['all', 'people', 'danger']);
   expect(kinds('sold')).toEqual(['all', 'economy']);
   expect(kinds('fire_changed')).toEqual(['all']);
+});
+
+test('▶ flies to where it happened, else to the actor as drawn; nowhere for an actor not drawn', () => {
+  const at = (x: number, y: number, z: number) => new Vector3(x, y, z);
+  const drawn = {
+    animals: new Map([['boar:35', { position: at(0, 0, 2010) }]]),
+    citizens: new Map([['tek', { pose: { position: at(2005, 0, 0) } }]]),
+  };
+  const target = (message: LiveEventMessage) =>
+    flightTarget(entry(message), drawn)
+      ?.toArray()
+      .map((value) => Math.round(value * 1e6) / 1e6) ?? null;
+  expect(
+    target(event('tree_felled', 'tek', {}, { position: { unit: [0, 1, 0] } })),
+  ).toEqual([0, 1, 0]);
+  expect(target(event('died', 'boar:35', { cause: 'hunted' }))).toEqual([
+    0, 0, 1,
+  ]);
+  expect(target(event('said', 'tek', { words: 'Hi' }))).toEqual([1, 0, 0]);
+  // Pip is not drawn (gone since ▶ was drawn): no flight, so a followed citizen stays followed
+  expect(target(event('said', 'pip', { words: 'Hi' }))).toBeNull();
+  expect(target(event('died', 'elk:2', {}))).toBeNull();
+  expect(
+    target(
+      event('tree_felled', null, {}, { line: 'A tree fell', importance: 2 }),
+    ),
+  ).toBeNull();
 });
 
 test('a mock death shows in the feed with the tick it happened; the filters and ▶ work', async ({
