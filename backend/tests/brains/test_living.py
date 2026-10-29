@@ -253,6 +253,8 @@ def test_hunters_hunt_and_the_fires_burn_through_the_night(life: Life) -> None:
 def test_the_brains_use_every_action_but_recall(life: Life) -> None:
     """M9: the scripted brains exercise the whole v0 contract; `recall` belongs to agent minds (D74)."""
     durative = {"walk_to", "follow", "gather", "fish", "hunt", "eat", "drink", "make_fire", "feed_fire", "rest"}
-    durative |= {"sleep", "work", "attack", "flee", "wait"}
+    # `attack` hangs on a wolf happening to come close to a spear carrier, luck in this run; it's proven instead by
+    # test_a_spear_carrier_drives_off_a_wolf_that_comes_close in tests/brains/test_wild_brains.py (D98)
+    durative |= {"sleep", "work", "flee", "wait"}
     assert {name for name in durative if not life.actions[name]} == set()
     assert life.said > 0 and life.gifts > 0  # say, and give (hunters share their meat at camp)
