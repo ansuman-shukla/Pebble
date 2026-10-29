@@ -61,7 +61,6 @@ export interface GroundMaterialOptions {
   weights?: GroundWeights;
   /** The grass tint where the mesh has no vertex colours. */
   tint?: string;
-  style?: GroundStyle;
 }
 
 /** How much of each face's own flat normal shows through the smooth normals: a hint of the low-poly facets. */
@@ -404,7 +403,6 @@ export function groundMaterial({
   hole = null,
   weights,
   tint,
-  style = GROUND_STYLE,
 }: GroundMaterialOptions = {}) {
   const material = new MeshStandardMaterial({
     color: tint ?? '#ffffff',
@@ -424,7 +422,7 @@ export function groundMaterial({
   if (hole) defines.GROUND_HOLE = '';
   material.defines = defines;
   const constant = weightsArray(weights ?? {});
-  const chunk = styleChunk(style);
+  const chunk = styleChunk(GROUND_STYLE);
   // the angle a pixel spans (radians), for the footprint
   const pixel = { value: 0.002 };
   const buffer = new Vector2();
