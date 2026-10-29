@@ -4,9 +4,12 @@ bodies that stand, sit or lie are within 0.8 m of each other."""
 
 from collections.abc import Callable
 
+import pytest
+
 from app.observability.events import TickSummary
 from app.sim.core import Stride
 from app.sim.doing import water_within_reach
+from app.sim.ground_speed import ground_mps
 from app.sim.simulation import Simulation
 from app.sim.slots import (
     PERSONAL_M,
@@ -370,10 +373,33 @@ def test_a_step_aside_keeps_within_the_tick_and_far_spots_are_not_stepped_to(
     start = someone.position
     middle = sim.world.town.to_unit(-38.0, 61.0)
     end = sim.world.town.to_unit(-36.0, 61.0)
-    sim.core.strides[someone.id] = Stride(1, ((start, 0.0), (middle, 30.0), (end, 60.0)))
+    sim.core.strides[someone.id] = Stride(1, ((start, 0.0), (middle, 30.0), (end, 60.0)), gait="run")
     aside = sim.world.town.to_unit(-36.0, 62.0)
     assert step_to(sim.core, someone, aside)
-    assert sim.core.strides[someone.id].walked == ((start, 0.0), (middle, 30.0), (aside, 60.0))
+    stepped = sim.core.strides[someone.id]
+    assert stepped.walked == ((start, 0.0), (middle, 30.0), (aside, 60.0))
+    assert stepped.gait == "run"  # a runner stepped aside still ran there (B1's endurance reads the gait)
     sim.core.strides.clear()
     far = sim.world.town.to_unit(60.0, 61.0)  # 100 m: more than a minute's walk
     assert not step_to(sim.core, someone, far) and someone.position == aside
+
+
+def test_steps_to_a_spot_take_the_time_the_person_walks_it_in(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    young = sim.add_citizen(make_spec("young", at=(-40.0, 61.0)))
+    elder = sim.add_citizen(make_spec("elder", age=75, at=(-34.0, 61.0)))
+    times = {}
+    for person, (x, z) in ((young, (-38.8, 61.0)), (elder, (-32.8, 61.0))):  # a straight step of 1.2 m
+        spot = sim.world.town.to_unit(x, z)
+        metres = sim.world.distance_m(person.position, spot)
+        assert step_to(sim.core, person, spot)
+        times[person.id] = sim.core.strides[person.id].walked[-1][1]
+        assert times[person.id] == pytest.approx(metres / ground_mps(sim.core, person, "walk"), rel=1e-3)
+    assert times["elder"] > times["young"] * 1.2  # at their own pace, not one walking pace for all
+    stall = layout(sim.core).slots["market-stall#seller"]
+    trader = sim.add_citizen(make_spec("trader", at=(20.0, 56.0)))
+    assert step_to(sim.core, trader, stall.position)  # round the stall: corners timed by the metres walked
+    walked = sim.core.strides[trader.id].walked
+    metres = sum(sim.world.distance_m(a[0], b[0]) for a, b in zip(walked, walked[1:], strict=False))
+    assert len(walked) > 2
+    assert walked[-1][1] == pytest.approx(metres / ground_mps(sim.core, trader, "walk"), rel=1e-3)

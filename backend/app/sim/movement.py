@@ -16,8 +16,8 @@ from app.sim.clock import SECONDS_PER_TICK
 from app.sim.core import WALK_AHEAD_TICKS, SimCore, Stride, TimedPoint
 from app.sim.destinations import beside, resolve
 from app.sim.fauna import SPECIES
-from app.sim.fire import near_lit_fire
-from app.sim.locomotion import Gait, Pace, body_factor, gait_for, gait_mps, load_bodies, night_factor, top_gait
+from app.sim.ground_speed import ground_mps, load_share
+from app.sim.locomotion import Gait, Pace, gait_for, load_bodies, top_gait
 from app.sim.navigation import WalkProgress, walk_along
 from app.sim.perception import match_person, nearest_danger, person_label
 from app.sim.state import ActionState, Citizen, System
@@ -143,26 +143,10 @@ def advance_walk(core: SimCore, citizen: Citizen, walk: ActionState) -> None:
     core.end_action(citizen, "done", arrive)
 
 
-def _load_share(core: SimCore, citizen: Citizen) -> float:
-    return core.carried_kg(citizen) / citizen.traits.carry_kg
-
-
 def walk_gait(core: SimCore, citizen: Citizen, walk: ActionState) -> Gait:
     """How the walker goes this minute: at its pace, a run turning to a jog once the endurance is spent."""
     pace = cast(Pace, walk.args.get("pace", "walk"))
-    return gait_for(pace, top_gait(citizen, _load_share(core, citizen)), run_left_s(core, citizen))
-
-
-def ground_mps(core: SimCore, citizen: Citizen, gait: Gait) -> float:
-    """Metres a second on flat open ground: the gait × age × load × health × energy × night (outside the town in
-    the dark with no lit fire close)."""
-    position = citizen.position
-    dark_outside = (
-        core.is_night_at(position)
-        and core.world.town_point(position) is None
-        and not near_lit_fire(core, position, load_bodies().night.fire_m)
-    )
-    return gait_mps(gait) * body_factor(citizen, _load_share(core, citizen)) * night_factor(dark_outside)
+    return gait_for(pace, top_gait(citizen, load_share(core, citizen)), run_left_s(core, citizen))
 
 
 def _dump_running(left: dict[str, float]) -> JsonValue:

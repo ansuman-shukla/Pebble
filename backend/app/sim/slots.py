@@ -30,6 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, model
 from app.core.config import WORLD_DATA_DIR
 from app.sim.clock import SECONDS_PER_TICK
 from app.sim.core import SimCore, Stride, TimedPoint
+from app.sim.ground_speed import ground_mps
 from app.sim.navigation import walk_along
 from app.sim.perception import HOME_RADIUS_M
 from app.sim.state import Citizen, System
@@ -51,7 +52,6 @@ ALREADY_THERE_M = 1.0  # a walk to a spot this close is no walk (movement's "You
 RING_M = (1.0, 1.8, 2.6, 3.4)  # the ring fallback's radii, 8 bearings each
 RING_BEARINGS = 8
 BESIDE_TURNS = (0.0, 30.0, -30.0, 60.0, -60.0, 90.0, -90.0, 120.0, -120.0, 150.0, -150.0, 180.0)  # free_round
-STEP_MPS = 5000 / 3600  # stepping to a slot or aside: walking pace
 STRAIGHT_M = 1.5  # a step this short goes straight; longer ones follow the planner's route
 MIN_STEP_S = 0.5
 MOVING = frozenset({"walk_to", "follow", "flee", "hunt", "attack"})  # actions that move the body every tick
@@ -669,7 +669,7 @@ def step_to(core: SimCore, citizen: Citizen, spot: Vec3, straight: bool = False)
         walked.append((spot, stride.walked[-1][1]))
         if len(walked) < 2:
             walked.insert(0, stride.walked[0])
-        core.strides[citizen.id] = Stride(stride.action, tuple(walked), stride.ahead)
+        core.strides[citizen.id] = Stride(stride.action, tuple(walked), stride.ahead, stride.gait)
     else:
         path = _path(core, citizen, spot, straight)
         if path is None:
@@ -681,22 +681,26 @@ def step_to(core: SimCore, citizen: Citizen, spot: Vec3, straight: bool = False)
 
 
 def _path(core: SimCore, citizen: Citizen, spot: Vec3, straight: bool = False) -> tuple[TimedPoint, ...] | None:
-    """The way from where the citizen stands to the spot, timed at walking pace: straight for a step or two (or
-    through a door), else the planner's route; None when there is none or it takes longer than the tick."""
+    """The way from where the citizen stands to the spot, timed by distance at their own walking speed: straight for
+    a step or two (or through a door), else the planner's route; None when there is none or it takes longer than the
+    tick."""
+    mps = ground_mps(core, citizen, "walk")
     distance = core.distance_m(citizen.position, spot)
     if distance <= STRAIGHT_M or straight:
-        return ((citizen.position, 0.0), (spot, max(MIN_STEP_S, distance / STEP_MPS)))
+        return ((citizen.position, 0.0), (spot, max(MIN_STEP_S, distance / mps)))
     route = core.planner.plan(citizen.position, spot, citizen.cell)
     if route is None:
         return None
-    walked = walk_along(route, 0, 0.0, math.inf, core.world.radius_m)
-    points = [(citizen.position, 0.0), *((unit, cost / STEP_MPS) for unit, cost in walked.corners)]
-    if points[-1][1] > SECONDS_PER_TICK:
+    corners = [unit for unit, _cost in walk_along(route, 0, 0.0, math.inf, core.world.radius_m).corners]
+    kept: list[TimedPoint] = [(citizen.position, 0.0)]
+    walked_m = 0.0
+    for unit in corners:
+        step_m = core.distance_m(kept[-1][0], unit)
+        if step_m >= 0.001:
+            walked_m += step_m
+            kept.append((unit, walked_m / mps))
+    if kept[-1][1] > SECONDS_PER_TICK:
         return None
-    kept = [points[0]]
-    for point in points[1:]:
-        if core.distance_m(point[0], kept[-1][0]) >= 0.001:
-            kept.append(point)
     return tuple(kept) if len(kept) >= 2 else ((citizen.position, 0.0), (spot, MIN_STEP_S))
 
 
