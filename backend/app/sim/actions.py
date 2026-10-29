@@ -77,7 +77,6 @@ GATHER_YIELD = (3, 6)
 DRINK_MINUTES = 3
 SLEEPY_ENERGY = 80.0  # above this nobody falls asleep by day
 APPROACH_M = 10.0  # a known person walking up to you interrupts once they come this close
-BESIDE_M = 3.0  # "walking up to you": to you, or to a spot this close to you
 ROUGH_DISTANCE_M: dict[str, float] = {
     "a few steps": 15.0,
     "a short walk": 100.0,
@@ -1017,9 +1016,6 @@ def interrupt(
         _interrupt(core, citizen, action, f"{stop}: night is falling.", None)
 
 
-WalkHeading = tuple[str | None, Vec3 | None]  # (person walked to, where the walk goes)
-
-
 def body_activity(action: ActionState | None) -> str | None:
     """What the body is doing for need rates: the action, or the work task (farming is hard work)."""
     if action is None:
@@ -1027,11 +1023,12 @@ def body_activity(action: ActionState | None) -> str | None:
     return str(action.item) if action.kind == "work" else action.kind
 
 
-def walk_heading(citizen: Citizen) -> WalkHeading | None:
+def walking_to(citizen: Citizen) -> str | None:
+    """The person a walk heads for (walk_to a person), if any."""
     action = citizen.action
     if action is None or action.kind != "walk_to":
         return None
-    return action.target_id, action.goal
+    return action.target_id
 
 
 def approaching(
@@ -1039,23 +1036,20 @@ def approaching(
     citizen: Citizen,
     seen: set[str],
     before: dict[str, Vec3],
-    headings: dict[str, WalkHeading | None],
+    walking_to: dict[str, str | None],
 ) -> list[str]:
-    """Known people in view who came within APPROACH_M this tick while walking to the citizen or to a spot beside
-    them (someone merely heading to the same well or market as you doesn't count)."""
+    """Known people in view who came within APPROACH_M this tick while walking to the citizen (someone merely heading
+    to the same well, market or field as you doesn't count, even when their walk ends where you stand)."""
     found: list[str] = []
     for person_id in sorted(seen & citizen.people):
-        heading = headings.get(person_id)
-        if heading is None or person_id not in before:
+        if walking_to.get(person_id) != citizen.id or person_id not in before:
             continue
         other = core.state.citizens[person_id]
         if core.distance_m(citizen.position, other.position) > APPROACH_M:
             continue
         if core.distance_m(before.get(citizen.id, citizen.position), before[person_id]) <= APPROACH_M:
             continue  # already close
-        target_id, goal = heading
-        if target_id == citizen.id or (goal is not None and core.distance_m(goal, citizen.position) <= BESIDE_M):
-            found.append(person_id)
+        found.append(person_id)
     return found
 
 
