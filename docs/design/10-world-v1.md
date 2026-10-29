@@ -387,8 +387,8 @@ apron/headband/straw hat; Bo/Vesa = existing band outfits.
 
 | Contact | Who | Rule (scripted) |
 |---|---|---|
-| Trade | band A ↔ stall | every 4th day band A's leader + one adult with ≥ 2 hides or ≥ 2 obsidian/flint leave in their early afternoon (town 07:00), sell at the stall, buy rice/cloth/a tool, leave town by 10:30 |
-| Obsidian | band B ↔ stall | Nim treks to the obsidian field every 6 days and sells at the stall on market day |
+| Trade | band A ↔ stall | every 4th day band A's leader + one adult with ≥ 2 hides or ≥ 4 strips of dried meat leave in their early afternoon (town 07:00), sell at the stall, buy rice and obsidian (a tool or cloth when they can), leave town by 10:30 |
+| Obsidian | band B ↔ stall | Nim treks to the obsidian field every 6 days for 4 shards and sells them at the stall on her way back (band B's local morning = the stall's hours) |
 | Raids | band B → field racks | when B's camp food < 1 day for the band 2 days running: Barro, Kaz, Nim go at town night (B's evening) to the racks; Goro's watch may catch them |
 | Poaching | Kaz | no game in B's ground after 2 searches → hunts in the Lord's woods with p = 1 − H |
 | Justice | outsiders caught | judged by the lord; band leaders come to pay fines for their own |
