@@ -265,3 +265,23 @@ def test_a_home_ring_hotspot_on_the_ring_s_edge_keeps_its_counts_in_the_ring(
     assert int(in_savanna.sum()) == 8
     assert (_metres(surface, flora, camp)[in_savanna] <= spec.hotspots.rings.home_m).all()
     assert int((roots & (_metres(surface, flora, camp) <= spec.hotspots.rings.home_m)).sum()) == 8
+
+
+def test_a_grove_s_den_keeps_natural_bushes_30_m_off_even_in_thick_bush(
+    view: WorldView, spec: WorldSpec, surface: Surface
+) -> None:
+    dens = [feature for feature in view.places.features if feature.id in ("elder_grove:den", "b_wood:den")]
+    biomes = {BIOME_NAMES[surface.biomes[den.cell]] for den in dens}
+    per_cell = {
+        biome: {**table, "berry_bush": 5.0} if biome in biomes else table
+        for biome, table in spec.flora.per_cell.items()
+    }
+    thick = generate_flora(
+        view, spec.model_copy(update={"flora": spec.flora.model_copy(update={"per_cell": per_cell})})
+    )
+
+    bushes = thick.units[_nodes(view, thick) == "berry_bush"]
+    for den in dens:
+        distance = angle_between(bushes, np.array(den.position)) * surface.radius_m
+        assert distance.min() >= 30, den.id
+        assert ((distance >= 30) & (distance < 40)).sum() >= 3, den.id  # the bush grows right up to it

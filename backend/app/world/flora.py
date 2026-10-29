@@ -17,7 +17,8 @@ cell u32 × n | east i8 × n | north i8 × n | kind u8 × n | scale u8 × n | ya
 
 Placement:
 1. natural flora by biome density (×`woodland` inside woodlot hotspots), on every land cell outside the town chart;
-2. each hotspot's exact counts inside its radius (natural flora of those node kinds stays out);
+2. each hotspot's exact counts inside its radius (natural flora of those node kinds stays out, and natural berry
+   bushes stay DEN_NEAREST_BUSH_M off a grove's den);
 3. each camp's home ring holds exactly `home_ring_flora` (natural flora of those kinds stays out; counts of a
    home-ring hotspot count toward it; no other hotspot's counted flora falls inside);
 4. nothing in water, on cliffs, on rivers, roads, paths, site props, camp grounds or the town chart.
@@ -53,6 +54,7 @@ PROP_CLEARANCE_M = 1.0  # beyond a site prop's footprint
 FEATURE_CLEARANCE_M = 3.0
 COUNTED_SPACING_M = 2.0  # counted items of one hotspot or ring keep this far apart
 DEN_FIRST_BUSH_M = 36.0  # from an edge den to its grove's first berry bush
+DEN_NEAREST_BUSH_M = 30.0  # no natural berry bush grows nearer a grove's den (10 §1.2: 30-50 m to the nearest)
 _ATTEMPTS = 40  # candidates drawn per counted item before giving up
 _REDRAWS = 6  # times a natural item off good ground is moved within its cell before it is dropped
 _EDGE_MARGIN_M = 0.5  # counted items stay this far inside their annulus (offsets are rounded to OFFSET_STEP_M)
@@ -263,7 +265,19 @@ class _FloraPlacer:
         capped = np.isin(nodes, list(self.hotspots_spec.home_ring_flora))
         for camp in self.camps:
             keep &= ~(capped & (self.surface.distances_m(camp, units) <= self.hotspots_spec.rings.home_m))
+        for den in self.grove_dens.values():  # its grove's bushes are the nearest
+            keep &= ~((nodes == "berry_bush") & (self.surface.distances_m(den, units) < DEN_NEAREST_BUSH_M))
         return keep
+
+    @cached_property
+    def grove_dens(self) -> dict[str, FloatArray]:
+        """The dens of hotspots that count berry bushes (a bear's grove), by hotspot id."""
+        groves = {hotspot.id for hotspot in self.hotspots if "berry_bush" in hotspot.flora}
+        return {
+            feature.hotspot: np.array(feature.position)
+            for feature in self.features
+            if feature.kind == "den" and feature.hotspot in groves
+        }
 
     # counted flora ---------------------------------------------------------------------------------------------
 
@@ -271,13 +285,12 @@ class _FloraPlacer:
         items = _Items.empty()
         home_m = self.hotspots_spec.rings.home_m
         in_rings: dict[str, dict[str, int]] = {camp: {} for camp in CAMPS}
-        dens = {feature.hotspot: np.array(feature.position) for feature in self.features if feature.kind == "den"}
         for hotspot in self.hotspots:
             centre = np.array(hotspot.centre)
             home_camp = hotspot.settlement if hotspot.ring == "home" and hotspot.settlement in CAMPS else None
             for node, count in hotspot.flora.items():
                 region = _Annulus(centre, 0.0, hotspot.radius_m)
-                den = dens.get(hotspot.id) if node == "berry_bush" else None
+                den = self.grove_dens.get(hotspot.id) if node == "berry_bush" else None
                 outside_rings = None if home_camp is not None else home_m
                 ring = None if home_camp is None else _Annulus(self.surface.site_unit(home_camp), 0.0, home_m)
                 items = items.extend(self._place_counted(region, node, count, outside_rings, items, den, within=ring))
