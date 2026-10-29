@@ -147,6 +147,25 @@ test('Space pauses and 1-4 pick the clock speeds', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test('Tab and Space on a focused button work the button, not the scene', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  const world = await openHeld(page, errors);
+  const speed = page.getByTestId('live-speed');
+  await expect(speed).toHaveText('paused');
+  await page.getByRole('button', { name: '×10', exact: true }).focus();
+  await page.keyboard.press('Space');
+  await expect(speed).toHaveText('×10');
+  const sixty = page.getByRole('button', { name: '×60', exact: true });
+  await sixty.focus();
+  await page.keyboard.press('Tab');
+  await expect(sixty).not.toBeFocused();
+  await expect(world).not.toHaveAttribute('data-selected');
+  await expect(speed).toHaveText('×10');
+  expect(errors).toEqual([]);
+});
+
 test('going to a site stops following (F18); footer and clock tell the camera place and its time (F19, F20)', async ({
   page,
 }) => {

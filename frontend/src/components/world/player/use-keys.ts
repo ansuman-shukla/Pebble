@@ -2,6 +2,13 @@ import { useEffect, useRef } from 'react';
 
 const TYPING_TARGETS = 'input, textarea, select, button, [contenteditable]';
 
+/** A key press the page's own keys leave alone: a browser shortcut, or aimed at a form control or button. */
+export const notForScene = (event: KeyboardEvent) =>
+  event.metaKey ||
+  event.ctrlKey ||
+  event.altKey ||
+  (event.target instanceof Element && !!event.target.closest(TYPING_TARGETS));
+
 /**
  * Keys held down (KeyboardEvent.code), read every frame. Key presses aimed at form controls are ignored;
  * releases always count so a key can never stick.
@@ -17,12 +24,7 @@ export function useKeys(onPress?: (code: string) => void) {
   useEffect(() => {
     const keys = held.current;
     const down = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (
-        event.target instanceof Element &&
-        event.target.closest(TYPING_TARGETS)
-      )
-        return;
+      if (notForScene(event)) return;
       keys.add(event.code);
       if (!event.repeat) press.current?.(event.code);
     };

@@ -67,7 +67,7 @@ import {
   CAMERA_MODES,
   type CameraMode,
 } from '@/components/world/player/camera-mode';
-import { useKeys } from '@/components/world/player/use-keys';
+import { notForScene, useKeys } from '@/components/world/player/use-keys';
 import {
   type RenderStats,
   RenderStatsProbe,
@@ -746,11 +746,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   useEffect(() => {
     const claim = (event: KeyboardEvent) => {
       if (event.code !== 'Tab' && event.code !== 'Space') return;
-      if (
-        event.target instanceof Element &&
-        event.target.closest('input, textarea, select, [contenteditable]')
-      )
-        return;
+      if (notForScene(event)) return;
       event.preventDefault();
       if (event.code !== 'Tab' || citizens.length === 0) return;
       const step = event.shiftKey ? -1 : 1;
