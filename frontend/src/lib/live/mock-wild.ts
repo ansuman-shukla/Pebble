@@ -1,7 +1,8 @@
 /*
  * DEV/TEST ONLY: the animals and fires of the mock live feed (`?mockLive=1`). A herd of deer grazes and wanders
  * on the town's approach and a fox trots past; by band A's camp deer graze and two wolves prowl at night (sleeping
- * by day). Both camp fires burn; the main gate's fire baskets burn from dusk to dawn. Shapes are the feed's.
+ * by day), and scripted scenes play out every behaviour the globe draws (`mock-animal-scenes.ts`). Both camp fires
+ * burn; the main gate's fire baskets burn from dusk to dawn. Shapes are the feed's.
  */
 import { Vector3 } from 'three';
 
@@ -11,6 +12,7 @@ import {
   type LiveFire,
   TICK_SECONDS,
 } from './live-contract';
+import { sceneAnimals } from './mock-animal-scenes';
 import type { Site, WorldView } from '@/lib/client/types.gen';
 import {
   anchorMapping,
@@ -102,6 +104,8 @@ export class MockWild {
     { mapping: SiteMapping; height: number }
   >;
   private states: AnimalState[];
+  /** Ticks stepped: the clock of the scripted scenes (`mock-animal-scenes.ts`). */
+  private ticks = 0;
 
   constructor(world: WorldView) {
     this.mappings = new Map(
@@ -121,6 +125,7 @@ export class MockWild {
   }
 
   step(night: boolean) {
+    this.ticks += 1;
     for (const state of this.states) {
       const { animal } = state;
       state.from = null;
@@ -148,7 +153,10 @@ export class MockWild {
   }
 
   animals(night: boolean): LiveAnimal[] {
-    return this.states.map(({ animal, at, heading, left, from }) => {
+    const scripted = sceneAnimals(this.ticks, (spot) =>
+      this.position('band_a_camp', spot),
+    );
+    const wandering = this.states.map(({ animal, at, heading, left, from }) => {
       const asleep = night !== Boolean(animal.nocturnal);
       const activity: AnimalActivity = asleep
         ? 'sleeping'
@@ -176,8 +184,9 @@ export class MockWild {
               ? 'grazing'
               : 'wandering',
         target: null,
-      };
+      } satisfies LiveAnimal;
     });
+    return [...wandering, ...scripted];
   }
 
   private route(animal: MockAnimal, from: Spot, at: Spot) {

@@ -1,33 +1,53 @@
+import { useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import {
   Suspense,
-  useCallback,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
 import { type Group, Matrix4, Vector3 } from 'three';
+import { clone } from 'three/examples/jsm/utils/SkeletonUtils.js';
 
-import { type AnimalGait, AnimalModel } from '@/components/world/animal-model';
+import { AnimalModel } from '@/components/world/animal-model';
 import { MAX_FRAME, smoothing } from '@/components/world/player/motion';
 import {
   type AnimalActivity,
-  type LiveAnimal,
-  tickMs,
-} from '@/lib/live/live-contract';
+  type AnimalDrive,
+  type AnimalTrack,
+  clipOf,
+  followAnimal,
+  layerOf,
+  moveAnimal,
+  newAnimalTrack,
+  newDrive,
+  shownActivity,
+  slopePitch,
+  wantedYaw,
+} from '@/lib/live/animal-motion';
+import type { LiveAnimal } from '@/lib/live/live-contract';
+import { groundSpeed } from '@/lib/live/walk-path';
+import { ANIMALS, assetSize, assetUrl, PROPS } from '@/lib/world/assets';
 import {
   type GlobeTerrain,
   tangentFrame,
   WATER_BIOMES,
 } from '@/lib/world/globe';
+import { clockRate, visualRate } from '@/lib/world/visual-rate';
 
 /*
- * The animals on the planet, where the live feed says they are. Like the citizens, each glides from where it was
- * drawn to its new position over one tick at the feed's speed and turns smoothly to its heading. Land animals
- * stand on the rendered ground; fish and sharks swim just under the water's surface the feed gives (sea level or
- * a lake's), ducks float on water and walk on land. Models load only within NEAR metres of the camera.
+ * The animals on the planet, where the live feed says they are. Like the citizens, each walks the timed path its
+ * tick streamed (`route`, from where it stood when the tick began), one tick behind the sim, with game seconds
+ * passing at the clock's speed, facing the way it goes (its heading standing), and keeps the moving activity it was
+ * shown until it gets where the tick says: a caught deer falls where its flight ends, a wolf pounces where its run
+ * ends (`animal-motion.ts`). Its gait clip is paced to the ground it covers and its activity lays a procedural layer
+ * over the clip (grazing heads down, alert heads up, a stalk low, a pounce's leap, a bite, a bear rearing, feeding,
+ * drinking, asleep on folded legs, dead on its side); remains are drawn as scattered bones. Land animals stand on the
+ * rendered ground, pitched to its slope; fish and sharks swim just under the water's surface the feed gives (sea
+ * level or a lake's), ducks float on water and walk on land. Models load only within NEAR metres of the camera.
  */
 
 /** Models within this distance of the camera (they hide past HIDE). */
@@ -36,51 +56,54 @@ const HIDE = 420;
 /** Far animals skip placing themselves on the ground every frame. */
 const SKIP_PLACING = HIDE + 150;
 const TURN_RATE = 6;
-const MIN_GLIDE = 16;
 /** How far under the surface swimmers are drawn. */
 const DEPTH: Partial<Record<LiveAnimal['kind'], number>> = {
   fish: 0.3,
   shark: 0.9,
 };
-
-const GAITS: Record<AnimalActivity, AnimalGait> = {
-  idle: 'idle',
-  grazing: 'idle',
-  sleeping: 'idle',
-  dead: 'idle',
-  walking: 'move',
-  running: 'run',
-  hunting: 'run',
-};
+/** The bone scatter is this long (metres) at scale 1; remains are drawn about their animal's length. */
+const BONES = PROPS.bone_scatter;
+const BONES_LENGTH = assetSize(BONES).z;
 
 const basis = new Matrix4();
 const side = new Vector3();
+const probe = new Vector3();
 
 /** What the page and the tests can read of a drawn animal (mutated every frame). */
 interface AnimalView {
   id: string;
   kind: LiveAnimal['kind'];
+  /** What it is shown doing (the move's activity while it walks to where the feed says it is). */
   activity: AnimalActivity;
-  /** World position of its feet (or its body, for swimmers). */
+  /** World position of its feet (or its body, for swimmers) and the way it faces (unit, on the ground's plane). */
   position: Vector3;
+  facing: Vector3;
   /** Within reach of the camera: shown and animated. */
   near: boolean;
-  /** The clip playing ('' until the model is loaded or while it is far). */
-  clip: string;
+  /** What its model was told and reports: clip ('' until loaded or while far), layer, pace, pose. */
+  drive: AnimalDrive;
+  /** Drawn as scattered bones. */
+  remains: boolean;
+  /** Nose-up pitch to the slope under it (radians). */
+  pitch: number;
 }
 
 export type AnimalViews = Map<string, AnimalView>;
 
-interface Track {
-  from: Vector3;
-  to: Vector3;
-  start: number;
-  duration: number;
-  yaw: number;
-}
-
 const wrapAngle = (angle: number) =>
   Math.atan2(Math.sin(angle), Math.cos(angle));
+
+/** Swimmers and floating ducks keep level with the water; land animals follow the ground. */
+function onWater(
+  animal: LiveAnimal,
+  terrain: GlobeTerrain,
+  direction: Vector3,
+) {
+  return (
+    DEPTH[animal.kind] !== undefined ||
+    (animal.kind === 'duck' && WATER_BIOMES.has(terrain.biomeAt(direction)))
+  );
+}
 
 /** How high the animal is drawn above sea level at the direction. */
 function heightOf(
@@ -88,115 +111,157 @@ function heightOf(
   terrain: GlobeTerrain,
   direction: Vector3,
 ) {
-  const depth = DEPTH[animal.kind];
-  if (depth !== undefined) return animal.position.height_m - depth;
-  if (animal.kind === 'duck' && WATER_BIOMES.has(terrain.biomeAt(direction)))
-    return animal.position.height_m;
+  const depth = DEPTH[animal.kind] ?? 0;
+  if (onWater(animal, terrain, direction))
+    return animal.position.height_m - depth;
   return terrain.heightAt(direction);
+}
+
+function Bones({ length }: { length: number }) {
+  const { scene } = useGLTF(assetUrl(BONES));
+  const model = useMemo(() => clone(scene), [scene]);
+  const scale = Math.min(Math.max(length / BONES_LENGTH, 0.3), 1.6);
+  return <primitive object={model} scale={scale} />;
 }
 
 function Animal({
   animal,
   terrain,
-  interval,
+  rate,
+  routeless,
+  replay,
   views,
 }: {
   animal: LiveAnimal;
   terrain: GlobeTerrain;
-  interval: number;
+  /** The clock: game seconds per real second (0 paused). */
+  rate: number;
+  /** The feed streams no animal routes (from before them): moves are walked straight over the tick. */
+  routeless: boolean;
+  replay: boolean;
   views: AnimalViews;
 }) {
   const radius = terrain.globe.radius;
+  const spec = ANIMALS[animal.kind];
+  const length = assetSize(spec.asset).z * (spec.scale ?? 1);
   const group = useRef<Group>(null);
+  const tilt = useRef<Group>(null);
+  const living = useRef<Group>(null);
+  const bones = useRef<Group>(null);
   const [mounted, setMounted] = useState(false);
-  const trackRef = useRef<Track>({
-    from: new Vector3(...animal.position.unit),
-    to: new Vector3(...animal.position.unit),
-    start: 0,
-    duration: 1,
-    yaw: (animal.heading_deg * Math.PI) / 180,
-  });
+  const [remains, setRemains] = useState(animal.activity === 'remains');
+  const [firstTrack] = useState(() => newAnimalTrack(animal, radius, replay));
+  const trackRef = useRef<AnimalTrack>(firstTrack);
+  const yaw = useRef((animal.heading_deg * Math.PI) / 180);
+  const driveRef = useRef<AnimalDrive>(newDrive());
   const viewRef = useRef<AnimalView>({
     id: animal.id,
     kind: animal.kind,
-    activity: animal.activity,
+    activity: shownActivity(firstTrack),
     position: new Vector3(),
+    facing: new Vector3(),
     near: false,
-    clip: '',
+    drive: newDrive(),
+    remains: false,
+    pitch: 0,
   });
-  const direction = useRef(new Vector3());
+  const scratch = useMemo(() => ({ direction: new Vector3() }), []);
 
-  const glide = useEffectEvent((next: LiveAnimal) => {
-    const track = trackRef.current;
-    const now = performance.now();
-    const t = Math.min((now - track.start) / track.duration, 1);
-    track.from.lerp(track.to, t).normalize();
-    track.to.set(...next.position.unit);
-    track.start = now;
-    track.duration = interval;
-    viewRef.current.activity = next.activity;
-  });
-  useLayoutEffect(() => glide(animal), [animal]);
+  // every new frame: the move it streams, joined where the animal is drawn
+  const onFrame = useEffectEvent((next: LiveAnimal) =>
+    followAnimal(trackRef.current, next, radius, rate, routeless),
+  );
+  useLayoutEffect(() => onFrame(animal), [animal]);
 
   useEffect(() => {
+    viewRef.current.drive = driveRef.current; // what its model is told and reports
     views.set(animal.id, viewRef.current);
     return () => {
       views.delete(animal.id);
     };
   }, [animal.id, views]);
 
-  const onClip = useCallback((clip: string) => {
-    viewRef.current.clip = viewRef.current.near ? clip : '';
-  }, []);
-
   useFrame(({ camera }, frameDelta) => {
     const body = group.current;
     if (!body) return;
+    const delta = Math.min(frameDelta, MAX_FRAME);
     const track = trackRef.current;
     const view = viewRef.current;
-    const t = Math.min((performance.now() - track.start) / track.duration, 1);
-    const at = direction.current.lerpVectors(track.from, track.to, t);
-    at.normalize();
+    const at = moveAnimal(track, delta, rate, scratch.direction);
+    const shown = shownActivity(track);
+    view.activity = shown;
     const rough = view.position.copy(at).multiplyScalar(radius);
     if (camera.position.distanceTo(rough) > SKIP_PLACING) {
       body.visible = view.near = false;
-      view.clip = '';
       return;
     }
     const height = heightOf(animal, terrain, at);
     view.position.copy(at).multiplyScalar(radius + height);
-    const wanted = (animal.heading_deg * Math.PI) / 180;
-    track.yaw +=
-      wrapAngle(wanted - track.yaw) *
-      smoothing(TURN_RATE, Math.min(frameDelta, MAX_FRAME));
     const { east, south, up } = tangentFrame(at);
+    const wanted = wantedYaw(
+      track,
+      east,
+      south,
+      yaw.current,
+      animal.heading_deg,
+    );
+    // turning is procedural motion: sped up with the clock like the clips (frozen paused)
+    yaw.current +=
+      wrapAngle(wanted - yaw.current) *
+      smoothing(TURN_RATE, delta * visualRate(rate));
     const facing = east
-      .multiplyScalar(Math.sin(track.yaw))
-      .addScaledVector(south, Math.cos(track.yaw));
+      .multiplyScalar(Math.sin(yaw.current))
+      .addScaledVector(south, Math.cos(yaw.current));
+    view.facing.copy(facing);
     body.position.copy(view.position);
     basis.makeBasis(side.crossVectors(up, facing), up, facing);
     body.quaternion.setFromRotationMatrix(basis);
     const wasNear = view.near;
     view.near =
       camera.position.distanceTo(view.position) < (wasNear ? HIDE : NEAR);
-    body.visible = view.near;
-    if (!view.near) view.clip = '';
-    if (view.near && !mounted) setMounted(true);
+    body.visible = view.near && track.opacity >= 0.5;
+    if (!view.near) return;
+    if (!mounted) setMounted(true);
+    // pitched to the ground under its front and hind feet
+    const ahead = (metres: number) =>
+      terrain.heightAt(
+        probe
+          .copy(at)
+          .addScaledVector(facing, metres / radius)
+          .normalize(),
+      );
+    view.pitch = onWater(animal, terrain, at)
+      ? 0
+      : slopePitch(ahead(length / 2), ahead(-length / 2), length);
+    if (tilt.current) tilt.current.rotation.x = -view.pitch;
+    const speed = groundSpeed(track.path);
+    const { drive } = view;
+    drive.speed = speed;
+    drive.clip = clipOf(animal.kind, shown, track.gait, speed);
+    drive.layer = layerOf(animal.kind, shown, track.gait);
+    drive.rate = visualRate(rate);
+    view.remains = drive.layer === 'remains';
+    if (view.remains !== remains) setRemains(view.remains);
+    if (living.current) living.current.visible = !view.remains;
+    if (bones.current) bones.current.visible = view.remains;
   });
 
-  const dead = animal.activity === 'dead';
   return (
     <group ref={group} visible={false}>
       {mounted && (
-        <group rotation-z={dead ? Math.PI / 2 : 0} position-y={dead ? 0.1 : 0}>
-          <Suspense fallback={null}>
-            <AnimalModel
-              kind={animal.kind}
-              gait={GAITS[animal.activity]}
-              still={dead}
-              onClip={onClip}
-            />
-          </Suspense>
+        <group ref={tilt}>
+          <group ref={living}>
+            <Suspense fallback={null}>
+              <AnimalModel kind={animal.kind} driveRef={driveRef} />
+            </Suspense>
+          </group>
+          {remains && (
+            <group ref={bones}>
+              <Suspense fallback={null}>
+                <Bones length={length} />
+              </Suspense>
+            </group>
+          )}
         </group>
       )}
     </group>
@@ -207,17 +272,25 @@ function Animal({
 export function GlobeAnimals({
   animals,
   speed,
+  paused,
+  replay = false,
   terrain,
   views,
 }: {
   animals: LiveAnimal[];
-  /** The feed's speed (ticks per real second): how long glides between frames take. */
+  /** The feed's clock: game seconds per real second, and whether it is paused. */
   speed: number;
+  paused: boolean;
+  /** The animals of a replayed moment (`?tick=`), which no tick follows. */
+  replay?: boolean;
   terrain: GlobeTerrain;
   /** Filled with what is drawn of each animal. */
   views: AnimalViews;
 }) {
-  const interval = speed > 0 ? Math.max(tickMs(speed), MIN_GLIDE) : tickMs(1);
+  // a feed that has streamed an animal's route streams them all (a later routeless move is a jump)
+  const [routed, setRouted] = useState(false);
+  if (!routed && animals.some((animal) => animal.route.length > 1))
+    setRouted(true);
   return (
     <>
       {animals.map((animal) => (
@@ -225,13 +298,17 @@ export function GlobeAnimals({
           key={animal.id}
           animal={animal}
           terrain={terrain}
-          interval={interval}
+          rate={clockRate(speed, paused)}
+          routeless={!routed}
+          replay={replay}
           views={views}
         />
       ))}
     </>
   );
 }
+
+const fixed = (value: number, digits = 2) => value.toFixed(digits);
 
 /** Hidden DOM hooks for tests: what is drawn of the animals, refreshed every 0.1 s. */
 export function AnimalHooks({ views }: { views: AnimalViews }) {
@@ -247,10 +324,20 @@ export function AnimalHooks({ views }: { views: AnimalViews }) {
         .sort()
         .join(',');
       element.dataset.nearClips = near
-        .map((v) => `${v.id}:${v.activity}:${v.clip}`)
+        .map((v) => `${v.id}:${v.activity}:${v.drive.clipName}`)
+        .join(' ');
+      // layer, clip pace, drawn speed (m/s), roll and lift of the body, slope pitch; remains drawn as bones
+      element.dataset.nearMotion = near
+        .map(
+          ({ id, drive, pitch, remains }) =>
+            `${id}:${remains ? 'bones' : drive.layer}:${fixed(drive.pace)}:${fixed(drive.speed)}:${fixed(drive.pose.roll)}:${fixed(drive.pose.lift)}:${fixed(pitch)}`,
+        )
         .join(' ');
       element.dataset.nearPositions = near
-        .map((v) => `${v.id}:${v.position.toArray().map((n) => n.toFixed(3))}`)
+        .map((v) => `${v.id}:${v.position.toArray().map((n) => fixed(n, 3))}`)
+        .join(' ');
+      element.dataset.nearFacing = near
+        .map((v) => `${v.id}:${v.facing.toArray().map((n) => fixed(n, 3))}`)
         .join(' ');
     }, 100);
     return () => window.clearInterval(timer);

@@ -18,6 +18,7 @@ import {
   speedWords,
 } from '../../src/lib/live/live-state';
 import { newTrack } from '../../src/lib/live/drawn-track';
+import { SCENE_IDS } from '../../src/lib/live/mock-animal-scenes';
 import { MockLiveServer, mockMotion } from '../../src/lib/live/mock-live';
 import { activityWords } from '../../src/lib/live/npc-activity';
 import { advance, citizenPath, pointAt } from '../../src/lib/live/walk-path';
@@ -199,9 +200,11 @@ test('frames carry the animals and the fires', () => {
 test('the mock feed has grazing deer, prowling wolves and fires that burn at night', () => {
   const server = new MockLiveServer(createMockWorld());
   const first = server.entities();
-  expect(new Set(first.animals.map((a) => a.kind))).toEqual(
+  const wandering = first.animals.filter((a) => !SCENE_IDS.has(a.id));
+  expect(new Set(wandering.map((a) => a.kind))).toEqual(
     new Set(['deer', 'fox', 'wolf']),
   );
+  expect(first.animals.length - wandering.length).toBe(SCENE_IDS.size);
   const lit = (fires: LiveFire[]) =>
     fires.filter((fire) => fire.lit).map((fire) => fire.id);
   expect(lit(first.fires)).toEqual([
@@ -209,7 +212,7 @@ test('the mock feed has grazing deer, prowling wolves and fires that burn at nig
     'band_b_camp:fire-pit',
   ]); // 08:00: the gate baskets are out
   expect(
-    first.animals.filter((a) => a.kind === 'wolf').map((a) => a.activity),
+    wandering.filter((a) => a.kind === 'wolf').map((a) => a.activity),
   ).toEqual(['sleeping', 'sleeping']);
 });
 
@@ -369,14 +372,20 @@ test('the mock feed carries the spectator fields: motion, why, needs, purse, ran
   server.skip(20);
   const walking = server
     .entities()
-    .animals.filter((animal) => animal.route.length > 0);
+    .animals.filter(
+      (animal) => animal.route.length > 0 && !SCENE_IDS.has(animal.id),
+    );
   expect(walking.length).toBeGreaterThan(0);
   for (const animal of walking) {
     expect(animal.route[0].t_s).toBe(0);
     expect(animal.speed_mps).toBeGreaterThan(0);
     expect(['grazing', 'wandering', 'prowling']).toContain(animal.goal); // what it does once there
   }
-  expect(animals.every((animal) => animal.gait === 'walk')).toBe(true);
+  expect(
+    animals
+      .filter((animal) => !SCENE_IDS.has(animal.id))
+      .every((animal) => animal.gait === 'walk'),
+  ).toBe(true);
 });
 
 test('in the mock feed, the dead and sleepers lie like the backend says, whatever their step is about', () => {

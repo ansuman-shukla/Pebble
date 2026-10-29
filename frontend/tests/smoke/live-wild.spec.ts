@@ -7,6 +7,7 @@ import {
   decodeWorld,
   type GlobeTerrain,
 } from '../../src/lib/world/globe';
+import { SCENE_IDS } from '../../src/lib/live/mock-animal-scenes';
 import { DRAW_CALL_BUDGET, openGlobe, WORLD_URL } from './globe-helpers';
 
 /*
@@ -51,9 +52,10 @@ test('animals near the camera are drawn on the ground playing their clips', asyn
   const errors: string[] = [];
   const world = await openGlobe(page, errors, '?mockLive=1');
   await expect(world).toHaveAttribute('data-live-status', 'live');
+  // ten wandering animals and the scripted scenes by band A's camp (`mock-animal-scenes.ts`)
   await expect(page.getByTestId('animals')).toHaveAttribute(
     'data-animals',
-    '10',
+    String(10 + SCENE_IDS.size),
   );
   // the herd and the fox on the town's approach are within reach of the gate; band A's camp is kilometres away
   await expect
@@ -68,13 +70,14 @@ test('animals near the camera are drawn on the ground playing their clips', asyn
     .toBe(5);
   for (const animal of await nearAnimals(page)) {
     expect(animal.id).not.toMatch(/^wolf/);
-    expect(animal.clip).toBe(
+    // a gait clip while the body moves, Idle once it stands (a walker that got there plays no walk on the spot)
+    expect(
       animal.activity === 'walking'
-        ? 'Walk'
+        ? ['Walk', 'Idle']
         : animal.activity === 'running'
-          ? 'Run'
-          : 'Idle',
-    );
+          ? ['Run', 'Idle']
+          : ['Idle'],
+    ).toContain(animal.clip);
   }
   const positions = (await data(page, 'animals', 'near-positions'))
     .split(' ')

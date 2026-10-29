@@ -22,7 +22,31 @@ AgeGroup = Literal["child", "teen", "young_adult", "middle_aged", "elder"]
 KnowledgeLevel = Literal["visited", "rough"]
 Region = Literal["town", "band_a", "band_b"]
 JsonScalar = str | int | float | bool | None
-AnimalActivity = Literal["idle", "grazing", "walking", "running", "hunting", "sleeping", "dead"]
+# what an animal is drawn doing (10-world-v1 §4.6 "activities drawn", D144); "running" and "hunting" are v0's words
+# for a flight and a predator's approach, kept until the sim says fleeing/chasing and stalking/chasing instead
+AnimalActivity = Literal[
+    "idle",
+    "grazing",
+    "alert",
+    "walking",
+    "trotting",
+    "running",
+    "fleeing",
+    "frozen",
+    "prowling",
+    "stalking",
+    "hunting",
+    "chasing",
+    "pouncing",
+    "attacking",
+    "feeding",
+    "drinking",
+    "floating",
+    "swimming",
+    "sleeping",
+    "dead",
+    "remains",
+]
 FireKind = Literal["pit", "basket", "campfire"]
 
 
