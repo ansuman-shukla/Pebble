@@ -18,7 +18,7 @@ async function onPage(page: Page, point: Vector3) {
   const [x, y, z, qx, qy, qz, qw] = (await world.getAttribute('data-camera'))!
     .split(',')
     .map(Number);
-  const box = (await page.locator('canvas').boundingBox())!;
+  const box = (await page.locator('canvas[data-engine]').boundingBox())!;
   const camera = new PerspectiveCamera(50, box.width / box.height, 0.1, 3000);
   camera.position.set(x, y, z);
   camera.quaternion.set(qx, qy, qz, qw);
@@ -50,9 +50,9 @@ test('a click on a body selects them and opens the inspector; a click on the gro
   await expect(inspector(page)).toHaveAttribute('data-inspect', 'tak');
   await expect(inspector(page).getByTestId('inspector-now')).not.toBeEmpty();
 
-  // the ground far below the body: nobody there
-  const below = await onPage(page, tak.clone().multiplyScalar(0.99995));
-  await page.mouse.click(below.x, Math.min(below.y + 120, 860));
+  // the ground in the lower middle of the scene, above the clock and between the panels: nobody there
+  const box = (await page.locator('canvas[data-engine]').boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.85);
   await expect(world).not.toHaveAttribute('data-selected');
   await expect(inspector(page)).toHaveCount(0);
 
@@ -241,7 +241,7 @@ test('the hint line names the spectator keys', async ({ page }) => {
   const errors: string[] = [];
   await openHeld(page, errors);
   await expect(page.getByTestId('spectator-keys')).toHaveText(
-    'Tab select, F follow, G go to, I inspector, L events, Space pause, 1-4 speed, Esc let go',
+    'Tab select, F follow, G go to, I inspector, L events, M minimap, Space pause, 1-4 speed, Esc let go',
   );
   expect(errors).toEqual([]);
 });

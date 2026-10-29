@@ -49,6 +49,7 @@ import type {
   GlobePlayerState,
 } from '@/components/world/globe/globe-player';
 import { GlobeWalker } from '@/components/world/globe/globe-walker';
+import { Minimap, type MinimapTown } from '@/components/world/globe/minimap';
 import { EventFeed } from '@/components/world/globe/event-feed';
 import {
   CitizenPicker,
@@ -684,6 +685,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   const selected = live.citizens.find((citizen) => citizen.id === selectedId);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [feedOpen, setFeedOpen] = useState(true);
+  const [minimapOpen, setMinimapOpen] = useState(true);
   const pinned = useMemo(
     () => [...new Set([selectedId, followId])].filter((id) => id !== null),
     [selectedId, followId],
@@ -762,7 +764,8 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
   );
 
   // the spectator keys (10-world-v1 §5.4): Tab cycles the selection, F follows it, G goes to it, Space pauses,
-  // 1-4 pick the clock's speeds, I and L show or hide the inspector and the event feed, Esc lets go of everything
+  // 1-4 pick the clock's speeds, I, L and M show or hide the inspector, the event feed and the minimap, Esc lets go
+  // of everything
   const clockLive = feed.status !== 'off';
   const { paused: livePaused, citizens } = live;
   const { setClock } = feed;
@@ -779,6 +782,7 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
         if (code === 'KeyG' && selectedId) goToCitizen(selectedId);
         if (code === 'KeyI') setInspectorOpen((open) => !open);
         if (code === 'KeyL') setFeedOpen((open) => !open);
+        if (code === 'KeyM') setMinimapOpen((open) => !open);
         if (clockLive && code === 'Space') setClock({ paused: !livePaused });
         const speed = CLOCK_SPEEDS[Number(code.replace('Digit', '')) - 1];
         if (clockLive && code.startsWith('Digit') && speed)
@@ -833,6 +837,15 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
       if (target) goNear(target);
     },
     [animalViews, npcViews, goNear],
+  );
+
+  const minimapTown = useMemo(
+    (): MinimapTown => ({
+      siteId: 'town',
+      placements: town.placements,
+      water: townWater,
+    }),
+    [town, townWater],
   );
 
   // the footer and the clock describe where the camera looks, not where the hidden avatar stands (F19, F20)
@@ -1070,49 +1083,67 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
         {(clockLive || replay) && (
           <span className="basis-full" data-testid="spectator-keys">
             Tab select, F follow, G go to, I inspector
-            {clockLive && ', L events, Space pause, 1-4 speed'}, Esc let go
+            {clockLive && ', L events'}, M minimap
+            {clockLive && ', Space pause, 1-4 speed'}, Esc let go
           </span>
         )}
       </div>
-      <div className="absolute right-3 bottom-3 flex flex-col items-end gap-2">
-        {replay && <ReplayBadge state={replay} />}
-        {feed.status !== 'off' && (
-          <LiveClock
-            state={live}
-            status={feed.status}
-            onChange={feed.setClock}
-            site={siteClock}
+      {/* the right column: People on top, shrinking to what the minimap, clock and follow bar below leave */}
+      <div className="pointer-events-none absolute top-(--toolbar-bottom) right-3 bottom-3 flex flex-col items-end gap-2 *:pointer-events-auto">
+        {peopleOpen && (
+          <PeoplePanel
+            citizens={live.citizens}
+            followId={followId}
+            selectedId={selectedId}
+            onSelect={(id) => {
+              setSelectedId(id);
+              setInspectorOpen(true);
+            }}
+            onFollow={follow}
+            onGoTo={goToCitizen}
           />
         )}
-        {followed && (
-          <div className="flex items-center gap-2 rounded-lg bg-white/80 p-1 pl-2 text-sm shadow">
-            following {followed.name}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={(event) => {
-                setFollowId(null);
-                event.currentTarget.blur();
-              }}
-            >
-              stop following
-            </Button>
-          </div>
-        )}
+        <div className="pointer-events-none! mt-auto flex shrink-0 flex-col items-end gap-2 *:pointer-events-auto">
+          {minimapOpen && ready && (
+            <Minimap
+              sites={goTo}
+              terrain={planet.terrain}
+              biomeNames={view.biome_names}
+              town={minimapTown}
+              citizens={live.citizens}
+              animals={live.animals}
+              fires={live.fires}
+              views={npcViews}
+              focusRef={focusRef}
+              onGo={goNear}
+            />
+          )}
+          {replay && <ReplayBadge state={replay} />}
+          {feed.status !== 'off' && (
+            <LiveClock
+              state={live}
+              status={feed.status}
+              onChange={feed.setClock}
+              site={siteClock}
+            />
+          )}
+          {followed && (
+            <div className="flex items-center gap-2 rounded-lg bg-white/80 p-1 pl-2 text-sm shadow">
+              following {followed.name}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={(event) => {
+                  setFollowId(null);
+                  event.currentTarget.blur();
+                }}
+              >
+                stop following
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
-      {peopleOpen && (
-        <PeoplePanel
-          citizens={live.citizens}
-          followId={followId}
-          selectedId={selectedId}
-          onSelect={(id) => {
-            setSelectedId(id);
-            setInspectorOpen(true);
-          }}
-          onFollow={follow}
-          onGoTo={goToCitizen}
-        />
-      )}
       {feed.status !== 'off' && (
         <EventFeed
           listen={feed.listen}

@@ -128,7 +128,7 @@ export function PeoplePanel({
     <div
       role="region"
       aria-label="People"
-      className="absolute top-(--toolbar-bottom) right-3 max-h-[calc(100%-var(--toolbar-bottom)-5rem)] w-96 overflow-y-auto rounded-lg bg-white/90 p-1 text-xs shadow-lg"
+      className="w-96 overflow-y-auto rounded-lg bg-white/90 p-1 text-xs shadow-lg"
     >
       <ul>
         {citizens.map((citizen) => (

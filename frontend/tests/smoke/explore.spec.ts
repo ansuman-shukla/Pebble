@@ -62,7 +62,7 @@ async function cameraOf(element: Locator, page: Page) {
     .split(',')
     .map(Number);
   const size = page.viewportSize()!;
-  const box = (await page.locator('canvas').boundingBox())!;
+  const box = (await page.locator('canvas[data-engine]').boundingBox())!;
   const camera = new PerspectiveCamera(FOV, box.width / box.height, 0.1, 1e5);
   camera.position.set(values[0], values[1], values[2]);
   camera.quaternion.copy(
@@ -238,10 +238,10 @@ test('dragging the pegman onto the planet drops the player there', async ({
   const errors: string[] = [];
   const element = await orbit(page, errors);
   const [target] = await visibleCells(element, page, false, 1);
-  const box = (await page.locator('canvas').boundingBox())!;
+  const box = (await page.locator('canvas[data-engine]').boundingBox())!;
   await page
     .getByRole('button', { name: 'drop' })
-    .dragTo(page.locator('canvas'), {
+    .dragTo(page.locator('canvas[data-engine]'), {
       targetPosition: {
         x: target.screen.x - box.x,
         y: target.screen.y - box.y,
