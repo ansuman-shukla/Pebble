@@ -21,7 +21,7 @@ const SIZES: Record<ChipView, { width: number; height: number }> = {
   cluster: { width: 150, height: 20 },
   'cluster-icon': { width: 40, height: 20 },
 };
-const sizer: ChipSizer = (_id, view) => SIZES[view];
+const sizer: ChipSizer = ({ view }) => SIZES[view];
 
 const anchor = (id: string, change: Partial<ChipAnchor> = {}): ChipAnchor => ({
   id,
@@ -241,9 +241,9 @@ test('randomized 40-label layouts: no overlaps, at most 14 chips, everyone in ra
         pinned: next() < 0.05,
       }),
     );
-    const sized: ChipSizer = (id, view) =>
+    const sized: ChipSizer = ({ leader, view }) =>
       view === 'full'
-        ? { width: 50 + (Number(id.slice(1)) % 7) * 15, height: 22 }
+        ? { width: 50 + (Number(leader.slice(1)) % 7) * 15, height: 22 }
         : SIZES[view];
     const chips = layoutChips(anchors, sized);
     const label = `seed ${seed}`;
@@ -329,4 +329,26 @@ test('speech bubbles: the three nearest speakers in range, each above the chips 
     [],
   );
   expect(pinnedFar).toEqual([{ id: 'say-lord', x: 300, bottom: 300 }]);
+});
+
+test('the sizer is asked for each cluster as it grows, with its members', () => {
+  const asked: string[] = [];
+  layoutChips(
+    [
+      anchor('a', { x: 100, distance: 5 }),
+      anchor('b', { x: 102, distance: 6 }),
+      anchor('c', { x: 104, distance: 7 }),
+    ],
+    (chip) => {
+      asked.push(`${chip.view} ${chip.members.join('+')}`);
+      return SIZES[chip.view];
+    },
+  );
+  expect(asked).toEqual([
+    'full a',
+    'full b',
+    'cluster a+b',
+    'full c',
+    'cluster a+b+c',
+  ]);
 });

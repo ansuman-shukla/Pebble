@@ -91,8 +91,10 @@ export interface ChipSize {
   height: number;
 }
 
-/** The size a subject's chip takes in a view (measured, or estimated before its first draw). */
-export type ChipSizer = (id: string, view: ChipView) => ChipSize;
+/** The size a chip takes for its members in a view (measured, or estimated from what it says). */
+export type ChipSizer = (
+  chip: Pick<PlacedChip, 'leader' | 'members' | 'view'>,
+) => ChipSize;
 
 export interface PlacedChip {
   /** The subject drawn: the nearest of the cluster (or the pinned one). */
@@ -148,7 +150,7 @@ export function layoutChips(
   const chips: PlacedChip[] = [];
   const resize = (chip: PlacedChip) => {
     chip.view = viewOf(chip);
-    Object.assign(chip, sizeOf(chip.leader, chip.view));
+    Object.assign(chip, sizeOf(chip));
   };
   const liftPastPinned = (chip: PlacedChip) => {
     for (

@@ -27,7 +27,6 @@ import {
   type LabelBox,
   layoutBubbles,
   layoutChips,
-  type PlacedChip,
   stackLabels,
 } from '@/lib/world/label-layout';
 import type {
@@ -182,14 +181,14 @@ const CHIP_ICONS: Record<ChipIcon, LucideIcon> = {
   dead: Skull,
 };
 
-/** Rough sizes (px) before a chip or bubble is first drawn in a view; measured sizes replace them. */
+/** Rough sizes (px) of a chip or bubble saying `text` in a view, until it is measured saying it. */
 const CHAR_PX = 6.5;
 const CHIP_PX = 24;
 const BUBBLE_WIDTH_PX = 224;
 const BUBBLE_LINE_PX = 16;
 
-function estimate(content: LabelContent, view: ChipView | 'speech'): ChipSize {
-  const words = content.text.length + (content.detail?.length ?? 0) + 3;
+function estimate(text: string, view: ChipView | 'speech'): ChipSize {
+  const chars = text.length + 3;
   switch (view) {
     case 'icon':
       return { width: CHIP_PX, height: CHIP_PX };
@@ -197,20 +196,24 @@ function estimate(content: LabelContent, view: ChipView | 'speech'): ChipSize {
       return { width: CHIP_PX * 2, height: CHIP_PX };
     case 'full':
     case 'cluster':
-      return { width: words * CHAR_PX + CHIP_PX + 12, height: CHIP_PX };
+      return { width: chars * CHAR_PX + CHIP_PX + 12, height: CHIP_PX };
     case 'speech': {
-      const width = Math.min(BUBBLE_WIDTH_PX, words * CHAR_PX + 16);
-      const lines = Math.ceil((words * CHAR_PX) / (BUBBLE_WIDTH_PX - 16));
+      const width = Math.min(BUBBLE_WIDTH_PX, chars * CHAR_PX + 16);
+      const lines = Math.ceil((chars * CHAR_PX) / (BUBBLE_WIDTH_PX - 16));
       return { width, height: lines * BUBBLE_LINE_PX + 8 };
     }
   }
 }
 
 /** What a cluster chip says: "3 · asleep" when all do the same, else "3 people"; farther, just the count. */
-function clusterWords(chip: PlacedChip, chips: Map<string, LabelContent>) {
-  const count = chip.members.length;
-  if (chip.view === 'cluster-icon') return String(count);
-  const doing = new Set(chip.members.map((id) => chips.get(id)?.detail));
+function clusterWords(
+  members: readonly string[],
+  view: ChipView,
+  chips: Map<string, LabelContent>,
+) {
+  const count = members.length;
+  if (view === 'cluster-icon') return String(count);
+  const doing = new Set(members.map((id) => chips.get(id)?.detail));
   const [detail] = doing;
   return doing.size === 1 && detail
     ? `${count} · ${detail}`
@@ -260,7 +263,8 @@ export function ChipProjector({
   store: LabelStore;
   pinned: readonly string[];
 }) {
-  const sizes = useRef(new Map<string, ChipSize>());
+  // each element's last measured size in a view, with the text it said then
+  const sizes = useRef(new Map<string, { text: string; size: ChipSize }>());
   useFrame(({ camera, size }) => {
     const chipOf = new Map<string, LabelContent>();
     const speech: LabelContent[] = [];
@@ -280,28 +284,46 @@ export function ChipProjector({
       }
       return spots.get(subject);
     };
-    const measured = (content: LabelContent, view: ChipView | 'speech') =>
-      sizes.current.get(`${content.id}:${view}`) ?? estimate(content, view);
+    const measured = (key: string, text: string, view: ChipView | 'speech') => {
+      const last = sizes.current.get(key);
+      return last?.text === text ? last.size : estimate(text, view);
+    };
+    /** What a chip says in a view: its name and doing, a cluster's words, nothing for an icon. */
+    const chipText = (members: readonly string[], view: ChipView) => {
+      const leader = chipOf.get(members[0])!;
+      if (members.length > 1) return clusterWords(members, view, chipOf);
+      return view === 'full' ? `${leader.text} · ${leader.detail ?? ''}` : '';
+    };
 
     const anchors = [...chipOf.keys()]
       .map(spotOf)
       .filter((spot) => spot !== undefined);
-    const chips = layoutChips(anchors, (subject, view) =>
-      measured(chipOf.get(subject)!, view),
+    const chips = layoutChips(anchors, ({ leader, members, view }) =>
+      measured(
+        `${chipOf.get(leader)!.id}:${view}`,
+        chipText(members, view),
+        view,
+      ),
     );
     const leading = new Map(chips.map((chip) => [chip.leader, chip]));
     const bubbles = layoutBubbles(
       speech.flatMap((content): BubbleAnchor[] => {
         const spot = spotOf(content.subject);
         return spot
-          ? [{ ...spot, id: content.id, ...measured(content, 'speech') }]
+          ? [
+              {
+                ...spot,
+                id: content.id,
+                ...measured(content.id, content.text, 'speech'),
+              },
+            ]
           : [];
       }),
       chips,
     );
     const shownBubbles = new Map(bubbles.map((bubble) => [bubble.id, bubble]));
 
-    const drawn: { element: HTMLElement; key: string }[] = [];
+    const drawn: { element: HTMLElement; key: string; text: string }[] = [];
     for (const [subject, content] of chipOf) {
       const element = store.elements.get(content.id);
       if (!element) continue;
@@ -310,12 +332,13 @@ export function ChipProjector({
       if (!chip) continue;
       element.dataset.view = chip.view;
       element.dataset.members = chip.members.join(' ');
+      const text = chipText(chip.members, chip.view);
       setText(
         element.querySelector('[data-chip-count]'),
-        chip.members.length > 1 ? clusterWords(chip, chipOf) : '',
+        chip.members.length > 1 ? text : '',
       );
       place(element, chip.x, chip.bottom);
-      drawn.push({ element, key: `${content.id}:${chip.view}` });
+      drawn.push({ element, key: `${content.id}:${chip.view}`, text });
     }
     for (const content of speech) {
       const element = store.elements.get(content.id);
@@ -324,13 +347,13 @@ export function ChipProjector({
       element.style.display = bubble ? '' : 'none';
       if (!bubble) continue;
       place(element, bubble.x, bubble.bottom);
-      drawn.push({ element, key: `${content.id}:speech` });
+      drawn.push({ element, key: content.id, text: content.text });
     }
     // read after every change above: one layout per frame
-    for (const { element, key } of drawn)
+    for (const { element, key, text } of drawn)
       sizes.current.set(key, {
-        width: element.offsetWidth,
-        height: element.offsetHeight,
+        text,
+        size: { width: element.offsetWidth, height: element.offsetHeight },
       });
   });
   return null;
