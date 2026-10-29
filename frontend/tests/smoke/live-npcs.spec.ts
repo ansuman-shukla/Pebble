@@ -644,14 +644,18 @@ test('the clock follows the feed, its speed buttons drive it, and a dropped feed
     .toBeLessThanOrEqual(1);
   await expect(page.getByRole('button', { name: 'time ×60' })).toHaveCount(0);
 
+  const badge = page.getByTestId('time-lapse-badge');
   await expect(page.getByTestId('live-speed')).toHaveText('×60');
+  await expect(badge).toHaveText('time-lapse ×60');
   await page.getByRole('button', { name: '×600', exact: true }).click();
   await expect(page.getByTestId('live-speed')).toHaveText('×600');
+  await expect(badge).toHaveText('time-lapse ×600');
   const fast = await tick();
   await page.waitForTimeout(1_000);
   expect((await tick()) - fast).toBeGreaterThan(5); // a tick every 0.1 s
   await page.getByRole('button', { name: 'pause', exact: true }).click();
   await expect(page.getByTestId('live-speed')).toHaveText('paused');
+  await expect(badge).toHaveCount(0);
   await page.waitForTimeout(300);
   const paused = await tick();
   await page.waitForTimeout(1_500);
@@ -660,6 +664,7 @@ test('the clock follows the feed, its speed buttons drive it, and a dropped feed
   // real time: no tick for a real minute, and the sky's clock runs a game second per real second
   await page.getByRole('button', { name: '×1', exact: true }).click();
   await expect(page.getByTestId('live-speed')).toHaveText('real time');
+  await expect(badge).toHaveCount(0);
   const minutes = async () =>
     Number(await world.getAttribute('data-game-minutes'));
   const before = await minutes();
