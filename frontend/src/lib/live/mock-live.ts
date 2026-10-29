@@ -547,6 +547,12 @@ class MockSocket implements LiveSocket {
   }
 }
 
+/** TEST ONLY, set before the page loads: the mock starts `ticks` in, held at `speed`, `elapsed` game seconds into its
+ * tick (a page opened mid-tick). */
+export interface MockStartHook {
+  __pebbleMockStart?: { ticks: number; speed: number; elapsed: number };
+}
+
 export interface MockClock {
   speed: number;
   paused: boolean;
@@ -559,6 +565,8 @@ export class MockLiveServer {
   private clock: MockClock = { speed: 1, paused: false };
   /** When (performance.now) the current tick began counting: its tick, or the last clock change (it restarts the timer). */
   private beat = performance.now();
+  /** Game seconds of the tick passed before the clock was held (`__pebbleMockStart`); a running timer starts afresh. */
+  private held = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
   private sockets = new Set<MockSocket>();
   private states: PersonState[];
@@ -577,6 +585,12 @@ export class MockLiveServer {
     this.world = world;
     this.states = this.freshStates();
     this.wild = new MockWild(world);
+    const { __pebbleMockStart: start } = globalThis as MockStartHook;
+    if (start) {
+      this.advanceTicks(start.ticks);
+      this.clock = { speed: start.speed, paused: true };
+      this.held = start.elapsed;
+    }
   }
 
   private freshStates(): PersonState[] {
@@ -680,12 +694,8 @@ export class MockLiveServer {
 
   /** Jumps the feed `ticks` ahead at once (tests: to the evening): one `tick` frame with where everything is. */
   skip(ticks: number) {
-    for (let k = 0; k < ticks; k++) {
-      this.tick += 1;
-      const night = isNight(this.tick);
-      for (const state of this.states) this.advance(state, night);
-      this.wild.step(isDark(this.tick));
-    }
+    this.advanceTicks(ticks);
+    this.held = 0;
     this.pending.splice(0);
     const frame = this.frame('tick');
     for (const socket of this.sockets) socket.deliver(frame);
@@ -700,6 +710,7 @@ export class MockLiveServer {
   restartRun() {
     this.runId = `mock-run-${Number(this.runId.split('-').pop()) + 1}`;
     this.tick = 0;
+    this.held = 0;
     this.states = this.freshStates();
     this.wild = new MockWild(this.world);
     this.feelings.clear();
@@ -717,9 +728,18 @@ export class MockLiveServer {
     this.timer = null;
   }
 
+  private advanceTicks(ticks: number) {
+    for (let k = 0; k < ticks; k++) {
+      this.tick += 1;
+      const night = isNight(this.tick);
+      for (const state of this.states) this.advance(state, night);
+      this.wild.step(isDark(this.tick));
+    }
+  }
+
   /** Game seconds of the current tick passed, like the backend's `tick_elapsed_s`. */
   private tickElapsed() {
-    if (this.clock.paused) return 0;
+    if (this.clock.paused) return this.held;
     const seconds = ((performance.now() - this.beat) / 1000) * this.clock.speed;
     return Math.min(seconds, TICK_SECONDS);
   }
@@ -728,6 +748,7 @@ export class MockLiveServer {
     this.stop();
     this.beat = performance.now();
     if (this.clock.paused || this.sockets.size === 0) return;
+    this.held = 0;
     this.timer = setInterval(() => this.step(), tickMs(this.clock.speed));
   }
 
