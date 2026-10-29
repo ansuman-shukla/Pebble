@@ -2,10 +2,10 @@
 
 from app.sim.acting import begin, settled
 from app.sim.bodies import COLLAPSE_WAKE_ENERGY
-from app.sim.clock import sun_altitude_deg, sun_direction
 from app.sim.core import SimCore
 from app.sim.doing import apply_partial
 from app.sim.state import ActionState, Citizen
+from app.sim.systems import dawn_at
 from app.world_api.models import Rest, Sleep, Wait
 
 SLEEPY_ENERGY = 80.0  # above this nobody falls asleep by day
@@ -27,11 +27,9 @@ def start_sleep(core: SimCore, citizen: Citizen, _action: Sleep) -> int:
 def advance_sleep(core: SimCore, citizen: Citizen, action: ActionState) -> None:
     if action.collapsed and citizen.body.energy < COLLAPSE_WAKE_ENERGY:
         return
-    now = core.altitude(citizen.position)
-    before = sun_altitude_deg(citizen.position, sun_direction(core.state.tick - 1, core.world.town_lon_deg))
-    if before <= 0 < now:
+    if dawn_at(core, citizen.position):
         core.end_action(citizen, "done", "You wake up; it is morning.")
-    elif now > 0 and citizen.body.energy >= 100:
+    elif core.altitude(citizen.position) > 0 and citizen.body.energy >= 100:
         core.end_action(citizen, "done", "You wake up rested.")
 
 
