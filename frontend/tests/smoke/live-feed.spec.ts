@@ -232,8 +232,8 @@ test('activities pick their clip and pose', () => {
   });
   expect(look('sleeping')).toEqual({
     clip: 'Idle',
-    pose: 'lying',
-    still: false,
+    pose: 'sleeping',
+    still: true, // no idle sway lying down
   });
   expect(look('dead')).toEqual({ clip: 'Idle', pose: 'lying', still: true });
   // the engine's work tasks
