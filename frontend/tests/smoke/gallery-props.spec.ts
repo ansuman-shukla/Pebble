@@ -17,6 +17,7 @@ test('gallery shows every World v1 prop, hand prop and kit look in the props and
     'berry_bush',
     'root_patch',
     'reed_bed',
+    'nut_tree',
     'tree_stump',
     'flint_seam',
     'obsidian_field',

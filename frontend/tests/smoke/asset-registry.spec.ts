@@ -8,6 +8,7 @@ import manifest from '../../src/lib/world/asset-manifest.json' with { type: 'jso
 import {
   ANIMALS,
   HAND_PROPS,
+  type HandProp,
   type HandPropKind,
   PROPS,
   type PropKind,
@@ -55,62 +56,60 @@ test('every registry kind resolves to a vendored file matching its pinned hash',
   }
 });
 
-// the kinds and props World v1 (docs/design/10-world-v1.md) draws: nodes, dens, roads, markers, stores, stations
-const WORLD_V1_KINDS: PropKind[] = [
-  'berry_bush',
-  'root_patch',
-  'reed_bed',
-  'nut_tree',
-  'tree_stump',
-  'fallen_log',
-  'driftwood',
-  'dead_tree',
-  'flint_seam',
-  'obsidian_field',
-  'rice_paddy',
-  'cave_mouth',
-  'bone_scatter',
-  'signpost',
-  'log_bridge',
-  'boundary_stone',
-  'banner',
-  'cairn',
-  'market_stall',
-  'forge',
-  'anvil',
-  'chest',
-  'grain_sack',
-  'coin_pouch',
-  'drying_rack',
-  'camp_drying_rack',
-  'sleeping_mat',
-  'field_barricade',
-  'bell_tower',
-  'storehouse',
-];
-const WORLD_V1_HAND_PROPS: HandPropKind[] = [
-  'axe',
-  'hoe',
-  'hammer',
-  'torch',
-  'spear',
-  'basket',
-  'coin_pouch',
-  'sack',
-  'pick',
-  'fishing_rod',
-];
+// the kinds World v1 (docs/design/10-world-v1.md) draws and the model each one must be (findings 2026-10-29)
+const WORLD_V1_KINDS: Partial<Record<PropKind, string>> = {
+  berry_bush: 'berry-bush-ee4812',
+  root_patch: 'taro-plant-8c0493',
+  reed_bed: 'totora-reed-bed-36d78f',
+  nut_tree: 'broadleaf-oak-997c22',
+  tree_stump: 'tree-stump-ec3f48',
+  fallen_log: 'fallen-log-1685fb',
+  driftwood: 'driftwood-log-90340b',
+  dead_tree: 'dead-tree-6795fa',
+  flint_seam: 'ballast-heap-2fb138',
+  obsidian_field: 'lava-rock-pile-d56d19',
+  rice_paddy: 'rice-paddy-tile-dc727e',
+  cave_mouth: 'smuggler-cave-mouth-69a07e',
+  bone_scatter: 'bone-scatter-90313d',
+  signpost: 'trail-signpost-bd29a7',
+  log_bridge: 'log-plank-bridge-a5f74f',
+  boundary_stone: 'garden-rock-2d3b51',
+  banner: 'nobori-banner-ae4d88',
+  cairn: 'pipi-horeko-cairn-f5db4b',
+  market_stall: 'market-stall-94937d',
+  forge: 'blacksmith-forge-09fa85',
+  anvil: 'anvil-1286cb',
+  chest: 'timber-crate-ba0739',
+  grain_sack: 'grain-sack-401d96',
+  coin_pouch: 'coin-pouch-be4dd8',
+  drying_rack: 'hasa-rice-drying-rack-d545bc',
+  camp_drying_rack: 'drying-net-rack-93ec3b',
+  sleeping_mat: 'straw-pile-ebd54d',
+  field_barricade: 'field-barricade-a646b9',
+  bell_tower: 'temple-bell-tower-745387',
+  storehouse: 'kura-storehouse-5c9631',
+};
+const WORLD_V1_HAND_PROPS: Record<HandPropKind, HandProp> = {
+  axe: { asset: 'hand-axe-cee9e7' },
+  hoe: { asset: 'garden-hoe-3974ad' },
+  hammer: { asset: 'hammer-fa3e51' },
+  torch: { asset: 'torch-stake-d82a2c' },
+  spear: { asset: 'yari-spear-e72c1f' },
+  basket: { asset: 'kete-reed-basket-6ca36c' },
+  coin_pouch: { asset: 'coin-pouch-be4dd8' },
+  sack: { asset: 'grain-sack-401d96' },
+  pick: { wardrobe: 'pick' },
+  fishing_rod: { wardrobe: 'fishing-rod' },
+};
 
-test('every World v1 kind and hand prop with a model resolves to a pinned asset', () => {
-  for (const kind of WORLD_V1_KINDS) {
-    const id = PROPS[kind];
+test('every World v1 kind and hand prop draws its chosen, pinned model', () => {
+  for (const [kind, id] of Object.entries(WORLD_V1_KINDS)) {
+    expect(PROPS[kind as PropKind], kind).toBe(id);
     expect(byId.get(id)?.files.glb.path, kind).toBeDefined();
   }
-  for (const kind of WORLD_V1_HAND_PROPS) {
-    const prop = HAND_PROPS[kind];
-    if ('asset' in prop)
-      expect(byId.get(prop.asset)?.files.glb.path, kind).toBeDefined();
-  }
+  expect(HAND_PROPS).toEqual(WORLD_V1_HAND_PROPS);
+  for (const prop of Object.values(HAND_PROPS))
+    if ('asset' in prop) expect(byId.get(prop.asset), prop.asset).toBeDefined();
 });
 
 test('wardrobe hand props are items the pinned humanoid engine carries in the right hand', () => {
