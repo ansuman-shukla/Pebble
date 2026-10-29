@@ -4,8 +4,10 @@ import { Vector3 } from 'three';
 import type {
   LiveAnimal,
   LiveCitizen,
+  LiveEventMessage,
   LiveFire,
   LiveFrame,
+  LiveMessage,
 } from '../../src/lib/live/live-contract';
 import {
   applyEntities,
@@ -453,4 +455,47 @@ test('a walker first seen mid-tick is drawn as far along its path as the tick ha
     4000,
   );
   expect(tickElapsed(state, 9000)).toBe(30);
+});
+
+test('the mock feed queues any event for the next tick, with its line, importance and place', async () => {
+  const server = new MockLiveServer(createMockWorld());
+  server.setClock({ speed: 600 }); // a tick every 0.1 s
+  const events: LiveEventMessage[] = [];
+  const ticks: number[] = [];
+  const socket = server.connect();
+  socket.onmessage = ({ data }) => {
+    const message = JSON.parse(data) as LiveMessage;
+    if (message.type === 'event') events.push(message);
+    else if (message.type === 'tick') ticks.push(message.tick);
+  };
+  await new Promise((done) => setTimeout(done, 150));
+  server.queueEvent(
+    'died',
+    'genzo',
+    { cause: 'violence', attacker: 'dun' },
+    {
+      line: 'Dun kills Genzo',
+      importance: 3,
+    },
+  );
+  server.queueEvent('bell_rang', null, { kind: 'noon' });
+  const queuedAt = ticks[ticks.length - 1] ?? 0;
+  await new Promise((done) => setTimeout(done, 300));
+  socket.close();
+  server.stop();
+  const died = events.find((e) => e.event.type === 'died')!;
+  expect(died.tick).toBe(queuedAt + 1);
+  expect(died.event).toMatchObject({
+    actor_id: 'genzo',
+    line: 'Dun kills Genzo',
+    importance: 3,
+    payload: { cause: 'violence', attacker: 'dun' },
+  });
+  expect(died.event.position?.unit).toHaveLength(3);
+  const bell = events.find((e) => e.event.type === 'bell_rang')!;
+  expect(bell.event).toMatchObject({
+    line: 'Bell rang',
+    importance: 1,
+    position: null,
+  });
 });

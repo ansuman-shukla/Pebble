@@ -531,6 +531,40 @@ export class MockLiveServer {
       events.forEach((event) => socket.deliver(event));
   }
 
+  /**
+   * Queues an event of any type for the next tick, like the engine's own (tests: a death, a sale). `extra` sets the
+   * line registry's fields; without them the line is plain, importance 1 and the place is the actor's.
+   */
+  queueEvent(
+    type: string,
+    actor: string | null,
+    payload: Record<string, unknown>,
+    extra: Partial<
+      Pick<LiveEventMessage['event'], 'line' | 'importance' | 'position'>
+    > = {},
+  ) {
+    this.events += 1;
+    const state = this.states.find(({ person }) => person.id === actor);
+    const words = type.replaceAll('_', ' ');
+    this.pending.push({
+      type: 'event',
+      run_id: this.runId,
+      tick: this.tick + 1,
+      event: {
+        id: `mock-${type}-${this.events}`,
+        type,
+        actor_id: actor,
+        payload,
+        line: state
+          ? `${state.person.name}: ${words}`
+          : words[0].toUpperCase() + words.slice(1),
+        importance: 1,
+        position: state ? placeOf(state) : null,
+        ...extra,
+      },
+    });
+  }
+
   /** Jumps the feed `ticks` ahead at once (tests: to the evening): one `tick` frame with where everything is. */
   skip(ticks: number) {
     for (let k = 0; k < ticks; k++) {
