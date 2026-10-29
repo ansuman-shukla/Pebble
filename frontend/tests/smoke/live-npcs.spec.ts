@@ -1118,13 +1118,17 @@ test('a page opened mid-tick at ×60 draws each walker as far along its path as 
   );
   const walkers = view.citizens.filter((citizen) => citizen.route.length > 1);
   expect(walkers.length).toBeGreaterThan(0);
+  let farthest = 0;
   for (const walker of walkers) {
     const path = citizenPath(walker, R);
     const start = pointAt(path, new Vector3());
     path.time = Math.min(path.times[0] + elapsed, path.arrive);
     const along = pointAt(path, new Vector3());
-    expect(start.angleTo(along) * R).toBeGreaterThan(5); // the check means something
+    const gone = start.angleTo(along) * R;
+    farthest = Math.max(farthest, gone);
+    expect(gone).toBeGreaterThan(1); // twice the tolerance below, so being drawn at the start fails
     expect(shown.get(walker.id)!.angleTo(along) * R).toBeLessThan(0.5);
   }
+  expect(farthest).toBeGreaterThan(5); // the check means something
   expect(errors).toEqual([]);
 });
