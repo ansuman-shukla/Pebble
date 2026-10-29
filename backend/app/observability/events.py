@@ -33,11 +33,45 @@ EventType = Literal[
     "fire_changed",
     "intervention",
     "snapshot",
+    # world v1 (10-world-v1 §6.3)
+    "node_changed",
+    "tree_felled",
+    "trespassed",
+    "stole",
+    "bought",
+    "sold",
+    "crafted",
+    "spoiled",
+    "tool_broke",
+    "tax_assessed",
+    "tax_paid",
+    "tax_overdue",
+    "ledger",
+    "prices_changed",
+    "accused",
+    "seized",
+    "released",
+    "confined",
+    "judged",
+    "sentence_served",
+    "standing_changed",
+    "leader_changed",
+    "bell_rang",
+    "tended",
+    "gestured",
+    "goal_set",
 ]
 ActorKind = Literal["citizen", "animal", "world", "player", "god"]
 Visibility = Literal["public", "private"]
 BodyValues = tuple[float, float, float, float]  # hunger, thirst, energy, health
 JsonScalar = str | int | float | bool | None
+Gait = Literal["walk", "jog", "run", "stalk"]  # a citizen's (10 §4.1)
+AnimalGait = Literal["walk", "trot", "run", "stalk", "swim"]  # trot: an animal's sustained speed (10 §4.6)
+GestureKind = Literal["wave", "bow", "nod", "shake_head", "point", "laugh", "jump"]
+Driver = Literal["hunger", "thirst", "rest", "danger", "duty", "ambition", "social", "night"]
+TargetKind = Literal["person", "animal", "node", "store", "structure", "fire", "stack", "place", "direction"]
+PriceWord = Literal["dear", "fair", "cheap"]
+Sentence = Literal["fine", "confine"]
 
 
 class Payload(BaseModel):
@@ -61,6 +95,16 @@ class Moved(Payload):
     # `position`, then on along their plan for a couple of game minutes while they keep at it, timed by t_s
     route: list[RoutePoint] = []
     speed_mps: float = 0.0  # ground speed where the route starts, game metres per game second
+    gait: Gait = "walk"  # how they went (run while fleeing or at `pace: "run"`, stalk on a hunt)
+
+
+class Target(Payload):
+    """What an action is about, for spectators (a person, an animal, a node, a store, a place...)."""
+
+    kind: TargetKind
+    id: str | None = None  # citizen, animal, node, store, structure, fire or ground stack id; None for a direction
+    name: str  # in neutral words ("Kenji", "a deer", "the well", "north")
+    position: Vec3 | None = None
 
 
 class AnimalPose(Payload):
@@ -69,6 +113,13 @@ class AnimalPose(Payload):
     cell: int
     heading_deg: float
     activity: AnimalActivity
+    # how to draw the move, the same rule as a citizen's `Moved` (D100): from where it stood when the tick began
+    # through `position`, then on along its plan while it keeps at it, timed by t_s; empty when it didn't move
+    route: list[RoutePoint] = []
+    speed_mps: float = 0.0
+    gait: AnimalGait = "walk"
+    goal: str = ""  # what it is after, in words ("grazing", "fleeing the wolf", "stalking the deer")
+    target: Target | None = None  # its quarry, its threat or the waterhole it heads for
 
 
 class TickSummary(Payload):
@@ -160,11 +211,13 @@ class NeedChanged(Payload):
 
 class Injured(Payload):
     amount: float
-    cause: str
+    cause: str  # "violence" (a person's attack: `attacker`), "animal attack", ...
+    attacker: str | None = None  # the citizen or animal that struck
 
 
 class Died(Payload):
-    cause: str
+    cause: str  # "violence" (`attacker`), "starvation", "dehydration", "hunted", "killed by a wolf", ...
+    attacker: str | None = None  # the citizen or animal whose blow killed
 
 
 class ItemLocation(Payload):
@@ -207,6 +260,205 @@ class Intervention(Payload):
     detail: dict[str, JsonScalar]
 
 
+# --- world v1 (10-world-v1 §6.3). Unless said otherwise the event's actor is the citizen who did it; ids name
+# citizens, nodes, stores and households; `deeds` and `judgement` refer to earlier events by their seq. ---
+
+
+class NodeChanged(Payload):
+    """A node's stock changed (taken, regrown, harvested, replanted; replaces `resource_changed`)."""
+
+    node: str
+    kind: str  # node kind (berry_bush, tree, rice_paddy, ...)
+    item: str  # what it yields
+    before: int
+    after: int
+    stage: str  # drawn stage after the change (node_stages.yaml)
+
+
+class TreeFelled(Payload):
+    node: str
+    yaw_deg: float  # the way the trunk falls (yaw in the local tangent frame, like headings)
+    logs: int
+    stack: str | None = None  # the ground stack the logs land in at the trunk
+
+
+class Took(Payload):
+    item: str
+    count: int
+
+
+class Trespassed(Payload):
+    """Once per entry (walls, castle at night) or per take (ground: poaching, `took`)."""
+
+    kind: Literal["walls", "castle", "ground"]
+    owner: str  # the group whose walls, castle or ground it is (town, band_a, band_b)
+    place: str  # in words ("the castle town", "the Lord's woods", "band A's ground")
+    took: Took | None = None
+    witnesses: list[str] = []
+
+
+class Stole(Payload):
+    thief: str
+    owner: str  # the owning household or group
+    store: str
+    item: str
+    count: int
+    witnesses: list[str] = []  # citizens who had the thief in view that tick
+
+
+class Traded(Payload):
+    """Payload of `bought` (the actor buys from the stall) and `sold` (the actor sells to it): one sale each."""
+
+    item: str
+    count: int
+    lots: int
+    coins: int  # paid (bought) or received (sold) in all
+    stall: str  # the stall's store id
+    merchant: str  # the stall's owner
+
+
+class Crafted(Payload):
+    recipe: str
+    item: str
+    count: int
+    station: str | None = None  # the structure crafted at (forge, fire pit, loom, drying rack)
+
+
+class Spoiled(Payload):
+    """At the holder's local dawn: what went off (one event per holder)."""
+
+    holder: str  # citizen or store id
+    holder_kind: Literal["inventory", "store"]
+    items: dict[str, int]  # item -> count lost
+
+
+class ToolBroke(Payload):
+    item: str  # spear, stone axe, iron sickle, pack, ...
+    use: Literal["hunt", "fell", "harvest", "carry", "craft"]
+
+
+class TaxChange(Payload):
+    """Payload of `tax_assessed` (owed grew), `tax_paid` (owed shrank) and `tax_overdue` (owed past its time):
+    `rice` and `coins` are this change (overdue: the arrears), `owed_*` what the household owes after it."""
+
+    household: str
+    rice: int = 0
+    coins: int = 0
+    owed_rice: int = 0
+    owed_coins: int = 0
+    days: int = 0  # tax_overdue: days in arrears
+
+
+class Ledger(Payload):
+    """Daily per citizen at local midnight (the scoreboard's daily facts)."""
+
+    coins: int
+    wealth_mon: int  # coins + town value of the inventory + an equal share of the household chest
+    income_24h: int
+    spent_24h: int
+    owed_rice: int = 0
+    owed_coins: int = 0
+
+
+class PricesChanged(Payload):
+    """An item's price word at the stall changed (actor: world)."""
+
+    stall: str
+    item: str
+    word: PriceWord
+    before: PriceWord
+    lot: int
+    sell: int  # mon per lot the stall sells for
+    buy: int  # mon per lot it pays
+
+
+class Accused(Payload):
+    person: str
+    to: str
+    deeds: list[int]  # seqs of the deed events passed on
+
+
+class Seized(Payload):
+    """A seizure attempt by the actor: `held` when it succeeded."""
+
+    person: str
+    held: bool
+    helpers: list[str] = []
+
+
+class Released(Payload):
+    """The actor (held or confined) is free again."""
+
+    cause: Literal["judged", "timeout", "seizer_down"]
+    by: str | None = None  # the seizer or judge
+
+
+class Confined(Payload):
+    """The actor is confined (the gaol, or tied at the band's fire) until `until_tick` or judged."""
+
+    place: str
+    until_tick: int
+    by: str | None = None
+
+
+class Judged(Payload):
+    person: str
+    sentence: Sentence
+    fine_mon: int = 0
+    confine_h: float = 0.0
+    deeds: list[int] = []  # seqs of the deeds judged
+    arrears: bool = False  # judged for the household's overdue tax
+
+
+class SentenceServed(Payload):
+    """The actor's sentence is done (fine paid in full, confinement over)."""
+
+    sentence: Sentence
+    judgement: int | None = None  # seq of the `judged` event
+
+
+class StandingChanged(Payload):
+    """The actor's standing with `group` changed (a deed seen or heard of, the dawn drift)."""
+
+    group: str
+    before: int
+    after: int
+    word: str  # the standing word after ("well regarded")
+    cause: str  # theft, poaching, trespass, assault, killing, sale, gift, tended, served, accusation, leader, drift
+    deed: int | None = None  # seq of the event that moved it
+
+
+class LeaderChanged(Payload):
+    """`group` has a new lord or leader (actor: the new one)."""
+
+    group: str
+    title: Literal["lord", "leader"]
+    previous: str | None = None
+    cause: Literal["standing", "death", "succession"]
+
+
+class BellRang(Payload):
+    kind: Literal["dawn", "noon", "dusk"]
+
+
+class Tended(Payload):
+    person: str
+    health: float  # health the tended person gained
+
+
+class Gestured(Payload):
+    kind: GestureKind
+    to: str | None = None
+    seen_by: list[str] = []
+
+
+class GoalSet(Payload):
+    """Spectator-only: what the actor is after and why (never perceived by others)."""
+
+    text: str
+    driver: Driver
+
+
 PAYLOAD_TYPES: dict[EventType, type[Payload]] = {
     "tick_summary": TickSummary,
     "citizen_spawned": CitizenSpawned,
@@ -225,6 +477,32 @@ PAYLOAD_TYPES: dict[EventType, type[Payload]] = {
     "fire_changed": FireChanged,
     "snapshot": SnapshotTaken,
     "intervention": Intervention,
+    "node_changed": NodeChanged,
+    "tree_felled": TreeFelled,
+    "trespassed": Trespassed,
+    "stole": Stole,
+    "bought": Traded,
+    "sold": Traded,
+    "crafted": Crafted,
+    "spoiled": Spoiled,
+    "tool_broke": ToolBroke,
+    "tax_assessed": TaxChange,
+    "tax_paid": TaxChange,
+    "tax_overdue": TaxChange,
+    "ledger": Ledger,
+    "prices_changed": PricesChanged,
+    "accused": Accused,
+    "seized": Seized,
+    "released": Released,
+    "confined": Confined,
+    "judged": Judged,
+    "sentence_served": SentenceServed,
+    "standing_changed": StandingChanged,
+    "leader_changed": LeaderChanged,
+    "bell_rang": BellRang,
+    "tended": Tended,
+    "gestured": Gestured,
+    "goal_set": GoalSet,
 }  # thought gets its payload with phase B
 
 
