@@ -439,19 +439,27 @@ function inLane(track: ReturnType<typeof newTrack>, seconds: number) {
 /** Metres south (negative: north) of the east-west street through the origin. */
 const south = (spot: Vector3) => -(spot.y / spot.z) * R;
 
-test('a walker keeps right of its route, stepping into the lane and back out without a jump', () => {
-  const track = newTrack(shortWalk({}), R);
-  const spots = inLane(track, 14.4);
+test('a walker keeps right of its route, stepping into the lane and back onto its spot without a jump', () => {
+  const track = newTrack(shortWalk({}), R); // 20 m east in 14.4 s
+  const spots = [
+    moveOn(track, 0, 1, new Vector3()).clone(),
+    ...inLane(track, 15),
+  ];
   const steps = spots.slice(1).map((spot, i) => metres(spots[i], spot));
   expect(Math.max(...steps)).toBeLessThan(0.04); // a side step on top of its pace, never a jump
   // walking east: its right is south
-  expect(south(spots[Math.round(5 / FRAME)])).toBeCloseTo(LANE_M, 2);
-  expect(south(spots[0])).toBeLessThan(0.05); // set off from where it stood
-  const after = inLane(track, 3); // stood still at the end of its walk: back onto its spot
-  expect(Math.abs(south(after.at(-1)!))).toBeLessThan(0.01);
-  const settle = after.slice(1).map((spot, i) => metres(after[i], spot));
-  expect(south(after[0])).toBeGreaterThan(0.3); // it steps back gradually...
-  expect(Math.max(...settle)).toBeLessThan(0.05); // ...a few centimetres a frame
+  const second = (s: number) => spots[Math.round(s / FRAME)];
+  expect(south(spots[0])).toBeCloseTo(0, 9); // set off from where it stood
+  expect(south(second(5))).toBeCloseTo(LANE_M, 2);
+  expect(south(second(13))).toBeCloseTo(LANE_M, 2); // 1.9 m to go
+  expect(south(second(13.9))).toBeGreaterThan(0.05); // stepping back over its last 1.5 m...
+  expect(south(second(13.9))).toBeLessThan(0.25);
+  expect(Math.abs(south(spots.at(-1)!))).toBeLessThan(1e-6); // ...it stops exactly on its spot
+  expect(metres(spots.at(-1)!, new Vector3(...at(20, 0)))).toBeLessThan(1e-3);
+  const after = inLane(track, 2); // and stays there, standing
+  expect(
+    Math.max(...after.map((spot) => metres(spot, spots.at(-1)!))),
+  ).toBeLessThan(1e-6);
 });
 
 test('two walkers passing on one street are drawn at least 0.6 m apart', () => {

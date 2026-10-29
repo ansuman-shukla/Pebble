@@ -22,6 +22,7 @@ import {
   groundSpeed,
   headingAt,
   joinAt,
+  metresLeft,
   pointAt,
   snapMetres,
   walking,
@@ -35,8 +36,10 @@ const CATCH_UP_RATE = 3;
 export const FADE_S = 0.3;
 /** Walkers are drawn this far right of their route, so two passing on one street don't merge (10 §4.3). */
 export const LANE_M = 0.35;
-/** How fast a walker steps into its lane, or back onto its spot once it stands (1/s, real time). */
+/** How fast a walker steps into its lane as it sets off (1/s, real time)... */
 const LANE_RATE = 4;
+/** ...and over how many metres before the end of its path it steps back onto the route. */
+const LANE_OUT_M = 1.5;
 
 /** What a citizen is shown doing (the label's words and the pose come from it). */
 export type Doing = Pick<
@@ -186,8 +189,9 @@ const going = new Vector3();
 
 /**
  * Shifts the drawn spot `at` (a unit direction, changed in place) into the walker's keep-right lane: LANE_M right of
- * the way it walks, stepped into over a fraction of a second as it sets off and left again once it stands. Drawn
- * only: the sim's walkers may pass through each other, and the path and its joins stay on the route.
+ * the way it walks, stepped into over a fraction of a second as it sets off and left over the last LANE_OUT_M of its
+ * path, so it stops (and sits, works...) exactly where the feed says. Drawn only: the sim's walkers may pass
+ * through each other, and the path and its joins stay on the route.
  */
 export function keepRight(
   track: Track,
@@ -202,6 +206,7 @@ export function keepRight(
   }
   track.lane +=
     ((onward ? 1 : 0) - track.lane) * (1 - Math.exp(-LANE_RATE * delta));
+  track.lane = Math.min(track.lane, metresLeft(track.path) / LANE_OUT_M);
   if (track.lane < 1e-4) return at;
   return at
     .addScaledVector(track.side, (LANE_M * track.lane) / radius)

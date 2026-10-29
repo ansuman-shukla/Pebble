@@ -11,6 +11,7 @@ import {
   TICK_SECONDS,
   tickMs,
 } from '../../src/lib/live/live-contract';
+import { LANE_M } from '../../src/lib/live/drawn-track';
 import { npcLook } from '../../src/lib/live/npc-activity';
 import {
   anchorMapping,
@@ -721,9 +722,9 @@ test('in real time a walker walks its streamed route at its own pace, facing the
     await page.waitForTimeout(100);
   }
   expect(await tick()).toBe(kenji.tick);
-  // on the route the engine streamed, never off it
+  // on the route the engine streamed (in its keep-right lane), never off it
   for (const { npc } of samples)
-    expect(offPath(npc.position, route)).toBeLessThan(0.3);
+    expect(offPath(npc.position, route)).toBeLessThan(LANE_M + 0.3);
   // at 5 km/h of real time: about 1.4 m/s, not 83 m/s
   const first = samples[0];
   const last = samples.at(-1)!;
