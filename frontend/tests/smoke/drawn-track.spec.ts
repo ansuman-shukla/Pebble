@@ -5,6 +5,8 @@ import {
   type Doing,
   FADE_S,
   follow,
+  keepRight,
+  LANE_M,
   moveOn,
   newTrack,
   shownDoing,
@@ -417,4 +419,64 @@ test('the walk on along the plan is not held: once the drawn body is where the f
   play(track, 6.5, 10); // a tick late: on into the plan ahead
   follow(track, tick([83.3, 0], [], { activity: 'idle' }), R, 10);
   expect(shownDoing(track).activity).toBe('idle');
+});
+
+/** Draws `seconds` of real time at ×1 in the keep-right lane: the drawn spots, frame by frame. */
+function inLane(track: ReturnType<typeof newTrack>, seconds: number) {
+  const spots: Vector3[] = [];
+  for (let frame = 0; frame < Math.round(seconds / FRAME); frame++)
+    spots.push(
+      keepRight(
+        track,
+        FRAME,
+        moveOn(track, FRAME, 1, new Vector3()),
+        R,
+      ).clone(),
+    );
+  return spots;
+}
+
+/** Metres south (negative: north) of the east-west street through the origin. */
+const south = (spot: Vector3) => -(spot.y / spot.z) * R;
+
+test('a walker keeps right of its route, stepping into the lane and back out without a jump', () => {
+  const track = newTrack(shortWalk({}), R);
+  const spots = inLane(track, 14.4);
+  const steps = spots.slice(1).map((spot, i) => metres(spots[i], spot));
+  expect(Math.max(...steps)).toBeLessThan(0.04); // a side step on top of its pace, never a jump
+  // walking east: its right is south
+  expect(south(spots[Math.round(5 / FRAME)])).toBeCloseTo(LANE_M, 2);
+  expect(south(spots[0])).toBeLessThan(0.05); // set off from where it stood
+  const after = inLane(track, 3); // stood still at the end of its walk: back onto its spot
+  expect(Math.abs(south(after.at(-1)!))).toBeLessThan(0.01);
+  const settle = after.slice(1).map((spot, i) => metres(after[i], spot));
+  expect(south(after[0])).toBeGreaterThan(0.3); // it steps back gradually...
+  expect(Math.max(...settle)).toBeLessThan(0.05); // ...a few centimetres a frame
+});
+
+test('two walkers passing on one street are drawn at least 0.6 m apart', () => {
+  const east = newTrack(
+    tick(
+      [20, 0],
+      [
+        [0, 0, 0],
+        [20, 0, 14.4],
+      ],
+    ),
+    R,
+  );
+  const west = newTrack(
+    tick(
+      [0, 0],
+      [
+        [20, 0, 0],
+        [0, 0, 14.4],
+      ],
+    ),
+    R,
+  );
+  const [a, b] = [inLane(east, 7.2), inLane(west, 7.2)];
+  expect(metres(a.at(-1)!, b.at(-1)!)).toBeGreaterThanOrEqual(0.6); // side by side mid-street
+  expect(south(a.at(-1)!)).toBeGreaterThan(0.3);
+  expect(south(b.at(-1)!)).toBeLessThan(-0.3);
 });

@@ -20,9 +20,11 @@ import {
   carriedOn,
   citizenPath,
   groundSpeed,
+  headingAt,
   joinAt,
   pointAt,
   snapMetres,
+  walking,
   type WalkPath,
 } from './walk-path';
 import type { CitizenEntity, RoutePoint } from '@/lib/client/types.gen';
@@ -31,6 +33,10 @@ import type { CitizenEntity, RoutePoint } from '@/lib/client/types.gen';
 const CATCH_UP_RATE = 3;
 /** A resync fades the body out where it was drawn and in on its path over this long (real seconds). */
 export const FADE_S = 0.3;
+/** Walkers are drawn this far right of their route, so two passing on one street don't merge (10 §4.3). */
+export const LANE_M = 0.35;
+/** How fast a walker steps into its lane, or back onto its spot once it stands (1/s, real time). */
+const LANE_RATE = 4;
 
 /** What a citizen is shown doing (the label's words and the pose come from it). */
 export type Doing = Pick<
@@ -80,6 +86,10 @@ export interface Track {
   doing: Doing;
   /** What it is shown doing instead while the drawn body walks to where the frame says it is (moving). */
   held: Doing | null;
+  /** How far into its keep-right lane the body is drawn (0 on its spot standing, 1 walking)... */
+  lane: number;
+  /** ...towards this side (unit, right of the way it last walked). */
+  side: Vector3;
 }
 
 /**
@@ -101,6 +111,8 @@ export function newTrack(
     opacity: 1,
     doing: doingOf(citizen),
     held: MOVING.has(citizen.activity) ? null : WALKING,
+    lane: 0,
+    side: new Vector3(),
   };
 }
 
@@ -168,4 +180,31 @@ export function moveOn(
   track.opacity = Math.min(Math.abs(fade.elapsed - half) / half, 1);
   if (fade.elapsed >= FADE_S) track.fade = null;
   return fade.elapsed < half ? out.copy(fade.from) : out;
+}
+
+const going = new Vector3();
+
+/**
+ * Shifts the drawn spot `at` (a unit direction, changed in place) into the walker's keep-right lane: LANE_M right of
+ * the way it walks, stepped into over a fraction of a second as it sets off and left again once it stands. Drawn
+ * only: the sim's walkers may pass through each other, and the path and its joins stay on the route.
+ */
+export function keepRight(
+  track: Track,
+  delta: number,
+  at: Vector3,
+  radius: number,
+) {
+  const onward = walking(track.path) && headingAt(track.path, going);
+  if (onward) {
+    going.crossVectors(going, at);
+    going.addScaledVector(at, -going.dot(at)); // on the tangent plane
+    if (going.lengthSq() > 1e-18) track.side.copy(going).normalize();
+  }
+  track.lane +=
+    ((onward ? 1 : 0) - track.lane) * (1 - Math.exp(-LANE_RATE * delta));
+  if (track.lane < 1e-4) return at;
+  return at
+    .addScaledVector(track.side, (LANE_M * track.lane) / radius)
+    .normalize();
 }
