@@ -82,6 +82,7 @@ type MockLiveWindow = {
     dropConnections(code?: number): void;
     sayNow(actor: string, words: string): void;
     restartRun(): void;
+    crowdCamp(): void;
     setClock(change: { speed?: number; paused?: boolean }): void;
     skip(ticks: number): void;
     entities(): EntitiesView;
@@ -545,6 +546,55 @@ test('the chips of citizens standing close together cluster instead of covering 
   );
   expect(boxes.length).toBeGreaterThanOrEqual(1);
   expect(covered).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('in the crowded band A camp of the first dawn no two drawn bodies come within 0.5 m over a minute', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  const world = await openLive(page, errors, '?mockLive=1', 10);
+  // four talk and eat on one spot by the fire; Tak and Ana walk through them head-on, a tick (6 s) each way
+  await page.evaluate(() =>
+    (globalThis as unknown as MockLiveWindow).__pebbleMockLive.crowdCamp(),
+  );
+  await expect(world).toHaveAttribute('data-live-connects', '2');
+  const camp = ['oru', 'mena', 'lio', 'bo', 'tak', 'ana'];
+  await expect
+    .poll(async () => (await npcOf(page, 'tak')).activity)
+    .toBe('walking');
+  const samples = (await trackNpcs(page, 60_000)).map((all) =>
+    all.filter((npc) => camp.includes(npc.id)),
+  );
+  const close = samples.flatMap((all, k) =>
+    all.flatMap((a, i) =>
+      all
+        .slice(i + 1)
+        .filter((b) => a.position.distanceTo(b.position) < 0.5)
+        .map(
+          (b) =>
+            `${(k / 10).toFixed(1)} s: ${a.id}-${b.id} ${a.position.distanceTo(b.position).toFixed(2)} m`,
+        ),
+    ),
+  );
+  expect(close).toEqual([]);
+  // the walkers did walk through the crowd: across the camp and past the fire, close by
+  const of = (all: Npc[], id: string) => all.find((npc) => npc.id === id)!;
+  for (const id of ['tak', 'ana']) {
+    const passing = samples.map((all) =>
+      of(all, id).position.distanceTo(of(all, 'oru').position),
+    );
+    expect(Math.max(...passing)).toBeGreaterThan(10);
+    expect(Math.min(...passing)).toBeLessThan(1.5);
+  }
+  // the four on one spot stand round it: apart and close by
+  const last = samples.at(-1)!;
+  const four = ['oru', 'mena', 'lio', 'bo'].map((id) => of(last, id).position);
+  for (const [i, a] of four.entries())
+    for (const b of four.slice(i + 1)) {
+      expect(a.distanceTo(b)).toBeGreaterThanOrEqual(0.6);
+      expect(a.distanceTo(b)).toBeLessThan(2.5);
+    }
   expect(errors).toEqual([]);
 });
 

@@ -437,6 +437,43 @@ const PEOPLE: MockPerson[] = [
   },
 ];
 
+/**
+ * The band A camp as the engine's first dawn showed it (tests, audit F2/F22): four people talking and eating on one
+ * spot by the fire while two walk straight through them back and forth, head-on.
+ */
+const CROWDED_CAMP: Record<string, Pick<MockPerson, 'home' | 'plan'>> = {
+  oru: {
+    home: [1, 1],
+    plan: [{ activity: 'talking', label: 'Mena', ticks: 60 }],
+  },
+  mena: {
+    home: [1, 1],
+    plan: [{ activity: 'eating', label: 'roasted roots', ticks: 60 }],
+  },
+  lio: {
+    home: [1, 1],
+    plan: [{ activity: 'eating', label: 'berries', ticks: 60 }],
+  },
+  bo: {
+    home: [1, 1],
+    plan: [{ activity: 'talking', label: 'Oru', ticks: 60 }],
+  },
+  tak: {
+    home: [-12, 1],
+    plan: [
+      { walk: [14, 1], to: 'the drying rack' },
+      { walk: [-12, 1], to: 'the water' },
+    ],
+  },
+  ana: {
+    home: [14, 1],
+    plan: [
+      { walk: [-12, 1], to: 'the water' },
+      { walk: [14, 1], to: 'the drying rack' },
+    ],
+  },
+};
+
 const ROLES = new Map(CITIZEN_LOOKS.map((look) => [look.id, look]));
 
 interface PersonState {
@@ -494,6 +531,8 @@ export class MockLiveServer {
   private pending: LiveEventMessage[] = [];
   /** Body words a test gave someone (`feel`); everyone else feels fine. */
   private feelings = new Map<string, string[]>();
+  /** Homes and plans a test scene gives some (`crowdCamp`); everyone else lives their own. */
+  private scene: Record<string, Pick<MockPerson, 'home' | 'plan'>> = {};
   /** Connections so far (tests read it to see a reconnect). */
   connects = 0;
   /** Like a backend without a run (tests): every connection is accepted, then closed with 4404. */
@@ -509,7 +548,8 @@ export class MockLiveServer {
     const sites = new Map<string, Site>(
       this.world.sites.map((site) => [site.id, site]),
     );
-    return PEOPLE.map((person) => {
+    return PEOPLE.map((own) => {
+      const person = { ...own, ...this.scene[own.id] };
       const site = sites.get(person.site);
       if (!site) throw new Error(`the world has no ${person.site} site`);
       return {
@@ -614,6 +654,12 @@ export class MockLiveServer {
   /** Simulates the server going away: every open socket closes abnormally. */
   dropConnections(code = 1006) {
     for (const socket of [...this.sockets]) this.detach(socket, code);
+  }
+
+  /** A new run whose band A camp is crowded like the engine's first dawn (CROWDED_CAMP; tests). */
+  crowdCamp() {
+    this.scene = CROWDED_CAMP;
+    this.restartRun();
   }
 
   /** A new run starts (like the engine's `--new-run`): open sockets close with 1012, the clock starts at 08:00. */
