@@ -172,42 +172,77 @@ function bearingDeg(
   return (Math.atan2(y, x) / DEG + 360) % 360;
 }
 
-test('seen from the town, band B (145° away) and band A sit on the edge toward where they are', async ({
-  page,
-  request,
-}) => {
-  const errors: string[] = [];
-  const world: WorldView = await (await request.get(WORLD_URL)).json();
-  const anchor = world.sites.find((site) => site.id === 'town')!.anchor;
-  const town = latLonFromDirection(new Vector3(...anchor.position));
-  await openHeld(page, errors);
-  await expect(minimap(page)).toHaveAttribute('data-minimap-site', 'town');
+/**
+ * Checks that each of `ids` sits on the edge of `site`'s minimap at the great-circle bearing toward them from the
+ * site's anchor; returns how far (degrees) the farthest of them is.
+ */
+async function expectOnEdgeToward(
+  page: Page,
+  world: WorldView,
+  site: string,
+  ids: string[],
+) {
+  const anchor = world.sites.find((one) => one.id === site)!.anchor;
+  const from = latLonFromDirection(new Vector3(...anchor.position));
+  await expect(minimap(page)).toHaveAttribute('data-minimap-site', site);
   await expect.poll(async () => (await dots(page)).length).toBe(15);
   const where = new Map(
-    (
-      await page.evaluate(() =>
-        (globalThis as unknown as MockLiveWindow).__pebbleMockLive
-          .entities()
-          .citizens.map((citizen) => [citizen.id, citizen.position] as const),
-      )
-    ).map(([id, position]) => [id, position]),
+    await page.evaluate(() =>
+      (globalThis as unknown as MockLiveWindow).__pebbleMockLive
+        .entities()
+        .citizens.map((citizen) => [citizen.id, citizen.position] as const),
+    ),
   );
   const centre = MAP_PX / 2;
-  for (const id of ['brak', 'pip', 'tak']) {
+  let farthest = 0;
+  for (const id of ids) {
     const position = where.get(id)!;
     const away =
       new Vector3(...position.unit).angleTo(new Vector3(...anchor.position)) /
       DEG;
+    farthest = Math.max(farthest, away);
     const dot = (await dots(page)).find((one) => one.id === id)!;
     expect(dot.edge, id).toBe(true);
     const drawnBearing =
       (Math.atan2(dot.x - centre, centre - dot.y) / DEG + 360) % 360;
-    const expected = bearingDeg(town, position);
+    const expected = bearingDeg(from, position);
     expect(
       Math.abs(((drawnBearing - expected + 540) % 360) - 180),
       `${id} ${away.toFixed(0)}° away: drawn at ${drawnBearing.toFixed(0)}°, toward ${expected.toFixed(0)}°`,
     ).toBeLessThan(3);
   }
+  return farthest;
+}
+
+test('seen from the town, the people of both bands sit on the edge toward where they are', async ({
+  page,
+  request,
+}) => {
+  const errors: string[] = [];
+  const world: WorldView = await (await request.get(WORLD_URL)).json();
+  await openHeld(page, errors);
+  await expectOnEdgeToward(page, world, 'town', ['brak', 'pip', 'tak']);
+  expect(errors).toEqual([]);
+});
+
+test('seen from band A, band B more than 90° away sits on the edge toward where it is', async ({
+  page,
+  request,
+}) => {
+  const errors: string[] = [];
+  const world: WorldView = await (await request.get(WORLD_URL)).json();
+  const pageWorld = await openHeld(page, errors);
+  await page.getByRole('button', { name: /go to/ }).first().click();
+  await page.getByRole('menuitem', { name: /Band A/i }).click();
+  await landed(pageWorld);
+  const farthest = await expectOnEdgeToward(page, world, 'band_a_camp', [
+    'brak',
+    'sela',
+    'dun',
+    'pip',
+  ]);
+  // past 90° the site's flat map would point the wrong way: keep a case of it
+  expect(farthest).toBeGreaterThan(90);
   expect(errors).toEqual([]);
 });
 
