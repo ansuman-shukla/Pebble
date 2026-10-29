@@ -7,6 +7,7 @@ import {
   decodeWorld,
   type GlobeTerrain,
 } from '../../src/lib/world/globe';
+import { SCENE_IDS } from '../../src/lib/live/mock-animal-scenes';
 import { DRAW_CALL_BUDGET, openGlobe, WORLD_URL } from './globe-helpers';
 
 /*
@@ -51,9 +52,10 @@ test('animals near the camera are drawn on the ground playing their clips', asyn
   const errors: string[] = [];
   const world = await openGlobe(page, errors, '?mockLive=1');
   await expect(world).toHaveAttribute('data-live-status', 'live');
+  // ten wandering animals and the scripted scenes by band A's camp (`mock-animal-scenes.ts`)
   await expect(page.getByTestId('animals')).toHaveAttribute(
     'data-animals',
-    '10',
+    String(10 + SCENE_IDS.size),
   );
   // the herd and the fox on the town's approach are within reach of the gate; band A's camp is kilometres away
   await expect
