@@ -829,9 +829,10 @@ function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
       const animal = entry.actorId ? animalViews.get(entry.actorId) : null;
       if (entry.position) goNear(new Vector3(...entry.position));
       else if (animal) goNear(animal.position.clone().normalize());
-      else if (entry.actorId) goToCitizen(entry.actorId);
+      else if (entry.actorId && npcViews.has(entry.actorId))
+        goToCitizen(entry.actorId);
     },
-    [animalViews, goNear, goToCitizen],
+    [animalViews, npcViews, goNear, goToCitizen],
   );
 
   // the footer and the clock describe where the camera looks, not where the hidden avatar stands (F19, F20)
