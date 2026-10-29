@@ -252,6 +252,7 @@ def test_the_rice_fields_stand_lies_inside_a_paddy() -> None:
         (lambda c: c["goro"].update(rank=4), "doesn't match the titles"),
         (lambda c: c["masanori"]["ambition"]["all_of"][0]["args"].update(store="granary"), "unknown store 'granary'"),
         (lambda c: c["suna"]["ambition"]["all_of"][0]["args"].update(store="drying-rack"), "unknown store"),
+        (lambda c: c["suna"]["ambition"]["all_of"][0]["args"].update(store="band_a_camp:fire-pit"), "unknown store"),
         (lambda c: c["genzo"]["ambition"]["all_of"][0]["args"].update(store="farmhouse-1"), "unknown store"),
         (lambda c: c["hana"]["ambition"]["all_of"][0]["args"].update(place="band_c_camp"), "unknown place"),
         (lambda c: c["nim"]["ambition"]["all_of"][0]["args"].update(who="nobody"), "unknown who"),
