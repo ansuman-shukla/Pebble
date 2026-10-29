@@ -179,7 +179,6 @@ export const GROUND_STYLE: GroundStyle = {
         lush: '#6a9045',
         dry: '#a8a85a',
         cool: '#5f9a5a',
-        flower: '#d9d9a0',
       },
       roughness: 0.95,
       bump: 0.02,
