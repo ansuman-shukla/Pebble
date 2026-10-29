@@ -241,7 +241,7 @@ test('the hint line names the spectator keys', async ({ page }) => {
   const errors: string[] = [];
   await openHeld(page, errors);
   await expect(page.getByTestId('spectator-keys')).toHaveText(
-    'Tab select, F follow, G go to, I inspector, L events, Space pause, 1-4 speed, Esc let go',
+    'Tab select, F follow, G go to, I inspector, L events, M minimap, Space pause, 1-4 speed, Esc let go',
   );
   expect(errors).toEqual([]);
 });

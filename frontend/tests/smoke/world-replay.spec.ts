@@ -75,7 +75,7 @@ test('?tick= draws the citizens where they were then and keeps the feed off', as
   // the spectator keys work on a replay too, but it has no clock to pause or speed up
   const keys = page.getByTestId('spectator-keys');
   await expect(keys).toHaveText(
-    'Tab select, F follow, G go to, I inspector, Esc let go',
+    'Tab select, F follow, G go to, I inspector, M minimap, Esc let go',
   );
   await expect
     .poll(async () => Math.max(...offsets(await drawn(page), then, radius)), {
