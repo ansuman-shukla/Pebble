@@ -293,7 +293,8 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
     if wanted and water_here(p) and ctx.chance(FISH_CHANCE):
         return [Option(score, "fish", api.fish)]
     if not wanted:
-        if near(p, home_area) and ctx.chance(0.6):
+        rested = ctx.notes.get("last") == "rest at camp"  # one rest at a time: then a look around
+        if near(p, home_area) and (rested or ctx.chance(0.6)):
             direction = COMPASS[ctx.pick(len(COMPASS))]
             return [Option(score, "stroll", lambda: api.walk_towards(direction, "a short walk"))]
         if not (at_home(p) or at(p, home_area)):

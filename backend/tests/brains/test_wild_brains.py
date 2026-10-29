@@ -162,18 +162,20 @@ def test_a_forager_with_a_full_load_stops_gathering_until_it_carries_less(
             "pip", age=age, site="band_a_camp", at=(0.0, 30.0), home=HOME_A, region="band_a", inventory={"meat": meat}
         )
     )
-    sim.state.resources[forager.cell, RESOURCE_INDEX["berries"]] = 40  # bushes heavy with berries right here
+    bushes = forager.cell
+    sim.state.resources[bushes, RESOURCE_INDEX["berries"]] = 40  # bushes heavy with berries right here
     skip_to(sim, forager.position, night=False)
     brain = _brain(sim, forager.id, role=role)
     full = _gathers(sim, brain, 2 * 60)
-    assert full == ["You can't carry any more."]  # told once, it stops trying
+    assert full == ["You can't carry any more."]  # told once, it stops trying (and strolls off)
 
+    put_in_the_wild(sim, forager.id, bushes)  # back by the bushes
     brain.api.notes["asleep"] = True  # a new day (just woken): it tries once more
     brain.decide()
     assert str(brain.api.notes["last"]).startswith("gather")
 
     forager.inventory["meat"] = 3  # carrying less now ("a little meat", say some was eaten): room to gather again
-    lighter = _gathers(sim, brain, 90)
+    lighter = _gathers(sim, brain, 3 * 60)
     assert any(text.startswith("You gather") for text in lighter)
 
 
@@ -223,3 +225,22 @@ def test_a_band_finds_its_water_after_dark_the_way_it_lay_by_day(
             for event in sim.drain()
         )
     assert drank and child.body.thirst < 30
+
+
+def test_a_full_forager_at_camp_looks_around_after_one_rest(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sim = without_animals(new_sim())
+    child = sim.add_citizen(
+        make_spec("pip", age=9, site="band_a_camp", at=(0.0, 1.5), home=HOME_A, region="band_a", inventory={"meat": 10})
+    )
+    skip_to(sim, child.position, night=False)
+    brain = _brain(sim, child.id, role="child")
+    monkeypatch.setattr(brain, "chance", lambda _p: False)  # never the lucky roll that sends it for a stroll
+    brain.api.notes["full"] = list(brain.api.look_around().you.carrying)  # told it can carry no more
+    brain.decide()
+    assert brain.api.notes["last"] == "rest at camp"
+    while child.action is not None:
+        sim.step()
+    brain.decide()
+    assert brain.api.notes["last"] == "stroll"  # not a second rest, and a third... (seed 1: Pip stood 5 h)
