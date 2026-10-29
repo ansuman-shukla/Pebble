@@ -293,6 +293,9 @@ const standing = async (page: Page) =>
  * planted they stay within ~2 cm. (Work clips like Fixing step about in the capture itself, so they aren't
  * held to this.)
  */
+/** The activities of someone on the move. */
+const MOVING: Activity[] = ['walking', 'running', 'hunting'];
+
 const FOOT_DRIFT = 0.025;
 const CALM_CLIPS = ['Idle', 'Talking'];
 
@@ -816,8 +819,11 @@ test('the real feed: the 15 citizens stand where the engine says, on the ground,
           const still =
             unit.angleTo(new Vector3(...before.position.unit)) * R < 0.01;
           const off = npc.position.clone().normalize().angleTo(unit) * R;
+          // (one still walking to where the engine has them shows the moving activity it had until it gets there)
+          const onTheWay =
+            !still && MOVING.includes(npc.activity) && off > 0.01;
           return [
-            ...(npc.activity === citizen.activity
+            ...(npc.activity === citizen.activity || onTheWay
               ? []
               : [`${citizen.id}: ${npc.activity} ≠ ${citizen.activity}`]),
             ...(off < (still ? 0.5 : 90)
@@ -830,17 +836,17 @@ test('the real feed: the 15 citizens stand where the engine says, on the ground,
     )
     .toEqual([]);
 
-  // between ticks the walkers walk the routes the engine streamed: they never cut off them (through a wall). Only
-  // checked with ticks far apart (×1 real time, up to ×6): at ×60 a tick lasts a second and the drawn spot is
-  // still easing onto the new route
+  // between ticks the walkers walk the routes the engine streamed: they never cut off them (through a wall). A page
+  // opened mid-tick draws its walkers that much later, finishing the tick before's route first. Only checked with
+  // ticks far apart (×1 real time, up to ×6): at ×60 a tick lasts a second and the drawn spot is still easing onto
+  // the new route
   if (tickMs(clock.speed) >= 10_000)
     await expect
       .poll(
         async () => {
           const when = await tick();
-          const walkers = (await at(when)).filter(
-            (citizen) => citizen.route.length > 1,
-          );
+          const [now, previous] = await Promise.all([at(when), at(when - 1)]);
+          const walkers = now.filter((citizen) => citizen.route.length > 1);
           await page.waitForTimeout(1_000); // the drawn spot settles onto the tick's route
           const off: string[] = [];
           for (let k = 0; k < 10; k++) {
@@ -849,10 +855,17 @@ test('the real feed: the 15 citizens stand where the engine says, on the ground,
               const npc = shown.find(
                 (candidate) => candidate.id === citizen.id,
               )!;
-              const route = citizen.route.map(
-                ({ unit }) => new Vector3(...unit),
+              const routes = [
+                citizen,
+                previous.find((old) => old.id === citizen.id)!,
+              ]
+                .map(({ route }) =>
+                  route.map(({ unit }) => new Vector3(...unit)),
+                )
+                .filter((route) => route.length > 0);
+              const metres = Math.min(
+                ...routes.map((route) => offPath(npc.position, route)),
               );
-              const metres = offPath(npc.position, route);
               if (metres > 0.5)
                 off.push(`${citizen.id}: ${metres.toFixed(2)} m`);
             }
