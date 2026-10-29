@@ -202,6 +202,16 @@ def test_repeated_attacks_can_kill(new_sim: Callable[..., Simulation]) -> None:
     assert wolf.hunger < 1.0 and wolf.target is None  # it has eaten
 
 
+def test_a_blow_bigger_than_the_health_left_kills(new_sim: Callable[..., Simulation]) -> None:
+    sim = new_sim()
+    victim = sim.add_citizen(make_spec("victim"))
+    victim.body.health = 5.0133  # healing leaves fractions; a blow rounded to 5.01 would leave a sliver
+    sim.core.injure(victim, 6.0, "animal attack", "a wolf attacks you")
+    assert not victim.body.alive and victim.body.health == 0.0
+    injured = [e.payload.model_dump() for e in sim.drain() if e.type == "injured"]
+    assert injured == [{"amount": 5.01, "cause": "animal attack"}]
+
+
 @pytest.mark.parametrize("safety", ["day", "fire", "group", "town", "fed"])
 def test_predators_leave_people_alone_by_day_near_fire_in_groups_in_town_and_when_fed(
     new_sim: Callable[..., Simulation], safety: str

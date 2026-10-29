@@ -5,11 +5,28 @@ Regrowth (02-simulation: berries ~3 days, roots ~5, nuts ~7): a gathered or fish
 is full three game days later. Cells nobody touches keep their starting stock.
 """
 
+import numpy as np
+
 from app.observability.events import ResourceChanged
 from app.sim import animals, fire
 from app.sim.clock import DAY_MINUTES
 from app.sim.core import SimCore
-from app.sim.items import REGROW_DAYS, RESOURCE_INDEX
+from app.sim.items import REGROW_DAYS, RESOURCE_INDEX, RESOURCES
+from app.sim.state import WorldState
+from app.sim.world import SimWorld
+
+INITIAL_RESOURCE_SHARE = 0.5  # cells start between half and fully stocked
+
+
+def stock_resources(world: SimWorld, state: WorldState) -> None:
+    """A new run's wild plants and fish: every stocked cell starts between half and fully stocked."""
+    rng = state.rng("ecology.stock")
+    for cell in np.flatnonzero(world.resource_caps.any(axis=1)).tolist():
+        for column in range(len(RESOURCES)):
+            cap = int(world.resource_caps[cell, column])
+            if cap:
+                share = INITIAL_RESOURCE_SHARE + (1 - INITIAL_RESOURCE_SHARE) * rng.random()
+                state.resources[cell, column] = round(cap * share)
 
 
 def regrow_key(cell: int, resource: str) -> str:

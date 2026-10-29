@@ -156,7 +156,7 @@ def hunt_chance(core: SimCore, citizen: Citizen, animal: Animal) -> float:
 
 def _strike_hunt(core: SimCore, citizen: Citizen, animal: Animal) -> None:
     species = SPECIES[animal.kind]
-    rng = core.state.rngs["actions"]
+    rng = core.state.rng("wild.hunt")
     if rng.random() < hunt_chance(core, citizen, animal):
         died = animals.kill(core, animal, "hunted")
         taken = [
@@ -181,7 +181,7 @@ def _strike_hunt(core: SimCore, citizen: Citizen, animal: Animal) -> None:
 
 def _strike_animal(core: SimCore, citizen: Citizen, animal: Animal) -> None:
     species = SPECIES[animal.kind]
-    rng = core.state.rngs["actions"]
+    rng = core.state.rng("wild.attack")
     blow = (BLOW[0] + (BLOW[1] - BLOW[0]) * rng.random()) * citizen.traits.strength
     blow *= SPEAR if citizen.inventory.get("spear", 0) else 1.0
     if animals.wound(core, animal, blow, f"attacked by {citizen.name}"):
@@ -204,7 +204,7 @@ def _strike_person(core: SimCore, citizen: Citizen, action: ActionState) -> None
     if core.distance_m(citizen.position, victim.position) > REACH_M:
         core.end_action(citizen, "failed", f"{capital(action.label)} is out of reach.")
         return
-    rng = core.state.rngs["actions"]
+    rng = core.state.rng("wild.strike")
     blow = (BLOW[0] + (BLOW[1] - BLOW[0]) * rng.random()) * citizen.traits.strength * 0.5
     blow *= SPEAR if citizen.inventory.get("spear", 0) else 1.0
     core.end_action(citizen, "done", f"You strike {action.label}.")
@@ -287,7 +287,7 @@ def _finish_fish(core: SimCore, citizen: Citizen, action: ActionState) -> None:
     if stock == 0:
         core.end_action(citizen, "failed", "You catch nothing; the water seems empty of fish.")
         return
-    rng = core.state.rngs["actions"]
+    rng = core.state.rng("wild.fish")
     chance = FISH_CHANCE * (SPEAR if citizen.inventory.get("spear", 0) else 1.0)
     chance *= (1.3 if "hunting" in citizen.skills else 1.0) * math.sqrt(citizen.traits.strength)
     if rng.random() >= min(CHANCE_RANGE[1], chance):

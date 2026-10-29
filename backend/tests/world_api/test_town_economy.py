@@ -4,12 +4,12 @@ eat from it, role tasks need the skill and the place, and every change replays f
 from collections.abc import Callable
 
 from app.observability.replay import ReplayEvent, from_snapshot, replay
-from app.sim.actions import FARM_GROWTH, FIELD_ID
 from app.sim.bodies import ACTIVE_RATE, HUNGER_PER_HOUR
 from app.sim.simulation import Simulation
 from app.sim.snapshot import take_snapshot
+from app.sim.work import FARM_GROWTH, FIELD_ID
 from app.world_api.facade import WorldApi, run_until_done
-from tests.sim_helpers import make_spec
+from tests.sim_helpers import make_spec, without_animals
 
 FIELDS = (-112.0, 58.0)
 STOREHOUSES = (70.0, 85.0)
@@ -42,7 +42,7 @@ def test_an_hour_of_farming_ripens_rice_and_the_farmer_harvests_it(new_sim: Call
 
 
 def test_a_full_farmer_leaves_the_ripe_rice_in_the_field(new_sim: Callable[..., Simulation]) -> None:
-    sim = new_sim()
+    sim = without_animals(new_sim())  # a deer wandering into view would end the hour
     api = _farmer(sim, inventory={"rice": 120})  # 24 kg of 25
     result = run_until_done(sim, api.work("farm"), 61)
     assert result.text == "You tend the rice paddies and harvest some rice. The rest stays in the field."

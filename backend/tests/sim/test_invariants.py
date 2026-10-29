@@ -88,7 +88,7 @@ def test_the_hash_sees_every_part_of_the_state(new_sim: Callable[..., Simulation
         lambda s: s.citizen("ben").inventory.__setitem__("nuts", 1),
         lambda s: s.citizen("cid").people.add("ben"),
         lambda s: s.state.resources.__setitem__((5, 0), 1),
-        lambda s: setattr(s.state.rngs["actions"], "state", 7),
+        lambda s: setattr(next(iter(s.state.rngs.values())), "state", 7),
         lambda s: setattr(s.state, "next_seq", s.state.next_seq + 1),
     ]
     for change in changes:

@@ -9,9 +9,10 @@ import pytest
 
 from app.observability.events import Moved, RoutePoint, TickSummary
 from app.sim import wild
-from app.sim.actions import WALK_M_PER_TICK, streamed_route
 from app.sim.clock import SECONDS_PER_TICK
 from app.sim.core import WALK_AHEAD_TICKS
+from app.sim.feed_citizens import streamed_route
+from app.sim.movement import WALK_M_PER_TICK
 from app.sim.navigation import Route
 from app.sim.simulation import Simulation
 from app.sim.vec import Vec3, step_towards

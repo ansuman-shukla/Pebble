@@ -1,36 +1,34 @@
 """The simulation: the single authority on what is true (02-simulation).
 
-Each tick (= 1 game minute): advance durative actions (walkers move) → bodies → ecology (M6) → perception and
-interrupts → visits → one `tick_summary`. Actions from brains arrive between ticks. The simulation never reads the
-wall clock and draws randomness only from its seeded streams, so the same seed and inputs give the same state.
+Each tick (= 1 game minute): advance durative actions (walkers move) → bodies → ecology (M6) → the systems' hooks
+(`app.sim.systems`) → perception and interrupts → visits → one `tick_summary`. Actions from brains arrive between
+ticks. The simulation never reads the wall clock and draws randomness only from its seeded streams, so the same seed
+and inputs give the same state.
 """
 
 import numpy as np
 
-from app.core.rng import Rng
 from app.observability.events import (
-    AnimalPose,
     CitizenSpawned,
     Died,
     EventDraft,
     ItemLocation,
     ItemMoved,
-    Moved,
     NeedChanged,
     Perceived,
     TickSummary,
 )
-from app.sim import actions, ecology
+from app.sim import actions, ecology, feed_animals, feed_citizens, resting, systems
 from app.sim.acting import refuse
 from app.sim.bodies import COLLAPSE_WAKE_ENERGY, HOT_BIOMES, Crossing, update_body
 from app.sim.citizens import CitizenSpec
 from app.sim.core import GiftPolicy, SimCore
-from app.sim.fauna import place_groups
+from app.sim.fauna import populate
 from app.sim.fire import hearth_fires
-from app.sim.items import ITEMS, RESOURCES
+from app.sim.items import ITEMS
 from app.sim.navigation import Planner
 from app.sim.perception import animal_sightings, perceive, self_view
-from app.sim.state import RNG_STREAMS, Animal, Citizen, GroundStack, PlaceKnowledge, WorldState, age_group
+from app.sim.state import Animal, Citizen, GroundStack, PlaceKnowledge, WorldState, age_group
 from app.sim.vec import Vec3, step_towards
 from app.sim.world import SimWorld, site_unit
 from app.world_api.models import (
@@ -39,54 +37,39 @@ from app.world_api.models import (
     Action,
     ActionResult,
     CheckSelf,
-    Drop,
-    Give,
     LookAround,
     Perception,
-    PickUp,
-    Say,
     SelfView,
 )
 
-INITIAL_RESOURCE_SHARE = 0.5  # cells start between half and fully stocked
 WOODPILE = 12  # pieces of wood by each camp's fire pit at the start
 WOODPILE_OFFSET_M = 3.2  # beyond the seats round the pit (2 m), between two of them
 WOODPILE_BEARING = 112.5
 
 
-def initial_state(world: SimWorld, seed: int) -> WorldState:
-    rngs = {name: Rng.for_subsystem(seed, name) for name in RNG_STREAMS}
-    resources = np.zeros_like(world.resource_caps)
-    stocked = np.flatnonzero(world.resource_caps.any(axis=1))
-    ecology_rng = rngs["ecology"]
-    for cell in stocked.tolist():
-        for column in range(len(RESOURCES)):
-            cap = int(world.resource_caps[cell, column])
-            if cap:
-                share = INITIAL_RESOURCE_SHARE + (1 - INITIAL_RESOURCE_SHARE) * ecology_rng.random()
-                resources[cell, column] = round(cap * share)
-    groups, animals = place_groups(world, rngs["animals"])
-    fires = hearth_fires(world)
-    ground: dict[str, GroundStack] = {}
-    for fire_id in sorted(fires):  # each camp keeps a woodpile by its fire pit
-        if fires[fire_id].kind == "pit":
-            spot = step_towards(fires[fire_id].position, WOODPILE_BEARING, WOODPILE_OFFSET_M, world.radius_m)
-            stack_id = f"stack-{len(ground) + 1}"
-            ground[stack_id] = GroundStack(stack_id, "wood", WOODPILE, spot, world.nearest_cell(spot))
-    return WorldState(
+def initial_state(world: SimWorld, seed: int, registry: systems.Registry = systems.REGISTRY) -> WorldState:
+    state = WorldState(
         tick=0,
+        seed=seed,
         next_seq=1,
-        next_stack=len(ground) + 1,
+        next_stack=1,
         citizens={},
-        ground=ground,
+        ground={},
         stores={},
-        resources=resources,
-        rngs=rngs,
-        animals={animal.id: animal for animal in animals},
-        groups={group.id: group for group in groups},
-        fires=fires,
-        next_animal=len(animals) + 1,
+        resources=np.zeros_like(world.resource_caps),
+        rngs={},
+        fires=hearth_fires(world),
+        systems={system.name: system.new(world) for system in registry.systems},
     )
+    ecology.stock_resources(world, state)
+    populate(world, state)
+    for fire_id in sorted(state.fires):  # each camp keeps a woodpile by its fire pit
+        if state.fires[fire_id].kind == "pit":
+            spot = step_towards(state.fires[fire_id].position, WOODPILE_BEARING, WOODPILE_OFFSET_M, world.radius_m)
+            stack_id = f"stack-{state.next_stack}"
+            state.ground[stack_id] = GroundStack(stack_id, "wood", WOODPILE, spot, world.nearest_cell(spot))
+            state.next_stack += 1
+    return state
 
 
 class Simulation:
@@ -96,12 +79,21 @@ class Simulation:
         state: WorldState,
         planner: Planner | None = None,
         accepts_gift: GiftPolicy | None = None,
+        registry: systems.Registry = systems.REGISTRY,
     ) -> None:
         self.core = SimCore(world, planner or Planner(world), state, accepts_gift)
+        self.registry = registry
 
     @classmethod
-    def new(cls, world: SimWorld, seed: int | None = None, planner: Planner | None = None) -> "Simulation":
-        return cls(world, initial_state(world, world.seed if seed is None else seed), planner)
+    def new(
+        cls,
+        world: SimWorld,
+        seed: int | None = None,
+        planner: Planner | None = None,
+        registry: systems.Registry = systems.REGISTRY,
+    ) -> "Simulation":
+        state = initial_state(world, world.seed if seed is None else seed, registry)
+        return cls(world, state, planner, registry=registry)
 
     @property
     def world(self) -> SimWorld:
@@ -267,15 +259,7 @@ class Simulation:
                 return refuse(self.core, citizen, action.action, "You are too exhausted.")
             if sleep is not None:
                 self.core.end_action(citizen, "interrupted", "You get up.")
-        if isinstance(action, Say):
-            return actions.say(self.core, citizen, action)
-        if isinstance(action, PickUp):
-            return actions.pick_up(self.core, citizen, action)
-        if isinstance(action, Drop):
-            return actions.drop(self.core, citizen, action)
-        if isinstance(action, Give):
-            return actions.give(self.core, citizen, action)
-        raise ValueError(f"no instant handler for {action.action}")
+        return actions.instant(self.core, citizen, action)
 
     def start(self, citizen_id: str, action: Action) -> int:
         """Start a durative action; returns its number for `result()`."""
@@ -295,7 +279,7 @@ class Simulation:
         core.hurt.clear()
         core.strides.clear()
         before = {citizen.id: citizen.position for citizen in core.living()}
-        poses = {a.id: (a.position, a.heading_deg, a.activity) for a in core.state.animals.values() if a.alive}
+        poses = feed_animals.poses(core)
         walk_targets = {citizen.id: actions.walking_to(citizen) for citizen in core.living()}
 
         # followers move last, after the people they follow have taken this minute's steps
@@ -307,6 +291,7 @@ class Simulation:
             worse[citizen.id] = self._body(citizen)
 
         ecology.step(core)
+        systems.run_hooks(core, self.registry)
 
         living = core.living()
         seen = self._visibility(living)
@@ -338,29 +323,12 @@ class Simulation:
             citizen.threats = stalkers[citizen.id]
             self._visit(citizen)
 
-        moved: dict[str, Moved] = {}
-        for citizen in core.citizens():
-            if citizen.id in before and citizen.position != before[citizen.id]:
-                route, speed_mps = actions.streamed_route(core, citizen)
-                moved[citizen.id] = Moved(
-                    position=citizen.position,
-                    height_m=citizen.height_m,
-                    cell=citizen.cell,
-                    heading_deg=citizen.heading_deg,
-                    route=route,
-                    speed_mps=speed_mps,
-                )
-        bodies = {
-            citizen.id: (citizen.body.hunger, citizen.body.thirst, citizen.body.energy, citizen.body.health)
-            for citizen in core.living()
-        }
-        animal_poses = {
-            animal.id: _pose(animal)
-            for animal in (core.state.animals[animal_id] for animal_id in sorted(core.state.animals))
-            if (animal.alive or animal.id in poses)  # one that died this tick may have moved first
-            and (animal.position, animal.heading_deg, animal.activity) != poses.get(animal.id)
-        }
-        core.emit("tick_summary", TickSummary(moved=moved, bodies=bodies, animals=animal_poses))
+        summary = TickSummary(
+            moved=feed_citizens.moves(core, before),
+            bodies=feed_citizens.bodies(core),
+            animals=feed_animals.changed(core, poses),
+        )
+        core.emit("tick_summary", summary)
 
     def run(self, ticks: int) -> None:
         for _ in range(ticks):
@@ -384,7 +352,7 @@ class Simulation:
             citizen.in_view, citizen.animals_in_view, citizen.threats = set(), set(), set()
             return []
         if change.collapsed:
-            actions.collapse(core, citizen)
+            resting.collapse(core, citizen)
         return [crossing for crossing in change.crossings if crossing.worse]
 
     def _visibility(self, living: list[Citizen]) -> dict[str, set[str]]:
@@ -405,16 +373,6 @@ class Simulation:
             place = self.core.world.places[place_id]
             if self.core.distance_m(citizen.position, place.centre) <= place.radius_m:
                 self.core.learn_place(citizen, place_id, "visited")
-
-
-def _pose(animal: Animal) -> AnimalPose:
-    return AnimalPose(
-        position=animal.position,
-        height_m=animal.height_m,
-        cell=animal.cell,
-        heading_deg=animal.heading_deg,
-        activity=animal.activity,
-    )
 
 
 def _groups(sightings: list[tuple[Animal, float]]) -> dict[str, tuple[Animal, float, int]]:
