@@ -95,7 +95,7 @@ citizens:
     home: cross-s-1
     knows_places: [town, castle, well, market, main-gate, west-gate, storehouses, training-ground, rice-fields, gaol]
     knows_people: [masanori, kenji, fumiko, genzo, aiko, hana, tokuji, tetsu, daisuke, ennen]
-    inventory: {spear: 1}
+    inventory: {iron spear: 1}
     rank: 3
     titles: [ashigaru]
     traits: {honesty: 0.6, generosity: 0.4, boldness: 0.8, temper: 0.7}
@@ -356,7 +356,7 @@ citizens:
     home: band_a_camp:shelter-n
     knows_places: [band_a_camp]
     knows_people: [ama, oru, tek, lia, suna]
-    inventory: {dried meat: 8, spear: 1}
+    inventory: {dried meat: 8, flint spear: 1}
     traits: {honesty: 0.7, generosity: 0.5, boldness: 0.5, temper: 0.4}
     family: {ama: mate, lia: child}
     bonds: {tek: 30}
@@ -402,7 +402,7 @@ citizens:
     home: band_a_camp:shelter-e
     knows_places: [band_a_camp]
     knows_people: [ama, bo, oru, lia, suna]
-    inventory: {dried meat: 10, spear: 1}
+    inventory: {dried meat: 10, flint spear: 1}
     traits: {honesty: 0.6, generosity: 0.5, boldness: 0.9, temper: 0.7}
     family: {suna: mate}
     bonds: {kaz: -30, bo: 30}
@@ -521,7 +521,7 @@ citizens:
     home: band_b_camp:shelter-e
     knows_places: [band_b_camp]
     knows_people: [barro, nim, pip, vesa]
-    inventory: {dried meat: 10, spear: 1}
+    inventory: {dried meat: 10, obsidian spear: 1}
     traits: {honesty: 0.3, generosity: 0.5, boldness: 0.95, temper: 0.8}
     family: {barro: sibling, vesa: parent}
     bonds: {tek: -30, goro: -20}

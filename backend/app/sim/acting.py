@@ -6,12 +6,11 @@ import re
 
 from app.observability.events import ActionEnded, ActionStarted, JsonScalar
 from app.sim.core import REACH_M, SimCore
-from app.sim.items import ITEMS
+from app.sim.items import ITEM_WORDS
 from app.sim.perception import normalize
 from app.sim.state import ActionState, Citizen
 from app.world_api.models import ActionName, ActionResult
 
-_SINGULAR = {"berry": "berries", "root": "roots", "nut": "nuts", "reed": "reeds"}
 _NUMBERS = {
     word: index + 1
     for index, word in enumerate("one two three four five six seven eight nine ten eleven twelve".split())
@@ -83,11 +82,11 @@ def refuse(core: SimCore, citizen: Citizen, kind: ActionName, text: str) -> Acti
 
 def item_name(words: str) -> str | None:
     """The item the words name: the last word or two-word name that is an item ("some dried meat" -> dried meat)."""
-    query = [_SINGULAR.get(word, word) for word in normalize(words).split()]
+    query = normalize(words).split()
     for end in range(len(query), 0, -1):
         for start in (end - 2, end - 1):
-            name = " ".join(query[max(start, 0) : end])
-            if start >= 0 and name in ITEMS:
+            name = ITEM_WORDS.get(" ".join(query[max(start, 0) : end]))
+            if start >= 0 and name is not None:
                 return name
     return None
 

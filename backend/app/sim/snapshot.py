@@ -34,8 +34,9 @@ from app.sim.systems import REGISTRY
 from app.sim.vec import Vec3
 from app.world_api.models import ActionResult
 
-# 4: the seed and the systems' blocks; 3: animals, groups, fires, fish stocks; 2: identities, regrowth, brain notes
-SNAPSHOT_VERSION = 4
+# 5: world v1 item kinds (spears by material, coins); 4: the seed and the systems' blocks; 3: animals, groups, fires,
+# fish stocks; 2: identities, regrowth, brain notes
+SNAPSHOT_VERSION = 5
 
 
 class _Snap(BaseModel):
