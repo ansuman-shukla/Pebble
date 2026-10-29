@@ -64,6 +64,7 @@ TOOL_ORDER: dict[Tool, tuple[str, ...]] = {
 }
 if {item for items in TOOL_ORDER.values() for item in items} != {k.name for k in ITEMS.values() if k.tool}:
     raise ValueError("every tool needs its place in TOOL_ORDER")
+TOOL_WORDS: dict[str, Tool] = {word: tool for tool in TOOL_ORDER for word in (tool, f"{tool}s")}  # "spear", "axes"
 
 
 def tool_in(inventory: Mapping[str, int], tool: Tool) -> str | None:

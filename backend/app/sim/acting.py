@@ -3,10 +3,11 @@ finding them within reach. Every failure is an in-world sentence.
 """
 
 import re
+from collections.abc import Mapping
 
 from app.observability.events import ActionEnded, ActionStarted, JsonScalar
 from app.sim.core import REACH_M, SimCore
-from app.sim.items import ITEM_WORDS
+from app.sim.items import ITEM_WORDS, TOOL_WORDS, tool_in
 from app.sim.perception import normalize
 from app.sim.state import ActionState, Citizen
 from app.world_api.models import ActionName, ActionResult
@@ -89,6 +90,15 @@ def item_name(words: str) -> str | None:
             if start >= 0 and name is not None:
                 return name
     return None
+
+
+def carried_name(words: str, inventory: Mapping[str, int]) -> str | None:
+    """The item the words name, or for a bare tool word ("the spear", "an axe") the best of that tool carried."""
+    item = item_name(words)
+    last = normalize(words).split()[-1:]
+    if item is not None or not last or last[0] not in TOOL_WORDS:
+        return item
+    return tool_in(inventory, TOOL_WORDS[last[0]])
 
 
 def item_amount(words: str, have: int) -> int:

@@ -70,7 +70,7 @@ def test_goods_are_said_in_their_plural(item: str, count: int, words: str) -> No
         ("an obsidian shard", "obsidian"),
         ("some iron sand", "iron sand"),
         ("a berry", "berries"),
-        ("a spear", None),  # which one? spears come by material
+        ("a spear", None),  # which one? spears come by material (`carried_name` takes the best one carried)
     ],
 )
 def test_goods_are_named_by_their_words(words: str, item: str | None) -> None:
