@@ -30,6 +30,7 @@ dev = [
 [tool.mypy]
 strict = true
 plugins = ["pydantic.mypy"]
+explicit_package_bases = true  # scripts/ has no __init__.py; tests import it as `scripts.*`
 exclude = ["\\.venv", "app/alembic/versions"]
 
 [tool.pytest.ini_options]
