@@ -216,7 +216,9 @@ def apply_event(state: ReplayState, event: ReplayEvent) -> None:
                 continue
             citizen.position, citizen.height_m, citizen.cell = moved.position, moved.height_m, moved.cell
             citizen.heading_deg = moved.heading_deg
-            citizen.route, citizen.speed_mps, citizen.gait = tuple(moved.route), moved.speed_mps, moved.gait
+            # a move with no route (under a millimetre) is drawn standing: no gait, as the sim's motion has none
+            gait = moved.gait if moved.route else None
+            citizen.route, citizen.speed_mps, citizen.gait = tuple(moved.route), moved.speed_mps, gait
         for citizen_id, body in summary.bodies.items():
             state.citizens[citizen_id].body = body
         for animal in state.animals.values():

@@ -99,9 +99,21 @@ DOING: dict[str, str] = {
 ANIMAL_DOING: dict[str, str] = {
     "grazing": "grazing",
     "walking": "on the move",
-    "running": "running",
-    "hunting": "hunting",
     "sleeping": "asleep",
+    # the finer words of 10-world-v1 §4.6 (A1)
+    "alert": "on the alert",
+    "trotting": "on the move",
+    "fleeing": "running away",
+    "frozen": "keeping still",
+    "prowling": "prowling",
+    "stalking": "stalking",
+    "chasing": "giving chase",
+    "pouncing": "pouncing",
+    "attacking": "attacking",
+    "feeding": "feeding",
+    "drinking": "drinking",
+    "floating": "floating",
+    "swimming": "swimming",
 }
 RESOURCE_KEYWORDS: dict[str, frozenset[str]] = {
     "berries": frozenset({"berries", "berry", "bush", "bushes"}),

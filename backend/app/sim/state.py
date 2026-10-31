@@ -23,7 +23,7 @@ KnowledgeLevel = Literal["visited", "rough"]
 Region = Literal["town", "band_a", "band_b"]
 JsonScalar = str | int | float | bool | None
 # what an animal is drawn doing (10-world-v1 §4.6 "activities drawn", D144); "running" and "hunting" are v0's words
-# for a flight and a predator's approach, kept until the sim says fleeing/chasing and stalking/chasing instead
+# for a flight and a predator's approach: the sim no longer says them (D125), they stay so runs recorded before replay
 AnimalActivity = Literal[
     "idle",
     "grazing",

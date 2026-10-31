@@ -27,7 +27,7 @@ from app.world.spec import BIOME_NAMES, load_site_kinds, load_world_spec
 from app.world.sphere import TangentFrame, lat_lon
 from app.world.store import WorldGenerator, load_or_generate
 from app.world.town import TOWN_DATA_DIR, Extent, KindSpec, TownView, load_kinds, load_town
-from app.world.view import Site, WorldView, decode_array
+from app.world.view import Feature, Ground, Hotspot, Site, WorldView, decode_array
 from app.world.walkability import WalkGrid, town_walk_grid
 
 BoolArray = NDArray[np.bool_]
@@ -104,6 +104,15 @@ class TownChart:
         e = self.extent
         return e.min_x <= x < e.max_x and e.min_z <= z < e.max_z
 
+    def holds(self, units: FloatArray) -> BoolArray:
+        """For each direction (rows of unit vectors): whether it lies in the chart (`to_local` then `contains`, for
+        many at once)."""
+        along_up = units @ self.frame.up
+        t = np.where(along_up > 0, (self.radius_m + self.height_m) / np.where(along_up > 0, along_up, 1.0), np.inf)
+        x, z, e = t * (units @ self.frame.east), t * (units @ self.frame.south), self.extent
+        inside: BoolArray = (along_up > 0) & (e.min_x <= x) & (x < e.max_x) & (e.min_z <= z) & (z < e.max_z)
+        return inside
+
 
 @dataclass(frozen=True)
 class Place:
@@ -168,6 +177,11 @@ class SimWorld:
     structures: Mapping[str, Structure]
     resource_caps: UInt8Array  # (cells, len(RESOURCES))
     hearths: Mapping[str, Hearth]
+    # the wild places of the world view (10-world-v1 §1.2): hotspots, hunting grounds and fixed features (dens,
+    # waterholes...); animals live by them (A1)
+    hotspots: tuple[Hotspot, ...] = ()
+    grounds: tuple[Ground, ...] = ()
+    features: tuple[Feature, ...] = ()
 
     @property
     def cell_count(self) -> int:
@@ -391,6 +405,9 @@ def build_sim_world(
         structures=structures,
         resource_caps=caps,
         hearths=dict(sorted(hearths.items())),
+        hotspots=tuple(view.places.hotspots),
+        grounds=tuple(view.places.grounds),
+        features=tuple(view.places.features),
     )
 
 

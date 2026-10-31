@@ -54,7 +54,7 @@ def _wolf_at(sim: Simulation, victim_id: str) -> None:
     """A hungry wolf already at the victim's side and going for them: it bites in this tick's ecology step."""
     victim = sim.citizen(victim_id)
     beside = step_towards(victim.position, 90.0, 1.0, sim.world.radius_m)
-    add_animal(sim, "wolf", beside, hunger=80.0, activity="hunting", target=victim_id, until=sim.tick + 30)
+    add_animal(sim, "wolf", beside, hunger=80.0, activity="chasing", target=victim_id, until=sim.tick + 30)
 
 
 def _starve(sim: Simulation, victim_id: str) -> None:

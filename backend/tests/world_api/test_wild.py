@@ -5,10 +5,12 @@ from collections.abc import Callable
 
 import pytest
 
-from app.sim import doing, movement, wild
+from app.observability.events import EventDraft
+from app.sim import doing, movement, wear, wild
 from app.sim import fire as fires
 from app.sim.clock import NIGHT_ALTITUDE_DEG
 from app.sim.core import SIGHT_FIRE_M, SIGHT_NIGHT_M
+from app.sim.economy import load_economy
 from app.sim.fauna import SPECIES
 from app.sim.simulation import Simulation
 from app.sim.state import Fire
@@ -54,12 +56,14 @@ def test_a_hunter_stalks_a_deer_and_brings_it_down(
     result = run_until_done(sim, api.hunt("the deer"), 10)
     assert result.outcome == "done"
     assert result.text == "You bring down a deer. You take some meat and a hide."
-    assert not deer.alive and deer.activity == "dead"
+    assert not deer.alive and deer.activity == "remains"  # a hunter's kill is bones at once (10 §4.6)
     hunter = sim.citizen("hunter")
     assert hunter.inventory == {"flint spear": 1, "meat": SPECIES["deer"].meat, "hide": SPECIES["deer"].hide}
     events = sim.drain()
     died = [e for e in events if e.type == "died"]
-    assert [(e.actor_id, e.payload.model_dump()["cause"]) for e in died] == [(deer.id, "hunted")]
+    assert [(e.actor_id, e.payload.model_dump()) for e in died] == [
+        (deer.id, {"cause": "hunted", "attacker": "hunter"})
+    ]
     moved = [e.payload.model_dump() for e in events if e.type == "item_moved"]
     assert {(m["item"], m["source"]["kind"], m["source"]["id"]) for m in moved} == {
         ("meat", "animal", deer.id),
@@ -76,11 +80,13 @@ def test_a_missed_animal_bolts_and_a_boar_can_turn_on_you(
     monkeypatch.setattr(wild, "hunt_chance", lambda *_: 0.0)
     monkeypatch.setitem(SPECIES, "boar", SPECIES["boar"].__class__(**{**SPECIES["boar"].__dict__, "fights_back": 1.0}))
     handle = api.hunt("boar")
+    start = boar.position
     sim.step()
     result = handle.result
     assert result is not None and result.outcome == "failed"
     assert result.text == "A boar turns on you and gets away."
-    assert boar.alive and boar.activity == "running"
+    assert boar.alive and boar.activity == "alert"  # it bolted, and watches from where it stopped
+    assert sim.world.distance_m(start, boar.position) > 100
     hurt = 100.0 - sim.citizen("hunter").body.health
     assert SPECIES["boar"].hurts[0] <= hurt <= SPECIES["boar"].hurts[1]
     injured = [e for e in sim.drain() if e.type == "injured"]
@@ -322,7 +328,7 @@ def test_animals_are_seen_by_kind_and_group(new_sim: Callable[..., Simulation]) 
     assert seen[0].where == "close by to the west"
     wolf.activity = "sleeping"
     assert api.look_around().animals[0].doing == "asleep"
-    wolf.target, wolf.activity = "hunter", "hunting"
+    wolf.target, wolf.activity = "hunter", "chasing"
     assert api.look_around().animals[0].doing == "coming at you"
     text = api.look_around().text()
     assert "Animals: a wolf close by to the west (coming at you)" in text
@@ -371,3 +377,73 @@ def test_wild_failures_are_in_world(new_sim: Callable[..., Simulation]) -> None:
         "Fish have to be caught; try fishing.",
     ]
     assert all(text.startswith(IN_WORLD) for text in texts)
+
+
+# --- spears wear out ---
+
+
+def _spears_always_break(monkeypatch: pytest.MonkeyPatch) -> None:
+    spec = load_economy()
+    breakage = {item: rule.model_copy(update={"chance": 1.0}) for item, rule in spec.breakage.items()}
+    monkeypatch.setattr(wear, "load_economy", lambda: spec.model_copy(update={"breakage": breakage}))
+
+
+def _broke(events: list[EventDraft]) -> list[tuple[str | None, str]]:
+    return [(e.actor_id, e.payload.model_dump()["item"]) for e in events if e.type == "tool_broke"]
+
+
+@pytest.mark.parametrize("lands", [True, False])
+def test_a_hunt_strike_can_break_the_spear(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch, lands: bool
+) -> None:
+    sim, api = _hunter(new_sim)
+    add_animal(sim, "deer", _beside(sim, 10.0), activity="grazing", until=10**9)
+    monkeypatch.setattr(wild, "hunt_chance", lambda *_: 1.0 if lands else 0.0)
+    _spears_always_break(monkeypatch)
+    sim.drain()
+    run_until_done(sim, api.hunt("the deer"), 5)
+    assert _broke(sim.drain()) == [("hunter", "flint spear")]
+    assert "flint spear" not in sim.citizen("hunter").inventory
+
+
+def test_an_attack_strike_can_break_the_spear(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sim, api = _hunter(new_sim)
+    add_animal(sim, "wolf", _beside(sim, 2.0), target="hunter")
+    monkeypatch.setattr(wild, "FIGHT_BACK", 0.0)
+    _spears_always_break(monkeypatch)
+    sim.drain()
+    run_until_done(sim, api.attack("the wolf"), 5)
+    assert _broke(sim.drain()) == [("hunter", "flint spear")]
+    assert "flint spear" not in sim.citizen("hunter").inventory
+
+
+def test_no_spear_no_breakage(new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch) -> None:
+    sim, api = _hunter(new_sim, inventory={})
+    add_animal(sim, "wolf", _beside(sim, 2.0), target="hunter")
+    monkeypatch.setattr(wild, "FIGHT_BACK", 0.0)
+    _spears_always_break(monkeypatch)
+    run_until_done(sim, api.attack("the wolf"), 5)
+    assert _broke(sim.drain()) == []
+
+
+def test_a_hunter_never_stalks_out_onto_the_water(new_sim: Callable[..., Simulation]) -> None:
+    """Regression: a planned stalk to a duck out on the lake led the hunter onto the water."""
+    sim, api = _hunter(new_sim)
+    world, allowed = sim.world, sim.core.planner.outer.allowed
+    lake = next(
+        cell for cell in range(world.cell_count)
+        if world.biome(cell) == "lake" and any(allowed[n] for n in world.neighbours[cell])
+        and all(not allowed[n] for n in world.neighbours[cell] if world.biome(n) == "lake")
+    )  # fmt: skip
+    shore = next(n for n in world.neighbours[lake] if allowed[n])
+    hunter = sim.citizen("hunter")
+    sim.core.place_at(hunter, world.unit(shore))
+    skip_to(sim, hunter.position, night=False)
+    add_animal(sim, "duck", world.unit(lake), activity="floating", until=10**9)
+    handle = api.hunt("duck")
+    for _ in range(5):
+        sim.step()
+        assert allowed[hunter.cell], "the hunter walked onto the water"
+    assert handle.result is not None and handle.result.text == "You can't get any closer to a duck."

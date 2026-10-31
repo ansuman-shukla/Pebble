@@ -15,23 +15,27 @@
 import math
 
 from app.observability.events import ItemLocation, ResourceChanged
-from app.sim import animals, fire
+from app.sim import animals, fire, wear
 from app.sim.acting import begin, capital, settled
 from app.sim.clock import SECONDS_PER_TICK
-from app.sim.core import REACH_M, WALK_AHEAD_TICKS, SimCore, Stride
+from app.sim.core import REACH_M, WALK_AHEAD_TICKS, SimCore, Stride, TimedPoint
 from app.sim.ecology import schedule_regrowth
 from app.sim.fauna import SPECIES
 from app.sim.items import ITEMS, RESOURCE_INDEX, amount_words, tool_in
 from app.sim.locomotion import gait_mps
+from app.sim.navigation import Route, WalkProgress, walk_along
 from app.sim.perception import match_animal, match_person, person_label
 from app.sim.state import ActionState, Animal, Citizen, Fire
-from app.sim.vec import Vec3, bearing_deg, normalize
+from app.sim.vec import Vec3, bearing_deg, step_towards
 from app.world_api.models import Attack, Hunt
 
 HUNT_MINUTES = 60  # stalking gives up after this long ("You lose the trail.")
 HUNT_STRIKE_M = 15.0  # close enough to rush it or throw a spear
 ATTACK_STRIKE_M = 3.0
 STALK_PACE_M = gait_mps("stalk") * SECONDS_PER_TICK  # metres a minute, creeping (bodies.yaml)
+STRIKE_SHARE = 0.8  # a stalk ends this share of striking distance from the animal
+REPLAN_M = 3.0  # a stalk's route is planned again once the animal is this far from where it was planned to
+SAME_SPOT_M = 0.001  # spots on a streamed route closer than this are one spot
 UNSKILLED = 0.4  # without the hunting skill
 SPEAR = 1.4
 HELPER_BONUS = 0.25  # per other hunter after the same group close by (at most two count)
@@ -83,7 +87,9 @@ def start_attack(core: SimCore, citizen: Citizen, action: Attack) -> int:
 
 
 def advance_stalk(core: SimCore, citizen: Citizen, action: ActionState) -> None:
-    """One minute of a hunt or an attack: creep closer, strike once close enough."""
+    """One minute of a hunt or an attack: creep closer along a planned route at the stalking pace (10 §4.1), strike
+    once close enough. The route leads to a spot just inside striking distance on the near side of the animal and is
+    planned again when the animal has moved off it."""
     if action.kind == "attack" and action.args.get("target") == "person":
         _strike_person(core, citizen, action)
         return
@@ -101,15 +107,20 @@ def advance_stalk(core: SimCore, citizen: Citizen, action: ActionState) -> None:
         if action.until_tick is not None and core.state.tick >= action.until_tick:
             core.end_action(citizen, "failed", f"You lose the trail of {name}.")
             return
-        pace = STALK_PACE_M * citizen.traits.speed
-        step = min(pace, distance - strike_m * 0.8)
-        target = _towards(citizen.position, animal.position, step / distance)
-        if not _walkable(core, citizen, target):
-            core.end_action(citizen, "failed", f"You can't get any closer to {name}.")
-            return
-        core.strides[citizen.id] = _stalk_stride(core, citizen, action, (target, step), animal.position, strike_m)
-        core.place_at(citizen, target)
+        if action.route is None or action.goal is None or core.distance_m(animal.position, action.goal) > REPLAN_M:
+            route = _stalk_route(core, citizen, animal.position, strike_m)
+            if route is None:
+                core.end_action(citizen, "failed", f"You can't get any closer to {name}.")
+                return
+            action.route, action.goal, action.leg, action.along_m = route, animal.position, 0, 0.0
+        budget = STALK_PACE_M * citizen.traits.speed  # cost units this minute (metres on flat open ground)
+        progress = walk_along(action.route, action.leg, action.along_m, budget, core.world.radius_m)
+        core.strides[citizen.id] = _stalk_stride(core, citizen, action, progress, budget)
+        action.leg, action.along_m = progress.leg, progress.along_m
+        core.place_at(citizen, progress.position)
         if core.distance_m(citizen.position, animal.position) > strike_m:
+            if progress.arrived:
+                action.route = None  # it moved on as they got there: plan again next minute
             return
     if action.kind == "hunt":
         _strike_hunt(core, citizen, animal)
@@ -117,23 +128,41 @@ def advance_stalk(core: SimCore, citizen: Citizen, action: ActionState) -> None:
         _strike_animal(core, citizen, animal)
 
 
-def _stalk_stride(
-    core: SimCore, citizen: Citizen, action: ActionState, step: tuple[Vec3, float], quarry: Vec3, strike_m: float
-) -> Stride:
-    """This minute's creep (`step`: where to and how many metres, straight at the stalking pace) and, while still
-    out of reach, the next WALK_AHEAD_TICKS minutes of it towards where the animal is now."""
-    pace = STALK_PACE_M * citizen.traits.speed / SECONDS_PER_TICK  # metres a game second
-    target, metres = step
-    reached = metres / pace  # a full creep takes the whole minute
-    walked = ((citizen.position, 0.0), (target, reached))
-    gap = core.distance_m(target, quarry)
-    left = min(WALK_AHEAD_TICKS * STALK_PACE_M * citizen.traits.speed, gap - strike_m * 0.8)
-    if left <= 0:
-        return Stride(action.number, walked, gait="stalk")
-    onward = _towards(target, quarry, left / gap)
-    if not _walkable(core, citizen, onward):
-        return Stride(action.number, walked, gait="stalk")
-    return Stride(action.number, walked, ((onward, reached + left / pace),), gait="stalk")
+def _stalk_route(core: SimCore, citizen: Citizen, quarry: Vec3, strike_m: float) -> Route | None:
+    """A route to the spot STRIKE_SHARE of striking distance from the quarry on the stalker's side (None: no way
+    there, or it lies within the town's walls, where animals never are, or on water: a duck out on the lake)."""
+    if core.world.town_point(citizen.position) is not None:
+        return None
+    gap = core.distance_m(citizen.position, quarry)
+    stand = step_towards(quarry, bearing_deg(quarry, citizen.position), min(gap, strike_m * STRIKE_SHARE),
+                         core.world.radius_m)  # fmt: skip
+    if core.world.town_point(stand) is not None or not core.planner.outer.allowed[core.world.nearest_cell(stand)]:
+        return None
+    return core.planner.plan(citizen.position, stand, citizen.cell)
+
+
+def _stalk_stride(core: SimCore, citizen: Citizen, action: ActionState, step: WalkProgress, budget: float) -> Stride:
+    """This minute's creep along the route (timed by the cost spent, like a walk) and, while the route goes on, the
+    next WALK_AHEAD_TICKS minutes of it."""
+    if action.route is None:
+        raise ValueError(f"stalk {action.number} of {citizen.id} has no route")
+    seconds = SECONDS_PER_TICK / budget  # game seconds per unit of cost
+    walked = [(citizen.position, 0.0), *((unit, cost * seconds) for unit, cost in step.corners)]
+    walked.append((step.position, step.cost_spent * seconds))
+    on = walk_along(action.route, step.leg, step.along_m, WALK_AHEAD_TICKS * budget, core.world.radius_m)
+    ahead = [(unit, SECONDS_PER_TICK + cost * seconds) for unit, cost in on.corners]
+    if not step.arrived:
+        ahead.append((on.position, SECONDS_PER_TICK + on.cost_spent * seconds))
+    return Stride(action.number, _distinct(core, walked), _distinct(core, ahead, after=step.position), gait="stalk")
+
+
+def _distinct(core: SimCore, points: list[TimedPoint], after: Vec3 | None = None) -> tuple[TimedPoint, ...]:
+    kept: list[TimedPoint] = []
+    for point in points:
+        last = kept[-1][0] if kept else after
+        if last is None or core.distance_m(point[0], last) >= SAME_SPOT_M:
+            kept.append(point)
+    return tuple(kept)
 
 
 def hunt_chance(core: SimCore, citizen: Citizen, animal: Animal) -> float:
@@ -156,10 +185,13 @@ def hunt_chance(core: SimCore, citizen: Citizen, animal: Animal) -> float:
 
 
 def _strike_hunt(core: SimCore, citizen: Citizen, animal: Animal) -> None:
+    """The strike: a kill by the hunt's chance (the hunter takes meat and hide, the body is remains at once), else it
+    gets away with its herd and may turn on them. A spear used in it may break (10 §2.4)."""
     species = SPECIES[animal.kind]
     rng = core.state.rng("wild.hunt")
+    spear = tool_in(citizen.inventory, "spear")
     if rng.random() < hunt_chance(core, citizen, animal):
-        died = animals.kill(core, animal, "hunted")
+        died = animals.kill(core, animal, "hunted", attacker=citizen.id, remains=True)
         taken = [
             _take_from(core, citizen, animal, item, count, died)
             for item, count in (("meat", species.meat), ("hide", species.hide))
@@ -168,8 +200,12 @@ def _strike_hunt(core: SimCore, citizen: Citizen, animal: Animal) -> None:
         got = " and ".join(words for words in taken if words)
         tail = f" You take {got}." if got else " You can't carry any of it."
         core.end_action(citizen, "done", f"You bring down {species.one}.{tail}")
+        if spear is not None:
+            wear.use_tool(core, citizen, spear, died)
         return
-    _scatter(core, animal, citizen.position)
+    if spear is not None:
+        wear.use_tool(core, citizen, spear)
+    _scatter(core, animal, citizen)
     text = f"{capital(species.one)} gets away."
     if species.fights_back and rng.random() < species.fights_back:
         low, high = species.hurts
@@ -187,14 +223,20 @@ def _strike_hunt(core: SimCore, citizen: Citizen, animal: Animal) -> None:
 
 
 def _strike_animal(core: SimCore, citizen: Citizen, animal: Animal) -> None:
+    """A blow at an animal: it may die of it, else it runs off (a predator driven off) and may bite back. A spear used
+    in it may break (10 §2.4)."""
     species = SPECIES[animal.kind]
     rng = core.state.rng("wild.attack")
+    spear = tool_in(citizen.inventory, "spear")
     blow = (BLOW[0] + (BLOW[1] - BLOW[0]) * rng.random()) * citizen.traits.strength
-    blow *= SPEAR if tool_in(citizen.inventory, "spear") else 1.0
-    if animals.wound(core, animal, blow, f"attacked by {citizen.name}"):
+    blow *= SPEAR if spear is not None else 1.0
+    killed = animals.wound(core, animal, blow, f"attacked by {citizen.name}", attacker=citizen.id)
+    if spear is not None:
+        wear.use_tool(core, citizen, spear)
+    if killed:
         core.end_action(citizen, "done", f"You kill {species.one}.")
         return
-    _scatter(core, animal, citizen.position)
+    _scatter(core, animal, citizen)
     if species.bite[1] > 0 and rng.random() < FIGHT_BACK:
         core.end_action(citizen, "done", f"You strike {species.one}; it bites back and runs off.")
         low, high = species.bite
@@ -220,15 +262,9 @@ def _strike_person(core: SimCore, citizen: Citizen, action: ActionState) -> None
     core.injure(victim, blow, "violence", f"{person_label(victim, citizen)} strikes you", attacker=citizen.id)
 
 
-def _scatter(core: SimCore, animal: Animal, threat: Vec3) -> None:
-    """A missed animal's group bolts away from the hunter."""
-    for member_id in core.state.groups[animal.group].members:
-        member = core.state.animals[member_id]
-        if member.alive and not SPECIES[member.kind].predator:
-            away = bearing_deg(threat, member.position)
-            animals.run_from(core, member, away)
-    if SPECIES[animal.kind].predator:
-        animals.drive_off(core, animal, threat)
+def _scatter(core: SimCore, animal: Animal, citizen: Citizen) -> None:
+    """A missed animal bolts away from the hunter, its herd with it (a predator is driven off)."""
+    animals.scatter(core, animal, citizen.position, citizen.id)
 
 
 def _take_from(core: SimCore, citizen: Citizen, animal: Animal, item: str, count: int, cause_seq: int) -> str:
@@ -249,17 +285,6 @@ def _take_from(core: SimCore, citizen: Citizen, animal: Animal, item: str, count
 
 def _verb(action: ActionState) -> str:
     return "hunting" if action.kind == "hunt" else "fighting"
-
-
-def _towards(origin: Vec3, goal: Vec3, share: float) -> Vec3:
-    return normalize(tuple(o + (g - o) * share for o, g in zip(origin, goal, strict=True)))  # type: ignore[arg-type]
-
-
-def _walkable(core: SimCore, citizen: Citizen, position: Vec3) -> bool:
-    """Stalking goes straight across open ground: never within the town's walls (animals are never there)."""
-    if core.world.town_point(position) is not None or core.world.town_point(citizen.position) is not None:
-        return False
-    return core.planner.outer.allowed[core.world.nearest_cell(position, citizen.cell)]
 
 
 # --- fishing ---
