@@ -472,13 +472,15 @@ def free_round(core: SimCore, citizen: Citizen, centre: Vec3, radius: float, bea
 
 def _arrival(core: SimCore, citizen: Citizen, slots: tuple[Slot, ...], anchor: Vec3, with_centre: bool) -> Vec3:
     """Where someone walking to these slots ends, claimed on the way: the nearest free work slot of theirs (the loom
-    for a weaver, the stall for the merchant), else the first owner's free stands (unless others queue for them),
-    then the end of its queue, then the next owner's (the granary before the other storehouses), else a ring spot
-    round the anchor, waiting for the first owner's stands. Seats and mats are taken by resting and sleeping, not by
-    walking."""
-    chosen = nearest_free(core, citizen, [slot for slot in slots if slot.kind == "work"])
-    if chosen is not None:
-        return _walk_claim(core, citizen, chosen, chosen.position)
+    for a weaver, the stall for the merchant; the first of their skills with a free slot here goes first, then those
+    open to all), else the first owner's free stands (unless others queue for them), then the end of its queue, then
+    the next owner's (the granary before the other storehouses), else a ring spot round the anchor, waiting for the
+    first owner's stands. Seats and mats are taken by resting and sleeping, not by walking."""
+    work = [slot for slot in slots if slot.kind == "work"]
+    for skill in (*citizen.skills, None):  # their own trade's first: the lord's seat before a guard stand (D166)
+        chosen = nearest_free(core, citizen, [slot for slot in work if slot.skill == skill])
+        if chosen is not None:
+            return _walk_claim(core, citizen, chosen, chosen.position)
     for owner in dict.fromkeys(slot.owner for slot in slots):
         if not _line(core, owner, but=citizen.id):  # first come, first served: nobody jumps the queue
             stand = nearest_free(
