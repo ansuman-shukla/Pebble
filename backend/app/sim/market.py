@@ -1,6 +1,6 @@
 """The market stall (10-world-v1 §2.5): prices that follow the stock, `buy` and `sell`, and the merchant's `trade`.
 
-The drawn stall is a store (its stock in `state.stores` under the stall's id), open while someone works `trade` at it
+The drawn stall is a store (its stock in `state.stores` under the stall's id), open while its owner works `trade` at it
 (the merchant behind the counter, within `OPEN_M`); `buy` and `sell` answer "The stall is shut." otherwise. The till
 is the keeper's purse: buyers pay into it and the stall pays sellers out of it, never more than it holds (D159).
 
@@ -24,6 +24,7 @@ from typing import Literal
 from pydantic import JsonValue, TypeAdapter
 
 from app.observability.events import ItemLocation, PricesChanged, Traded
+from app.sim import ownership
 from app.sim.acting import capital, item_name, refuse
 from app.sim.coins import count_in_words, number_words, price_words
 from app.sim.core import SimCore
@@ -136,8 +137,8 @@ def stall_in_reach(core: SimCore, citizen: Citizen) -> Station | None:
 
 
 def keeper(core: SimCore, stall: Station) -> Citizen | None:
-    """Who keeps the stall open: someone working `trade` within `OPEN_M` of it (the merchant; a sleeper's action is
-    sleep, so they are awake)."""
+    """Who keeps the stall open: one of its owners (the merchant's household, E2) working `trade` within `OPEN_M` of it
+    (a sleeper's action is sleep, so they are awake)."""
     return next(
         (
             citizen
@@ -145,6 +146,7 @@ def keeper(core: SimCore, stall: Station) -> Citizen | None:
             if citizen.action is not None
             and citizen.action.kind == "work"
             and citizen.action.item == "trade"
+            and ownership.owns(core.world, citizen, stall.id)
             and core.distance_m(citizen.position, stall.centre) <= OPEN_M
         ),
         None,

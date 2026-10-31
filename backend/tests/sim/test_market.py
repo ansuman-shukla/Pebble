@@ -28,6 +28,7 @@ from app.world_api.models import Buy, PriceSeen, Sell, Work
 from tests.sim_helpers import make_spec, without_animals
 
 STALL = "market-stall"
+MERCHANT_HOME = "main-e-2"  # the stall is her household's (E2)
 BEHIND = (20.0, 52.2)  # the merchant's spot behind the counter
 BEFORE = (20.0, 56.0)  # the buyer side of the stall
 # §2.5: at the target stock each good sells for its value a lot and is bought for ⌊0.75 × that⌋
@@ -140,7 +141,14 @@ def _market(new_sim: Callable[..., Simulation], merchant_coins: int = 100, **buy
         if good.stall is not None and item != "gold":
             sim.stock_store(STALL, item, good.stall.target)
     sim.add_citizen(
-        make_spec("fumiko", name="Fumiko", at=BEHIND, skills=["trade"], inventory={"coins": merchant_coins})
+        make_spec(
+            "fumiko",
+            name="Fumiko",
+            at=BEHIND,
+            home=MERCHANT_HOME,
+            skills=["trade"],
+            inventory={"coins": merchant_coins},
+        )
     )
     sim.add_citizen(make_spec("goro", name="Goro", at=BEFORE, **buyer))
     sim.drain()
@@ -180,6 +188,17 @@ def test_the_stall_is_open_only_while_the_merchant_works_trade_at_it(new_sim: Ca
     assert other is not None
     other.item = "guard"  # at work behind the stall, but not trading
     assert sim.instant("goro", Buy(item="rice", amount=2)).text == "The stall is shut."
+
+
+def test_only_the_stall_s_owner_keeps_it_open(new_sim: Callable[..., Simulation]) -> None:
+    sim = without_animals(new_sim(seed=3))
+    sim.stock_store(STALL, "rice", 120)
+    sim.add_citizen(make_spec("rival", name="Rival", at=BEHIND, skills=["trade"], inventory={"coins": 50}))
+    sim.add_citizen(make_spec("goro", name="Goro", at=BEFORE, inventory={"coins": 50}))
+    sim.start("rival", Work(task="trade"))  # a trader at the counter, but not of the merchant's household
+    assert sim.instant("goro", Buy(item="rice", amount=2)).text == "The stall is shut."
+    sim.citizen("rival").home = MERCHANT_HOME  # one of the household
+    assert sim.instant("goro", Buy(item="rice", amount=2)).outcome == "done"
 
 
 def test_a_purchase_moves_whole_lots_and_pays_the_merchant_lot_by_lot(new_sim: Callable[..., Simulation]) -> None:
