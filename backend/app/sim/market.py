@@ -136,7 +136,8 @@ def stall_in_reach(core: SimCore, citizen: Citizen) -> Station | None:
 
 
 def keeper(core: SimCore, stall: Station) -> Citizen | None:
-    """Who keeps the stall open: someone awake working `trade` within `OPEN_M` of it (the merchant)."""
+    """Who keeps the stall open: someone working `trade` within `OPEN_M` of it (the merchant; a sleeper's action is
+    sleep, so they are awake)."""
     return next(
         (
             citizen
@@ -144,7 +145,6 @@ def keeper(core: SimCore, stall: Station) -> Citizen | None:
             if citizen.action is not None
             and citizen.action.kind == "work"
             and citizen.action.item == "trade"
-            and not citizen.body.asleep
             and core.distance_m(citizen.position, stall.centre) <= OPEN_M
         ),
         None,
@@ -187,6 +187,7 @@ def buy(core: SimCore, citizen: Citizen, action: Buy) -> ActionResult:
         deal, paid, stock = deal + 1, paid + price, stock - lot.lot
     if deal == 0:
         return refuse(core, citizen, "buy", stopped)
+    stopped = stopped or _odd(item, action.amount % lot.lot)
     count = deal * lot.lot
     seq = core.emit(
         "bought",
@@ -231,6 +232,7 @@ def sell(core: SimCore, citizen: Citizen, action: Sell) -> ActionResult:
         deal, paid, stock = deal + 1, paid + price, stock + lot.lot
     if deal == 0:
         return refuse(core, citizen, "sell", stopped)
+    stopped = stopped or _odd(item, min(action.amount, carried) % lot.lot)
     count = deal * lot.lot
     seq = core.emit(
         "sold",
@@ -295,13 +297,26 @@ def _tally(core: SimCore, merchant: Citizen) -> None:
     sales[session] = sales.get(session, 0) + 1
 
 
+def _odd(item: str, units: int) -> str:
+    """What is left over when an amount isn't whole lots ("The odd measure isn't sold.")."""
+    if units == 0:
+        return ""
+    unit = _unit(item)
+    return f"The odd {unit} isn't sold." if units == 1 else f"The odd {number_words(units)} {unit}s aren't sold."
+
+
+def _unit(item: str) -> str:
+    """One unit of a good as a buyer counts it ("measure", "piece", "hide")."""
+    kind = ITEMS[item]
+    return kind.one.partition(" ")[2].partition(" of ")[0] if kind.mass else kind.one.partition(" ")[2]
+
+
 def _lot_words(item: str, lot: int) -> str:
     """A lot as a buyer counts it: "a hide", "two measures", "four pieces"."""
     kind = ITEMS[item]
     if lot == 1:
         return kind.one
-    unit = kind.one.partition(" ")[2].partition(" of ")[0] if kind.mass else (kind.plural or kind.name)
-    return f"{number_words(lot)} {unit}s" if kind.mass else f"{number_words(lot)} {unit}"
+    return f"{number_words(lot)} {_unit(item)}s" if kind.mass else f"{number_words(lot)} {kind.plural or kind.name}"
 
 
 # --- price words and what someone at the stall sees ---

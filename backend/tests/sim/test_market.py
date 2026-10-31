@@ -188,7 +188,10 @@ def test_a_purchase_moves_whole_lots_and_pays_the_merchant_lot_by_lot(new_sim: C
     coins = coins_held(sim.state)
     result = sim.instant("goro", Buy(item="rice", amount=5))  # two lots of two: the odd measure isn't sold
     # the first lot at the target (4), the second at 118 left (dear: 5)
-    assert (result.outcome, result.text) == ("done", "You buy four measures of rice for nine coins.")
+    assert (result.outcome, result.text) == (
+        "done",
+        "You buy four measures of rice for nine coins. The odd measure isn't sold.",
+    )
     assert sim.citizen("goro").inventory == {"coins": 41, "rice": 4}
     assert sim.citizen("fumiko").inventory == {"coins": 109}
     assert sim.state.stores[STALL]["rice"] == 116
@@ -239,10 +242,13 @@ def test_buying_names_the_lot_and_the_goods_the_stall_sells(new_sim: Callable[..
     _open(sim)
     assert sim.instant("goro", Buy(item="rice", amount=1)).text == "Rice is sold two measures at a time."
     assert sim.instant("goro", Buy(item="wood", amount=3)).text == "Wood is sold four pieces at a time."
+    assert sim.instant("goro", Buy(item="wood", amount=6)).text == (
+        "You buy four pieces of wood for four coins. The odd two pieces aren't sold."
+    )
     assert sim.instant("goro", Buy(item="berries", amount=3)).text == "The stall doesn't sell berries."
     assert sim.instant("goro", Buy(item="moonstones", amount=3)).text == "The stall doesn't sell moonstones."
     assert sim.instant("goro", Buy(item="two measures of rice", amount=2)).outcome == "done"
-    assert sim.citizen("goro").inventory == {"coins": 46, "rice": 2}
+    assert sim.citizen("goro").inventory == {"coins": 42, "rice": 2, "wood": 4}
 
 
 def test_a_sale_to_the_stall_is_paid_from_the_merchant_s_purse(new_sim: Callable[..., Simulation]) -> None:
@@ -256,7 +262,7 @@ def test_a_sale_to_the_stall_is_paid_from_the_merchant_s_purse(new_sim: Callable
     sold = next(e for e in sim.drain() if e.type == "sold")
     assert sold.payload == Traded(item="hide", count=2, lots=2, coins=21, stall=STALL, merchant="fumiko")
     rice = sim.instant("goro", Sell(item="rice", amount=9))  # 7 carried: 3 lots
-    assert rice.text == "You sell six measures of rice for nine coins."
+    assert rice.text == "You sell six measures of rice for nine coins. The odd measure isn't sold."
     assert sim.citizen("goro").inventory == {"coins": 30, "hide": 1, "rice": 1}
 
 
@@ -343,6 +349,8 @@ def test_someone_at_the_open_stall_sees_each_good_s_price_and_word(new_sim: Call
     assert seen["hide"].price == "fifteen coins each; it pays eleven coins"
     assert seen["gold"] == PriceSeen(item="gold", price="none left; it pays twenty-six coins", word="dear")
     assert not [price.price for price in view.items if re.search(r"\d", price.price)]  # no digits reach a mind
+    sim.citizen("goro").body.asleep = True
+    assert market_view(sim.core, sim.citizen("goro")) is None
     assert seen["iron axe"].price == "sixty coins each; it pays thirty-nine coins"  # priced at 3 in stock
 
 
