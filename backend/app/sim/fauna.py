@@ -277,7 +277,9 @@ class Pin:
 def pins(world: SimWorld, kind: str) -> tuple[Pin, ...]:
     """The pinned homes of a kind, in the world view's order: a predator's dens of its kind; a herd's hunting
     grounds (hotspots listing it, at their centre; a settlement's ground, on its habitat between NEAR_SITE_M and the
-    ground's edge, the first such cell by distance). A spot off the kind's habitat pins nobody."""
+    ground's edge, the first such cell by distance). A den always pins its kind (wherever it may stand: dens lie at
+    a hotspot's edge or off a road, often outside the kind's habitat); a hunting ground off the herd's habitat pins
+    nobody."""
     cache = world_cache(world)
     found: tuple[Pin, ...] | None = cache.get(("pins", kind))
     if found is not None:
@@ -288,7 +290,7 @@ def pins(world: SimWorld, kind: str) -> tuple[Pin, ...]:
         homes += [
             Pin(world.nearest_cell(den.position), den.id)
             for den in world.features
-            if den.kind == "den" and den.animal == kind and ok[world.nearest_cell(den.position)]
+            if den.kind == "den" and den.animal == kind and standable(world, kind)[world.nearest_cell(den.position)]
         ]
     else:
         homes += [Pin(spot.cell, spot.id) for spot in world.hotspots if kind in spot.hunting and ok[spot.cell]]

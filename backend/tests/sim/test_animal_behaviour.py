@@ -418,3 +418,16 @@ def test_every_animal_move_is_streamed_from_where_it_stood(new_sim: Callable[...
             metres = sum(sim.world.distance_m(a.unit, b.unit) for a, b in zip(walked, walked[1:], strict=False))
             assert metres <= caps[animal.kind] * 1.01
     assert moves > 1000
+
+
+# --- where they live ---
+
+
+def test_every_den_in_the_world_view_has_its_group(new_sim: Callable[..., Simulation]) -> None:
+    sim = new_sim()
+    dens = [f for f in sim.world.features if f.kind == "den"]
+    assert len(dens) == 5  # P1's table: two wolf dens, two bear dens, the lions'
+    for den in dens:
+        groups = [g for g in sim.state.groups.values() if den_of(sim.world, g) == den.position]
+        assert len(groups) == 1, den.id
+        assert groups[0].kind == den.animal and groups[0].size == SPECIES[str(den.animal)].group_size[1]
