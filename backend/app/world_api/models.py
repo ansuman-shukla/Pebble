@@ -108,7 +108,9 @@ Driver = Literal["hunger", "thirst", "rest", "danger", "duty", "ambition", "soci
 PriceWord = Literal["dear", "fair", "cheap"]  # a stall's price for a good against what the good is worth
 Sentence = Literal["fine", "confine"]  # what a judge hands down
 
-CONTRACT_VERSION = "v1-draft"  # D96: C1 owns the draft through wave 3; Q1 freezes it as contract_v1.json
+# the one place the contract's version is set (test_contract writes it into the draft file); D96: C1 owns the draft
+# through wave 3, Q1 freezes it as contract_v1.json
+CONTRACT_VERSION = "v1-draft"
 INSTANT_ACTIONS: frozenset[ActionName] = frozenset(
     ("look_around", "check_self", "say", "pick_up", "drop", "give", "recall")
     + ("buy", "sell", "stash", "accuse", "gesture", "set_goal")

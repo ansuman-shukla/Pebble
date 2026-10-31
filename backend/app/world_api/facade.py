@@ -197,7 +197,7 @@ class WorldApi:
         return self._start(Flee())
 
     def work(self, task: str) -> ActionHandle:
-        """A role task: farm, store food, guard, trade, weave, govern."""
+        """A role task: farm, store food, guard, trade, weave, govern, pray, ring bell."""
         return self._start(Work(task=task))
 
     def follow(self, person: str, pace: Pace = "walk") -> ActionHandle:
