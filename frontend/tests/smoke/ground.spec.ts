@@ -24,7 +24,12 @@ import {
   weightsArray,
 } from '../../src/lib/world/ground-shader';
 import type { GroundBreakup } from '../../src/lib/world/ground-style';
-import { openGlobe, OUTSIDE_THE_WALLS, WORLD_URL } from './globe-helpers';
+import {
+  openGlobe,
+  OUTSIDE_THE_WALLS,
+  stillWorld,
+  WORLD_URL,
+} from './globe-helpers';
 
 /*
  * The ground shader (bible §5.1): 8 layer weights per terrain vertex that follow the rules (rock on steep slopes,
@@ -648,6 +653,8 @@ test.describe('ground at street level', () => {
     }) => {
       test.setTimeout(120_000);
       const errors: string[] = [];
+      // noon whatever the engine's clock says, and no one walking through the view: both looks see the same scene
+      await stillWorld(page);
       await openGlobe(page, errors, `${query}&ground=flat`);
       await page.waitForTimeout(1500);
       const plain = await groundPixels(page);
@@ -659,13 +666,19 @@ test.describe('ground at street level', () => {
       // the shader shows earth and gravel in the grass, and texture (the gate's road is earth in both)
       expect(detailed.earth).toBeGreaterThan(plain.earth + 0.05);
       expect(detailed.green).toBeGreaterThan(minGreen);
-      expect(detailed.texture).toBeGreaterThan(plain.texture * 4);
+      // the patterns add fine texture over the flat look (by a margin: the flat gate view's walls and road have
+      // texture of their own, so a ratio to it sat on the edge)
+      expect(detailed.texture - plain.texture).toBeGreaterThan(0.4);
+      // grassland outside the walls is nearly all ground: its patterns alone must carry the texture
+      if (query === OUTSIDE_THE_WALLS)
+        expect(detailed.texture).toBeGreaterThan(1.5);
       expect(errors).toEqual([]);
     });
 
   test('the low quality compiles and still shows patches', async ({ page }) => {
     test.setTimeout(90_000);
     const errors: string[] = [];
+    await stillWorld(page);
     await openGlobe(page, errors, `${OUTSIDE_THE_WALLS}&ground=low`);
     await page.waitForTimeout(1500);
     expect((await groundPixels(page)).earth).toBeGreaterThan(0.05);

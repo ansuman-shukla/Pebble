@@ -55,6 +55,22 @@ export const OUTSIDE_THE_WALLS = '?at=37.49,3.22,85&time=12:00';
 /** The South marsh, just south of the town: mud and puddles at street level, facing the town. */
 export const SOUTH_MARSH = '?at=31.2,12,0&time=12:00';
 
+/**
+ * Keeps the world still for pixel checks: the live feed never speaks (so `?time=` holds instead of the engine's
+ * clock, which may be at night) and the entities come back empty (no one walks into view). Call before openGlobe.
+ */
+export async function stillWorld(page: Page) {
+  await page.routeWebSocket(/\/api\/v1\/live$/, () => undefined);
+  await page.route(/\/api\/v1\/entities$/, async (route) => {
+    const response = await route.fetch();
+    const entities = (await response.json()) as Record<string, unknown>;
+    await route.fulfill({
+      response,
+      json: { ...entities, citizens: [], animals: [], fires: [] },
+    });
+  });
+}
+
 /** Opens the globe at `/<query>` and waits until the world is ready and the player is placed. */
 export async function openGlobe(page: Page, errors: string[], query = '') {
   page.on('pageerror', (error) => errors.push(error.message));
