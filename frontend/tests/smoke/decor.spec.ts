@@ -21,6 +21,11 @@ import {
   type GlobeTerrain,
 } from '../../src/lib/world/globe';
 import {
+  biomeGroundClaims,
+  groundWeights,
+} from '../../src/lib/world/globe-mesh';
+import { GROUND_LAYERS } from '../../src/lib/world/ground-shader';
+import {
   createScatter,
   NODE_CLEARANCE,
   ROAD_CLEARANCE,
@@ -154,6 +159,46 @@ test('every flora kind of the world has a look', () => {
   expect(view.places.flora_kinds.length).toBeGreaterThan(10);
   for (const kind of view.places.flora_kinds)
     expect(FLORA_LOOKS[kind], kind).toBeDefined();
+});
+
+test('no decor grows where the ground is mostly rock', () => {
+  const { globe } = terrain;
+  const mountain = view.biome_names.indexOf('mountain');
+  const claims = view.biome_names.map(biomeGroundClaims);
+  const weights = new Float64Array(GROUND_LAYERS.length);
+  const rock = GROUND_LAYERS.indexOf('rock');
+  const rockAt = (direction: Vector3) => {
+    const hit = terrain.locate(direction);
+    groundWeights(
+      {
+        claims: claims[globe.biomes[hit.cell]],
+        slope: (Math.acos(1 - hit.tilt) * 180) / Math.PI,
+        height: hit.height,
+        lakeLevel: Infinity,
+      },
+      weights,
+    );
+    return weights[rock];
+  };
+  const cells = [...globe.biomes.keys()].filter(
+    (cell) => globe.biomes[cell] === mountain,
+  );
+  expect(cells.length).toBeGreaterThan(200);
+  let rocky = 0;
+  let decor = 0;
+  const faults: string[] = [];
+  for (const cell of cells) {
+    if (rockAt(cellDirection(globe, cell, new Vector3())) > 0.5) rocky += 1;
+    for (const instance of scatter.decor(cell)) {
+      decor += 1;
+      if (rockAt(instance.position.clone().normalize()) > 0.5)
+        faults.push(`${instance.kind} on rock`);
+    }
+  }
+  expect(faults).toEqual([]);
+  // mountains have rock ground and decor between it
+  expect(rocky).toBeGreaterThan(20);
+  expect(decor).toBeGreaterThan(500);
 });
 
 test('decor keeps off nodes and their spots, roads and paths, and rocks keep out of mineral hotspots', () => {

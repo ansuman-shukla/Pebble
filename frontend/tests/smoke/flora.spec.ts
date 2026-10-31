@@ -100,6 +100,8 @@ test('rows give each cell its items and node ids name table indexes', () => {
   expect(floraIndex('flora:41036')).toBe(41_036);
   expect(floraIndex('elder_grove:den')).toBeNull();
   expect(floraIndex('flora:')).toBeNull();
+  expect(floraIndex('flora:12x')).toBeNull();
+  expect(floraIndex('b_wood:flora:12')).toBeNull();
 });
 
 test('an item lies its offset steps east and north of its cell centre', () => {
