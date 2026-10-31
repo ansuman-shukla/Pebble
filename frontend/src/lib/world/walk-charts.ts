@@ -1,12 +1,12 @@
 /*
  * What the globe walker collides with outside the town: camp and landmark placements (Polyfork colliders,
- * each standing on the terrain under it like the rendered model) and the scattered biome props near the
+ * each standing on the terrain under it like the rendered model) and the scattered decor and nodes near the
  * player (trees, rocks, bushes; ground cover never blocks), all in a chart's local metres.
  */
 import { Matrix4, Vector3 } from 'three';
 
-import { PROPS, type PropKind } from './assets';
-import { BIOME_PROPS, GROUND_COVER } from './biome-props';
+import { PROPS } from './assets';
+import { BLOCKING_KINDS } from './biome-props';
 import {
   buildWalkWorld,
   type ColliderFile,
@@ -23,19 +23,10 @@ import type { WalkChart, WildBlockers } from './globe-walk';
 import { type Scatter, type ScatterInstance, scatterMatrix } from './scatter';
 import type { Site } from '@/lib/client/types.gen';
 
-/** Scattered kinds that block walking: everything but ground cover. */
-const BLOCKING_SCATTER_KINDS: readonly PropKind[] = [
-  ...new Set(
-    Object.values(BIOME_PROPS).flatMap((props) =>
-      props.map((prop) => prop.kind),
-    ),
-  ),
-].filter((kind) => !GROUND_COVER.has(kind));
-
-const BLOCKING = new Set(BLOCKING_SCATTER_KINDS);
+const BLOCKING = new Set(BLOCKING_KINDS);
 
 /** Asset ids of the blocking scattered kinds (their colliders must be loaded). */
-export const BLOCKING_SCATTER_ASSETS = BLOCKING_SCATTER_KINDS.map(
+export const BLOCKING_SCATTER_ASSETS = BLOCKING_KINDS.map(
   (kind) => PROPS[kind],
 );
 

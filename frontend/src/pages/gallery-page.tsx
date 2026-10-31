@@ -28,7 +28,11 @@ import {
   PROPS,
   type PropKind,
 } from '@/lib/world/assets';
-import { BIOME_PROPS, LANDMARK_KINDS } from '@/lib/world/biome-props';
+import {
+  BIOME_PROPS,
+  LANDMARK_KINDS,
+  SPECIES_LOOKS,
+} from '@/lib/world/biome-props';
 import {
   CITIZEN_LOOKS,
   type CitizenLook,
@@ -43,13 +47,14 @@ const ANIMAL_SPACING = 3.6;
 const ANIMALS_PER_ROW = 8;
 const ANIMAL_KINDS = Object.keys(ANIMALS) as AnimalKind[];
 
-// every kind the globe scatters or builds landmarks from, shortest first so tall trees stand at the back
+// every kind the globe scatters, grows as flora species or builds landmarks from, shortest first so tall trees stand at the back
 const WILD_KINDS = [
   ...new Set<PropKind>([
     ...Object.values(BIOME_PROPS).flatMap((entries) =>
       entries.map((entry) => entry.kind),
     ),
     ...LANDMARK_KINDS,
+    ...SPECIES_LOOKS,
   ]),
 ].sort((a, b) => assetSize(PROPS[a]).y - assetSize(PROPS[b]).y);
 const WILD_SPACING = 6;
