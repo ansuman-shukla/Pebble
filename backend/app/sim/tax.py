@@ -25,7 +25,7 @@ from typing import cast
 from pydantic import JsonValue, TypeAdapter
 
 from app.observability.events import EventDraft, ItemLocation, ItemMoved, Ledger, TaxChange
-from app.sim import society
+from app.sim import ownership, society
 from app.sim.clock import DAY_MINUTES, game_minute, local_minute
 from app.sim.core import SimCore
 from app.sim.economy import value_of
@@ -101,6 +101,7 @@ def store_food(core: SimCore, citizen: Citizen, action: ActionState) -> str:
     store_id = str(action.store_id)
     store = core.state.stores.setdefault(store_id, {})
     told: list[str] = []
+    noticed = ownership.notice(core, citizen, store_id).strip()  # the keep notices what others took from it
     owed = account(core, citizen.home) if citizen.home is not None else None
     if owed is not None and owed.rice and is_granary(core.world, store_id) and citizen.inventory.get("rice"):
         rice = min(owed.rice, citizen.inventory["rice"])
@@ -116,8 +117,8 @@ def store_food(core: SimCore, citizen: Citizen, action: ActionState) -> str:
         if stored:
             told.append(f"You put {' and '.join(stored)} in the storehouse.")
     if not told:
-        return "You owe no rice tax, and the storehouse isn't yours to fill." if _food(citizen) else "You have no food."
-    return " ".join(told)
+        told.append("You owe no rice tax, and the storehouse isn't yours to fill.")
+    return " ".join([*told, noticed] if noticed else told)
 
 
 def paid_dues(core: SimCore, giver: Citizen, receiver: Citizen, item: str, count: int) -> int | None:

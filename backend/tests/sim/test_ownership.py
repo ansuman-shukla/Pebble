@@ -99,6 +99,26 @@ def test_the_owners_take_freely_and_notice_once_what_went_missing(new_sim: Calla
     assert _stole(sim.drain()) == []
 
 
+def test_owners_notice_what_went_missing_when_they_eat_or_store_food_there(new_sim: Callable[..., Simulation]) -> None:
+    sim = _scene(
+        new_sim,
+        ("genzo", "farmhouse-1", "farmhouse-1"),
+        ("goro", "cross-s-1", "farmhouse-1"),
+        ("kenji", "castle-keep", "store-2"),
+        ("tokuji", "farmhouse-2", "store-2"),
+        kenji={"inventory": {"rice": 3}},
+    )
+    sim.stock_store("farmhouse-1-chest", "rice", 20)
+    sim.stock_store("store-2", "wood", 20)
+    WorldApi(sim, "goro").pick_up("2 rice")
+    WorldApi(sim, "tokuji").pick_up("2 wood")
+    sim.citizen("genzo").body.hunger = 30.0
+    eaten = run_until_done(sim, WorldApi(sim, "genzo").eat("rice"), 10)
+    assert eaten.text.endswith(" Some of your rice is gone.")
+    stored = run_until_done(sim, WorldApi(sim, "kenji").work("store food"), 10)
+    assert stored.text == "You put a little rice in the storehouse. Some of your wood is gone."
+
+
 def test_eating_from_the_granary_is_free_to_the_keep_and_within_a_grant_and_theft_beyond(
     new_sim: Callable[..., Simulation],
 ) -> None:

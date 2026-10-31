@@ -124,6 +124,8 @@ def finish_gather(core: SimCore, citizen: Citizen, action: ActionState) -> None:
 
 def finish_eat(core: SimCore, citizen: Citizen, action: ActionState) -> None:
     text = _eat(core, citizen, action, action.amount)
+    if text and action.store_id is not None:  # an owner eating at their store notices what others took (§2.6)
+        text += ownership.notice(core, citizen, action.store_id)
     if citizen.body.alive:  # raw food can kill, and dying has ended the action
         core.end_action(citizen, "done" if text else "failed", text or "There's nothing left to eat.")
 
