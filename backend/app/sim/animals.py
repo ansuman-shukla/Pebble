@@ -34,11 +34,13 @@ from app.sim.core import SimCore
 from app.sim.courses import SAME_S, Course, TimedPoint, ahead, at, redirect, tick_start_s, walked
 from app.sim.fauna import (
     SPECIES,
+    Species,
     can_stand,
     den_of,
     jitter,
     new_animal,
     range_cells,
+    range_m,
     standable,
     terrain,
     waterhole_of,
@@ -92,6 +94,7 @@ CARCASS_THREAT_M = 15.0  # people this close threaten a feeding predator: a pack
 LEAVE_M = 100.0
 DEN_KEEP_M = 40.0  # within this of its den a predator defends it by day (10 §1.6)
 DEN_CHARGE_M = 25.0  # against anyone this close to the den
+DEN_CHASE_M = DEN_KEEP_M  # and gives the charge up once they are farther than this from the den (its defence ring)
 REMAINS_TICKS = DAY_MINUTES  # a predator's kill turns to bones a game day after it died
 REMAINS_SHOWN_TICKS = 120  # and lies as bones at least this long before its group replaces it
 ESCORT_M = 5.0  # pack mates keep this far to the side of their leader (and 3 m back) per place in the line
@@ -271,12 +274,23 @@ def _group(core: SimCore, group: AnimalGroup, life: Wildlife) -> None:
         return  # predators stay put by day: asleep at their den, or where the night left them
     rng = core.state.rng("animals.wander")
     group.next_move = tick + rng.randint(*WANDER_TICKS)
+    if species.predator and _hungry_pack(core, group):  # it goes where the game is in its range, not just about
+        game = _game(core, species, core.world.unit(group.home), spot, range_m(core.world, group))
+        if game is not None:
+            group.goal = jitter(core.world, game.position, SPREAD_M, rng)
+            return
     cells = range_cells(core.world, group)
     cell = int(cells[rng.randint(0, cells.size - 1)])
     goal = jitter(core.world, core.world.unit(cell), 10.0, rng)
     if near_lit_fire(core, goal, FEAR_M * 2):
         return  # keep the old goal: animals stay away from fires
     group.goal = goal
+
+
+def _hungry_pack(core: SimCore, group: AnimalGroup) -> bool:
+    """Its leader (the first living member) is hungry."""
+    leader = next((core.state.animals[m] for m in group.members if core.state.animals[m].alive), None)
+    return leader is not None and leader.hunger >= HUNGRY
 
 
 def _dawn_or_dusk(core: SimCore, unit: Vec3) -> bool:
@@ -529,7 +543,8 @@ def _predator(core: SimCore, animal: Animal, life: Wildlife, start: float) -> No
         return
     hunting_time = core.altitude(animal.position) < DUSK_ALTITUDE_DEG
     den = den_of(core.world, group)
-    if not hunting_time and den is not None and core.distance_m(animal.position, den) <= DEN_KEEP_M:
+    rested = animal.activity == "sleeping" or tick >= animal.until  # not straight after a charge it gave up
+    if not hunting_time and rested and den is not None and core.distance_m(animal.position, den) <= DEN_KEEP_M:
         intruder = _den_intruder(core, animal, den)
         if intruder is not None:
             _go_for(core, animal, intruder, "den", life, start)
@@ -661,8 +676,11 @@ def _press(core: SimCore, animal: Animal, person: Citizen, life: Wildlife, start
         core.altitude(animal.position) >= DUSK_ALTITUDE_DEG if why == "hunt" else den is None
     )
     distance = core.distance_m(animal.position, person.position)
-    far = PERSON_SENSE_M * 1.5 if why == "hunt" else DEN_KEEP_M * 2
-    if safe or distance > far:
+    if why == "hunt":
+        away = distance > PERSON_SENSE_M * 1.5
+    else:  # a den is defended within its ring, never chased beyond it (10 §1.6)
+        away = den is None or core.distance_m(person.position, den) > DEN_CHASE_M
+    if safe or away:
         _give_up(core, animal, retreat_from=None)
         return
     if distance > CHARGE_M and why == "hunt":
@@ -721,14 +739,17 @@ def _bite(core: SimCore, animal: Animal, person: Citizen, why: str) -> None:
 def _quarry(core: SimCore, animal: Animal) -> Animal | None:
     """The nearest member of the herd it goes for: among herds of its prey with a member within PREY_SCENT_M, the one
     with the most members, the nearest of those (so kills spread over the herds, 10 §4.6)."""
-    prey_kinds = SPECIES[animal.kind].prey
+    return _game(core, SPECIES[animal.kind], animal.position, animal.position, PREY_SCENT_M)
+
+
+def _game(core: SimCore, species: Species, around: Vec3, origin: Vec3, within_m: float) -> Animal | None:
+    """The herd a predator goes for among its prey's herds with a member within `within_m` of `around` (the kind it
+    prefers first): the one with the most members, the nearest to `origin` of those; its member nearest `origin`."""
     herds: dict[str, list[tuple[float, str, Animal]]] = {}
-    species = SPECIES[animal.kind]
     for other in core.state.animals.values():
-        if other.alive and other.kind in prey_kinds and can_stand(core.world, species, other.cell):
-            distance = core.distance_m(animal.position, other.position)
-            if distance <= PREY_SCENT_M:
-                herds.setdefault(other.group, []).append((distance, other.id, other))
+        if other.alive and other.kind in species.prey and can_stand(core.world, species, other.cell):
+            if core.distance_m(around, other.position) <= within_m:
+                herds.setdefault(other.group, []).append((core.distance_m(origin, other.position), other.id, other))
     if not herds:
         return None
     preferred = {group: members for group, members in herds.items() if members[0][2].kind in species.prefers}
@@ -1292,8 +1313,8 @@ def _arrive(core: SimCore, animal: Animal, activity: AnimalActivity) -> None:
     if activity in ("grazing", "floating") and not SPECIES[animal.kind].predator:
         activity = _resting(core, animal)
     animal.activity = _shown(animal, activity)
-    if activity in ARRIVE_TICKS:
-        animal.until = tick + core.state.rng("animals.arrive").randint(*ARRIVE_TICKS[activity])
+    if activity in ARRIVE_TICKS:  # never cutting short a rest it is due (after a charge, a missed hunt)
+        animal.until = max(animal.until, tick + core.state.rng("animals.arrive").randint(*ARRIVE_TICKS[activity]))
 
 
 def _place(core: SimCore, animal: Animal, position: Vec3) -> None:

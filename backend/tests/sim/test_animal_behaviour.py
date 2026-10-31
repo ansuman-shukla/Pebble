@@ -338,6 +338,32 @@ def test_a_predator_charges_whoever_comes_near_its_den_by_day(new_sim: Callable[
     assert leader.target is None  # it gave up and went home
 
 
+def test_a_den_charge_stops_at_the_edge_of_its_ring(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression (#109): a wolf chased a forager ~90 m from its den and killed them."""
+    sim, leader, victim = _den_scene(new_sim, friends=0)
+    monkeypatch.setattr(animal_life, "GIVE_UP_CHANCE", 0.0)  # it would go on biting
+    _step(sim)
+    assert leader.target == victim
+    den = den_of(sim.world, sim.state.groups[leader.group])
+    assert den is not None
+    person = sim.citizen(victim)
+    sim.core.place_at(person, step_towards(den, 90.0, animal_life.DEN_CHASE_M + 5.0, R))  # fled out of the ring
+    events = [e for _ in range(5) for e in _step(sim)]
+    assert not [e for e in events if e.type == "injured" and e.actor_id == victim]
+    assert leader.target is None
+
+
+def test_a_den_charge_given_up_is_not_taken_up_again_at_once(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sim, leader, victim = _den_scene(new_sim, friends=0)
+    monkeypatch.setattr(animal_life, "GIVE_UP_CHANCE", 1.0)  # one bite, then it lets go
+    events = [e for _ in range(10) for e in _step(sim)]  # the forager stays inside the ring
+    assert len([e for e in events if e.type == "injured" and e.actor_id == victim]) == 1
+
+
 def test_company_keeps_a_den_from_charging(new_sim: Callable[..., Simulation]) -> None:
     sim, leader, victim = _den_scene(new_sim, friends=2)
     events = [e for _ in range(5) for e in _step(sim)]
@@ -489,3 +515,20 @@ def test_a_hunters_kill_is_replaced_on_time(new_sim: Callable[..., Simulation]) 
     animal_life.kill(sim.core, rabbits[0], "hunted", attacker="tek", remains=True)  # bones at once
     sim.run(round(SPECIES["rabbit"].respawn_days * DAY_MINUTES))
     assert rabbits[0].id not in sim.state.animals
+
+
+def test_a_hungry_pack_heads_for_the_game_in_its_range(new_sim: Callable[..., Simulation]) -> None:
+    """Regression (#109): a den's group only wandered at random, so the game a few hundred metres off (band B's herds,
+    the B wood bear's boar) was rarely within scent and band B's camp saw almost no kills."""
+    sim, centre = _open_ground(new_sim, night=True)
+    herd = _herd(sim, "deer", [step_towards(centre, 90.0, 600.0 + 6 * n, R) for n in range(3)], activity="sleeping",
+                 until=10**9)  # fmt: skip
+    (wolf,) = _hungry(sim, "wolf", centre)
+    group = sim.state.groups[wolf.group]
+    group.next_move = 0
+    sim.step()
+    assert group.goal is not None
+    assert min(sim.world.distance_m(group.goal, deer.position) for deer in herd) <= animal_life.SPREAD_M + 1e-6
+    wolf.hunger, group.next_move = 0.0, 0  # fed: it just wanders its range
+    sim.step()
+    assert min(sim.world.distance_m(group.goal, deer.position) for deer in herd) > animal_life.SPREAD_M
