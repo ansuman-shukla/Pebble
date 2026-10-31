@@ -186,19 +186,33 @@ def _near_camp(sim: Simulation, position: Vec3) -> bool:
     return any(sim.world.distance_m(position, sim.world.places[site].centre) <= CAMP_M for site in LIVING_SITES)
 
 
-class Kills(_Counted):
-    """Predator kills within 1 km of a settlement, over the seeds (≥ 20)."""
+class Kills(Check):
+    """Predator kill sequences within 1 km of each settlement: the critic checklist's ≥ 20 a camp over both seeds, as
+    ≥ 10 a camp on each seed (10 §4.6 expects ≈ 3 a night near people from the six pinned predator groups)."""
 
     name = "a1.kills"
-    least = 20
+    least_per_camp = 10
+
+    @override
+    def start(self, sim: Simulation) -> None:
+        self.counts = dict.fromkeys(LIVING_SITES, 0)
 
     @override
     def after_step(self, sim: Simulation, events: list[EventDraft]) -> None:
         for event in events:
             if isinstance(event.payload, Died) and event.actor_kind == "animal" and event.actor_id is not None:
-                attacker = event.payload.attacker or ""
-                if _kind(attacker) in SPECIES and _near_camp(sim, sim.state.animals[event.actor_id].position):
-                    self.count += 1
+                if _kind(event.payload.attacker or "") not in SPECIES:
+                    continue
+                where = sim.state.animals[event.actor_id].position
+                for site in LIVING_SITES:
+                    if sim.world.distance_m(where, sim.world.places[site].centre) <= CAMP_M:
+                        self.counts[site] += 1
+
+    @override
+    def outcome(self, sim: Simulation) -> Outcome:
+        least = min(self.counts.values())
+        words = ", ".join(f"{site} {count}" for site, count in self.counts.items())
+        return Outcome(least, least >= self.least_per_camp, words)
 
 
 class Approaches(_Counted):
