@@ -7,15 +7,15 @@ from dataclasses import replace
 
 import pytest
 
-from app.brains import grounds
 from app.brains.brain import UtilityBrain
-from app.brains.grounds import DEN_CLEAR_M, GROUND_FOOD, GROUNDS_M, STOP_CLEAR_M, WAYS, forage_grounds
 from app.brains.profile import BrainProfile, Ground
 from app.brains.routines import TRIP_LEGS, TRIP_TIMES
-from app.sim import nodes
+from app.sim import grounds, nodes
 from app.sim.destinations import COMPASS_BEARING, ROUGH_DISTANCE_M
+from app.sim.grounds import DEN_CLEAR_M, GROUND_FOOD, GROUNDS_M, STOP_CLEAR_M, WAYS
 from app.sim.simulation import Simulation
 from app.sim.vec import Vec3, bearing_deg, step_towards
+from app.sim.world import SimWorld
 from app.world.view import Feature
 from app.world_api.facade import WorldApi
 from app.world_api.models import Compass
@@ -64,7 +64,7 @@ def _walked_towards(sim: Simulation, citizen_id: str) -> str:
 
 def test_the_grounds_are_the_ways_with_most_food_beyond_the_home_ring(new_sim: Callable[..., Simulation]) -> None:
     sim = new_sim()
-    kept = forage_grounds(sim.world, CAMP)
+    kept = _grounds(sim.world, CAMP)
     camp = sim.world.places[CAMP].centre
     dens = _dens(sim)
     totals = sim.world.nodes.food_by_bearing(
@@ -83,8 +83,8 @@ def test_a_way_rich_only_in_food_by_dens_is_no_ground(
     sim = new_sim()
     world, table = sim.world, sim.world.nodes
     camp = world.places[CAMP].centre
-    monkeypatch.setattr(grounds, "clear_legs", lambda *_: TRIP_LEGS)
-    before = [ground.way for ground in forage_grounds(world, CAMP)]
+    monkeypatch.setattr(grounds, "clear_legs", lambda *args: args[-1])  # every walk on allowed
+    before = [ground.way for ground in _grounds(world, CAMP)]
     sector = WAYS.index(before[0])
     food = [
         node
@@ -98,9 +98,14 @@ def test_a_way_rich_only_in_food_by_dens_is_no_ground(
         for node in food
     )
     by_dens = replace(world, features=(*world.features, *dens))
-    after = [ground.way for ground in forage_grounds(by_dens, CAMP)]
+    after = [ground.way for ground in _grounds(by_dens, CAMP)]
     assert before[0] not in after and len(after) == 3
     assert after[:2] == before[1:]  # re-ranked: the next ways move up
+
+
+def _grounds(world: SimWorld, camp_id: str) -> tuple[Ground, ...]:
+    """What the engine hands a band's brains."""
+    return tuple(Ground(way, legs) for way, legs in grounds.forage_grounds(world, camp_id, TRIP_LEGS))
 
 
 def _dens(sim: Simulation) -> list[Vec3]:
@@ -124,14 +129,14 @@ def test_forage_trips_stop_short_of_the_dens(new_sim: Callable[..., Simulation])
         return all(sim.world.distance_m(_stop(sim, region, way, leg), den) >= STOP_CLEAR_M for den in dens)
 
     for region in ("band_a", "band_b"):
-        for ground in forage_grounds(sim.world, f"{region}_camp"):
+        for ground in _grounds(sim.world, f"{region}_camp"):
             assert all(clear(region, ground.way, leg) for leg in range(ground.legs + 1))
             assert ground.legs == TRIP_LEGS or not clear(region, ground.way, ground.legs + 1)
     camp = sim.world.places["band_b_camp"].centre
     near_dens = sim.world.nodes.food_by_bearing(sim.world.grid, camp, *GROUNDS_M, GROUND_FOOD)
     richest = [WAYS[sector] for sector in sorted(range(len(WAYS)), key=lambda sector: -near_dens[sector])[:3]]
     by_dens = [way for way in richest if not all(clear("band_b", way, leg) for leg in range(TRIP_LEGS + 1))]
-    kept = {ground.way: ground.legs for ground in forage_grounds(sim.world, "band_b_camp")}
+    kept = {ground.way: ground.legs for ground in _grounds(sim.world, "band_b_camp")}
     assert by_dens  # the wolves' and the bears' dens lie on band B's richest ways
     assert all(kept.get(way, -1) < TRIP_LEGS for way in by_dens)  # dropped, or walked on only so far
     away = sim.world.nodes.food_by_bearing(
