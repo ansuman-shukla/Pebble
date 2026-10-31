@@ -144,6 +144,11 @@ test.describe('route chains', () => {
       { kind: 'path', cells: [4, 7] },
       // a loop with no junction on it
       { kind: 'path', cells: [10, 11, 12, 10] },
+      // a path first, then a road over one of its steps
+      { kind: 'path', cells: [20, 21, 22] },
+      { kind: 'road', cells: [21, 22, 23] },
+      // a road that loops back to a cell it passed: a chain from that junction back to it, not a closed loop
+      { kind: 'road', cells: [30, 31, 32, 33, 31] },
     ]);
     const drawn = chains
       .map(
@@ -153,20 +158,36 @@ test.describe('route chains', () => {
       .sort();
     const reversed = (chain: string) =>
       chain.replace(/[\d-]+/, (cells) => cells.split('-').reverse().join('-'));
-    const expected = ['road:1-2-3', 'road:3-4', 'path:3-5-6', 'path:4-7'];
+    const expected = [
+      'road:1-2-3',
+      'road:3-4',
+      'path:3-5-6',
+      'path:4-7',
+      'path:20-21',
+      'road:21-22-23',
+      'road:30-31',
+      'road:31-32-33-31',
+    ];
     for (const chain of expected)
       expect(
         drawn.includes(chain) || drawn.includes(reversed(chain)),
         chain,
       ).toBe(true);
-    expect(drawn.filter((chain) => chain.endsWith(':closed'))).toHaveLength(1);
-    expect(drawn).toHaveLength(5);
+    expect(drawn.filter((chain) => chain.endsWith(':closed'))).toEqual([
+      expect.stringMatching(/^path:(10|11|12)-/),
+    ]);
+    expect(drawn).toHaveLength(expected.length + 1);
     expect(Object.fromEntries(ends)).toEqual({
       1: 'road',
       3: 'road',
       4: 'road',
       6: 'path',
       7: 'path',
+      20: 'path',
+      21: 'road',
+      23: 'road',
+      30: 'road',
+      31: 'road',
     });
   });
 });
@@ -188,15 +209,17 @@ test.describe('ground marks of the real world', () => {
 
   test('a road is 3 m wide and a path 1.5 m, edge 1 on the middle line and 0 at the borders', () => {
     const marked = vertices(geometry);
-    for (const kind of ['road', 'path'] as const) {
+    for (const [kind, width] of [
+      ['road', 3],
+      ['path', 1.5],
+    ] as const) {
       const ribbon = marked.filter(
-        (vertex) =>
-          vertex.kind === kind && vertex.half === ROUTE_WIDTH[kind] / 2,
+        (vertex) => vertex.kind === kind && vertex.half === width / 2,
       );
       expect(ribbon.length).toBeGreaterThan(1000);
       const middle = ribbon.filter((vertex) => vertex.across === 0);
       const borders = ribbon.filter(
-        (vertex) => Math.abs(vertex.across) === ROUTE_WIDTH[kind] / 2,
+        (vertex) => Math.abs(vertex.across) === width / 2,
       );
       expect(middle.length + borders.length).toBe(ribbon.length);
       expect(borders.every((vertex) => vertex.edge === 0)).toBe(true);
@@ -207,6 +230,38 @@ test.describe('ground marks of the real world', () => {
         middle.every((vertex) => vertex.edge >= 0 && vertex.edge <= 1),
       ).toBe(true);
     }
+  });
+
+  test('a ribbon tapers to nothing over a half width at each end', () => {
+    const ribbon = marks.ribbons.find(
+      (candidate) =>
+        candidate.kind === 'road' &&
+        !candidate.closed &&
+        !marks.bridges.some((bridge) =>
+          candidate.points.includes(bridge.centre),
+        ) &&
+        candidate.points.every((point) => ground.heightAt(point) !== null) &&
+        candidate.points.length > 20,
+    )!;
+    const alone = vertices(
+      buildMarks({
+        planet: {
+          marks: { ribbons: [ribbon], patches: [], bridges: [] },
+          ground,
+        },
+      }),
+    );
+    // three vertices across at every metre, in order along the ribbon
+    const middle = alone
+      .filter((vertex) => vertex.across === 0)
+      .map((vertex) => vertex.edge);
+    expect(middle.length).toBe(ribbon.points.length);
+    expect(middle.slice(0, 3).map((edge) => +edge.toFixed(3))).toEqual([
+      0, 0.667, 1,
+    ]);
+    expect(middle.slice(-3).map((edge) => +edge.toFixed(3))).toEqual([
+      1, 0.667, 0,
+    ]);
   });
 
   test('every cell of every road and path lies on a ribbon at least as wide as its own', () => {
@@ -400,6 +455,23 @@ test.describe('ground marks of the real world', () => {
       );
     });
     expect(onWater).toEqual([]);
+    // nor on its areas: a road arriving at a gate ends where the town's own road begins
+    const paved = buildWalkWorld(
+      [],
+      town.areas.map(({ polygon }) => ({ polygon })),
+      new Map(),
+    );
+    const doubled = vertices(geometry).filter(({ position }) => {
+      mapping.toLocal(position, local);
+      return [
+        [0, 0],
+        [1.5, 0],
+        [-1.5, 0],
+        [0, 1.5],
+        [0, -1.5],
+      ].every(([dx, dz]) => isWater(paved, [local.x + dx, local.z + dz]));
+    });
+    expect(doubled).toEqual([]);
     // the west road's lead crosses the mill stream: its ribbon stops at the banks
     expect(
       marked.some(({ position }) => {
@@ -466,7 +538,7 @@ window.__THREE_DEVTOOLS__.addEventListener('observe', ({ detail }) => {
   }
 });`;
 
-/** Mean sRGB colour (0..255) of the 5×5 pixels round where a world point lands on the canvas. */
+/** Mean sRGB colour (0..255) of the 5×5 pixels round where a world point lands on the canvas, or null off screen. */
 const pixelAt = (page: Page, point: Vector3) =>
   page.evaluate<number[] | null>(`(() => {
     const camera = window.__camera;
@@ -508,6 +580,10 @@ const deltaE = (a: number[], b: number[]) => {
   return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
 };
 
+/** Unit tangent of a ribbon at sample i. */
+const alongAt = (points: Vector3[], i: number) =>
+  points[i + 1].clone().sub(points[i - 1]);
+
 /** Compass bearing (degrees) from one unit direction to another. */
 function bearing(from: Vector3, to: Vector3) {
   const { east, north } = tangentFrame(from);
@@ -519,7 +595,7 @@ function bearing(from: Vector3, to: Vector3) {
 }
 
 test.describe('ground marks on screen', () => {
-  test('a road stands out from the grass 5 m off it (ΔE > 10)', async ({
+  test('a road stands out from the grass 5 m off it (ΔE > 10), its border ragged', async ({
     page,
     playwright,
   }) => {
@@ -540,7 +616,12 @@ test.describe('ground marks on screen', () => {
         .addScaledVector(side, metres)
         .normalize();
     // a stretch of road out in the grassland, level, with no other mark near it
-    let spot: { centre: Vector3; off: Vector3; stand: Vector3 } | null = null;
+    let spot: {
+      centre: Vector3;
+      off: Vector3;
+      stand: Vector3;
+      border: Vector3[];
+    } | null = null;
     for (const ribbon of marks.ribbons.filter(
       (candidate) => candidate.kind === 'road' && candidate.width === 3,
     )) {
@@ -573,21 +654,26 @@ test.describe('ground marks on screen', () => {
           )
         )
           continue;
-        spot = { centre, off, stand };
+        // 0.2 m inside the far border, every metre over 16 m: the noise eats into the road there in places
+        const border = Array.from({ length: 17 }, (_, k) => {
+          const at = ribbon.points[i + k - 8];
+          const across = new Vector3()
+            .crossVectors(alongAt(ribbon.points, i + k - 8), at)
+            .normalize();
+          return offset(at, across, -1.3);
+        });
+        spot = { centre, off, stand, border };
       }
       if (spot) break;
     }
     expect(spot).not.toBeNull();
-    const { centre, off, stand } = spot!;
+    const { centre, off, stand, border } = spot!;
     const { lat, lon } = latLonFromDirection(stand);
     await page.addInitScript({ content: CATCH_SCENE });
     await stillWorld(page);
     const errors: string[] = [];
-    const world = await openGlobe(
-      page,
-      errors,
-      `?at=${lat.toFixed(5)},${lon.toFixed(5)},${bearing(stand, centre).toFixed(1)}&time=12:00`,
-    );
+    const query = `?at=${lat.toFixed(5)},${lon.toFixed(5)},${bearing(stand, centre).toFixed(1)}&time=12:00`;
+    const world = await openGlobe(page, errors, query);
     // the camera flies in behind the player first
     await expect(world).toHaveAttribute('data-camera-flying', 'false', {
       timeout: 10_000,
@@ -602,6 +688,21 @@ test.describe('ground marks on screen', () => {
     expect(road).not.toBeNull();
     expect(grass).not.toBeNull();
     expect(deltaE(road!, grass!)).toBeGreaterThan(10);
+    // a ragged border, not a ruled line: 0.2 m inside it the grass shows through in places and the road reaches
+    // its border in others (each pixel's share of the way from the grass's colour to the road's)
+    const edge = await Promise.all(
+      border.map((point) => pixelAt(page, at(point))),
+    );
+    const span = road!.map((value, k) => value - grass![k]);
+    const shares = edge.map(
+      (pixel) =>
+        pixel!.reduce(
+          (sum, value, k) => sum + (value - grass![k]) * span[k],
+          0,
+        ) / span.reduce((sum, value) => sum + value * value, 0),
+    );
+    expect(Math.min(...shares)).toBeLessThan(0.65);
+    expect(Math.max(...shares)).toBeGreaterThan(0.8);
     expect(errors).toEqual([]);
   });
 
