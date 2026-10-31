@@ -62,10 +62,6 @@ class Theft(Check):
         self.thefts = 0
 
     @override
-    def before_step(self, sim: Simulation) -> None:
-        self._free: dict[tuple[str, str, str], int | None] = {}
-
-    @override
     def after_step(self, sim: Simulation, events: list[EventDraft]) -> None:
         stole = {event.seq for event in events if event.type == "stole"}
         self.thefts += len(stole)
