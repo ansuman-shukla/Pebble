@@ -143,7 +143,7 @@ interface Patch {
 }
 
 /** Where a bridge carries a road or path over a river. */
-interface BridgeSpan {
+export interface BridgeSpan {
   /** Unit direction of its middle. */
   centre: Vector3;
   /** Unit tangent along the road. */

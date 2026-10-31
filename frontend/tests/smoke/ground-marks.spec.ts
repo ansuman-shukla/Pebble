@@ -1,4 +1,9 @@
-import { expect, type PlaywrightWorkerArgs, test } from '@playwright/test';
+import {
+  expect,
+  type Page,
+  type PlaywrightWorkerArgs,
+  test,
+} from '@playwright/test';
 import { type BufferGeometry, Vector3 } from 'three';
 
 import type { TownView, WorldView } from '../../src/lib/client/types.gen';
@@ -11,7 +16,9 @@ import {
   anchorMapping,
   buildTerrain,
   decodeWorld,
+  latLonFromDirection,
   type SiteMapping,
+  tangentFrame,
 } from '../../src/lib/world/globe';
 import {
   buildMarks,
@@ -34,11 +41,12 @@ import {
   streamChannels,
 } from '../../src/lib/world/river-courses';
 import { TOWN_URL, WORLD_URL } from './explore-helpers';
+import { openGlobe, stillWorld } from './globe-helpers';
 
 /*
  * Ground marks (bible §5.1): the network's roads and paths as ribbons through their cells, junction patches, camp
  * ground, work spots and the town's areas, all in one mesh whose vertices tell the material their kind, how far in
- * from the border they lie and how far from the middle line.
+ * from the border they lie and how far from the middle line; then the mesh and its pixels on the globe.
  */
 
 /** The town's ground disc (globe-page.tsx TOWN_GROUND_RADIUS). */
@@ -434,5 +442,195 @@ test.describe('ground marks of the real world', () => {
       );
       expect(edge).toBeCloseTo(Math.min(1, inside / half), 4);
     }
+  });
+});
+
+/** Catches the scenes and the camera of the page's renderer (browser code as a string: no DOM types here). */
+const CATCH_SCENE = `
+window.__THREE_DEVTOOLS__ = new EventTarget();
+window.__scenes = [];
+window.__THREE_DEVTOOLS__.addEventListener('observe', ({ detail }) => {
+  if (detail.isScene) window.__scenes.push(detail);
+  if (detail.isWebGLRenderer) {
+    const render = detail.render.bind(detail);
+    detail.render = (scene, camera) => {
+      window.__camera = camera;
+      render(scene, camera);
+    };
+  }
+});`;
+
+/** Mean sRGB colour (0..255) of the 5×5 pixels round where a world point lands on the canvas. */
+const pixelAt = (page: Page, point: Vector3) =>
+  page.evaluate<number[] | null>(`(() => {
+    const camera = window.__camera;
+    const ndc = camera.position.clone().set(${point.x}, ${point.y}, ${point.z}).project(camera);
+    const source = document.querySelector('canvas');
+    const x = Math.round(((ndc.x + 1) / 2) * source.width);
+    const y = Math.round(((1 - ndc.y) / 2) * source.height);
+    if (ndc.z > 1 || x < 2 || y < 2 || x > source.width - 3 || y > source.height - 3) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = source.width;
+    canvas.height = source.height;
+    const context = canvas.getContext('2d');
+    context.drawImage(source, 0, 0);
+    const { data } = context.getImageData(x - 2, y - 2, 5, 5);
+    const mean = [0, 0, 0];
+    for (let i = 0; i < data.length; i += 4) for (let k = 0; k < 3; k++) mean[k] += data[i + k] / 25;
+    return mean;
+  })()`);
+
+/** CIELAB of an sRGB colour (0..255, D65). */
+function lab([r, g, b]: number[]) {
+  const linear = (c: number) => {
+    const v = c / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  const [lr, lg, lb] = [r, g, b].map(linear);
+  const xyz = [
+    (0.4124 * lr + 0.3576 * lg + 0.1805 * lb) / 0.95047,
+    0.2126 * lr + 0.7152 * lg + 0.0722 * lb,
+    (0.0193 * lr + 0.1192 * lg + 0.9505 * lb) / 1.08883,
+  ].map((t) =>
+    t > 216 / 24389 ? Math.cbrt(t) : ((t * 24389) / 27 + 16) / 116,
+  );
+  return [116 * xyz[1] - 16, 500 * (xyz[0] - xyz[1]), 200 * (xyz[1] - xyz[2])];
+}
+
+const deltaE = (a: number[], b: number[]) => {
+  const [p, q] = [lab(a), lab(b)];
+  return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+};
+
+/** Compass bearing (degrees) from one unit direction to another. */
+function bearing(from: Vector3, to: Vector3) {
+  const { east, north } = tangentFrame(from);
+  const toward = to.clone().sub(from);
+  return (
+    ((Math.atan2(toward.dot(east), toward.dot(north)) * 180) / Math.PI + 360) %
+    360
+  );
+}
+
+test.describe('ground marks on screen', () => {
+  test('a road stands out from the grass 5 m off it (ΔE > 10)', async ({
+    page,
+    playwright,
+  }) => {
+    test.setTimeout(120_000);
+    const { view, terrain, marks, ground } = await loadWorld(playwright);
+    const radius = view.radius_m;
+    const town = new Vector3(
+      ...view.sites.find((site) => site.kind === 'town')!.anchor.position,
+    );
+    const others = (ribbon: (typeof marks.ribbons)[number]) =>
+      marks.ribbons
+        .filter((other) => other !== ribbon)
+        .flatMap((other) => other.points);
+    const offset = (from: Vector3, side: Vector3, metres: number) =>
+      from
+        .clone()
+        .multiplyScalar(radius)
+        .addScaledVector(side, metres)
+        .normalize();
+    // a stretch of road out in the grassland, level, with no other mark near it
+    let spot: { centre: Vector3; off: Vector3; stand: Vector3 } | null = null;
+    for (const ribbon of marks.ribbons.filter(
+      (candidate) => candidate.kind === 'road' && candidate.width === 3,
+    )) {
+      const near = others(ribbon);
+      for (let i = 30; i < ribbon.points.length - 30 && !spot; i += 10) {
+        const centre = ribbon.points[i];
+        const along = ribbon.points[i + 1].clone().sub(ribbon.points[i - 1]);
+        const side = new Vector3().crossVectors(along, centre).normalize();
+        const [off, stand] = [
+          offset(centre, side, -5),
+          offset(centre, side, 14),
+        ];
+        const heights = [centre, off, stand].map((point) =>
+          ground.heightAt(point),
+        );
+        if (
+          centre.angleTo(town) * radius < 400 ||
+          view.biome_names[terrain.biomeAt(centre)] !== 'grassland' ||
+          heights.some((height) => height === null) ||
+          Math.max(...(heights as number[])) -
+            Math.min(...(heights as number[])) >
+            1.5 ||
+          ribbon.gaps.some(([from, to]) => i > from - 20 && i < to + 20) ||
+          near.some((point) => point.angleTo(centre) * radius < 15) ||
+          marks.patches.some(
+            (patch) =>
+              patch.centre.angleTo(centre) * radius < patch.radius + 10,
+          )
+        )
+          continue;
+        spot = { centre, off, stand };
+      }
+      if (spot) break;
+    }
+    expect(spot).not.toBeNull();
+    const { centre, off, stand } = spot!;
+    const { lat, lon } = latLonFromDirection(stand);
+    await page.addInitScript({ content: CATCH_SCENE });
+    await stillWorld(page);
+    const errors: string[] = [];
+    const world = await openGlobe(
+      page,
+      errors,
+      `?at=${lat.toFixed(5)},${lon.toFixed(5)},${bearing(stand, centre).toFixed(1)}&time=12:00`,
+    );
+    // the camera flies in behind the player first
+    await expect(world).toHaveAttribute('data-camera-flying', 'false', {
+      timeout: 10_000,
+    });
+    await page.waitForTimeout(1000);
+    const at = (point: Vector3) =>
+      point.clone().multiplyScalar(radius + ground.heightAt(point)! + 0.05);
+    const [road, grass] = await Promise.all([
+      pixelAt(page, at(centre)),
+      pixelAt(page, at(off)),
+    ]);
+    expect(road).not.toBeNull();
+    expect(grass).not.toBeNull();
+    expect(deltaE(road!, grass!)).toBeGreaterThan(10);
+    expect(errors).toEqual([]);
+  });
+
+  test('the world draws its ground marks in one mesh: town areas, roads, paths and camps', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const errors: string[] = [];
+    await page.addInitScript({ content: CATCH_SCENE });
+    await stillWorld(page);
+    await openGlobe(page, errors, '?time=12:00');
+    const kinds = await page.evaluate<string[][]>(`(() => {
+      const found = [];
+      for (const scene of window.__scenes)
+        scene.traverse((object) => {
+          const mark = object.isMesh && object.geometry.getAttribute('mark');
+          if (!mark) return;
+          const kinds = new Set();
+          for (let i = 0; i < mark.count; i++) kinds.add(Math.round(mark.getX(i)));
+          found.push([...kinds].sort((a, b) => a - b));
+        });
+      return found;
+    })()`);
+    // one mesh (the town's five area kinds used to be five), holding every kind the world lays
+    expect(kinds).toHaveLength(1);
+    expect(kinds[0].map((kind) => MARK_KINDS[Number(kind)]).sort()).toEqual([
+      'dug',
+      'farmland',
+      'iron_sand',
+      'packed',
+      'path',
+      'paving',
+      'raked',
+      'road',
+      'scorch',
+      'worn',
+    ]);
+    expect(errors).toEqual([]);
   });
 });
