@@ -3,6 +3,7 @@ gaits; a herd bolts together; herds by the settlements stay at half their cap or
 kill near the camps; threats meet people (approaches, attacks with a bite, den-defence charges) and bite only where
 the rules allow. Counts marked "over the seeds" are summed over both seeds."""
 
+from abc import abstractmethod
 from collections.abc import Mapping
 from typing import ClassVar, override
 
@@ -132,29 +133,61 @@ class HerdAlarm(Check):
         return Outcome(share, share >= 0.8, f"{share:.0%} of {self.near} mates bolted with them")
 
 
-class HerdsKept(Check):
-    """The lowest share of its cap any herd living by a settlement had alive at the end of a day (≥ 0.5 passes)."""
+class _HerdLosses(Check):
+    """The lowest share of its cap a herd living by a settlement had left at the end of a day, counting as lost only
+    the members whose death `_taken_by` says (deaths carry their attacker; a dead member is lost until replaced)."""
 
-    name = "a1.herds_kept"
+    @abstractmethod
+    def _taken_by(self, sim: Simulation, attacker: str) -> bool:
+        """Whether a death by this attacker (an animal or citizen id, "" for none) costs the herd."""
 
     @override
     def start(self, sim: Simulation) -> None:
         self.worst, self.which = 1.0, "none"
+        self.taken: set[str] = set()
 
     @override
     def after_step(self, sim: Simulation, events: list[EventDraft]) -> None:
+        for event in events:
+            if isinstance(event.payload, Died) and event.actor_kind == "animal" and event.actor_id is not None:
+                if self._taken_by(sim, event.payload.attacker or ""):
+                    self.taken.add(event.actor_id)
         if sim.tick % DAY_MINUTES:
             return
         for group in sim.state.groups.values():
             if SPECIES[group.kind].predator or group.kind == "fish" or not near_people(sim.world, group):
                 continue
-            share = sum(sim.state.animals[m].alive for m in group.members) / group.size
+            lost = sum(not sim.state.animals[m].alive and m in self.taken for m in group.members)
+            share = 1.0 - lost / group.size
             if share < self.worst:
                 self.worst, self.which = share, f"{group.id} day {sim.tick // DAY_MINUTES}"
 
     @override
     def outcome(self, sim: Simulation) -> Outcome:
         return Outcome(self.worst, self.worst >= 0.5, f"{self.worst:.0%} ({self.which})")
+
+
+class HerdsKept(_HerdLosses):
+    """Herds by the settlements keep half their cap or more every day against the predators (≥ 0.5 passes): only
+    members predators killed count as lost (hunters' kills are `a1.hunting_pressure`'s)."""
+
+    name = "a1.herds_kept"
+
+    @override
+    def _taken_by(self, sim: Simulation, attacker: str) -> bool:
+        return _kind(attacker) in SPECIES
+
+
+class HuntingPressure(_HerdLosses):
+    """Herds by the settlements keep half their cap or more every day against the hunters (≥ 0.5 passes): only
+    members people brought down count as lost."""
+
+    name = "a1.hunting_pressure"
+    pending = "BR2 spreading hunters over the herds"
+
+    @override
+    def _taken_by(self, sim: Simulation, attacker: str) -> bool:
+        return attacker in sim.state.citizens
 
 
 class _Counted(Check):
@@ -361,6 +394,7 @@ CHECKS: tuple[type[Check], ...] = (
     AnimalStreamed,
     HerdAlarm,
     HerdsKept,
+    HuntingPressure,
     Kills,
     Approaches,
     Attacks,
