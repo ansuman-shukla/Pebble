@@ -3377,6 +3377,14 @@
             },
             "type": "array",
             "title": "Fires"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/NodeEntity"
+            },
+            "type": "array",
+            "title": "Nodes",
+            "default": []
           }
         },
         "type": "object",
@@ -3528,6 +3536,44 @@
         ],
         "title": "NeedsSeries"
       },
+      "NodeEntity": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "item": {
+            "type": "string",
+            "title": "Item"
+          },
+          "cap": {
+            "type": "integer",
+            "title": "Cap"
+          },
+          "stock": {
+            "type": "integer",
+            "title": "Stock"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "item",
+          "cap",
+          "stock",
+          "stage",
+          "id"
+        ],
+        "title": "NodeEntity"
+      },
       "PersonRef": {
         "properties": {
           "id": {
@@ -3642,9 +3688,9 @@
             "type": "integer",
             "title": "Start"
           },
-          "emptied_cells": {
+          "emptied_nodes": {
             "type": "integer",
-            "title": "Emptied Cells"
+            "title": "Emptied Nodes"
           }
         },
         "type": "object",
@@ -3652,7 +3698,7 @@
           "resource",
           "now",
           "start",
-          "emptied_cells"
+          "emptied_nodes"
         ],
         "title": "ResourceStock"
       },
