@@ -152,7 +152,9 @@ def test_walkers_to_one_place_take_separate_stands_then_a_queue_in_reach(new_sim
 
 def test_a_weaver_walks_home_to_the_loom_and_weaves_there(new_sim: Callable[..., Simulation]) -> None:
     sim = _sim(new_sim)
-    weaver = sim.add_citizen(make_spec("aiko", at=(-80.0, 80.0), home="farmhouse-1", skills=["weaving"]))
+    weaver = sim.add_citizen(
+        make_spec("aiko", at=(-80.0, 80.0), home="farmhouse-1", skills=["weaving"], inventory={"reeds": 2})
+    )
     farmer = sim.add_citizen(make_spec("genzo", at=(-80.0, 80.0), home="farmhouse-1", skills=["farming"]))
     for citizen in (farmer, weaver):  # the farmer first: the loom is the weaver's, free or not
         assert run_until_done(sim, WorldApi(sim, citizen.id).walk_to_place("home"), 10).text == "You arrive home."

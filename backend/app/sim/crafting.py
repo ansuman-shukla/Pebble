@@ -9,6 +9,9 @@ or, if the crafter no longer carries them, nothing happens. Cut short, nothing i
 
     craft ─▶ recipe? skill? station within 4 m? inputs + fuel carried? room? ─▶ a slot at the station ─▶ … minutes
           ─▶ inputs and fuel ─▶ world, yield ─▶ the crafter (one `crafted`, its item moves caused by it)
+
+`work("weave")`, the weaver's hour at her loom, makes cloth as the cloth recipe does when she carries the reeds
+(`weave`, D161).
 """
 
 from collections.abc import Mapping
@@ -37,6 +40,7 @@ from app.world_api.models import Craft, RecipeName
 RECIPES = WORLD_DATA_DIR / "recipes.yaml"
 STATION_M = 4.0  # a station is within reach this close (from its centre)
 FUEL = "wood"
+CLOTH = "cloth"  # the recipe `work("weave")` makes
 
 
 class _Spec(BaseModel):
@@ -189,6 +193,19 @@ def _make(core: SimCore, citizen: Citizen, name: str, rounds: int, station: str 
         core.item_moved(citizen, used, used_count, hand, world, cause_seq=seq)
     citizen.inventory[item] = citizen.inventory.get(item, 0) + each * rounds
     core.item_moved(citizen, item, each * rounds, world, hand, cause_seq=seq)
+
+
+def weave(core: SimCore, citizen: Citizen, action: ActionState) -> str:
+    """`work("weave")`'s finisher: an hour at the loom makes a length of cloth from two reeds carried, as the cloth
+    recipe does; without them (or room for the cloth) the hour goes on the loom itself (D161)."""
+    recipe = load_recipes().recipes[CLOTH]
+    if _rounds(recipe, citizen.inventory) == 0:
+        return "You mend the loom and set up the warp; there are no reeds to weave."
+    if not _fits(core, citizen, recipe, 1):
+        return "Your hands are full; you leave the warp on the loom."
+    loom = str(action.args.get("slot", "")).partition("#")[0] or None
+    _make(core, citizen, CLOTH, 1, loom)
+    return f"You weave {_made_words(recipe.yields)}."
 
 
 def _needs(recipe: Recipe, rounds: int) -> dict[str, int]:

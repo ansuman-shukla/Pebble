@@ -102,6 +102,7 @@ def test_role_tasks_need_the_skill_and_the_place(new_sim: Callable[..., Simulati
     trade = run_until_done(sim, api.work("trade"), 61)
     assert (trade.outcome, trade.text) == ("done", "You trade with passers-by and haggle over cloth and salt.")
     run_until_done(sim, api.walk_to_place("home"), 60)
+    sim.citizen(api.citizen_id).inventory["reeds"] = 2
     assert run_until_done(sim, api.work("weave"), 61).text == "You weave a length of cloth."
 
 

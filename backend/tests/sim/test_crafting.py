@@ -176,6 +176,28 @@ def test_crafting_refuses_what_the_crafter_couldn_t_carry(new_sim: Callable[...,
     assert _run(over, "aiko", too_heavy, 0) == "failed: You couldn't carry a length of cloth as well."
 
 
+def test_weaving_at_the_loom_makes_cloth_from_the_reeds_carried(new_sim: Callable[..., Simulation]) -> None:
+    sim = without_animals(new_sim(seed=4))
+    sim.add_citizen(make_spec("aiko", name="Aiko", at=LOOM, home="farmhouse-1", skills=["weaving"]))
+    bare = sim.start("aiko", Work(task="weave"))  # no reeds: the hour goes on the loom
+    assert _run(sim, "aiko", bare, 61) == "done: You mend the loom and set up the warp; there are no reeds to weave."
+    assert sim.citizen("aiko").inventory == {} and not [e for e in sim.drain() if e.type == "crafted"]
+    sim.citizen("aiko").inventory["reeds"] = 5
+    number = sim.start("aiko", Work(task="weave"))
+    weaving = sim.citizen("aiko").action
+    assert weaving is not None and weaving.kind == "work" and weaving.args["slot"] == "farmhouse-1-loom#seat"
+    assert _run(sim, "aiko", number, 61) == "done: You weave a length of cloth."
+    assert sim.citizen("aiko").inventory == {"reeds": 3, "cloth": 1}
+    crafted = [e.payload for e in sim.drain() if isinstance(e.payload, Crafted)]
+    assert crafted == [Crafted(recipe="cloth", item="cloth", count=1, station="farmhouse-1-loom")]
+    sim.citizen("aiko").inventory["iron sand"] = 24  # 24.3 + 1 - 0.2 kg is more than she can carry
+    full = sim.start("aiko", Work(task="weave"))
+    assert _run(sim, "aiko", full, 61) == "done: Your hands are full; you leave the warp on the loom."
+    assert sim.citizen("aiko").inventory == {"reeds": 3, "cloth": 1, "iron sand": 24}
+    packed = sim.start("aiko", Craft(recipe="pack"))
+    assert _run(sim, "aiko", packed, 0) == "failed: To make a pack you need two hides and two reeds."
+
+
 def _hunter(new_sim: Callable[..., Simulation], at: tuple[float, float], **fields: object) -> Simulation:
     sim = without_animals(new_sim(seed=4))
     fields = {"name": "Bo", "site": CAMP, "at": at, "home": f"{CAMP}:shelter-n", "region": "band_a"} | fields
