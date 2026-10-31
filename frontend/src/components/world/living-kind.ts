@@ -38,7 +38,7 @@ import { visualRate } from '@/lib/world/visual-rate';
  */
 
 /** Kinds lying flat on the ground: their shadows would be invisible, so they skip the shadow pass. */
-const FLAT_KINDS = new Set(['rice_paddy', 'paving_tile']);
+const FLAT_KINDS = new Set(['rice_paddy', 'paving_tile', 'sleeping_mat']);
 /** Kinds whose loop plays wherever the camera is, outside the clip budget. */
 const ALWAYS_MOVING = new Set(['water_wheel']);
 /** Kinds whose loop is a mechanism, a flame or water: it plays on clip time. Every other loop is wind sway. */
