@@ -112,7 +112,13 @@ async function loadWorld(playwright: PlaywrightWorkerArgs['playwright']) {
   const ground = globeMarkGround({
     terrain,
     rivers,
-    town: { mapping, groundRadius: TOWN_GROUND_RADIUS, height, water },
+    town: {
+      mapping,
+      groundRadius: TOWN_GROUND_RADIUS,
+      height,
+      water,
+      areas: town.areas,
+    },
   });
   const geometry = buildMarks({ planet: { marks, ground } });
   return {

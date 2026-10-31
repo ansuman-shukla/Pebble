@@ -440,8 +440,9 @@ export function planetMarks({
 }
 
 /**
- * The drawn ground on the globe: no marks on the drawn rivers, nor on the town's moat and stream; the town's disc
- * at its plateau height (local metres), else the terrain.
+ * The drawn ground on the globe: no marks on the drawn rivers, on the town's moat and stream, nor over the town's
+ * areas (they are marks already: a road arriving at a gate ends where its street begins); the town's disc at its
+ * plateau height (local metres), else the terrain.
  */
 export function globeMarkGround({
   terrain,
@@ -455,20 +456,26 @@ export function globeMarkGround({
     groundRadius: number;
     height: number;
     water: WalkWater[];
+    areas: TownArea[];
   };
 }): MarkGround {
   const radius = terrain.globe.radius;
   const fromWater = riverIndex(rivers, radius);
-  const wet = buildWalkWorld([], town.water, new Map());
+  // the collision world's water test is a point-in-polygons test: one for the water, one for the areas
+  const [wet, marked] = [
+    town.water,
+    town.areas.map(({ polygon }) => ({ polygon })),
+  ].map((polygons) => buildWalkWorld([], polygons, new Map()));
   const local = new Vector3();
   return {
     radius,
     heightAt(direction) {
       if (fromWater(direction) < 0) return null;
       town.mapping.toLocal(local.copy(direction).multiplyScalar(radius), local);
-      if (Math.hypot(local.x, local.z) < town.groundRadius)
-        return isWater(wet, [local.x, local.z]) ? null : town.height;
-      return terrain.heightAt(direction);
+      if (Math.hypot(local.x, local.z) >= town.groundRadius)
+        return terrain.heightAt(direction);
+      const point: Point = [local.x, local.z];
+      return isWater(wet, point) || isWater(marked, point) ? null : town.height;
     },
   };
 }
@@ -802,6 +809,8 @@ export function buildMarks({
 /** View distances (metres) where the patterns end, and where the marks narrow away to nothing. */
 const PATTERN_END = { full: 300, low: 150 };
 const FADE: [number, number] = [2000, 2600];
+/** How fast (a metre) a mark's coverage rises from its ragged border inwards. */
+const COVERAGE_SLOPE = 16;
 /** The low-poly facets the ground shows (ground-shader.ts FACETS), so marks shade like the ground under them. */
 const FACETS = 0.35;
 const FACETS_FADE: [number, number] = [250, 1200];
@@ -866,7 +875,8 @@ uniform vec2 markFacetsFade;
 
 /*
  * The mark's colour, roughness and relief from its pattern, and its coverage: 0.5 where the noisy ragged border
- * cuts the mark, rising a unit a metre inwards (three's alpha to coverage turns that into a pixel-wide fade).
+ * cuts the mark, rising COVERAGE_SLOPE a metre inwards (three's alpha to coverage turns that into a pixel-wide fade)
+ * and whole from 1 / COVERAGE_SLOPE metres in.
  */
 const FRAGMENT_COLOR = /* glsl */ `
 float markRoughness;
@@ -879,29 +889,32 @@ float markRelief = 0.0;
   float dist = length(vViewPosition);
   float facing = max(abs(dot(normalize(vNormal), vViewPosition)) / dist, 0.05);
   float fw = dist * markPixel * sqrt(1.0 + 1.0 / (facing * facing));
-  float extra;
-  vec4 g = groundNoises(p, fw, extra);
   // far away a mark narrows away to nothing instead of thinning into a shimmering line
   float edge = vMark.y * halfWidth - halfWidth * smoothstep(${glslFloat(FADE[0])}, ${glslFloat(FADE[1])}, dist);
-  // the ragged border eats up to the kind's rag into the mark (at most most of a narrow one), along noise at 4 m, 1 m
-  // and 0.4 m
-  float ragNoise = clamp(extra * 0.45 + g.z * 0.35 + gFine(p + 23.0, 2.7, fw) * 0.2, 0.0, 1.0);
-  float rag = min(MARK_RAG[kind], 0.8 * halfWidth) * (0.15 + 0.85 * ragNoise);
+  // the ragged border eats up to the kind's rag into the mark (at most most of a narrow one) along noise at 2.3 m,
+  // 0.9 m and 0.4 m; deeper in the mark is whole, so the noise is only paid near its border
+  float ragMax = min(MARK_RAG[kind], 0.8 * halfWidth);
+  float rag = 0.0;
+  if (edge < ragMax + ${glslFloat(1 / COVERAGE_SLOPE)}) {
+    float ragNoise = gFine(p + 53.0, 0.43, fw) * 0.45 + gFine(p + 31.0, 1.13, fw) * 0.35 + gFine(p + 23.0, 2.7, fw) * 0.2;
+    rag = ragMax * (0.15 + 0.85 * clamp(ragNoise, 0.0, 1.0));
+  }
   vec3 color = MARK_BASE[kind];
   markRoughness = MARK_ROUGHNESS[kind];
 #ifndef MARK_FLAT
   if (dist < MARK_PATTERN_END) {
+    float extra;
+    vec4 g = groundNoises(p, fw, extra);
     float roughness = markRoughness;
     vec4 look = markLook(kind, p, across, edge, vMarkPerp, fw, g, roughness);
     float far = smoothstep(MARK_PATTERN_END * 0.8, MARK_PATTERN_END, dist);
-    color = mix(look.rgb, color, far);
+    color = mix(look.rgb, color, far) * (0.92 + 0.16 * g.x);
     markRoughness = mix(roughness, markRoughness, far);
     markRelief = (look.a - 0.5) * MARK_DEPTH[kind] * (1.0 - smoothstep(0.015, 0.05, fw)) * (1.0 - smoothstep(30.0, 40.0, dist));
   }
-  color *= 0.92 + 0.16 * g.x;
 #endif
   diffuseColor.rgb = color;
-  diffuseColor.a = 0.5 + edge - rag;
+  diffuseColor.a = clamp(0.5 + (edge - rag) * ${glslFloat(COVERAGE_SLOPE)}, 0.0, 1.0);
 }
 `;
 

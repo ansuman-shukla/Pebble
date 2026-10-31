@@ -239,7 +239,7 @@ export function GlobeTown({
     const ground = globeMarkGround({
       terrain,
       rivers,
-      town: { mapping, groundRadius, height, water },
+      town: { mapping, groundRadius, height, water, areas: town.areas },
     });
     const marks = planetMarks({ globe: terrain.globe, places, sites, rivers });
     const signposts = places.features.filter(

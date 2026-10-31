@@ -358,9 +358,9 @@ vec4 markLook(int kind, vec3 p, float across, float edge, vec3 perp, float fw, v
     }
     float wander = (g.z - 0.5) * 0.3 + (g.y - 0.5) * 0.2;
     float rut = (1.0 - smoothstep(0.06, 0.16 + fw, abs(abs(across) - 0.72 + wander))) * smoothstep(0.3, 0.5, g.w + 0.1);
-    c = mix(c, mark_road_rut * (0.88 + 0.24 * gFine(p + 5.0, 6.0, fw)), rut * 0.45);
+    c = mix(c, mark_road_rut * (0.88 + 0.24 * g.z), rut * 0.45);
     float crown = (1.0 - smoothstep(0.15, 0.4, abs(across))) * smoothstep(0.52, 0.66, g.w * 0.6 + gFine(p + 2.0, 1.9, fw) * 0.4);
-    c = mix(c, mark_road_crown * (0.75 + 0.4 * gFine(p, 9.0, fw)), crown * 0.85);
+    c = mix(c, mark_road_crown * (0.75 + 0.4 * g.z), crown * 0.85);
     relief += crown * 0.25 - rut * 0.3;
   } else if (kind == 1) {
     // path: trodden earth, worn paler and smoother down its middle, a few pebbles
@@ -368,7 +368,7 @@ vec4 markLook(int kind, vec3 p, float across, float edge, vec3 perp, float fw, v
     c = mix(mark_path_dark, mark_path_light, smoothstep(0.25, 0.75, mottle) * 0.7 + tread * 0.3);
     float pebbles = gFine(p + 3.0, 9.0, fw);
     c = mix(c, mark_path_pebble, smoothstep(0.8, 0.9 + 20.0 * fw, pebbles) * 0.6);
-    c *= 0.9 + 0.2 * gFine(p + 8.0, 12.0, fw);
+    c *= 0.9 + 0.2 * pebbles;
     relief = 0.45 + smoothstep(0.65, 0.9, pebbles) * 0.4 - tread * 0.1;
   } else if (kind == 2) {
     // paving: stone slabs of uneven tone with dark joints
