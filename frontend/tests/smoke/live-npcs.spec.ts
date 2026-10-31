@@ -330,22 +330,12 @@ function walkedPart({ route, position }: CitizenEntity) {
 const PASSING_M = 5;
 
 /**
- * How far the drawing may part a body from where the engine has it (D192): KEEP_M for each body that can push it,
- * nothing with nobody about (a crowd of n spreads over about KEEP_M √n). Pushers are those the engine puts within
- * KEEP_M of it, and walkers drawn passing by (a walker of its own is pushed by anyone drawn by).
+ * How far the drawing may part a body from where the engine has it (D192): KEEP_M for each walker drawn passing by
+ * (a walker of its own is pushed by anyone drawn by), nothing with nobody about. The engine itself never crowds a
+ * body: its slots keep everyone who stands, sits or lies 0.8 m apart (D117), more than KEEP_M, and those inside a
+ * house are out of the crowd.
  */
-function parted(
-  citizen: CitizenEntity,
-  now: CitizenEntity[],
-  npc: Npc,
-  shown: Npc[],
-) {
-  const unit = new Vector3(...citizen.position.unit);
-  const crowding = now.filter(
-    (other) =>
-      other.id !== citizen.id &&
-      unit.angleTo(new Vector3(...other.position.unit)) * R < KEEP_M,
-  ).length;
+function parted(npc: Npc, shown: Npc[]) {
   const moving = MOVING.includes(npc.activity);
   const passing = shown.filter(
     (other) =>
@@ -353,7 +343,7 @@ function parted(
       (moving || MOVING.includes(other.activity)) &&
       other.position.distanceTo(npc.position) < PASSING_M,
   ).length;
-  return KEEP_M * Math.sqrt(crowding + passing);
+  return KEEP_M * Math.sqrt(passing);
 }
 
 /** Metres from a drawn spot to the nearest of what a citizen walked in the given ticks. */
@@ -983,7 +973,7 @@ test('the real feed: the 22 citizens stand where the engine says, on the ground,
           const direction = npc.position.clone().normalize();
           const above = npc.position.length() - (R + groundUnder(direction));
           return [
-            ...(off < lateM + parted(citizen, now, npc, shown)
+            ...(off < lateM + parted(npc, shown)
               ? []
               : [`${citizen.id}: ${off.toFixed(2)} m off its walk`]),
             ...(Math.abs(above) < 0.5
@@ -997,8 +987,8 @@ test('the real feed: the 22 citizens stand where the engine says, on the ground,
     .toEqual([]);
 
   // the engine ticks on and the drawn citizens follow it: at the page's tick, everyone who stood still since the
-  // tick before is exactly where the engine has them (unless the engine has others on their spot: then just clear of
-  // them), and everyone does what the engine says
+  // tick before is exactly where the engine has them (unless walkers drawn by push them aside), and everyone does
+  // what the engine says
   await expect.poll(tick, { timeout: nextTick }).toBeGreaterThan(startTick);
   await expect
     .poll(
@@ -1026,7 +1016,7 @@ test('the real feed: the 22 citizens stand where the engine says, on the ground,
             ...(npc.activity === citizen.activity || onTheWay
               ? []
               : [`${citizen.id}: ${npc.activity} ≠ ${citizen.activity}`]),
-            ...(drift < (still ? 0.5 : lateM) + parted(citizen, now, npc, shown)
+            ...(drift < (still ? 0.5 : lateM) + parted(npc, shown)
               ? []
               : [`${citizen.id}: ${drift.toFixed(2)} m off`]),
           ];
@@ -1059,7 +1049,7 @@ test('the real feed: the 22 citizens stand where the engine says, on the ground,
                 citizen,
                 previous.find((old) => old.id === citizen.id)!,
               ]);
-              if (metres > 0.5 + parted(citizen, now, npc, shown))
+              if (metres > 0.5 + parted(npc, shown))
                 off.push(`${citizen.id}: ${metres.toFixed(2)} m`);
             }
             await page.waitForTimeout(100);

@@ -1607,6 +1607,17 @@
             ],
             "title": "Slot Heading"
           },
+          "slot_height_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slot Height M"
+          },
           "goal": {
             "type": "string",
             "title": "Goal"
@@ -1709,6 +1720,7 @@
           "motion",
           "posture",
           "slot_heading",
+          "slot_height_m",
           "goal",
           "driver",
           "target",

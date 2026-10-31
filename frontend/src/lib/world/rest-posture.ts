@@ -81,8 +81,8 @@ const STEEPEST_SHIN = 80 * DEG;
 /** A sleeper's head turns this far to its side (radians, about the head's up axis). */
 const SLEEP_HEAD = 25 * DEG;
 /**
- * How high a seat is (m) when the feed doesn't say (`slot_height_m`, not on the feed yet): a bench's (a camp's log
- * seat is 0.4, the loom's stool 0.3).
+ * How high a seat is (m) when the feed doesn't say (`slot_height_m`): a bench's (a camp's log seat is 0.4, the
+ * loom's stool 0.3).
  */
 export const SEAT_HEIGHT = 0.45;
 /**

@@ -1,0 +1,173 @@
+# Slots (docs/design/10-world-v1.md §4.3): the spots bodies take at structures and places, so nobody stands, sits or
+# lies inside anyone else and every worker is at the thing they work at.
+#
+# A slot: {name, kind, at | polar, heading | face, task, skill, posture, height_m, words}
+#   kind     seat | mat | stand | queue | work  (homes get one `inside` slot each by themselves)
+#   at       [x, z] metres: a structure kind's slots around its centre at rotation 0 (+z is its front, the way it
+#            faces), turned with each placement; a place's slots in its chart's metres (town: x east, z south)
+#   polar    [r, bearing]: r metres from the centre at a compass bearing (0 = north, 90 = east), at rotation 0
+#   heading  the way the body faces, a yaw (0 = +z, 90 = +x); or face: [x, z], a point to face (default the centre)
+#   task     a work slot's `work(task)`; skill = the skill it needs (none: anyone may work there)
+#   posture  standing | sitting | sitting_ground | lying (default by kind: seat sitting, mat lying, else standing)
+#   height_m where the hips rest above the ground (seats)
+#   words    where a result says the body is ("on the bench"; default by kind)
+#
+# Any two slots, of one owner or of neighbours, lie at least 0.8 m apart (a body's personal space, D117); stands,
+# queues and work slots lie on walkable ground (tests/sim/test_slots.py checks both over the whole layout).
+
+kinds:
+  # --- homes (each gets an `inside` slot for its residents, D117) ---
+  townhouse: &house_2m
+    - {name: door, kind: stand, at: [0, 3.0]}
+    - {name: queue-1, kind: queue, at: [1.3, 3.0]}
+    - {name: queue-2, kind: queue, at: [0, 4.0]}
+    - {name: queue-3, kind: queue, at: [1.3, 4.0]}
+  farmhouse: # west of the door stays clear: the weaver's loom stands there at farmhouse-1
+    - {name: door, kind: stand, at: [0, 4.0]}
+    - {name: queue-1, kind: queue, at: [1.3, 4.0]}
+    - {name: queue-2, kind: queue, at: [0, 5.0]}
+    - {name: queue-3, kind: queue, at: [1.3, 5.0]}
+  temple_hall:
+    - {name: door, kind: stand, at: [0, 5.0]}
+    - {name: queue-1, kind: queue, at: [1.3, 5.0]}
+    - {name: queue-2, kind: queue, at: [0, 6.0]}
+    - {name: queue-3, kind: queue, at: [1.3, 6.0]}
+    - {name: pray-1, kind: work, task: pray, at: [-2.2, 5.6], heading: 180, posture: sitting_ground, words: before the temple hall}
+    - {name: pray-2, kind: work, task: pray, at: [-3.6, 5.6], heading: 180, posture: sitting_ground, words: before the temple hall}
+  castle_keep: # the castle court lies before the keep's door: the lord's seat faces it
+    - {name: door, kind: stand, at: [0, 7.0]}
+    - {name: queue-1, kind: queue, at: [1.3, 7.0]}
+    - {name: queue-2, kind: queue, at: [0, 8.0]}
+    - {name: queue-3, kind: queue, at: [1.3, 8.0]}
+    - {name: lord-seat, kind: work, task: govern, skill: governing, at: [0, 9.5], heading: 0, posture: sitting, height_m: 0.45, words: on the lord's seat}
+    - {name: retainer-1, kind: work, task: guard, skill: arms, at: [-1.6, 9.5], heading: 0}
+    - {name: retainer-2, kind: work, task: guard, skill: arms, at: [1.6, 9.5], heading: 0}
+    - {name: petitioner-1, kind: stand, at: [-2.4, 13.0], heading: 180}
+    - {name: petitioner-2, kind: stand, at: [-0.8, 13.0], heading: 180}
+    - {name: petitioner-3, kind: stand, at: [0.8, 13.0], heading: 180}
+    - {name: petitioner-4, kind: stand, at: [2.4, 13.0], heading: 180}
+
+  # --- town works and furniture ---
+  castle_gatehouse: # two guards flank the passage, facing out (the west gate faces in: see placements)
+    - {name: guard-1, kind: work, task: guard, skill: arms, at: [-2.2, 2.8], heading: 0}
+    - {name: guard-2, kind: work, task: guard, skill: arms, at: [2.2, 2.8], heading: 0}
+  war_drum: # the training ground's post
+    - {name: guard-1, kind: work, task: guard, skill: arms, at: [-1.2, 1.0], heading: 0}
+    - {name: guard-2, kind: work, task: guard, skill: arms, at: [1.2, 1.0], heading: 0}
+  well: # on its open (south) side; the queue too still reaches it (a well is drunk from within 4.5 m)
+    - {name: stand-1, kind: stand, polar: [2.3, 140]}
+    - {name: stand-2, kind: stand, polar: [2.3, 180]}
+    - {name: stand-3, kind: stand, polar: [2.3, 220]}
+    - {name: queue-1, kind: queue, polar: [3.5, 180]}
+    - {name: queue-2, kind: queue, polar: [3.5, 160]}
+    - {name: queue-3, kind: queue, polar: [3.5, 200]}
+  storehouse:
+    - {name: door-1, kind: stand, at: [-0.8, 3.0]}
+    - {name: door-2, kind: stand, at: [0.8, 3.0]}
+    - {name: queue-1, kind: queue, at: [0, 4.0]}
+    - {name: queue-2, kind: queue, at: [0, 5.0]}
+    - {name: queue-3, kind: queue, at: [0, 6.0]}
+  chest:
+    - {name: stand-1, kind: stand, at: [-0.45, 1.0]}
+    - {name: stand-2, kind: stand, at: [0.45, 1.0]}
+  fire_basket:
+    - {name: tend, kind: stand, at: [0, 1.0]}
+    - {name: warm-1, kind: stand, at: [-1.0, 0.6]}
+    - {name: warm-2, kind: stand, at: [1.0, 0.6]}
+  bench: # 0.84 m apart (not 0.6): every body keeps the one personal space (D117)
+    - {name: seat-1, kind: seat, at: [-0.42, 0], heading: 0, height_m: 0.45, words: on the bench}
+    - {name: seat-2, kind: seat, at: [0.42, 0], heading: 0, height_m: 0.45, words: on the bench}
+  market_stall: # the seller behind the counter, buyers before it
+    - {name: seller, kind: work, task: trade, skill: trade, at: [0, -1.2], heading: 0, words: behind the stall}
+    - {name: buyer-1, kind: stand, at: [-0.6, 1.25], heading: 180}
+    - {name: buyer-2, kind: stand, at: [0.6, 1.25], heading: 180}
+  forge: # the model's own anvil stands at its open front
+    - {name: anvil, kind: work, task: forge, skill: smithing, at: [0.8, 2.8], heading: 180, words: at the anvil}
+    - {name: stand, kind: stand, at: [-1.0, 3.4], heading: 180}
+  loom:
+    - {name: seat, kind: work, task: weave, skill: weaving, at: [0, 0.75], heading: 180, posture: sitting, height_m: 0.3, words: at the loom}
+  drying_rack:
+    - {name: work, kind: work, task: dry, at: [0, 1.0], heading: 180, words: at the drying rack}
+  bell_tower:
+    - {name: rope, kind: work, task: ring bell, at: [0, 2.8], heading: 180, words: at the bell rope}
+
+  # --- camps ---
+  fire_pit: # 8 seats on 4 log seats, a tend stand and 2 stands round the pit in the gaps between the logs (0.8 m
+    # off the sitters' legs), 10 mats beyond the seats, feet to the fire, 0.8 m off the seats and off the lean-tos' fronts
+    - {name: tend, kind: stand, polar: [1.2, 65]}
+    - {name: stand-1, kind: stand, polar: [1.4, 205]}
+    - {name: stand-2, kind: stand, polar: [1.4, 240]}
+    - {name: seat-1, kind: seat, polar: [2.2, 9.0], height_m: 0.4, words: on a log by the fire}
+    - {name: seat-2, kind: seat, polar: [2.2, 31.0], height_m: 0.4, words: on a log by the fire}
+    - {name: seat-3, kind: seat, polar: [2.2, 99.0], height_m: 0.4, words: on a log by the fire}
+    - {name: seat-4, kind: seat, polar: [2.2, 121.0], height_m: 0.4, words: on a log by the fire}
+    - {name: seat-5, kind: seat, polar: [2.2, 149.0], height_m: 0.4, words: on a log by the fire}
+    - {name: seat-6, kind: seat, polar: [2.2, 171.0], height_m: 0.4, words: on a log by the fire}
+    - {name: seat-7, kind: seat, polar: [2.2, 289.0], height_m: 0.4, words: on a log by the fire}
+    - {name: seat-8, kind: seat, polar: [2.2, 311.0], height_m: 0.4, words: on a log by the fire}
+    - {name: mat-1, kind: mat, polar: [3.8, 325], words: on a mat by the fire}
+    - {name: mat-2, kind: mat, polar: [3.8, 20], words: on a mat by the fire}
+    - {name: mat-3, kind: mat, polar: [3.8, 65], words: on a mat by the fire}
+    - {name: mat-4, kind: mat, polar: [3.8, 83], words: on a mat by the fire}
+    - {name: mat-5, kind: mat, polar: [3.8, 135], words: on a mat by the fire}
+    - {name: mat-6, kind: mat, polar: [3.8, 155], words: on a mat by the fire}
+    - {name: mat-7, kind: mat, polar: [3.8, 175], words: on a mat by the fire}
+    - {name: mat-8, kind: mat, polar: [3.8, 290], words: on a mat by the fire}
+    - {name: mat-9, kind: mat, polar: [3.8, 310], words: on a mat by the fire}
+    - {name: mat-10, kind: mat, polar: [3.8, 340], words: on a mat by the fire}
+  lean_to: # 2 mats under the roof, 0.9 m apart, heads in, and 2 stands before its front corners (off the fire's mats)
+    - {name: mat-1, kind: mat, at: [-0.45, -0.2], heading: 0, words: under the lean-to}
+    - {name: mat-2, kind: mat, at: [0.45, -0.2], heading: 0, words: under the lean-to}
+    - {name: stand-1, kind: stand, at: [-1.6, 1.6], heading: 180}
+    - {name: stand-2, kind: stand, at: [1.6, 1.6], heading: 180}
+
+placements: # per placement: slots instead of its kind's (replace) or besides them
+  west-gate: # faces into the town: its guards stand on the outer side, facing out
+    replace: true
+    slots:
+      - {name: guard-1, kind: work, task: guard, skill: arms, at: [-2.2, -2.8], heading: 180}
+      - {name: guard-2, kind: work, task: guard, skill: arms, at: [2.2, -2.8], heading: 180}
+  castle-store-w: # the gaol: its door opens into the pen (see places: gaol)
+    replace: true
+    slots: []
+  castle-fire-w: # the moat runs just south of the castle's fire baskets: tended from beside them
+    replace: true
+    slots:
+      - {name: tend, kind: stand, at: [1.0, 0]}
+      - {name: warm-1, kind: stand, at: [-1.0, 0]}
+  castle-fire-e:
+    replace: true
+    slots:
+      - {name: tend, kind: stand, at: [-1.0, 0]}
+      - {name: warm-1, kind: stand, at: [1.0, 0]}
+  cross-s-1-chest: # stands against the house: reached from the street side
+    replace: true
+    slots:
+      - {name: stand-1, kind: stand, at: [-0.45, -1.0], heading: 0}
+      - {name: stand-2, kind: stand, at: [0.45, -1.0], heading: 0}
+
+places: # what walking to a named place resolves to: these owners' slots in order, then the place's own
+  well: {owners: [well]}
+  main-gate: {owners: [main-gate, main-gate-fire-w, main-gate-fire-e]}
+  west-gate: {owners: [west-gate]}
+  market: {owners: [market-stall]}
+  castle: {owners: [castle-keep, castle-gate]}
+  temple: {owners: [temple-hall]}
+  storehouses: {owners: [store-2, store-1, store-3, store-4, store-5]} # the granary first
+  training-ground: {owners: [war-drum]}
+  forge: {owners: [forge]}
+  bell-tower: {owners: [bell-tower]}
+  band_a_camp: {owners: ["band_a_camp:fire-pit"]}
+  band_b_camp: {owners: ["band_b_camp:fire-pit"]}
+  rice-fields: # in paddy-5, a row of tiles apart
+    slots:
+      - {name: farm-1, kind: work, task: farm, skill: farming, at: [-123, 51], heading: 0, words: in the paddies}
+      - {name: farm-2, kind: work, task: farm, skill: farming, at: [-119, 51], heading: 0, words: in the paddies}
+      - {name: farm-3, kind: work, task: farm, skill: farming, at: [-123, 57], heading: 0, words: in the paddies}
+      - {name: farm-4, kind: work, task: farm, skill: farming, at: [-119, 57], heading: 0, words: in the paddies}
+      - {name: farm-5, kind: work, task: farm, skill: farming, at: [-123, 63], heading: 0, words: in the paddies}
+      - {name: farm-6, kind: work, task: farm, skill: farming, at: [-119, 63], heading: 0, words: in the paddies}
+  gaol: # on the ground inside the pen
+    slots:
+      - {name: confined-1, kind: seat, task: confined, skill: confined, at: [-14.6, -15.6], heading: 90, posture: sitting_ground, words: in the gaol}
+      - {name: confined-2, kind: seat, task: confined, skill: confined, at: [-13.4, -14.2], heading: 90, posture: sitting_ground, words: in the gaol}

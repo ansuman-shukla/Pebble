@@ -81,6 +81,40 @@ def test_the_motion_table(kwargs: dict[str, Any], expected: tuple[str, str]) -> 
     assert _motion(**kwargs) == expected
 
 
+BENCH = {"slot": "b#seat-1", "where": "on the bench", "posture": "sitting", "facing": 90.0, "seat_m": 0.45}
+LOOM = {"slot": "l#seat", "where": "at the loom", "posture": "sitting", "facing": 180.0, "seat_m": 0.3, "task": "weave"}
+MAT = {"slot": "c#mat-1", "where": "on a mat", "posture": "lying", "facing": 45.0, "seat_m": 0.0}
+INSIDE = {"slot": "h#inside", "where": "inside", "posture": "inside", "facing": 0.0, "seat_m": 0.0}
+STALL = {"slot": "m#stall", "where": "at the stall", "posture": "standing", "facing": 270.0, "seat_m": 0.0}
+PRAY = {"slot": "t#pray-1", "where": "before the hall", "posture": "sitting_ground", "facing": 180.0, "seat_m": 0.0}
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "expected"),
+    [
+        ({"action": "rest", "args": BENCH}, BodyMotion("sit", "sitting", 90.0, 0.45)),
+        ({"action": "rest", "args": BENCH, "gait": "walk"}, BodyMotion("walk", "standing")),  # stepping onto it
+        (
+            {"action": "rest", "args": {"slot": None, "where": "on the ground"}},
+            BodyMotion("sit_ground", "sitting_ground"),
+        ),
+        ({"action": "work", "args": LOOM}, BodyMotion("craft", "sitting", 180.0, 0.3)),
+        ({"action": "work", "args": {**STALL, "task": "trade"}}, BodyMotion("trade", "standing", 270.0)),
+        ({"action": "work", "args": {**STALL, "task": "weave"}}, BodyMotion("craft", "crouching", 270.0)),  # its own
+        ({"action": "work", "args": {**PRAY, "task": "pray"}}, BodyMotion("pray", "sitting_ground", 180.0)),
+        ({"action": "sleep", "args": MAT, "asleep": True}, BodyMotion("lie", "lying", 45.0)),
+        ({"action": "sleep", "args": INSIDE, "asleep": True}, BodyMotion("inside", "inside")),
+        ({"action": "sleep", "args": INSIDE, "asleep": True, "gait": "walk"}, BodyMotion("inside", "inside")),
+        ({"action": "sleep", "args": INSIDE, "alive": False}, BodyMotion("lie", "lying")),  # died in their sleep
+    ],
+)
+def test_a_body_on_its_slot_rests_the_slot_s_way(kwargs: dict[str, Any], expected: BodyMotion) -> None:
+    """S1's slots (D119): the action's args say how the body rests on the slot it took, and which way it faces."""
+    args = kwargs.pop("args")
+    defaults: dict[str, Any] = {"alive": True, "asleep": False, "gait": None, "load": 0.0, "talking": False}
+    assert body_motion(**(defaults | kwargs), args=args) == expected
+
+
 def test_load_is_the_share_of_what_their_age_can_carry() -> None:
     assert load_share({}, "young_adult") == 0.0
     assert load_share({"wood": 5, "rice": 25}, "young_adult") == pytest.approx(10 / 25)
@@ -123,7 +157,8 @@ def test_replay_tells_the_motion_the_sim_had_at_every_tick(new_sim: Callable[...
                 talking=sim.tick - spoke.get(citizen.id, -TALKING_TICKS) < TALKING_TICKS,
             )
             entity = citizen_entity(replayed.citizens[citizen.id], sim.tick)
-            assert BodyMotion(entity.motion, entity.posture) == truth, (sim.tick, citizen.id)
+            shown = BodyMotion(entity.motion, entity.posture, entity.slot_heading, entity.slot_height_m)
+            assert shown == truth, (sim.tick, citizen.id)
             seen[truth.motion] += 1
     exercised = {
         "walk",
@@ -136,5 +171,7 @@ def test_replay_tells_the_motion_the_sim_had_at_every_tick(new_sim: Callable[...
         "gather_high",
         "farm",
         "craft",
+        "inside",
+        "sit",
     }
     assert exercised | {"trade", "eat", "drink", "tend", "pick_up"} <= set(seen), seen  # the run really used the table

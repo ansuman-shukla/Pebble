@@ -86,7 +86,7 @@ def test_the_storehouse_is_only_for_the_town_and_only_within_reach(new_sim: Call
 
 def test_role_tasks_need_the_skill_and_the_place(new_sim: Callable[..., Simulation]) -> None:
     sim = new_sim()
-    api = _farmer(sim, at=MARKET, skills=["farming", "trade", "weaving"])
+    api = _farmer(sim, at=MARKET, skills=["farming", "trade", "weaving"], home="farmhouse-1")  # the loom's house
     assert run_until_done(sim, api.work("farm"), 1).text == "There are no fields here to tend."
     assert run_until_done(sim, api.work("guard"), 1).text == "You don't know how to do that."
     assert run_until_done(sim, api.work("dance"), 1).text == "You don't know how to do that."

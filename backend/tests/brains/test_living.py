@@ -23,6 +23,7 @@ from app.sim.fire import SAFE_M, near_lit_fire
 from app.sim.navigation import Planner
 from app.sim.perception import HOME_RADIUS_M
 from app.sim.simulation import Simulation
+from app.sim.slots import PERSONAL_M, crowded, held_slot, is_inside, off_work_slot
 from app.sim.vec import Vec3
 from app.sim.world import SimWorld
 from tests.sim_helpers import drawn_on, local_hour
@@ -57,6 +58,9 @@ class Life:
     gifts: int = 0  # items handed from one citizen to another
     moves: Counter[str] = field(default_factory=Counter)  # citizens' moves in a tick, by the action that moved them
     off_drawn: list[tuple[int, str, float]] = field(default_factory=list)  # (tick, citizen, metres) drawn elsewhere
+    crowded: list[tuple[int, str, str, float]] = field(default_factory=list)  # (tick, a, b, metres) closer than 0.8 m
+    off_slot: list[tuple[int, str]] = field(default_factory=list)  # (tick, citizen) working off their task's slots
+    beds: Counter[str] = field(default_factory=Counter)  # (citizen:bed kind) sleeper-minutes in the small hours
 
 
 @pytest.fixture(scope="module")
@@ -115,6 +119,8 @@ def life(sim_world: SimWorld, planner: Planner) -> Life:
                 out.actions[payload["action"]] += 1
                 kind = str(payload["args"].get("task", payload["action"]))
                 out.started[(event.actor_id, day, kind)] += 1
+        out.crowded += [(sim.tick, a, b, metres) for a, b, metres in crowded(sim.core)]
+        out.off_slot += [(sim.tick, citizen_id) for citizen_id in off_work_slot(sim.core)]
         for citizen in sim.state.citizens.values():
             if citizen.id not in injured:
                 out.need_damage[citizen.id] += max(0.0, health[citizen.id] - citizen.body.health)
@@ -123,15 +129,19 @@ def life(sim_world: SimWorld, planner: Planner) -> Life:
             moved = sim_world.distance_m(before[citizen.id], citizen.position)
             out.moved_m[(citizen.id, day)] += moved
             local = sim_world.town_point(citizen.position)
-            if local is not None and not walk.is_walkable(*local):
+            if local is not None and not walk.is_walkable(*local) and not is_inside(sim.core, citizen):
                 out.walls.append((sim.tick, citizen.id))
             action = citizen.action
             if citizen.body.asleep or moved > 0 or (action is not None and action.kind in PROGRESS):
                 last_progress[citizen.id] = sim.tick
             out.stall[citizen.id] = max(out.stall[citizen.id], sim.tick - last_progress[citizen.id])
-            if citizen.region != "town" and 0.5 <= local_hour(sim, citizen.id) < 4.0:
+            small_hours = 0.5 <= local_hour(sim, citizen.id) < 4.0
+            if citizen.region != "town" and small_hours:
                 home = sim_world.structures[str(citizen.home)]
                 out.night[citizen.id].append((citizen.body.asleep, sim_world.distance_m(citizen.position, home.door)))
+            if small_hours and citizen.body.asleep:
+                bed = held_slot(sim.core, citizen)
+                out.beds[f"{citizen.id}:{bed.kind if bed is not None else 'ground'}"] += 1
         for camp in ("band_a_camp:fire-pit", "band_b_camp:fire-pit"):
             fire = sim.state.fires[camp]
             if sim.core.is_night_at(fire.position):
@@ -157,7 +167,7 @@ def _draw(
             drawn[citizen.id] = citizen.position
             gaps.append(sim.world.distance_m(before[citizen.id], citizen.position))
         else:
-            out.moves[moving[citizen.id]] += 1
+            out.moves[moving.get(citizen.id, "nothing")] += 1  # (stepping aside while standing about)
             gaps.append(sim.world.distance_m(moved.route[0].unit, before[citizen.id]))
             drawn[citizen.id] = drawn_on(moved.route, SECONDS_PER_TICK)
             gaps.append(sim.world.distance_m(drawn[citizen.id], citizen.position))
@@ -187,6 +197,23 @@ def test_everyone_keeps_doing_things_and_moving(life: Life) -> None:
         for day in range(DAYS):
             assert life.moved_m[(citizen_id, day)] > 100, f"{citizen_id} barely moved on day {day}"
     assert life.said > 15 * DAYS  # people greet each other
+
+
+def test_no_two_bodies_end_a_tick_closer_than_personal_space(life: Life) -> None:
+    """Audit F2: citizens stood inside each other in 88 % of samples. Now at every tick's end no two living bodies
+    that stand, sit or lie (not walking, not inside a house) are within 0.8 m of each other."""
+    assert life.crowded == [], life.crowded[:10]
+    assert PERSONAL_M == 0.8
+
+
+def test_workers_work_at_their_slots_and_sleepers_lie_inside_or_on_mats(life: Life) -> None:
+    """Audit F12/F16: weaving at the loom, trading behind the stall, farming in the paddies, guarding at the gates;
+    town folk sleep inside their houses, the bands on mats under their lean-tos or round their fire."""
+    assert life.off_slot == [], life.off_slot[:10]
+    for citizen in life.sim.state.citizens.values():
+        beds = {key.split(":")[1]: minutes for key, minutes in life.beds.items() if key.startswith(f"{citizen.id}:")}
+        wanted = "inside" if citizen.region == "town" else "mat"
+        assert set(beds) == {wanted}, f"{citizen.id} slept {beds}"
 
 
 def test_nobody_walks_through_the_town_walls(life: Life) -> None:

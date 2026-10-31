@@ -56,6 +56,7 @@ function entity(overrides: Partial<LiveCitizen> = {}): LiveCitizen {
     motion: 'idle',
     posture: 'standing',
     slot_heading: null,
+    slot_height_m: null,
     goal: '',
     driver: null,
     target: null,
