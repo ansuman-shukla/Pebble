@@ -1,4 +1,4 @@
-"""Instant actions between people and things (03): say, pick up, drop and give; and the stores within reach."""
+"""Instant actions between people and things (03): say, pick up, drop, give and stash; and the stores within reach."""
 
 import re
 
@@ -10,7 +10,7 @@ from app.sim.core import HEARING_M, KEPT_HEARD, REACH_M, SimCore
 from app.sim.items import ITEMS, amount_words
 from app.sim.perception import match_person, normalize, person_label
 from app.sim.state import Citizen, Heard
-from app.world_api.models import ActionResult, Drop, Give, PickUp, Say, Volume
+from app.world_api.models import ActionResult, Drop, Give, PickUp, Say, Stash, Volume
 
 SAY_VERB: dict[Volume, str] = {"whisper": "whisper", "normal": "say", "shout": "shout"}
 STORE_REACH_M = ownership.REACH_M  # from a storehouse's door, a chest's home's door, or where a store stands
@@ -145,6 +145,31 @@ def give(core: SimCore, citizen: Citizen, action: Give) -> ActionResult:
     )
     return ActionResult(
         action="give", outcome="done", text=f"{capital(label)} takes {amount_words(count, ITEMS[item])}."
+    )
+
+
+def stash(core: SimCore, citizen: Citizen, action: Stash) -> ActionResult:
+    """Put carried things into a store of your own within reach: your household's chest (the merchant: the stall)."""
+    item = carried_name(action.item, citizen.inventory)
+    carried = citizen.inventory.get(item, 0) if item else 0
+    if item is None or carried == 0:
+        return refuse(core, citizen, "stash", f"You aren't carrying any {action.item}.")
+    store_id = own_store_in_reach(core, citizen)
+    if store_id is None:
+        return refuse(core, citizen, "stash", "There's nothing of yours to put it in here.")
+    count = min(action.amount, carried)
+    noticed = ownership.notice(core, citizen, store_id)
+    citizen.inventory[item] -= count
+    if citizen.inventory[item] == 0:
+        del citizen.inventory[item]
+    store = core.state.stores.setdefault(store_id, {})
+    store[item] = store.get(item, 0) + count
+    core.item_moved(
+        citizen, item, count, ItemLocation(kind="inventory", id=citizen.id), ownership.item_location(store_id)
+    )
+    words = amount_words(count, ITEMS[item])
+    return ActionResult(
+        action="stash", outcome="done", text=f"You put {words} in {ownership.store_words(store_id)}.{noticed}"
     )
 
 

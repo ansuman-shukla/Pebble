@@ -42,6 +42,7 @@ from app.world_api.models import (
     Say,
     SetGoal,
     Sleep,
+    Stash,
     Volume,
     Wait,
     WalkTo,
@@ -88,6 +89,7 @@ INSTANTS: dict[ActionName, Instant] = {
     "give": handles(Give, exchange.give),
     "gesture": handles(Gesture, expression.gesture),
     "set_goal": handles(SetGoal, expression.set_goal),
+    "stash": handles(Stash, exchange.stash),
 }
 STARTS: dict[ActionName, Starter] = {
     "walk_to": handles(WalkTo, movement.start_walk),
