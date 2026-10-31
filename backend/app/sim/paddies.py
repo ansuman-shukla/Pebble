@@ -26,8 +26,8 @@ from app.sim.state import ActionState, Citizen
 from app.sim.vec import Vec3
 
 FIELDS = "rice-fields"  # the place the paddies lie in
-TEND_GROWTH = 50  # a day's tending of a paddy: an hour's work (10 §1.4)
-TEND_SESSION = 17  # a 20-minute session's share of it (the last one of a day tops it up to 50)
+TEND_GROWTH = 65  # a day's tending of a paddy, an hour's work: the bible's 50 + 30 % (D152, balance)
+TEND_SESSION = 22  # a 20-minute session's share of it (the last one of a day tops it up)
 SESSION_MINUTES = 20
 ELDER_SESSION_MINUTES = 30
 HARVEST = 10  # a session's rice by hand

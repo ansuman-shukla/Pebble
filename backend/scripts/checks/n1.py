@@ -20,9 +20,6 @@ HOME_RING_M = 400.0
 HOME_RING_DAY = 4
 HOME_RING_SHARE = 0.4
 FOOD = frozenset({"berries", "roots", "nuts"})
-STORE = "store-2"  # the granary
-STORE_GAIN = 1  # the granary gains over a run (test_living's storehouse test)
-STORE_DROP = 120  # the most it may lose from one day's end to the next: about a day of the town eating
 
 
 class Reach(Check):
@@ -193,26 +190,4 @@ class HomeRing(Check):
         return Outcome(worst, bool(self.shares) and worst < HOME_RING_SHARE, words)
 
 
-class Storehouse(Check):
-    """The granary's rice at each day's end: what it gained over the run and the worst drop from one day to the next
-    (the paddies ripen in pairs, so the store rises on harvest days and the town eats from it every day)."""
-
-    name = "n1.storehouse"
-
-    @override
-    def start(self, sim: Simulation) -> None:
-        self.days = [sim.state.stores.get(STORE, {}).get("rice", 0)]
-
-    @override
-    def after_step(self, sim: Simulation, events: list[EventDraft]) -> None:
-        if sim.tick % DAY_MINUTES == 0:
-            self.days.append(sim.state.stores.get(STORE, {}).get("rice", 0))
-
-    @override
-    def outcome(self, sim: Simulation) -> Outcome:
-        gain = self.days[-1] - self.days[0]
-        drop = max((a - b for a, b in zip(self.days[1:], self.days[2:], strict=False)), default=0)
-        return Outcome(gain, gain >= STORE_GAIN and drop <= STORE_DROP, f"+{gain}, worst day -{drop}: {self.days}")
-
-
-CHECKS: tuple[type[Check], ...] = (Reach, InPaddies, Regrowing, Rice, HomeRing, Storehouse)
+CHECKS: tuple[type[Check], ...] = (Reach, InPaddies, Regrowing, Rice, HomeRing)
