@@ -4,11 +4,7 @@ import { Box3, Vector3 } from 'three';
 import type { Furniture, WorldView } from '../../src/lib/client/types.gen';
 import { MockLiveServer } from '../../src/lib/live/mock-live';
 import { assetSize, PROPS } from '../../src/lib/world/assets';
-import {
-  furniturePlacements,
-  LOG_PAST_SEATS_M,
-  MAT_SIZE,
-} from '../../src/lib/world/furniture';
+import { furniturePlacements } from '../../src/lib/world/furniture';
 import { anchorMapping } from '../../src/lib/world/globe';
 import { proceduralScene } from '../../src/lib/world/procedural-props';
 import { WORLD_URL } from './globe-helpers';
@@ -54,10 +50,11 @@ test('each piece is drawn at its slot, turned its way, its seat at the slot heig
   const log = drawn(piece({}));
   expect(log.placed).toMatchObject({ x: 0.74, z: -2.03, rotation_deg: 340 });
   expect(log.top).toBeCloseTo(0.4, 2);
-  expect(log.across).toBeCloseTo(0.84 + LOG_PAST_SEATS_M, 2); // both sitters on it, with room at its ends
+  expect(log.across).toBeCloseTo(1.74, 2); // both sitters on it (0.84 m apart), with room at its ends
   expect(log.along).toBeCloseTo(0.4, 2); // round: as thick as it is high
   expect(drawn(piece({ span_m: 0, seat_m: 0.5 })).across).toBeCloseTo(0.9, 2);
   expect(drawn(piece({ span_m: 0, seat_m: 0.5 })).top).toBeCloseTo(0.5, 2);
+  expect(drawn(piece({ span_m: 0, seat_m: 0.5 })).along).toBeCloseTo(0.5, 2);
   const stool = drawn(piece({ kind: 'stool', seat_m: 0.3, span_m: 0 }));
   expect(stool.top).toBeCloseTo(0.3, 2);
   expect(
@@ -66,9 +63,11 @@ test('each piece is drawn at its slot, turned its way, its seat at the slot heig
   const lord = drawn(piece({ kind: 'lord_seat', seat_m: 0.45, span_m: 0 }));
   expect(lord.top).toBeCloseTo(0.45, 2);
   const mat = drawn(piece({ kind: 'sleeping_mat', seat_m: 0, span_m: 0 }));
-  expect([mat.across, mat.top, mat.along].map((m) => m.toFixed(2))).toEqual(
-    [MAT_SIZE.x, MAT_SIZE.y, MAT_SIZE.z].map((m) => m.toFixed(2)),
-  ); // flat and long the way a lying body faces
+  expect([mat.across, mat.top, mat.along].map((m) => m.toFixed(2))).toEqual([
+    '0.90',
+    '0.07',
+    '2.00',
+  ]); // flat and long the way a lying body faces
   expect(
     furniturePlacements([piece({}), piece({ site: 'town' })], 'town'),
   ).toHaveLength(1);
@@ -123,6 +122,8 @@ test('the mock feed seats and beds people on drawn furniture, never in the air',
         nearest.piece.seat_m,
         2,
       );
+      if (citizen.activity === 'resting')
+        expect(citizen.motion, where).toBe('sit'); // on the seat, not the ground
       used.add(nearest.piece.kind);
     }
     server.skip(1);

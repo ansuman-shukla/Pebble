@@ -9,9 +9,9 @@ import { assetSize, PROPS } from '@/lib/world/assets';
 import { FURNITURE_SEAT } from '@/lib/world/procedural-props';
 
 /** A log seat reaches this far past its outer seats, together (a sitter's width). */
-export const LOG_PAST_SEATS_M = 0.9;
+const LOG_PAST_SEATS_M = 0.9;
 /** A sleeping mat as drawn: across the body, its height, along the body (metres). */
-export const MAT_SIZE = { x: 0.9, y: 0.07, z: 2 };
+const MAT_SIZE = { x: 0.9, y: 0.07, z: 2 };
 
 export interface FurniturePlacement {
   id: string;
