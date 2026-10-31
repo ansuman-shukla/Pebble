@@ -26,12 +26,13 @@ from pydantic import JsonValue, TypeAdapter
 
 from app.observability.events import EventDraft, ItemLocation, ItemMoved, Ledger, TaxChange
 from app.sim import society
+from app.sim.clock import DAY_MINUTES, game_minute, local_minute
 from app.sim.core import SimCore
 from app.sim.economy import value_of
 from app.sim.items import ITEMS, amount_words
 from app.sim.ownership import CHEST, KEEP, is_granary, owns
 from app.sim.state import ActionState, Citizen, System
-from app.sim.vec import Vec3
+from app.sim.vec import Vec3, lat_lon_deg
 
 LocalTest = Callable[[Vec3], bool]  # app.sim.systems' (which registers these hooks, so can't be imported here)
 RICE_TAX = 0.4  # of each harvest
@@ -39,7 +40,7 @@ DUES = 5  # mon a day, a household outside the fields
 FIELD_DUES = 6  # mon a day for each paddy a farm household farms
 PADDIES: Mapping[str, int] = {"farmhouse-1": 4, "farmhouse-2": 2}  # farm household -> paddies (§1.4)
 NO_DUES = frozenset({KEEP, "temple-hall"})
-COURT_DAY = 7  # dues still owed when it ends are in arrears
+COURT_DAY = 7  # dues still owed when it ends (at the household's local midnight) are in arrears
 
 
 @dataclass
@@ -147,12 +148,11 @@ def households(core: SimCore) -> dict[str, Vec3]:
 def settle_at_midnight(core: SimCore, now: LocalTest) -> None:
     """Midnight hook, per household whose local midnight it is: a court day ending puts what is owed in arrears;
     overdue rice or arrears are told (`tax_overdue`); then the new day's dues are owed."""
-    court_ended = society.day_of_week(core.state.tick - 1) == COURT_DAY
     for household, door in households(core).items():
         if not now(door):
             continue
         owed = account(core, household)
-        if court_ended:
+        if _local_day_ended(core, door) == COURT_DAY:
             owed.arrears = owed.coins
         if owed.rice or owed.arrears:
             owed.days += 1
@@ -162,6 +162,16 @@ def settle_at_midnight(core: SimCore, now: LocalTest) -> None:
         if dues := dues_of(household):
             owed.coins += dues
             core.emit("tax_assessed", _change(household, owed, coins=dues))
+
+
+def _local_day_ended(core: SimCore, unit: Vec3) -> int:
+    """The week day that just ended at this spot's local midnight: its local clock runs 4 minutes a degree east of the
+    town's, so a house west of the castle ends its day a few minutes after the town does."""
+    before = core.state.tick - 1
+    _, lon = lat_lon_deg(unit)
+    ahead = local_minute(before, core.world.town_lon_deg, lon) - game_minute(before) % DAY_MINUTES
+    ahead = (ahead + DAY_MINUTES / 2) % DAY_MINUTES - DAY_MINUTES / 2  # minutes the spot's clock is ahead of the town's
+    return society.day_of_week(before + math.floor(ahead))
 
 
 def ledger_at_midnight(core: SimCore, now: LocalTest) -> None:

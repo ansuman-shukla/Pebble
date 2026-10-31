@@ -8,11 +8,13 @@ import pytest
 
 from app.observability.events import EventDraft, ItemMoved, Ledger, TaxChange
 from app.sim import tax
-from app.sim.clock import DAY_MINUTES, START_MINUTE
+from app.sim.clock import DAY_MINUTES, START_MINUTE, local_minute
 from app.sim.simulation import Simulation
 from app.sim.snapshot import restore, take_snapshot
 from app.sim.state import ActionState
+from app.sim.systems import midnight_at
 from app.sim.tax import TAX, Account
+from app.sim.vec import lat_lon_deg
 from app.sim.work import farm
 from app.world_api.facade import WorldApi, run_until_done
 from tests.sim_helpers import make_spec, without_animals
@@ -36,9 +38,16 @@ def _tax(events: list[EventDraft]) -> list[tuple[str, str | None, TaxChange]]:
 
 
 def _midnight(sim: Simulation, tick: int) -> list[EventDraft]:
-    sim.state.tick = tick
-    tax.settle_at_midnight(sim.core, lambda _unit: True)
+    """The town's midnight at `tick` and the minutes round it, each household settling at its own local midnight."""
+    for minute in range(tick - 20, tick + 20):
+        sim.state.tick = minute
+        tax.settle_at_midnight(sim.core, lambda unit: midnight_at(sim.core, unit))
     return sim.drain()
+
+
+def _night(day: int) -> int:
+    """The tick of the town's midnight that ends day `day` (0-based)."""
+    return (day + 1) * DAY_MINUTES - START_MINUTE
 
 
 @pytest.mark.parametrize(("harvest", "owed"), [(12, 5), (10, 4), (1, 1), (25, 10), (0, 0)])
@@ -150,6 +159,27 @@ def test_dues_are_owed_daily_and_overdue_only_once_court_day_passes_unpaid(new_s
     assert tax.account(sim.core, "temple-hall") == Account()
 
 
+def test_a_house_west_of_the_castle_puts_its_dues_in_arrears_at_its_own_midnight_after_court_day(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    sim = _scene(new_sim, ("genzo", "farmhouse-1", "farmhouse-1"), ("tetsu", "temple-hall", "temple-hall"))
+    door = sim.world.structures["farmhouse-1"].door
+    assert local_minute(COURT_ENDS, sim.world.town_lon_deg, lat_lon_deg(door)[1]) > DAY_MINUTES - 15  # still day 7
+    tax.account(sim.core, "farmhouse-1").coins = 30
+    told: list[tuple[int, str, TaxChange]] = []
+    for tick in range(COURT_ENDS - 5, COURT_ENDS + 30):  # the town's midnight, then the house's a few minutes later
+        sim.state.tick = tick
+        tax.settle_at_midnight(sim.core, lambda unit: midnight_at(sim.core, unit))
+        told += [(tick, kind, change) for kind, _, change in _tax(sim.drain())]
+    assert told
+    assert [(kind, change.household, change.coins) for _, kind, change in told] == [
+        ("tax_overdue", "farmhouse-1", 30),
+        ("tax_assessed", "farmhouse-1", 24),
+    ]
+    assert told[0][0] > COURT_ENDS
+    assert tax.account(sim.core, "farmhouse-1") == Account(coins=54, arrears=30, days=1)
+
+
 def test_paying_the_lord_clears_the_arrears_and_the_overdue_count(new_sim: Callable[..., Simulation]) -> None:
     sim = _scene(
         new_sim,
@@ -182,10 +212,10 @@ def test_rice_still_owed_at_midnight_is_overdue_and_counts_the_days(new_sim: Cal
     sim = _scene(new_sim, ("genzo", "farmhouse-1", "farmhouse-1"))
     tax.account(sim.core, "farmhouse-1").rice = 5
     for day in (1, 2):
-        overdue = [c for kind, _, c in _tax(_midnight(sim, day * DAY_MINUTES)) if kind == "tax_overdue"]
+        overdue = [c for kind, _, c in _tax(_midnight(sim, _night(day))) if kind == "tax_overdue"]
         assert overdue == [TaxChange(household="farmhouse-1", rice=5, owed_rice=5, owed_coins=24 * (day - 1), days=day)]
     tax.account(sim.core, "farmhouse-1").rice = 0
-    assert [kind for kind, _, _ in _tax(_midnight(sim, 3 * DAY_MINUTES))] == ["tax_assessed"]
+    assert [kind for kind, _, _ in _tax(_midnight(sim, _night(3)))] == ["tax_assessed"]
     assert tax.account(sim.core, "farmhouse-1").days == 0
 
 
