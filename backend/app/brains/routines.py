@@ -57,7 +57,7 @@ BELL = 88.0  # the bell can't wait: above hungry (85) and thirsty (80), below st
 # when to go: the words of the sun where the monk stands (a bell's moment is the town's clock, see `sim/society.py`)
 BELLS: dict[TimeOfDay, str] = {"dawn": "dawn bell", "midday": "noon bell", "sunset": "dusk bell", "dusk": "dusk bell"}
 HUNT = "Hunt game for the band"
-LYING_FOOD = ("meat on the ground", "fish on the ground")
+LYING_FOOD = ("meat on the ground", "fish on the ground")  # fresh: not "dried meat" (someone's store, not remains)
 # a forager with enough food (or no room) rests, looks about camp and heads back: one aim, so goals don't flip
 AT_EASE: tuple[str, Driver] = ("Take it easy about camp", "rest")
 SCAVENGE = WORK + 6  # over a hunt: the meat is there already
@@ -416,7 +416,14 @@ def _scavenge(ctx: Context) -> list[Option]:
     p, api = ctx.perception, ctx.api
     if prowler(p) is not None or full_load(p, ctx.notes.get("full")):
         return []
-    food = next((t for t in p.things if t.label.endswith(LYING_FOOD) and DISTANCE[t.nearness] != "far"), None)
+    food = next(
+        (
+            t
+            for t in p.things
+            if t.label.endswith(LYING_FOOD) and "dried meat" not in t.label and DISTANCE[t.nearness] != "far"
+        ),
+        None,
+    )
     if food is None:
         return []
     item = "fish" if food.label.endswith("fish on the ground") else "meat"

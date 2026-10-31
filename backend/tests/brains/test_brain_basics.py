@@ -11,7 +11,7 @@ from pydantic import JsonValue
 
 from app.brains.brain import UtilityBrain
 from app.brains.profile import BrainProfile, known_titles
-from app.brains.routines import ROUTINES, Context
+from app.brains.routines import ROUTINES, Context, _scavenge
 from app.brains.senses import Needs
 from app.observability.events import Gestured, GoalSet, Said
 from app.sim import fire as fires
@@ -221,6 +221,15 @@ def test_a_forager_at_ease_keeps_one_goal_while_it_rests_looks_about_and_heads_b
         "rest": "rest at camp", "stroll": "stroll", "back": "go home",
     }  # fmt: skip
     assert {(aim, driver) for _, aim, driver in picked.values()} == {("Take it easy about camp", "rest")}
+
+
+def test_dried_meat_lying_about_is_not_taken_for_remains() -> None:
+    dried = Seen(label="some dried meat on the ground", where="right beside you", nearness="right beside you")
+    fresh = Seen(label="some meat on the ground", where="right beside you", nearness="right beside you")
+    look = _camp_look("in the wild")
+    assert _scavenge(_forager_ctx(look.model_copy(update={"things": [dried]}), False, {})) == []
+    [take] = _scavenge(_forager_ctx(look.model_copy(update={"things": [fresh]}), False, {}))
+    assert take.name == "pick up the meat"
 
 
 def _near_camp(sim: Simulation) -> int:
