@@ -682,8 +682,10 @@ def settle(core: SimCore) -> None:
 
 
 def _come_out(core: SimCore, citizen: Citizen, home: Structure) -> None:
-    """Awake again: out of the door to a free spot before the house (a stand, the queue, else round the door)."""
-    step_to(core, citizen, reserve_home(core, citizen, home), straight=True)
+    """Awake again: out of the door to a free spot before the house (a stand, the queue, else round the door), never
+    straight onto a work slot (the lord's seat, the loom's stool): they walk to work when they set to it."""
+    before_door = tuple(slot for slot in layout(core).homes.get(home.id, ()) if slot.kind != "work")
+    step_to(core, citizen, _arrival(core, citizen, before_door, home.door, with_centre=True), straight=True)
 
 
 def _move_queues(core: SimCore) -> None:

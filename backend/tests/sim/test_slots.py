@@ -721,3 +721,22 @@ def test_someone_who_moved_off_their_spot_this_tick_lets_it_go(new_sim: Callable
     assert follow.result is not None and follow.result.text == "Leader stops, and you stop beside them."
     assert claim_of(sim.core, follower) is None  # let go of the stand, not walked back to it
     assert 1.1 < sim.world.distance_m(follower.position, leader.position) < 1.3
+
+
+def test_waking_up_comes_out_of_the_door_not_onto_the_seat_of_ones_work(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    sleepers = [
+        sim.add_citizen(make_spec(person, at=sim.world.structures[home].door_xz, home=home, skills=[skill]))
+        for person, home, skill in (("lord", "castle-keep", "governing"), ("weaver", "farmhouse-1", "weaving"))
+    ]
+    skip_to(sim, sleepers[0].position, night=True)
+    sleeps = [WorldApi(sim, person.id).sleep() for person in sleepers]
+    for sleep in sleeps:
+        assert run_until_done(sim, sleep, 18 * 60).text == "You wake up; it is morning."
+    sim.step()
+    for person in sleepers:
+        slot = _slot(sim, person)
+        assert slot.kind == "stand" and slot.id.endswith("#door"), slot.id  # not the lord's seat nor the loom's
+        assert sim.world.distance_m(person.position, slot.position) < 0.01
+    work = [slot for slot in layout(sim.core).slots.values() if slot.kind == "work"]
+    assert all(sim.world.distance_m(p.position, slot.position) >= PERSONAL_M for p in sleepers for slot in work)
