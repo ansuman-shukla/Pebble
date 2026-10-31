@@ -125,4 +125,4 @@ def test_storing_and_farming_replay_from_events(new_sim: Callable[..., Simulatio
     events = [ReplayEvent(e.tick, e.type, e.actor_id, e.payload.model_dump(mode="json")) for e in sim.drain()]
     rebuilt = replay(start, events)
     assert rebuilt.same_as(from_snapshot(take_snapshot(sim.state)))
-    assert rebuilt.stores[STORE] == {"rice": 30 + FARM_GROWTH}
+    assert rebuilt.stores[STORE] == {"rice": 30 + 5}  # the rice tax on the harvest: ⌈40 % of 12⌉

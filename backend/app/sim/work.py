@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from app.observability.events import ItemLocation, JsonScalar
-from app.sim import slots, society
+from app.sim import slots, society, tax
 from app.sim.acting import begin, settled
 from app.sim.core import SimCore
 from app.sim.exchange import storehouse_in_reach
@@ -38,7 +38,7 @@ def farm(core: SimCore, citizen: Citizen, _action: ActionState) -> str:
     if field["rice"] == 0:
         del field["rice"]
     citizen.inventory["rice"] = citizen.inventory.get("rice", 0) + taken
-    core.item_moved(
+    harvested = core.item_moved(
         citizen,
         "rice",
         taken,
@@ -46,26 +46,9 @@ def farm(core: SimCore, citizen: Citizen, _action: ActionState) -> str:
         ItemLocation(kind="inventory", id=citizen.id),
         cause_seq=grown,
     )
+    tax.assess_harvest(core, citizen, taken, harvested)  # E2's rice tax on each harvest (N1: from gather("rice"))
     left = " The rest stays in the field." if field.get("rice", 0) else ""
     return f"You tend the rice paddies and harvest {amount_words(taken, ITEMS['rice'])}.{left}"
-
-
-def store_food(core: SimCore, citizen: Citizen, action: ActionState) -> str:
-    store_id = str(action.store_id)
-    store = core.state.stores.setdefault(store_id, {})
-    stored: list[str] = []
-    for item in sorted(citizen.inventory):
-        if ITEMS[item].food <= 0:
-            continue
-        count = citizen.inventory.pop(item)
-        store[item] = store.get(item, 0) + count
-        core.item_moved(
-            citizen, item, count, ItemLocation(kind="inventory", id=citizen.id), ItemLocation(kind="store", id=store_id)
-        )
-        stored.append(amount_words(count, ITEMS[item]))
-    if not stored:
-        return "You have no food left to store."
-    return f"You put {' and '.join(stored)} in the storehouse."
 
 
 @dataclass(frozen=True)
@@ -104,7 +87,7 @@ WORK_TASKS: tuple[WorkTask, ...] = (
         at="storehouse",
         nowhere="There's no storehouse within reach.",
         label="filling the storehouse",
-        finish=store_food,
+        finish=tax.store_food,
     ),
     WorkTask(
         "guard",

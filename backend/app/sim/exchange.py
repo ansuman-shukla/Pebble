@@ -3,7 +3,7 @@
 import re
 
 from app.observability.events import ItemLocation, Said
-from app.sim import ownership
+from app.sim import ownership, tax
 from app.sim.acting import capital, carried_name, item_amount, item_name, refuse, stack_in_reach
 from app.sim.citizens import store_ids
 from app.sim.core import HEARING_M, KEPT_HEARD, REACH_M, SimCore
@@ -132,6 +132,7 @@ def give(core: SimCore, citizen: Citizen, action: Give) -> ActionResult:
         return refuse(core, citizen, "give", f"{capital(label)} can't carry any more.")
     if not core.accepts_gift(citizen, receiver, item, count):
         return refuse(core, citizen, "give", f"{capital(label)} doesn't take it.")
+    paid = tax.paid_dues(core, citizen, receiver, item, count)
     citizen.inventory[item] -= count
     if citizen.inventory[item] == 0:
         del citizen.inventory[item]
@@ -142,6 +143,7 @@ def give(core: SimCore, citizen: Citizen, action: Give) -> ActionResult:
         count,
         ItemLocation(kind="inventory", id=citizen.id),
         ItemLocation(kind="inventory", id=receiver.id),
+        cause_seq=paid,
     )
     return ActionResult(
         action="give", outcome="done", text=f"{capital(label)} takes {amount_words(count, ITEMS[item])}."
