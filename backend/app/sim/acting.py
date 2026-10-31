@@ -34,6 +34,7 @@ VERB: dict[str, str] = {
     "make_fire": "making a fire",
     "feed_fire": "tending the fire",
     "attack": "fighting",
+    "craft": "crafting",
 }
 
 

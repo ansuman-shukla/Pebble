@@ -1,0 +1,34 @@
+# Crafting (docs/design/10-world-v1.md §2.3; D160): what `craft(recipe)` makes, from what, where and how long.
+# Read by app/sim/crafting.py; the recipe names are the contract's (`RecipeName` in app/world_api/models.py).
+#
+# recipes.<name>:
+#   inputs   items used up, from what the crafter carries
+#   fuel     pieces of wood burned at the station besides (every iron craft at the forge: 2)
+#   yields   items made
+#   batch    rounds at most in one go with what is carried (dried meat: 1-5 meat make as many strips); default 1
+#   skill    the skill it needs; null = anyone
+#   station  the kind of thing (data/town, data/world placements) to craft at, within 4 m
+#   minutes  how long it takes (a batch takes no longer)
+#
+# stations.<kind>: where at it the crafter works: its work slots of `task` (data/slots.yaml), or a free seat round it
+# (`task: null`, the fire pit's logs); `words` names it in a refusal ("You need a forge within reach ...").
+
+recipes:
+  flint spear: {inputs: {wood: 1, flint: 1}, yields: {flint spear: 1}, skill: hunting, station: fire_pit, minutes: 30}
+  obsidian spear:
+    {inputs: {wood: 1, obsidian: 1}, yields: {obsidian spear: 1}, skill: hunting, station: fire_pit, minutes: 30}
+  iron spear:
+    {inputs: {iron sand: 2, wood: 1}, fuel: 2, yields: {iron spear: 1}, skill: smithing, station: forge, minutes: 60}
+  stone axe: {inputs: {wood: 1, flint: 2}, yields: {stone axe: 1}, skill: gathering, station: fire_pit, minutes: 45}
+  iron axe:
+    {inputs: {iron sand: 3, wood: 2}, fuel: 2, yields: {iron axe: 1}, skill: smithing, station: forge, minutes: 120}
+  sickle: {inputs: {iron sand: 3, wood: 1}, fuel: 2, yields: {sickle: 1}, skill: smithing, station: forge, minutes: 120}
+  cloth: {inputs: {reeds: 2}, yields: {cloth: 1}, skill: weaving, station: loom, minutes: 60} # work("weave") too
+  pack: {inputs: {hide: 2, reeds: 2}, yields: {pack: 1}, skill: weaving, station: loom, minutes: 60}
+  dried meat: {inputs: {meat: 1}, yields: {dried meat: 1}, batch: 5, skill: null, station: drying_rack, minutes: 30}
+
+stations:
+  fire_pit: {task: null, words: a fire pit}
+  forge: {task: forge, words: a forge}
+  loom: {task: weave, words: a loom}
+  drying_rack: {task: dry, words: a drying rack}

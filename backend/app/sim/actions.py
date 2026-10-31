@@ -2,7 +2,8 @@
 tick and end on completion or interrupt. Every failure is an in-world sentence; nothing reveals numbers or ids.
 
 This module dispatches: each action's handlers live in their own module (movement, resting, doing, work, exchange,
-expression, wild), one row per action in the tables below. It also decides what interrupts a running action.
+expression, market, crafting, wild), one row per action in the tables below. It also decides what interrupts a running
+action.
 """
 
 import re
@@ -11,7 +12,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel
 
-from app.sim import doing, exchange, expression, movement, resting, wild, work
+from app.sim import crafting, doing, exchange, expression, market, movement, resting, wild, work
 from app.sim.acting import VERB, refuse, settled
 from app.sim.bodies import COLLAPSE_WAKE_ENERGY, Crossing
 from app.sim.clock import NIGHT_ALTITUDE_DEG, sun_altitude_deg, sun_direction
@@ -25,6 +26,8 @@ from app.world_api.models import (
     ActionName,
     ActionResult,
     Attack,
+    Buy,
+    Craft,
     Drink,
     Drop,
     Eat,
@@ -40,6 +43,7 @@ from app.world_api.models import (
     PickUp,
     Rest,
     Say,
+    Sell,
     SetGoal,
     Sleep,
     Stash,
@@ -90,6 +94,8 @@ INSTANTS: dict[ActionName, Instant] = {
     "gesture": handles(Gesture, expression.gesture),
     "set_goal": handles(SetGoal, expression.set_goal),
     "stash": handles(Stash, exchange.stash),
+    "buy": handles(Buy, market.buy),
+    "sell": handles(Sell, market.sell),
 }
 STARTS: dict[ActionName, Starter] = {
     "walk_to": handles(WalkTo, movement.start_walk),
@@ -107,6 +113,7 @@ STARTS: dict[ActionName, Starter] = {
     "fish": handles(Fish, lambda core, citizen, _action: wild.start_fish(core, citizen)),
     "make_fire": handles(MakeFire, lambda core, citizen, _action: wild.start_make_fire(core, citizen)),
     "feed_fire": handles(FeedFire, lambda core, citizen, _action: wild.start_feed_fire(core, citizen)),
+    "craft": handles(Craft, crafting.start_craft),
 }
 ADVANCES: dict[ActionName, Advancer] = {  # actions not listed here wait for their `until_tick`, then finish
     "walk_to": movement.advance_walk,
@@ -126,9 +133,10 @@ FINISHES: dict[ActionName, Finisher] = {
     "fish": wild.complete,
     "make_fire": wild.complete,
     "feed_fire": wild.complete,
+    "craft": crafting.finish_craft,
 }
 _NIGHT_STOPS = frozenset({"walk_to", "follow", "gather", "wait", "rest", "work", "hunt", "fish"})
-_NEED_STOPS = frozenset({"walk_to", "follow", "gather", "wait", "rest", "flee", "work", "hunt", "fish"})
+_NEED_STOPS = frozenset({"walk_to", "follow", "gather", "wait", "rest", "flee", "work", "hunt", "fish", "craft"})
 
 
 def not_yet(core: SimCore, citizen: Citizen, kind: ActionName) -> ActionResult:
