@@ -166,18 +166,48 @@ class Layout:
     solids: tuple[Solid, ...]
 
 
+@dataclass(frozen=True)
+class LocalSlot:
+    """A slot's spec where it lies in its chart's metres (the town's, or a camp's round its anchor), facing its way."""
+
+    spec: SlotSpec
+    x: float
+    z: float
+    heading_deg: float
+
+
+def local_slots(
+    slot_specs: Iterable[SlotSpec], rotation: Rotation = 0, origin: tuple[float, float] = (0.0, 0.0)
+) -> list[LocalSlot]:
+    """Slot specs laid out in their chart: turned with their owner and moved to its centre."""
+    located: list[LocalSlot] = []
+    for item in slot_specs:
+        x, z = rotate_point(*item.local(), rotation)
+        heading = round((item.local_heading() + rotation) % 360.0, 2)
+        located.append(LocalSlot(item, origin[0] + x, origin[1] + z, heading))
+    return located
+
+
+def placement_slots(spec: SlotsSpec, placement: TownPlacement) -> list[LocalSlot]:
+    """A placement's slots: its kind's (unless the placement replaces them), then its own."""
+    override = spec.placements.get(placement.id)
+    kind_slots = [] if override is not None and override.replace else spec.kinds.get(placement.kind, [])
+    extra = override.slots if override is not None else []
+    return local_slots([*kind_slots, *extra], placement.rotation_deg, (placement.x, placement.z))
+
+
 def build_layout(world: SimWorld, town: TownView, spec: SlotsSpec) -> Layout:
     owners: dict[str, list[Slot]] = {}
 
-    def add(owner: str, slot_specs: Iterable[SlotSpec], to_unit: ToUnit, rotation: Rotation = 0) -> None:
-        for item in slot_specs:
-            x, z = rotate_point(*item.local(), rotation)
+    def add(owner: str, located: Iterable[LocalSlot], to_unit: ToUnit) -> None:
+        for at in located:
+            item = at.spec
             slot = Slot(
                 id=f"{owner}#{item.name}",
                 owner=owner,
                 kind=item.kind,
-                position=to_unit(x, z),
-                heading_deg=round((item.local_heading() + rotation) % 360.0, 2),
+                position=to_unit(at.x, at.z),
+                heading_deg=at.heading_deg,
                 posture=item.posture or _POSTURES.get(item.kind, "standing"),
                 height_m=item.height_m,
                 task=item.task,
@@ -186,25 +216,15 @@ def build_layout(world: SimWorld, town: TownView, spec: SlotsSpec) -> Layout:
             )
             owners.setdefault(owner, []).append(slot)
 
-    def placed(owner: str, placement: TownPlacement, origin: ToUnit) -> None:
-        override = spec.placements.get(placement.id)
-        kind_slots = [] if override is not None and override.replace else spec.kinds.get(placement.kind, [])
-        extra = override.slots if override is not None else []
-
-        def at(x: float, z: float) -> Vec3:
-            return origin(placement.x + x, placement.z + z)
-
-        add(owner, [*kind_slots, *extra], at, placement.rotation_deg)
-
     for placement in town.placements:
-        placed(placement.id, placement, world.town.to_unit)
+        add(placement.id, placement_slots(spec, placement), world.town.to_unit)
     solids: list[Solid] = []
     for site in world.sites:
         if site.kind != "camp":
             continue
         in_camp = _site_frame(world, site)
         for placement in site.placements:
-            placed(f"{site.id}:{placement.id}", placement, in_camp)
+            add(f"{site.id}:{placement.id}", placement_slots(spec, placement), in_camp)
             if placement.walk == "solid":
                 half = max(placement.footprint.x, placement.footprint.z) / 2
                 solids.append(Solid(in_camp(placement.x, placement.z), half + _SOLID_MARGIN_M))
@@ -222,7 +242,7 @@ def build_layout(world: SimWorld, town: TownView, spec: SlotsSpec) -> Layout:
         unknown = [owner for owner in place_spec.owners if owner not in owners]
         if unknown:
             raise ValueError(f"place {place_id}: no slots for owners {unknown}")
-        add(place_id, place_spec.slots, world.town.to_unit)
+        add(place_id, local_slots(place_spec.slots), world.town.to_unit)
         own = owners.get(place_id, [])
         places[place_id] = tuple(slot for owner in place_spec.owners for slot in owners[owner]) + tuple(own)
 
