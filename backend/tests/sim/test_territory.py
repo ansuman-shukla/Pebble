@@ -452,3 +452,49 @@ def test_known_dens_and_told_entries_survive_a_snapshot(new_sim: Callable[..., S
     assert before.dens and before.inside == {"kaz": ["walls"]}
     restored = restore(take_snapshot(sim.state))
     assert TERRITORY.of(restored) == before
+
+
+# --- the wolf pack's quarry ---
+
+
+def _open_ground(new_sim: Callable[..., Simulation], night: bool) -> tuple[Simulation, Vec3]:
+    sim = without_animals(new_sim())
+    centre = sim.world.unit(wild_cell(sim, flat_m=15.0))
+    skip_to(sim, centre, night=night)
+    return sim, centre
+
+
+@pytest.mark.parametrize(
+    ("kind", "company", "goes"),
+    [("wolf", 0, True), ("wolf", 1, False), ("bear", 1, True), ("lion", 1, True)],
+)
+def test_wolves_go_only_for_a_person_alone_other_predators_for_a_pair_too(
+    new_sim: Callable[..., Simulation], kind: str, company: int, goes: bool
+) -> None:
+    sim, centre = _open_ground(new_sim, night=True)
+    victim = _person(sim, "walker", centre)
+    for n in range(company):
+        _person(sim, f"mate{n}", step_towards(centre, 0.0, 8.0, R))
+    predators = [
+        _animal(sim, kind, step_towards(centre, 90.0, 60.0 + 4.0 * n, R), hunger=90.0, activity="prowling")
+        for n in range(3 if kind == "wolf" else 1)
+    ]
+    sim.drain()
+    went: set[str | None] = set()
+    for _ in range(3):
+        bitten = {e.actor_id for e in _run(sim, 1) if isinstance(e.payload, Injured)}
+        went |= {p.target for p in predators} | bitten
+    assert went - {None} == ({victim} if goes else set())
+
+
+def test_a_wolf_gives_up_once_its_quarry_has_company(new_sim: Callable[..., Simulation]) -> None:
+    sim, centre = _open_ground(new_sim, night=True)
+    victim = _person(sim, "walker", centre)
+    (wolf,) = [_animal(sim, "wolf", step_towards(centre, 90.0, 110.0, R), hunger=90.0, activity="prowling")]
+    sim.drain()
+    _run(sim, 1)
+    assert wolf.target == victim  # still far off: coming at them
+    mate = sim.citizen(_person(sim, "mate", step_towards(sim.citizen(victim).position, 0.0, 5.0, R)))
+    assert mate.body.alive
+    _run(sim, 1)
+    assert wolf.target is None

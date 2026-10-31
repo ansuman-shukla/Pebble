@@ -61,6 +61,7 @@ class Species:
     bite: tuple[float, float] = (0.0, 0.0)  # injury to a person per bite; (0, 0) = never attacks people
     prey: frozenset[str] = frozenset()
     prefers: frozenset[str] = frozenset()  # prey it goes for first when any is about (a bear: boar, not deer)
+    lone_people: bool = False  # hunts only a person alone (nobody within GROUP_M): a wolf pack (10 §1.6)
     scavenges: bool = False  # eats from a carcass it finds before it hunts
     meat: int = 0  # pieces a hunter gets (a predator's kill leaves half of them on the ground)
     hide: int = 0
@@ -121,7 +122,7 @@ SPECIES: dict[str, Species] = {
                 prey=frozenset({"rabbit", "hare", "duck"}), meat=1, hide=1, catch=0.3),
         Species("wolf", "a wolf", "wolves", _GRASS | frozenset({"taiga", "tundra"}), (2, 4), 5, 1.2, 4.5, 10.0, 30.0,
                 800, 4.0, predator=True, stalk_m=60, pounce_m=30, strike=0.5, race_s=120, bite=(12, 25),
-                prey=frozenset({"deer", "elk", "rabbit", "hare", "goat", "boar"}),
+                lone_people=True, prey=frozenset({"deer", "elk", "rabbit", "hare", "goat", "boar"}),
                 meat=3, hide=1, catch=0.2, fights_back=0.5, hurts=(10, 25)),
         Species("bear", "a bear", "bears", _FOREST | frozenset({"taiga"}), (1, 1), 4, 1.0, 4.0, 11.0, 10.0, 700, 5.0,
                 predator=True, stalk_m=40, pounce_m=15, strike=0.5, bite=(25, 40),

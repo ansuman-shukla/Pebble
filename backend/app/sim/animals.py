@@ -646,9 +646,19 @@ def _exposed_person(core: SimCore, animal: Animal) -> Citizen | None:
         for person in core.living()
         if (distance := core.distance_m(animal.position, person.position)) <= PERSON_SENSE_M
         and exposed(core, person)
+        and _huntable(core, animal, person)
         and not _taken(core, person, animal)
     ]
     return min(options)[2] if options else None
+
+
+def _huntable(core: SimCore, animal: Animal, person: Citizen) -> bool:
+    """A wolf pack goes only for a person alone, nobody else within GROUP_M (10 §1.6); the rest for anyone exposed."""
+    if not SPECIES[animal.kind].lone_people:
+        return True
+    return not any(
+        other.id != person.id and core.distance_m(other.position, person.position) <= GROUP_M for other in core.living()
+    )
 
 
 def _nearest_person(core: SimCore, position: Vec3, within_m: float) -> Citizen | None:
@@ -673,7 +683,9 @@ def _press(core: SimCore, animal: Animal, person: Citizen, life: Wildlife, start
     why = life.charges.get(animal.id, "hunt")
     den = den_of(core.world, core.state.groups[animal.group])
     safe = not exposed(core, person) or (
-        core.altitude(animal.position) >= DUSK_ALTITUDE_DEG if why == "hunt" else den is None
+        core.altitude(animal.position) >= DUSK_ALTITUDE_DEG or not _huntable(core, animal, person)
+        if why == "hunt"
+        else den is None
     )
     distance = core.distance_m(animal.position, person.position)
     if why == "hunt":
