@@ -419,21 +419,39 @@ def walkable(core: SimCore, spot: Vec3) -> bool:
     return all(core.distance_m(spot, solid.centre) >= solid.radius_m for solid in layout(core).solids)
 
 
-def nearest_free(
-    core: SimCore, citizen: Citizen, candidates: Iterable[Slot], within_m: float = math.inf
-) -> Slot | None:
-    """The nearest free slot among the candidates the citizen may take (ties by id): no one else's body or claim
-    within PERSONAL_M of it (their own claim counts as free)."""
+def _free_by_distance(
+    core: SimCore, citizen: Citizen, candidates: Iterable[Slot], within_m: float
+) -> list[tuple[float, str, Slot]]:
+    """The free slots among the candidates the citizen may take, nearest first (ties by id): no one else's body or
+    claim within PERSONAL_M of it (their own claim counts as free)."""
     spots = _taken(core, citizen.id)
-    free = [
+    return sorted(
         (distance, slot.id, slot)
         for slot in candidates
         if slot.usable_by(citizen)
         and slot.kind != "inside"
         and (distance := core.distance_m(citizen.position, slot.position)) <= within_m
         and _clear(core, slot.position, spots)
-    ]
-    return min(free)[2] if free else None
+    )
+
+
+def nearest_free(
+    core: SimCore, citizen: Citizen, candidates: Iterable[Slot], within_m: float = math.inf
+) -> Slot | None:
+    """The nearest free slot among the candidates the citizen may take (ties by id)."""
+    free = _free_by_distance(core, citizen, candidates, within_m)
+    return free[0][2] if free else None
+
+
+def _nearest_reachable(
+    core: SimCore, citizen: Citizen, candidates: Iterable[Slot], within_m: float = math.inf, far: bool = False
+) -> Slot | None:
+    """The nearest free slot the citizen can step to at this tick's end (`step_to`'s way there; `far`: a work slot
+    anywhere in the place), so a claim taken standing still never names a slot they can't reach."""
+    for distance, _, slot in _free_by_distance(core, citizen, candidates, within_m):
+        if distance <= OCCUPY_M or _path(core, citizen, slot.position, far=far) is not None:
+            return slot
+    return None
 
 
 def ring_bearings(radius: float) -> int:
@@ -571,9 +589,9 @@ def reserve_near(core: SimCore, citizen: Citizen, point: Vec3, with_centre: bool
 
 
 def take_seat(core: SimCore, citizen: Citizen) -> Slot | None:
-    """A free seat within SEAT_M (stepped to at the tick's end), else None: they sit where they are."""
+    """A free seat within SEAT_M they can step to (at the tick's end), else None: they sit where they are."""
     seats = (slot for slot in layout(core).slots.values() if slot.kind == "seat" and slot.task is None)
-    seat = nearest_free(core, citizen, seats, SEAT_M)
+    seat = _nearest_reachable(core, citizen, seats, SEAT_M)
     if seat is not None:
         claim(core, citizen, seat, seat.position, approach=True)
     return seat
@@ -599,7 +617,7 @@ def take_bed(core: SimCore, citizen: Citizen) -> Slot | None:
             for slot in lay.owners.get(owner, ())
             if slot.kind == "mat" and core.distance_m(slot.position, home.door) <= HOME_RADIUS_M
         ]
-        mat = nearest_free(core, citizen, mats, STEP_MAX_M)
+        mat = _nearest_reachable(core, citizen, mats, STEP_MAX_M)
         if mat is not None:
             claim(core, citizen, mat, mat.position, approach=True)
             return mat
@@ -626,19 +644,11 @@ def take_work_slot(core: SimCore, citizen: Citizen, task: str, area: tuple[Vec3,
     ]
     if not near:
         return "none here"
-    spots = _taken(core, citizen.id)
-    options = sorted(
-        (core.distance_m(citizen.position, slot.position), slot.id, slot)
-        for slot in near
-        if _clear(core, slot.position, spots)
-    )
-    for _, _, slot in options:
-        if core.distance_m(citizen.position, slot.position) <= OCCUPY_M or _path(
-            core, citizen, slot.position, far=True
-        ):
-            claim(core, citizen, slot, slot.position, approach=True)
-            return slot
-    return "all taken"
+    slot = _nearest_reachable(core, citizen, near, far=True)
+    if slot is None:
+        return "all taken"
+    claim(core, citizen, slot, slot.position, approach=True)
+    return slot
 
 
 # --- the tick's end ---

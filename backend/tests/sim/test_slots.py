@@ -4,6 +4,7 @@ bodies that stand, sit or lie are within 0.8 m of each other."""
 
 from collections import Counter
 from collections.abc import Callable
+from dataclasses import replace
 
 import pytest
 
@@ -16,6 +17,7 @@ from app.sim.simulation import Simulation
 from app.sim.slots import (
     LEGS_M,
     PERSONAL_M,
+    SEAT_M,
     SLOTS,
     STEP_MAX_M,
     Slot,
@@ -668,3 +670,21 @@ def test_the_first_in_line_still_on_the_way_keeps_the_freed_stand(new_sim: Calla
     sim.step()
     assert walker.action is not None and walker.action.kind == "walk_to"  # still on the way...
     assert _slot(sim, idle).id == "well#queue-2"  # ...so the one behind them doesn't take the stand
+
+
+def test_rest_never_claims_a_seat_it_cant_step_to(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    x, z = sim.world.structures["main-w-3"].door_xz
+    inside = sim.world.town.to_unit(x - 3.0, z)  # deep in the house, behind its walls: no way there in a few steps
+    behind_wall = Slot("main-w-3#seat-x", "main-w-3", "seat", inside, 0.0, "sitting", 0.45, words="on a stool")
+    lay = layout(sim.core)
+    SLOTS.of(sim.state).layout = replace(lay, slots={**lay.slots, behind_wall.id: behind_wall})
+    rester = sim.add_citizen(make_spec("rester", at=(x, z)))
+    assert sim.world.distance_m(rester.position, behind_wall.position) < SEAT_M  # near, but inside the house
+    rest = WorldApi(sim, rester.id).rest(5)
+    started = [e.payload.model_dump()["args"] for e in sim.drain() if e.type == "action_started"]
+    assert started == [{"minutes": 5, "slot": None, "where": "on the ground"}] and claim_of(sim.core, rester) is None
+    spot = rester.position
+    sim.step()
+    assert rester.position == spot  # sits where they stand: the args never name a seat they don't sit on
+    assert run_until_done(sim, rest, 10).text == "You rest a while on the ground."
