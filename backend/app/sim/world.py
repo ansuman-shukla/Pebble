@@ -28,7 +28,7 @@ from app.world.spec import BIOME_NAMES, load_site_kinds, load_world_spec
 from app.world.sphere import TangentFrame, lat_lon
 from app.world.store import WorldGenerator, load_or_generate
 from app.world.town import TOWN_DATA_DIR, Extent, KindSpec, TownSpec, TownView, load_kinds, load_town, load_town_spec
-from app.world.view import Feature, Ground, Hotspot, Site, WorldView, decode_array
+from app.world.view import Feature, Ground, Hotspot, Road, Site, WorldView, decode_array
 from app.world.walkability import WalkGrid, town_walk_grid
 
 BoolArray = NDArray[np.bool_]
@@ -183,6 +183,7 @@ class SimWorld:
     hotspots: tuple[Hotspot, ...] = ()
     grounds: tuple[Ground, ...] = ()
     features: tuple[Feature, ...] = ()
+    roads: tuple[Road, ...] = ()  # roads and paths (10 §1.3): territory names the way someone is on (T1)
 
     @property
     def cell_count(self) -> int:
@@ -415,6 +416,7 @@ def build_sim_world(
         hotspots=tuple(view.places.hotspots),
         grounds=tuple(view.places.grounds),
         features=tuple(view.places.features),
+        roads=tuple(view.places.roads),
     )
 
 
