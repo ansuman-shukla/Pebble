@@ -141,7 +141,10 @@ function envelope(t: number, length: number, edge: number) {
 
 /** How long one gesture lasts (s) before it repeats, and the pause after it. */
 export const GESTURE_LENGTH: Record<
-  Exclude<Layer, 'stalk' | 'laden' | 'pray' | 'reach' | 'reach_high' | 'swirl'>,
+  Exclude<
+    Layer,
+    'stalk' | 'laden' | 'pray' | 'reach' | 'reach_high' | 'swirl' | 'weave'
+  >,
   number
 > = {
   wave: 2.2,
@@ -234,6 +237,15 @@ const bendTo = new Vector3();
 /** A pan swirled in a small circle once a second. */
 const SWIRL_HZ = 1;
 const swirled = new Vector3();
+/**
+ * Weaving seated: the upper arms forward and down, the forearms reaching ahead over the loom's breast beam, the hands
+ * carrying the shuttle across the warp and back every WEAVE_S seconds, leaning in a little as it goes.
+ */
+const WEAVE_S = 2.4;
+const WEAVE_ARM = new Vector3(0.2, -0.65, 0.7);
+const WEAVE_FORE = new Vector3(0.12, 0.15, 1);
+const WEAVE_ACROSS = 0.6;
+const wove = new Vector3();
 const WAVE_ARM = new Vector3(-0.55, 0.8, 0.2);
 const WAVE_FORE = [new Vector3(-0.15, 1, 0.25), new Vector3(-0.75, 0.6, 0.25)];
 const POINT = new Vector3(-0.2, 0.15, 1);
@@ -282,6 +294,20 @@ export function layer(
       );
       aimAt(rig, rig.arms.right.fore, rig.arms.right.hand, swirled, 0.6);
       aimAt(rig, rig.arms.left.fore, rig.arms.left.hand, swirled, 0.4);
+      return 0;
+    }
+    case 'weave': {
+      const lean = 6 + 2 * Math.cos((t / WEAVE_S) * 4 * Math.PI);
+      turnAbout(rig, rig.spine, X, lean * DEG);
+      const across = WEAVE_ACROSS * Math.sin((t / WEAVE_S) * 2 * Math.PI);
+      for (const side of ['left', 'right'] as const) {
+        const { arm, fore, hand } = rig.arms[side];
+        const out = side === 'left' ? 1 : -1;
+        wove.copy(WEAVE_ARM).setX(out * WEAVE_ARM.x);
+        aimAt(rig, arm, fore, wove, 0.8);
+        wove.copy(WEAVE_FORE).setX(out * WEAVE_FORE.x + across);
+        aimAt(rig, fore, hand, wove, 0.9);
+      }
       return 0;
     }
     case 'laden':

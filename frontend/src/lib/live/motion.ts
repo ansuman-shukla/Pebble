@@ -134,10 +134,17 @@ export type BodyPose =
 /**
  * A procedural motion layered over the clip (`poses.ts`): the hunter's creep, a bow in prayer with the hands together,
  * a hand reaching to the ground and back (picking, tending a fire, knapping) or up into a bush (picking berries) or
- * swirling a pan, a gesture.
+ * swirling a pan, both hands at work ahead passing the shuttle (weaving seated), a gesture.
  */
 export type Layer =
-  'stalk' | 'laden' | 'pray' | 'reach' | 'reach_high' | 'swirl' | GestureKind;
+  | 'stalk'
+  | 'laden'
+  | 'pray'
+  | 'reach'
+  | 'reach_high'
+  | 'swirl'
+  | 'weave'
+  | GestureKind;
 
 /** Things held that the asset pack has no model for, drawn from code (D133's stand-ins). */
 type MadeProp = 'pan' | 'stone' | 'cup' | 'food' | 'pick' | 'rod';

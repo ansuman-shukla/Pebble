@@ -651,6 +651,34 @@ test.describe('layers', () => {
     expect(at(rig.arms.right.hand).y).toBeLessThan(high.y - 0.4);
   });
 
+  test('weaving seated reaches both hands ahead and carries them across the warp and back', async () => {
+    const { rig, at, pose } = await posedRig('town-weaver', 'Sitting');
+    pose(null, 0);
+    const chest = at(rig.chest);
+    const resting = [at(rig.arms.left.hand), at(rig.arms.right.hand)];
+    const middle = (t: number) => {
+      pose('weave', t);
+      const [left, right] = [at(rig.arms.left.hand), at(rig.arms.right.hand)];
+      // both hands ahead of the chest, over the loom, and well apart from the start (an arm's reach, not a clap)
+      for (const [k, hand] of [left, right].entries()) {
+        expect(hand.z - chest.z, `t ${t}: hand ${k} ahead`).toBeGreaterThan(
+          0.3,
+        );
+        expect(hand.z, `t ${t}: hand ${k} reaches out`).toBeGreaterThan(
+          resting[k].z + 0.1,
+        );
+      }
+      return (left.x + right.x) / 2;
+    };
+    // a quarter of the pass the hands are over to their left, three quarters to their right
+    const leftward = middle(0.6);
+    const rightward = middle(1.8);
+    expect(leftward - rightward, 'the shuttle goes across').toBeGreaterThan(
+      0.2,
+    );
+    expect(Math.abs(middle(0) - (leftward + rightward) / 2)).toBeLessThan(0.05);
+  });
+
   test('a reach puts the right hand out to the ground ahead', async () => {
     const { rig, at, pose } = await posedRig('town-smith', 'Crouch');
     pose(null, 0.85);
