@@ -3,7 +3,8 @@
 Contract v1 is a draft (D96): C1 owns it until Q1 freezes `contract_v1.json`. `contract_v1_draft.json` holds the
 action names, the `WorldApi` methods and the JSON schemas of every action, result and perception, plus a changelog
 whose last line carries the hash of the schemas it describes. Any change to them fails here until the draft file is
-rewritten with a line saying what changed:
+rewritten with a line saying what changed (a revert to an earlier contract gets its own line too, so a hash may
+come back, just never twice in a row):
 
     uv run python -m tests.world_api.test_contract "walk_to and follow take a pace"
 
@@ -113,7 +114,8 @@ def test_every_change_to_the_draft_has_a_changelog_line() -> None:
     changelog = draft()["changelog"]
     assert changelog[-1]["contract"] == fingerprint(contract()), "add a changelog line: see this module's docstring"
     assert all(line["change"].strip() for line in changelog)
-    assert len({line["contract"] for line in changelog}) == len(changelog)  # a line per change
+    hashes = [line["contract"] for line in changelog]
+    assert all(before != after for before, after in zip(hashes, hashes[1:], strict=False))  # a line per change
 
 
 def test_v1_keeps_every_v0_shape() -> None:
