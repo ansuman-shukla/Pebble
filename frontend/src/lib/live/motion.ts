@@ -68,11 +68,11 @@ export type GestureKind = (typeof GESTURES)[number];
 export interface FedBody {
   motion?: Motion;
   posture?: FedPosture;
-  /** The seat's or work slot's facing (degrees, the heading convention), once slots exist. */
+  /** The seat's, mat's or work slot's facing (degrees, the heading convention) while the body is on it. */
   slot_heading?: number | null;
   /**
-   * How high the seat's top is (m, the slot's `height_m`: a bench 0.45, the loom's stool 0.3), once the feed carries
-   * it (S1's slots have it, the feed doesn't yet): a seat without it is a bench's (`SEAT_HEIGHT`).
+   * How high the seat's top is (m, the slot's `height_m`: a bench 0.45, the loom's stool 0.3): a seat without it is a
+   * bench's (`SEAT_HEIGHT`).
    */
   slot_height_m?: number | null;
 }
