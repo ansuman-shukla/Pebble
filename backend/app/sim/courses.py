@@ -46,7 +46,8 @@ def at(points: list[TimedPoint], seconds: float) -> Vec3:
             if tb - ta <= SAME_S:
                 return b
             share = (seconds - ta) / (tb - ta)
-            return normalize(tuple(x + (y - x) * share for x, y in zip(a, b, strict=True)))  # type: ignore[arg-type]
+            mixed = (a[0] + (b[0] - a[0]) * share, a[1] + (b[1] - a[1]) * share, a[2] + (b[2] - a[2]) * share)
+            return normalize(mixed)
     return points[-1][0]
 
 
