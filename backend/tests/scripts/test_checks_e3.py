@@ -33,6 +33,7 @@ def test_sales_count_bought_and_sold_events_a_day(new_sim: Callable[..., Simulat
         9.0, True, "9.0/day a seed (≥ 9)"
     )
     assert {e3.Sales, e3.RicePrice, e3.Recipes} <= set(CHECKS)
+    assert {check.pending for check in e3.CHECKS} == {"BR1/BR2 trade and craft"}  # until the brains trade
 
 
 def _rice(new_sim: Callable[..., Simulation]) -> tuple[Simulation, e3.RicePrice]:
@@ -83,5 +84,6 @@ def test_every_recipe_must_be_made_on_some_seed(new_sim: Callable[..., Simulatio
     assert first == e3.RecipesMade(7, False, "7/9 recipes (not dried meat, pack)", frozenset({"dried meat", "pack"}))
     other = e3.RecipesMade(8, False, "8/9 recipes (not pack)", frozenset({"pack"}))
     assert e3.Recipes.overall({1: first, 2: other}) == Outcome(8, False, "8/9 recipes over all seeds (not pack)")
+    assert e3.Recipes.overall({1: other, 2: first}) == Outcome(8, False, "8/9 recipes over all seeds (not pack)")
     every = e3.RecipesMade(9, True, "9/9 recipes")
     assert e3.Recipes.overall({1: first, 2: every}) == Outcome(9, True, "9/9 recipes over all seeds")
