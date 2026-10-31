@@ -223,11 +223,17 @@ def _strike_hunt(core: SimCore, citizen: Citizen, animal: Animal) -> None:
 
 
 def _strike_animal(core: SimCore, citizen: Citizen, animal: Animal) -> None:
+    """A blow at an animal: it may die of it, else it runs off (a predator driven off) and may bite back. A spear used
+    in it may break (10 §2.4)."""
     species = SPECIES[animal.kind]
     rng = core.state.rng("wild.attack")
+    spear = tool_in(citizen.inventory, "spear")
     blow = (BLOW[0] + (BLOW[1] - BLOW[0]) * rng.random()) * citizen.traits.strength
-    blow *= SPEAR if tool_in(citizen.inventory, "spear") else 1.0
-    if animals.wound(core, animal, blow, f"attacked by {citizen.name}", attacker=citizen.id):
+    blow *= SPEAR if spear is not None else 1.0
+    killed = animals.wound(core, animal, blow, f"attacked by {citizen.name}", attacker=citizen.id)
+    if spear is not None:
+        wear.use_tool(core, citizen, spear)
+    if killed:
         core.end_action(citizen, "done", f"You kill {species.one}.")
         return
     _scatter(core, animal, citizen)

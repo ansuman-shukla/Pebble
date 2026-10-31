@@ -5,10 +5,12 @@ from collections.abc import Callable
 
 import pytest
 
-from app.sim import doing, movement, wild
+from app.observability.events import EventDraft
+from app.sim import doing, movement, wear, wild
 from app.sim import fire as fires
 from app.sim.clock import NIGHT_ALTITUDE_DEG
 from app.sim.core import SIGHT_FIRE_M, SIGHT_NIGHT_M
+from app.sim.economy import load_economy
 from app.sim.fauna import SPECIES
 from app.sim.simulation import Simulation
 from app.sim.state import Fire
@@ -375,3 +377,52 @@ def test_wild_failures_are_in_world(new_sim: Callable[..., Simulation]) -> None:
         "Fish have to be caught; try fishing.",
     ]
     assert all(text.startswith(IN_WORLD) for text in texts)
+
+
+# --- spears wear out ---
+
+
+def _spears_always_break(monkeypatch: pytest.MonkeyPatch) -> None:
+    spec = load_economy()
+    breakage = {item: rule.model_copy(update={"chance": 1.0}) for item, rule in spec.breakage.items()}
+    monkeypatch.setattr(wear, "load_economy", lambda: spec.model_copy(update={"breakage": breakage}))
+
+
+def _broke(events: list[EventDraft]) -> list[tuple[str | None, str]]:
+    return [(e.actor_id, e.payload.model_dump()["item"]) for e in events if e.type == "tool_broke"]
+
+
+@pytest.mark.parametrize("lands", [True, False])
+def test_a_hunt_strike_can_break_the_spear(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch, lands: bool
+) -> None:
+    sim, api = _hunter(new_sim)
+    add_animal(sim, "deer", _beside(sim, 10.0), activity="grazing", until=10**9)
+    monkeypatch.setattr(wild, "hunt_chance", lambda *_: 1.0 if lands else 0.0)
+    _spears_always_break(monkeypatch)
+    sim.drain()
+    run_until_done(sim, api.hunt("the deer"), 5)
+    assert _broke(sim.drain()) == [("hunter", "flint spear")]
+    assert "flint spear" not in sim.citizen("hunter").inventory
+
+
+def test_an_attack_strike_can_break_the_spear(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sim, api = _hunter(new_sim)
+    add_animal(sim, "wolf", _beside(sim, 2.0), target="hunter")
+    monkeypatch.setattr(wild, "FIGHT_BACK", 0.0)
+    _spears_always_break(monkeypatch)
+    sim.drain()
+    run_until_done(sim, api.attack("the wolf"), 5)
+    assert _broke(sim.drain()) == [("hunter", "flint spear")]
+    assert "flint spear" not in sim.citizen("hunter").inventory
+
+
+def test_no_spear_no_breakage(new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch) -> None:
+    sim, api = _hunter(new_sim, inventory={})
+    add_animal(sim, "wolf", _beside(sim, 2.0), target="hunter")
+    monkeypatch.setattr(wild, "FIGHT_BACK", 0.0)
+    _spears_always_break(monkeypatch)
+    run_until_done(sim, api.attack("the wolf"), 5)
+    assert _broke(sim.drain()) == []
