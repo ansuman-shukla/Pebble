@@ -224,7 +224,7 @@ def _hunter(new_sim: Callable[..., Simulation], deer_m: float, age: int = 25) ->
     sim = without_animals(new_sim())
     spec = make_spec("hunter", age=age, home=None, skills=["hunting"], inventory={"flint spear": 1})
     citizen = sim.add_citizen(spec)
-    put_in_the_wild(sim, citizen.id, wild_cell(sim))
+    put_in_the_wild(sim, citizen.id, wild_cell(sim, flat_m=5.0))
     skip_to(sim, citizen.position, night=False)
     deer = step_towards(citizen.position, 90.0, deer_m, sim.world.radius_m)
     add_animal(sim, "deer", deer, activity="grazing", until=10**9)
@@ -232,8 +232,17 @@ def _hunter(new_sim: Callable[..., Simulation], deer_m: float, age: int = 25) ->
     return sim, WorldApi(sim, citizen.id), deer
 
 
+def _on_route(sim: Simulation, unit: Vec3, route: Route) -> bool:
+    """The spot lies on one of the route's legs (within a centimetre)."""
+    for a, b in zip(route.points, route.points[1:], strict=False):
+        leg = sim.world.distance_m(a, b)
+        if abs(sim.world.distance_m(a, unit) + sim.world.distance_m(unit, b) - leg) < 0.01:
+            return True
+    return False
+
+
 @pytest.mark.parametrize(("age", "pace"), [(25, 1.0), (63, 0.6)])
-def test_a_hunter_creeping_up_is_streamed_at_the_stalking_pace(
+def test_a_hunter_creeping_up_is_streamed_at_the_stalking_pace_along_a_planned_route(
     new_sim: Callable[..., Simulation], age: int, pace: float
 ) -> None:
     sim, api, deer = _hunter(new_sim, 140.0, age)
@@ -242,41 +251,25 @@ def test_a_hunter_creeping_up_is_streamed_at_the_stalking_pace(
     before = hunter.position
     sim.step()
     moved = _moved(sim, "hunter")
-    assert moved is not None and hunter.action is not None
+    assert moved is not None and hunter.action is not None and hunter.action.route is not None
     _starts_where_they_stood(sim, moved, before)
     assert moved.gait == "stalk"
     stalk_mps = wild.STALK_PACE_M * pace / SECONDS_PER_TICK
-    # (the sim creeps along the chord towards the deer: a few cm short of the arc's length)
-    assert moved.speed_mps == pytest.approx(stalk_mps, rel=1e-3)
-    assert _speeds(sim, moved.route) == pytest.approx([stalk_mps] * (len(moved.route) - 1), rel=1e-3)
-    assert moved.route[1].unit == hunter.position
-    assert moved.route[1].t_s == SECONDS_PER_TICK
-    # on towards the deer for two more minutes, stopping short of where they'd strike from
-    left = sim.world.distance_m(moved.route[-1].unit, deer)
-    assert left == pytest.approx(max(wild.HUNT_STRIKE_M * 0.8, 140.0 - 3 * wild.STALK_PACE_M * pace), abs=0.1)
+    # along the planned route (10 §4.1: no straight creeping), at the stalking pace over each leg's cost (never faster)
+    route = hunter.action.route
+    assert all(_on_route(sim, point.unit, route) for point in moved.route)
+    assert all(0.8 * stalk_mps <= speed <= stalk_mps * 1.001 for speed in _speeds(sim, moved.route))
+    walked = next(point for point in moved.route if point.unit == hunter.position)
+    assert walked.t_s == pytest.approx(SECONDS_PER_TICK)
+    # the route ends just inside striking distance of the deer, on the hunter's side
+    assert sim.world.distance_m(route.points[-1], deer) == pytest.approx(wild.HUNT_STRIKE_M * wild.STRIKE_SHARE)
     assert sim.world.distance_m(drawn_on(moved.route, SECONDS_PER_TICK), hunter.position) < DRAWN_M
 
 
 def test_a_hunter_who_strikes_is_streamed_only_up_to_the_strike(
     new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # 62 m off: a minute's creep (48 m) brings the deer within the strike (15 m), short of the usual 12 m stop
-    sim, api, _ = _hunter(new_sim, 62.0)
-    monkeypatch.setattr(wild, "hunt_chance", lambda *_: 1.0)
-    hunter = sim.citizen("hunter")
-    api.hunt("the deer")
-    before = hunter.position
-    sim.step()
-    moved = _moved(sim, "hunter")
-    assert moved is not None and hunter.action is None  # struck this tick: no plan left to draw
-    assert [point.unit for point in moved.route] == [before, hunter.position]
-    assert _seconds(moved.route) == [0.0, SECONDS_PER_TICK]
-
-
-def test_a_short_creep_into_the_strike_is_timed_at_the_stalking_pace(
-    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # 40 m off: 28 m of creeping (to 12 m off) brings the deer within the strike in a little over half a minute
+    # 40 m off: under 30 m of creeping (to 12 m off) brings the deer within the strike (15 m) this minute
     sim, api, _ = _hunter(new_sim, 40.0)
     monkeypatch.setattr(wild, "hunt_chance", lambda *_: 1.0)
     hunter = sim.citizen("hunter")
@@ -284,8 +277,9 @@ def test_a_short_creep_into_the_strike_is_timed_at_the_stalking_pace(
     before = hunter.position
     sim.step()
     moved = _moved(sim, "hunter")
-    assert moved is not None and hunter.action is None
-    assert [point.unit for point in moved.route] == [before, hunter.position]
-    creep_m = 40.0 - wild.HUNT_STRIKE_M * 0.8
-    assert _seconds(moved.route) == pytest.approx([0.0, creep_m / wild.STALK_PACE_M * SECONDS_PER_TICK])
-    assert moved.speed_mps == pytest.approx(wild.STALK_PACE_M / SECONDS_PER_TICK, rel=1e-3)
+    assert moved is not None and hunter.action is None  # struck this tick: no plan left to draw
+    assert moved.route[0].unit == before and moved.route[-1].unit == hunter.position
+    creep_s = _seconds(moved.route)[-1]
+    creep_m = 40.0 - wild.HUNT_STRIKE_M * wild.STRIKE_SHARE
+    stalk_mps = wild.STALK_PACE_M / SECONDS_PER_TICK
+    assert creep_m / stalk_mps - 1e-6 <= creep_s <= creep_m / (0.8 * stalk_mps) + 1e-6 < SECONDS_PER_TICK
