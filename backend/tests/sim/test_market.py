@@ -7,6 +7,7 @@ import pytest
 
 from app.observability.events import ItemMoved, PricesChanged, Traded
 from app.observability.replay import ReplayEvent, replay
+from app.sim.citizens import CITIZENS, load_citizens
 from app.sim.economy import coins_held, load_economy
 from app.sim.market import (
     MARKET,
@@ -81,6 +82,13 @@ def test_the_stall_trades_exactly_the_goods_with_a_stall_row() -> None:
     goods = load_economy().goods
     assert stall_goods() == tuple(sorted(item for item, good in goods.items() if good.stall is not None))
     assert "berries" not in stall_goods() and "flint" not in stall_goods() and "coins" not in stall_goods()
+
+
+def test_the_cast_s_stall_opens_with_every_good_at_its_target_but_the_finite_gold() -> None:
+    goods = load_economy().goods
+    targets = {item: good.stall.target for item, good in goods.items() if good.stall is not None and item != "gold"}
+    assert load_citizens(CITIZENS).stores[STALL] == targets
+    assert all(price_word(item, count) == "fair" for item, count in targets.items())
 
 
 # --- the stall in the world ---

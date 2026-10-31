@@ -151,7 +151,19 @@ def test_clock_commands_reach_the_engine(db_session: Session, sim_world: SimWorl
 def test_a_new_run_starts_with_the_cast_and_the_stocked_stores(db_session: Session, sim_world: SimWorld) -> None:
     loop = open_loop(db_session, sim_world, KEY, new_run=True, citizens=CITIZENS, clock=Clock())
     assert len(loop.sim.state.citizens) == 22
+    stall = {
+        "rice": 120,
+        "dried meat": 20,
+        "wood": 40,
+        "hide": 6,
+        "obsidian": 6,
+        "iron sand": 20,
+        "cloth": 6,
+        "pack": 3,
+    }
+    stall |= {"iron spear": 2, "iron axe": 2, "sickle": 2}  # the market stall, every good at its target (not gold)
     assert loop.sim.state.stores == {
+        "market-stall": stall,
         "store-2": {"rice": 400, "wood": 300},
         "castle-keep-chest": {"coins": 2015},  # the treasury
         "farmhouse-1-chest": {"rice": 20},
@@ -160,6 +172,7 @@ def test_a_new_run_starts_with_the_cast_and_the_stocked_stores(db_session: Sessi
     events = _events(db_session, loop.run.id)
     stocked = [e for e in events if e.type == "item_moved"]
     assert [(e.payload["source"]["kind"], e.payload["destination"]["id"], e.payload["item"]) for e in stocked] == [
+        *(("world", "market-stall", item) for item in sorted(stall)),
         ("world", "store-2", "rice"),
         ("world", "store-2", "wood"),
         ("world", "castle-keep-chest", "coins"),

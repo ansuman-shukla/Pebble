@@ -21,6 +21,9 @@
 
 stores:
   store-2: {rice: 400, wood: 300} # the granary's stand: about six days of rice, firewood for the gate baskets
+  market-stall: # every good it trades at its target stock (data/economy.yaml), so prices open at the values; gold
+    # is finite (the falls pool's 40 grains), so the stall starts with none
+    {rice: 120, dried meat: 20, wood: 40, hide: 6, obsidian: 6, iron sand: 20, cloth: 6, pack: 3, iron spear: 2, iron axe: 2, sickle: 2}
 
 chests: # by home: the household chest's starting stock
   castle-keep: {coins: 2015} # the lord's treasury
