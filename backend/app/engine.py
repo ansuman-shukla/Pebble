@@ -26,7 +26,7 @@ from sqlalchemy import Engine as DbEngine
 from sqlalchemy.exc import DBAPIError
 from sqlmodel import Session
 
-from app.brains.profile import BrainProfile
+from app.brains.profile import BrainProfile, known_titles
 from app.brains.runner import CitizenBrains
 from app.core.db import create_db_engine
 from app.db.models import Run
@@ -61,6 +61,7 @@ HOME_AREAS = {"town": "town", "band_a": "band_a_camp", "band_b": "band_b_camp"} 
 def citizen_brains(sim: Simulation, seed: int) -> CitizenBrains:
     """A scripted brain for every citizen, acting through their own `WorldApi`."""
     places = sim.world.places
+    cast = sim.state.citizens
     return CitizenBrains(
         (
             (
@@ -72,6 +73,9 @@ def citizen_brains(sim: Simulation, seed: int) -> CitizenBrains:
                     region=citizen.region,
                     home_area=places[HOME_AREAS[citizen.region]].name,
                     skills=citizen.skills,
+                    titled=known_titles(
+                        (cast[other].name, cast[other].role) for other in sorted(citizen.people) if other in cast
+                    ),
                 ),
             )
             for citizen in sim.core.citizens()
