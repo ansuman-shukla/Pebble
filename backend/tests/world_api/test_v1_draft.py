@@ -33,7 +33,7 @@ from tests.sim_helpers import WELL, make_spec
 V1_ACTIONS: dict[ActionName, Action] = {
     "buy": Buy(item="rice", amount=4),
     "sell": Sell(item="hide", amount=1),
-    "stash": Stash(item="rice", amount=2),
+    "stash": Stash(item="dried meat", amount=2),
     "craft": Craft(recipe="flint spear"),
     "accuse": Accuse(person="Ama", to="Kenji"),
     "seize": Seize(person="Ama"),
@@ -85,6 +85,28 @@ def test_the_draft_names_every_new_action() -> None:
         ["buy", "sell", "stash", "craft", "accuse", "seize", "judge", "tend", "gesture", "set_goal"]
     )
     assert NOT_YET_ACTIONS, "every v1 action has landed: retire this module's not-yet tests"
+
+
+@pytest.mark.parametrize("name", sorted(V1_ACTIONS))
+def test_each_facade_method_sends_its_action_whole(
+    name: ActionName, new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sim = new_sim()
+    me = WorldApi(sim, sim.add_citizen(make_spec(at=WELL)).id)
+    sent: list[Action] = []
+
+    def instant(_citizen_id: str, action: Action) -> ActionResult:
+        sent.append(action)
+        return ActionResult(action=action.action, outcome="failed", text=NOT_YET)
+
+    def start(_citizen_id: str, action: Action) -> int:
+        sent.append(action)
+        return 0
+
+    monkeypatch.setattr(sim, "instant", instant)
+    monkeypatch.setattr(sim, "start", start)
+    facade_call(me, V1_ACTIONS[name])
+    assert sent == [V1_ACTIONS[name]]
 
 
 @pytest.mark.parametrize("name", NOT_YET_ACTIONS)
