@@ -112,6 +112,7 @@ export type PropKind =
   | 'log_bridge'
   | 'boundary_stone'
   | 'cairn'
+  | 'hide_streamer'
   // world v1 stores, stations and furniture
   | 'market_stall'
   | 'forge'
@@ -240,6 +241,8 @@ export const PROPS: Record<PropKind, string> = {
   log_seat: 'procedural-log-seat',
   stool: 'procedural-stool',
   lord_seat: 'procedural-lord-seat',
+  // a band's claim cairn carries a hide streamer: no such model, drawn from code
+  hide_streamer: 'procedural-hide-streamer',
 };
 
 export type HandPropKind =

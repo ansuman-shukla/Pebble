@@ -166,6 +166,11 @@ const STOOL_SIZE = { x: 0.36, y: 0.3, z: 0.3 };
 const LORD_SEAT_SIZE = { x: 1.1, y: 0.45, z: 0.9 };
 const LORD_MAT = 0.04;
 
+const STREAMER_ID = 'procedural-hide-streamer';
+/** A band's hide streamer: a pole with a strip of hide tied at its top (beside a claim cairn, 10 §1.5). */
+const STREAMER_SIZE = { x: 0.6, y: 1.8, z: 0.06 };
+const STREAMER_HIDE = { length: 0.55, height: 0.24 };
+
 /** Where the hips rest on each piece as built (metres above the ground). */
 export const FURNITURE_SEAT: Record<string, number> = {
   [LOG_ID]: LOG_SIZE.y,
@@ -203,6 +208,39 @@ function paintedMesh(name: string, parts: BufferGeometry[]): Group {
 
 const paintedBox = (box: Box, color: string) =>
   painted(boxGeometry(box), color);
+
+/**
+ * A pole and the strip of hide tied at its top, hanging out along +x. The strip is a part named `banner-cloth`,
+ * so the wind waves it like the town's banners (wind.ts, D148): fixed at the pole, free at its tip.
+ */
+function buildHideStreamer(): Group {
+  const pole = 0.04;
+  const { length, height } = STREAMER_HIDE;
+  const group = paintedMesh('hide-streamer-pole', [
+    paintedBox(
+      [0, STREAMER_SIZE.y / 2, 0, pole, STREAMER_SIZE.y, pole],
+      '#5c4026',
+    ),
+  ]);
+  const hide = new Mesh(
+    painted(
+      new PlaneGeometry(length, height).translate(
+        pole / 2 + length / 2,
+        STREAMER_SIZE.y - height / 2 - 0.04,
+        0,
+      ),
+      '#b98a5a',
+    ),
+    new MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.95,
+      side: DoubleSide,
+    }),
+  );
+  hide.name = 'banner-cloth';
+  group.add(hide);
+  return group;
+}
 
 /** A barked log lying along x with pale cut ends, resting on the ground. */
 function buildLogSeat(): Group {
@@ -318,6 +356,11 @@ export const PROCEDURAL_PROPS: Record<string, ProceduralProp> = {
     size: LOOM_SIZE,
     build: buildLoom,
     colliders: wholeBox(LOOM_ID, LOOM_SIZE),
+  },
+  [STREAMER_ID]: {
+    size: STREAMER_SIZE,
+    build: buildHideStreamer,
+    colliders: wholeBox(STREAMER_ID, STREAMER_SIZE),
   },
 };
 
