@@ -161,7 +161,7 @@ kinds:
     words: {0: "a pool where gold once glinted", 1: "{noun}, a few glints left", 3: "{noun}"}
   rice_paddy:
     item: rice
-    cap: 78 # the bible's 60 + 30 % (D152: E2's granary feeds more than the bible's 35 a day)
+    cap: 78 # the bible's 60 + 30 % (D152: E2's granary feeds D156's temporary rations; back to 60 when BR1 removes them)
     take: [10, 10] # a sickle 15 (the paddies' own numbers live in app/sim/paddies.py)
     minutes: 20
     spots: 4

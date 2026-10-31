@@ -38,7 +38,7 @@ class NodeEntry:
     cap: int
     stock: int
     regrow_at: int | None = None  # the tick it grows one more (a felled tree: its next stage); None: it doesn't
-    growth: int | None = None  # paddies: 0 replanted, +50 a counted tending, RIPE bears rice
+    growth: int | None = None  # paddies: 0 replanted, + a day's tending (paddies.TEND_GROWTH), RIPE bears rice
     sapling: bool = False  # a felled tree grown back as far as a sapling
 
 
