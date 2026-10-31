@@ -1,6 +1,7 @@
 """The market stall (10-world-v1 §2.5): prices follow the stock, the stall opens only while its merchant trades at it,
 and `buy`/`sell` move whole lots and coins between holders, never more than each holds."""
 
+import re
 from collections.abc import Callable
 
 import pytest
@@ -9,6 +10,7 @@ from app.observability.events import ItemMoved, PricesChanged, Traded
 from app.observability.replay import ReplayEvent, replay
 from app.sim import market
 from app.sim.citizens import CITIZENS, load_citizens
+from app.sim.coins import count_in_words, price_words
 from app.sim.economy import coins_held, load_economy
 from app.sim.market import (
     MARKET,
@@ -91,6 +93,29 @@ def test_the_stall_pays_less_for_a_lot_than_it_asks_for_that_lot_back(item: str)
     assert lot is not None
     for stock in range(2 * lot.target - lot.lot + 1):  # sold in: stock -> stock + lot; bought back: the reverse
         assert pays_for(item, stock) < sell_price(item, stock + lot.lot), (item, stock)
+
+
+@pytest.mark.parametrize(
+    ("count", "words"),
+    [
+        (1, "a coin"),
+        (17, "seventeen coins"),
+        (100, "a hundred coins"),
+        (112, "a hundred and twelve coins"),
+        (240, "two hundred and forty coins"),
+        (999, "nine hundred and ninety-nine coins"),
+        (2015, "two thousand and fifteen coins"),
+        (3600, "three thousand six hundred coins"),
+    ],
+)
+def test_a_price_is_counted_in_words_however_large(count: int, words: str) -> None:
+    assert price_words(count) == words
+
+
+def test_a_count_in_words_runs_from_one_to_9999() -> None:
+    for wrong in (0, 10_000):
+        with pytest.raises(ValueError, match="not a count"):
+            count_in_words(wrong)
 
 
 def test_the_stall_trades_exactly_the_goods_with_a_stall_row() -> None:
@@ -202,7 +227,9 @@ def test_a_purchase_stops_when_the_stall_runs_out(new_sim: Callable[..., Simulat
     sim = _market(new_sim, inventory={"coins": 500})
     _open(sim)
     result = sim.instant("goro", Buy(item="sickle", amount=3))
-    assert result.text == "You buy two sickles for 112 coins. The stall has no more sickles."  # 50 + 62
+    assert (
+        result.text == "You buy two sickles for a hundred and twelve coins. The stall has no more sickles."
+    )  # 50 + 62
     assert STALL in sim.state.stores and "sickle" not in sim.state.stores[STALL]
     assert sim.instant("goro", Buy(item="gold", amount=1)).text == "The stall has no more gold."
 
@@ -315,6 +342,7 @@ def test_someone_at_the_open_stall_sees_each_good_s_price_and_word(new_sim: Call
     assert seen["dried meat"].price == "six coins for two strips; it pays four coins"
     assert seen["hide"].price == "fifteen coins each; it pays eleven coins"
     assert seen["gold"] == PriceSeen(item="gold", price="none left; it pays twenty-six coins", word="dear")
+    assert not [price.price for price in view.items if re.search(r"\d", price.price)]  # no digits reach a mind
     assert seen["iron axe"].price == "sixty coins each; it pays thirty-nine coins"  # priced at 3 in stock
 
 

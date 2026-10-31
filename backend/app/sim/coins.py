@@ -33,3 +33,21 @@ def coin_words(count: int) -> str:
         return "a short string of coins"
     strings = count // STRING
     return "a string of coins" if strings == 1 else f"{number_words(strings)} strings of coins"
+
+
+def count_in_words(n: int) -> str:
+    """1-9 999 spelled out, as a price is counted coin by coin ("a hundred and twelve", "two thousand and fifteen")."""
+    if not 0 < n < 10_000:
+        raise ValueError(f"{n} is not a count from 1 to 9 999")
+    thousands, rest = divmod(n, 1000)
+    hundreds, below = divmod(rest, 100)
+    parts = [f"{'a' if thousands == 1 else number_words(thousands)} thousand"] if thousands else []
+    parts += [f"{'a' if hundreds == 1 else number_words(hundreds)} hundred"] if hundreds else []
+    if below:
+        return " ".join(parts) + (" and " if parts else "") + number_words(below)
+    return " ".join(parts)
+
+
+def price_words(count: int) -> str:
+    """A price or a payment, every coin counted in words ("a coin", "seventeen coins", "a hundred and twelve coins")."""
+    return "a coin" if count == 1 else f"{count_in_words(count)} coins"

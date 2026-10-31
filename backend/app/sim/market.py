@@ -25,7 +25,7 @@ from pydantic import JsonValue, TypeAdapter
 
 from app.observability.events import ItemLocation, PricesChanged, Traded
 from app.sim.acting import capital, item_name, refuse
-from app.sim.coins import number_words
+from app.sim.coins import count_in_words, number_words, price_words
 from app.sim.core import SimCore
 from app.sim.crafting import Station, count_words, stations
 from app.sim.economy import StallLot, load_economy, value_of
@@ -197,7 +197,7 @@ def buy(core: SimCore, citizen: Citizen, action: Buy) -> ActionResult:
     _pay(core, citizen, merchant, paid, seq)
     _tally(core, merchant)
     note_prices(core, stall, seq)
-    bought = f"You buy {count_words(item, count)} for {_coins(paid)}."
+    bought = f"You buy {count_words(item, count)} for {price_words(paid)}."
     return ActionResult(action="buy", outcome="done", text=f"{bought} {stopped}".strip())
 
 
@@ -241,7 +241,7 @@ def sell(core: SimCore, citizen: Citizen, action: Sell) -> ActionResult:
     _pay(core, merchant, citizen, paid, seq)
     _tally(core, merchant)
     note_prices(core, stall, seq)
-    sold = f"You sell {count_words(item, count)} for {_coins(paid)}."
+    sold = f"You sell {count_words(item, count)} for {price_words(paid)}."
     return ActionResult(action="sell", outcome="done", text=f"{sold} {stopped}".strip())
 
 
@@ -293,10 +293,6 @@ def _tally(core: SimCore, merchant: Citizen) -> None:
     sales = MARKET.of(core.state).sales
     session = f"{merchant.id}#{merchant.action.number}"
     sales[session] = sales.get(session, 0) + 1
-
-
-def _coins(count: int) -> str:
-    return "a coin" if count == 1 else f"{number_words(count)} coins"
 
 
 def _lot_words(item: str, lot: int) -> str:
@@ -360,10 +356,10 @@ def market_view(core: SimCore, citizen: Citizen) -> MarketView | None:
     for item in stall_goods():
         stock, lot = stock_of(core, stall, item), _lot(item).lot
         each = "each" if lot == 1 else f"for {_lot_words(item, lot)}"
-        sells = f"{_coins(sell_price(item, stock))} {each}" if stock >= lot else "none left"
+        sells = f"{price_words(sell_price(item, stock))} {each}" if stock >= lot else "none left"
         seen.append(
             PriceSeen(
-                item=item, price=f"{sells}; it pays {_coins(pays_for(item, stock))}", word=price_word(item, stock)
+                item=item, price=f"{sells}; it pays {price_words(pays_for(item, stock))}", word=price_word(item, stock)
             )
         )
     return MarketView(items=seen)
@@ -377,5 +373,5 @@ def trade(core: SimCore, citizen: Citizen, action: ActionState) -> str:
     sales = MARKET.of(core.state).sales.pop(f"{citizen.id}#{action.number}", 0)
     if sales == 0:
         return "You keep the stall a while; nobody comes to trade."
-    made = "a sale" if sales == 1 else f"{number_words(sales)} sales"
+    made = "a sale" if sales == 1 else f"{count_in_words(sales)} sales"
     return f"You keep the stall a while and make {made}."
