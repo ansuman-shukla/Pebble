@@ -16,9 +16,10 @@ from numpy.typing import NDArray
 from pydantic import BaseModel, ConfigDict, Field
 from sqlmodel import Session
 
-from app.sim.items import RESOURCE_CAPS, RESOURCE_INDEX, RESOURCES, RIVER_FISH, RIVER_REEDS
+from app.sim.node_table import NodeTable, build_node_table, paddy_points, paddy_rects
 from app.sim.vec import Vec3, angle, as_vec, dot, normalize
 from app.world.biomes import BIOME_IDS, walk_costs
+from app.world.flora import generate_flora
 from app.world.generate import GENERATOR
 from app.world.geometry import Point
 from app.world.grid import Grid, build_grid
@@ -26,7 +27,7 @@ from app.world.roads import cell_kinds, walk_costs_with_roads
 from app.world.spec import BIOME_NAMES, load_site_kinds, load_world_spec
 from app.world.sphere import TangentFrame, lat_lon
 from app.world.store import WorldGenerator, load_or_generate
-from app.world.town import TOWN_DATA_DIR, Extent, KindSpec, TownView, load_kinds, load_town
+from app.world.town import TOWN_DATA_DIR, Extent, KindSpec, TownSpec, TownView, load_kinds, load_town, load_town_spec
 from app.world.view import Feature, Ground, Hotspot, Site, WorldView, decode_array
 from app.world.walkability import WalkGrid, town_walk_grid
 
@@ -175,7 +176,7 @@ class SimWorld:
     sites: tuple[Site, ...]
     places: Mapping[str, Place]
     structures: Mapping[str, Structure]
-    resource_caps: UInt8Array  # (cells, len(RESOURCES))
+    nodes: NodeTable  # every usable wild thing: flora, node features and the paddies (10 §1.1)
     hearths: Mapping[str, Hearth]
     # the wild places of the world view (10-world-v1 §1.2): hotspots, hunting grounds and fixed features (dens,
     # waterholes...); animals live by them (A1)
@@ -278,6 +279,7 @@ def build_sim_world(
     town_view: TownView,
     kinds: Mapping[str, KindSpec],
     town_places: TownPlacesSpec,
+    town_spec: TownSpec,
 ) -> SimWorld:
     grid = build_grid(view.frequency)
     if grid.cell_count != view.cell_count:
@@ -304,17 +306,22 @@ def build_sim_world(
     road_kinds = cell_kinds(view.places.roads, grid.cell_count)
     terrain_cost = walk_costs_with_roads(walk_costs(biomes, river), road_kinds, river)  # routes take roads (D80)
 
-    caps = np.zeros((grid.cell_count, len(RESOURCES)), dtype=np.uint8)
-    for biome_name, biome_caps in RESOURCE_CAPS.items():
-        rows = biomes == BIOME_IDS[biome_name]
-        for column, resource in enumerate(RESOURCES):
-            caps[rows, column] = biome_caps.get(resource, 0)
-    reeds = caps[:, RESOURCE_INDEX["reeds"]]
-    banks = river & np.isin(biomes, [BIOME_IDS[name] for name in RESOURCE_CAPS])  # rivers through living ground
-    reeds[banks] = np.maximum(reeds[banks], RIVER_REEDS)
-    fish = caps[:, RESOURCE_INDEX["fish"]]
-    fish[banks] = np.maximum(fish[banks], RIVER_FISH)
-    caps[in_town] = 0
+    paddies = {}
+    rects = paddy_rects(town_spec)
+    for paddy_id, rect in rects.items():
+        middle, spots = paddy_points(rect)
+        paddies[paddy_id] = (chart.to_unit(*middle), tuple(chart.to_unit(x, z) for x, z in spots))
+    nodes = build_node_table(
+        grid,
+        view.radius_m,
+        generate_flora(view, load_world_spec()),
+        view.places.flora_nodes,
+        view.places.features,
+        view.places.hotspots,
+        water,
+        paddies,
+        rects,
+    )
 
     places: dict[str, Place] = {}
     for other in view.sites:
@@ -403,7 +410,7 @@ def build_sim_world(
         sites=tuple(view.sites),
         places=places,
         structures=structures,
-        resource_caps=caps,
+        nodes=nodes,
         hearths=dict(sorted(hearths.items())),
         hotspots=tuple(view.places.hotspots),
         grounds=tuple(view.places.grounds),
@@ -412,7 +419,7 @@ def build_sim_world(
 
 
 def sim_world_from_view(view: WorldView) -> SimWorld:
-    return build_sim_world(view, load_town(), load_kinds(), load_town_places())
+    return build_sim_world(view, load_town(), load_kinds(), load_town_places(), load_town_spec())
 
 
 def load_sim_world(session: Session, generator: WorldGenerator = GENERATOR) -> SimWorld:

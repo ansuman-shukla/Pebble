@@ -8,8 +8,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Literal, cast
 
-import numpy as np
-from numpy.typing import NDArray
 from pydantic import JsonValue
 
 from app.core.rng import Rng
@@ -227,9 +225,7 @@ class WorldState:
     citizens: dict[str, Citizen]
     ground: dict[str, GroundStack]
     stores: dict[str, dict[str, int]]  # storehouse or field id -> items
-    resources: NDArray[np.uint8]  # (cells, len(RESOURCES)) wild plant counters
     rngs: dict[str, Rng]  # the random streams drawn from so far, by name (see `rng`)
-    regrow: dict[str, int] = field(default_factory=dict)  # "cell:resource" -> tick it grows one more
     notes: dict[str, dict[str, JsonValue]] = field(default_factory=dict)  # scripted brains' working memory
     animals: dict[str, Animal] = field(default_factory=dict)
     groups: dict[str, AnimalGroup] = field(default_factory=dict)

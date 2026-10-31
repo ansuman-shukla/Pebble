@@ -1,11 +1,11 @@
-"""Item kinds and the wild plant resources counted per cell."""
+"""Item kinds: what each thing citizens carry is called, weighs and is worth as food (wild things are nodes:
+`app.sim.nodes`)."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
 from app.sim.coins import coin_words
-from app.world.spec import BIOME_NAMES
 
 Tool = Literal["spear", "axe", "sickle"]
 
@@ -70,39 +70,6 @@ TOOL_WORDS: dict[str, Tool] = {word: tool for tool in TOOL_ORDER for word in (to
 def tool_in(inventory: Mapping[str, int], tool: Tool) -> str | None:
     """The best item of this tool someone carries ("iron spear"), or None."""
     return next((item for item in TOOL_ORDER[tool] if inventory.get(item, 0) > 0), None)
-
-
-RESOURCES: tuple[str, ...] = ("berries", "roots", "nuts", "reeds", "wood", "fish")  # column order of the counters
-GATHERED = frozenset({"berries", "roots", "nuts", "reeds", "wood"})  # picked by hand; fish are caught (`fish()`)
-RESOURCE_INDEX = {name: index for index, name in enumerate(RESOURCES)}
-
-# Most of each wild resource a cell holds, by biome (cells are ~40 m across). Rivers through these biomes also grow
-# RIVER_REEDS reeds on their cells.
-RESOURCE_CAPS: dict[str, dict[str, int]] = {
-    "grassland": {"berries": 10, "roots": 20, "wood": 6},
-    "broadleaf_forest": {"berries": 40, "roots": 10, "nuts": 25, "wood": 40},
-    "taiga": {"berries": 12, "nuts": 20, "wood": 40},
-    "wetland": {"roots": 15, "reeds": 40},
-    "savanna": {"roots": 15, "wood": 4},
-    "tundra": {"berries": 6},
-    "hills": {"roots": 6, "wood": 4},
-    "shallow_ocean": {"fish": 30},
-    "lake": {"fish": 20},
-}
-RIVER_REEDS = 12
-RIVER_FISH = 8
-
-# Game days a cell takes to grow back from bare to full (02-simulation: berries ~3, roots ~5, nuts ~7).
-REGROW_DAYS: dict[str, float] = {"berries": 3.0, "roots": 5.0, "nuts": 7.0, "reeds": 4.0, "wood": 6.0, "fish": 4.0}
-
-_UNKNOWN = set(RESOURCE_CAPS) - set(BIOME_NAMES)
-if _UNKNOWN:
-    raise ValueError(f"resource caps name unknown biomes: {sorted(_UNKNOWN)}")
-_BAD_ITEMS = {item for caps in RESOURCE_CAPS.values() for item in caps} - set(RESOURCES)
-if _BAD_ITEMS:
-    raise ValueError(f"resource caps name unknown resources: {sorted(_BAD_ITEMS)}")
-if set(REGROW_DAYS) != set(RESOURCES):
-    raise ValueError("every resource needs a regrowth time")
 
 
 def amount_words(count: int, kind: ItemKind) -> str:

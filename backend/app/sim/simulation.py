@@ -56,12 +56,10 @@ def initial_state(world: SimWorld, seed: int, registry: systems.Registry = syste
         citizens={},
         ground={},
         stores={},
-        resources=np.zeros_like(world.resource_caps),
         rngs={},
         fires=hearth_fires(world),
         systems={system.name: system.new(world) for system in registry.systems},
     )
-    ecology.stock_resources(world, state)
     populate(world, state)
     for fire_id in sorted(state.fires):  # each camp keeps a woodpile by its fire pit
         if state.fires[fire_id].kind == "pit":

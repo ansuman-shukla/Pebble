@@ -1,15 +1,11 @@
-"""Replay: rebuild what spectators see (positions, bodies, actions, items, resources, knowledge, animals, fires) from
+"""Replay: rebuild what spectators see (positions, bodies, actions, items, nodes, knowledge, animals, fires) from
 the nearest snapshot plus the events after it. The same reducer backs `GET /entities?at=tick`, the citizen pages and
 the "every change has an event" test.
 """
 
-import base64
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
-
-import numpy as np
-from numpy.typing import NDArray
 
 from app.observability.events import (
     ActionEnded,
@@ -25,15 +21,15 @@ from app.observability.events import (
     ItemMoved,
     JsonScalar,
     KnowledgeChanged,
-    ResourceChanged,
+    NodeChanged,
     RoutePoint,
     StandingChanged,
     Target,
     TickSummary,
 )
 from app.sim.fire import strength
-from app.sim.items import RESOURCE_INDEX
 from app.sim.locomotion import Gait
+from app.sim.nodes import NodeView, node_views
 from app.sim.snapshot import SimSnapshot
 from app.sim.state import AnimalActivity, FireKind, Region
 from app.sim.vec import Vec3
@@ -124,7 +120,7 @@ class ReplayState:
     citizens: dict[str, ReplayCitizen]
     ground: dict[str, ReplayStack]
     stores: dict[str, dict[str, int]]
-    resources: NDArray[np.uint8]
+    nodes: dict[str, NodeView] = field(default_factory=dict)  # nodes that differ from full, by id (10 §1.1)
     animals: dict[str, ReplayAnimal] = field(default_factory=dict)
     fires: dict[str, ReplayFire] = field(default_factory=dict)
 
@@ -134,7 +130,7 @@ class ReplayState:
             and self.citizens == other.citizens
             and self.ground == other.ground
             and self.stores == other.stores
-            and np.array_equal(self.resources, other.resources)
+            and self.nodes == other.nodes
             and self.animals == other.animals
             and self.fires == other.fires
         )
@@ -178,7 +174,6 @@ def from_snapshot(snapshot: SimSnapshot) -> ReplayState:
             places={place_id: known.level for place_id, known in c.places.items()},
             people=set(c.people),
         )
-    resources = np.frombuffer(base64.b64decode(snapshot.resources), dtype=np.uint8)
     animals = {
         a.id: ReplayAnimal(a.id, a.kind, a.group, a.position, a.height_m, a.cell, a.heading_deg, a.activity, a.alive)
         for a in snapshot.animals
@@ -191,7 +186,7 @@ def from_snapshot(snapshot: SimSnapshot) -> ReplayState:
         citizens=citizens,
         ground={s.id: ReplayStack(s.item, s.count, s.position, s.cell) for s in snapshot.ground},
         stores={store: dict(items) for store, items in snapshot.stores.items()},
-        resources=resources.reshape(-1, snapshot.resource_columns).copy(),
+        nodes=node_views(snapshot.systems["nodes"].data),
         animals=animals,
         fires=fires,
     )
@@ -299,9 +294,16 @@ def apply_event(state: ReplayState, event: ReplayEvent) -> None:
         moved_item = ItemMoved.model_validate(event.payload)
         _take(state, moved_item.source, moved_item.item, moved_item.count)
         _put(state, moved_item.destination, moved_item.item, moved_item.count)
-    elif kind == "resource_changed":
-        changed = ResourceChanged.model_validate(event.payload)
-        state.resources[changed.cell, RESOURCE_INDEX[changed.resource]] = changed.after
+    elif kind == "node_changed":
+        node = NodeChanged.model_validate(event.payload)
+        known = state.nodes.get(node.node)
+        cap = node.before if known is None else known.cap  # a node not known differs from full only now
+        if node.after == cap:  # full again (a full paddy is ripe): as the simulation, it no longer differs
+            state.nodes.pop(node.node, None)
+        else:
+            state.nodes[node.node] = NodeView(
+                kind=node.kind, item=node.item, cap=cap, stock=node.after, stage=node.stage
+            )
     elif kind == "goal_set":
         goal = GoalSet.model_validate(event.payload)
         citizen = state.citizens[_actor(event)]
@@ -342,7 +344,7 @@ def _take(state: ReplayState, where: ItemLocation, item: str, count: int) -> Non
         store[item] -= count
         if store[item] == 0:
             del store[item]
-    # resources change through their own `resource_changed` event; `world` and `animal` items come from nowhere
+    # nodes change through their own `node_changed` event; `world` and `animal` items come from nowhere
 
 
 def _put(state: ReplayState, where: ItemLocation, item: str, count: int) -> None:

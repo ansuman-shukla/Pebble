@@ -50,6 +50,7 @@ from app.world_api.models import GestureKind, Pace, Perception
 STOREHOUSES = "the storehouses"
 WELL = "the well"
 FIRE = "the fire pit"
+HURT = ("weak and aching", "close to death")  # how a body that has lost half its health feels
 CHAT_CHANCE = 0.3  # with someone greeted already in earshot and nothing pressing, a word in passing this often
 EAT_ORDER = ("berries", "nuts", "roots", "rice", "dried meat")  # what spoils first goes first; dried meat keeps
 MOVING = frozenset({"walk_to", "follow", "flee", "hunt", "attack", "rest", "sleep"})  # they move the body
@@ -190,7 +191,8 @@ class UtilityBrain:
         behind_walls = self.profile.region == "town" and at(p, self.profile.home_area)  # walls keep animals out
         threat = danger(p)
         if threat is not None and not behind_walls and fire_here(p) not in ("burning", "low"):  # fire too
-            if carries(p, "spear") and DISTANCE[threat.nearness] in ("here", "near", "close"):  # armed: drive it off
+            hurt = any(word in p.you.feeling for word in HURT)  # bitten badly already: no more fighting, run
+            if carries(p, "spear") and not hurt and DISTANCE[threat.nearness] in ("here", "near", "close"):
                 aim = f"Drive off {threat.label}"
                 options.append(Option(200, "fight off", partial(self.api.attack, threat.label), aim, "danger"))
             else:

@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from types import FrameType
+from typing import get_args
 
 import psycopg
 from sqlalchemy import Engine as DbEngine
@@ -45,6 +46,7 @@ from app.world.generate import GENERATOR
 from app.world.spec import load_site_kinds, load_world_spec
 from app.world.store import WorldKey, world_key
 from app.world_api.facade import WorldApi
+from app.world_api.models import Compass
 
 POLL_S = 0.25  # how often a waiting engine looks for commands
 HEARTBEAT_S = 1.0  # a waiting engine (paused, or between real-time ticks) stamps the run this often
@@ -57,6 +59,22 @@ log = logging.getLogger("pebble.engine")
 
 Brain = Callable[[Simulation], None]  # called before every tick
 HOME_AREAS = {"town": "town", "band_a": "band_a_camp", "band_b": "band_b_camp"}  # region -> its home place id
+GROUNDS_M = (450.0, 1000.0)  # a band's food grounds: past the thin home ring, the middle ring (10 §1.2)
+GROUND_FOOD = frozenset({"berries", "roots", "nuts"})
+GROUNDS_KEPT = 3
+GROUND_LEAST = 100  # food (pieces when full) a way must hold to be worth the walk
+
+
+def forage_grounds(world: SimWorld, region: str) -> tuple[Compass, ...]:
+    """The ways from a band's camp its food lies beyond the home ring (10 §1.2), most first: the land a band knows,
+    given to its scripted brains (a mind learns it by walking it)."""
+    if region == "town":
+        return ()
+    camp = world.places[HOME_AREAS[region]].centre
+    totals = world.nodes.food_by_bearing(world.grid, camp, *GROUNDS_M, GROUND_FOOD)
+    ways: tuple[Compass, ...] = get_args(Compass)  # north first, clockwise: the sectors' order
+    ranked = sorted(range(len(totals)), key=lambda sector: (-totals[sector], sector))
+    return tuple(ways[sector] for sector in ranked[:GROUNDS_KEPT] if totals[sector] >= GROUND_LEAST)
 
 
 def citizen_brains(sim: Simulation, seed: int) -> CitizenBrains:
@@ -64,6 +82,7 @@ def citizen_brains(sim: Simulation, seed: int) -> CitizenBrains:
     places = sim.world.places
     cast = sim.state.citizens
     traits = {spec.id: spec.traits for spec in load_citizens(CITIZENS).citizens if spec.traits is not None}
+    grounds = {region: forage_grounds(sim.world, region) for region in HOME_AREAS}
     return CitizenBrains(
         (
             (
@@ -80,6 +99,7 @@ def citizen_brains(sim: Simulation, seed: int) -> CitizenBrains:
                     ),
                     granary=citizen.region == "town" and fed_by_granary(citizen),
                     honesty=traits[citizen.id].honesty if citizen.id in traits else 0.5,
+                    grounds=grounds[citizen.region],
                 ),
             )
             for citizen in sim.core.citizens()

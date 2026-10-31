@@ -33,6 +33,7 @@ from app.sim.clock import SECONDS_PER_TICK
 from app.sim.core import SimCore, Stride, TimedPoint
 from app.sim.ground_speed import ground_mps
 from app.sim.navigation import walk_along
+from app.sim.node_table import PADDY_KIND
 from app.sim.perception import HOME_RADIUS_M
 from app.sim.state import Citizen, System
 from app.sim.vec import Vec3, step_towards
@@ -56,6 +57,7 @@ RING_SPACING_M = 1.0  # neighbouring spots on one ring lie at least this far apa
 BESIDE_TURNS = (0.0, 30.0, -30.0, 60.0, -60.0, 90.0, -90.0, 120.0, -120.0, 150.0, -150.0, 180.0)  # free_round
 STRAIGHT_M = 1.5  # a step this short goes straight; longer ones follow the planner's route
 MIN_STEP_S = 0.5
+PADDY_TASK = "farm"  # the work done at the paddies' node spots
 MOVING = frozenset({"walk_to", "follow", "flee", "hunt", "attack"})  # actions that move the body every tick
 _POSTURES: dict[SlotKind, SlotPosture] = {"seat": "sitting", "mat": "lying", "inside": "inside"}
 _WORDS: dict[SlotKind, str] = {"seat": "on a seat", "mat": "on a mat", "inside": "inside"}
@@ -336,13 +338,34 @@ def layout(core: SimCore) -> Layout:
     return state.layout
 
 
+def node_slots(core: SimCore, node: int) -> tuple[Slot, ...]:
+    """A node's work spots (10 §1.1) as work slots owned by the node (`<node id>#<k>`), claimed like any other."""
+    table = core.world.nodes
+    node_id, kind = table.ids[node], table.kind(node)
+    paddy = table.kinds[node] == PADDY_KIND
+    words, task = ("in the paddies", PADDY_TASK) if paddy else (f"at {kind.one}", None)
+    return tuple(
+        Slot(f"{node_id}#{k}", node_id, "work", spot.position, spot.heading_deg, "standing", task=task, words=words)
+        for k, spot in enumerate(table.spots(node))
+    )
+
+
+def slot_by_id(core: SimCore, slot_id: str) -> Slot:
+    """A slot of the layout, or a node's work spot."""
+    slot = layout(core).slots.get(slot_id)
+    if slot is not None:
+        return slot
+    node_id, _, number = slot_id.rpartition("#")
+    return node_slots(core, core.world.nodes.index[node_id])[int(number)]
+
+
 def claim_of(core: SimCore, citizen: Citizen) -> Claim | None:
     return slot_state(core).claims.get(citizen.id)
 
 
 def held_slot(core: SimCore, citizen: Citizen) -> Slot | None:
     claim = claim_of(core, citizen)
-    return layout(core).slots[claim.slot] if claim is not None and claim.slot is not None else None
+    return slot_by_id(core, claim.slot) if claim is not None and claim.slot is not None else None
 
 
 def is_inside(core: SimCore, citizen: Citizen) -> bool:
@@ -415,9 +438,8 @@ def _taken(core: SimCore, but: str) -> list[Vec3]:
     """Every spot a body or a claim keeps (a seat's or mat's with the legs before it), except the citizen's own
     (claims inside a house keep none)."""
     spots = _bodies(core, but)
-    lay = layout(core)
     for citizen_id, claimed in slot_state(core).claims.items():
-        slot = lay.slots[claimed.slot] if claimed.slot is not None else None
+        slot = slot_by_id(core, claimed.slot) if claimed.slot is not None else None
         if citizen_id == but or (slot is not None and slot.kind == "inside"):
             continue
         spots.append(claimed.position)
@@ -675,17 +697,31 @@ def take_work_slot(core: SimCore, citizen: Citizen, task: str, area: tuple[Vec3,
     return slot
 
 
+def take_first_free(core: SimCore, citizen: Citizen, options: Iterable[Slot]) -> Slot | None:
+    """The first of the work slots (in the caller's order) that is free and that they can walk to within the tick,
+    claimed (walked to at the tick's end); None when there is none."""
+    spots = _taken(core, citizen.id)
+    for slot in options:
+        if not _clear(core, slot.position, spots):
+            continue
+        if core.distance_m(citizen.position, slot.position) <= OCCUPY_M or _path(
+            core, citizen, slot.position, far=True
+        ):
+            claim(core, citizen, slot, slot.position, approach=True)
+            return slot
+    return None
+
+
 # --- the tick's end ---
 
 
 def settle(core: SimCore) -> None:
     """A tick hook (after interrupts): free stale claims, step to claims taken standing still, keep bodies apart."""
     state = slot_state(core)
-    lay = layout(core)
     for citizen_id in sorted(state.claims):
         citizen = core.state.citizens[citizen_id]
         claimed = state.claims[citizen_id]
-        slot = lay.slots[claimed.slot] if claimed.slot is not None else None
+        slot = slot_by_id(core, claimed.slot) if claimed.slot is not None else None
         inside = slot is not None and slot.kind == "inside"
         if not _still_held(core, citizen, claimed, slot):
             del state.claims[citizen_id]
@@ -866,12 +902,12 @@ def crowded(core: SimCore) -> list[tuple[str, str, float]]:
 
 
 def off_work_slot(core: SimCore) -> list[str]:
-    """Workers at a task done at slots (the loom, the stall, the paddies) who aren't standing on one of its slots."""
+    """Workers at a task done at slots (the loom, the stall, the paddies' spots) who aren't standing on one of them."""
     lay = layout(core)
     off: list[str] = []
     for citizen in core.living():
         action = citizen.action
-        if action is None or action.kind != "work" or str(action.item) not in lay.tasks:
+        if action is None or action.kind != "work" or str(action.item) not in lay.tasks | {PADDY_TASK}:
             continue
         slot = held_slot(core, citizen)
         on = slot is not None and slot.task == action.item

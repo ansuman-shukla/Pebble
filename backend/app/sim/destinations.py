@@ -4,7 +4,7 @@ in-world reason it can't be walked to; and catching up with the person walked to
 
 from dataclasses import dataclass
 
-from app.sim import slots
+from app.sim import paddies, reach, slots
 from app.sim.acting import capital
 from app.sim.core import SimCore
 from app.sim.fauna import SPECIES
@@ -55,7 +55,10 @@ def resolve(core: SimCore, citizen: Citizen, target: Target) -> Destination | st
             if normalize(place.name) == query:
                 knowledge = citizen.places[place_id]
                 if knowledge.level == "visited":
-                    spot = slots.reserve_place(core, citizen, place_id)
+                    farming = place_id == paddies.FIELDS and "farming" in citizen.skills
+                    spot = (paddies.reserve(core, citizen) if farming else None) or slots.reserve_place(
+                        core, citizen, place_id
+                    )
                     return Destination(spot, place.name, None, f"You arrive at {place.name}.", place.name)
                 spot = slots.reserve_near(core, citizen, knowledge.guess, with_centre=True)
                 return Destination(spot, place.name, None, f"rough:{place_id}", place.name)
@@ -102,8 +105,8 @@ def _resolve_direction(core: SimCore, citizen: Citizen, target: DirectionTarget)
 
 
 def _thing_spot(core: SimCore, citizen: Citizen, thing: Thing) -> Vec3:
-    """A structure or hearth: one of its slots; a thing on the ground: a spot beside it; plants, water: the spot told
-    (or a free one round it)."""
+    """A structure or hearth: one of its slots; a node: the nearest free spot of the nearest like it with some left
+    (10 §1.1); a thing on the ground: a spot beside it; water: the spot told (or a free one round it)."""
     if thing.kind == "structure":
         structure = core.world.structures[thing.ref]
         if structure.id == citizen.home:
@@ -112,6 +115,10 @@ def _thing_spot(core: SimCore, citizen: Citizen, thing: Thing) -> Vec3:
     if thing.kind == "fire":
         fire = core.state.fires[thing.ref]
         return slots.reserve_owner(core, citizen, fire.id, fire.position, thing.goal)
+    if thing.kind == "node":
+        spot = reach.reserve(core, citizen, core.world.nodes.index[thing.ref])
+        if spot is not None:
+            return spot
     return slots.reserve_near(core, citizen, thing.goal, with_centre=thing.kind != "ground")
 
 

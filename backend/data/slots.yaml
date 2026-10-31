@@ -161,14 +161,7 @@ places: # what walking to a named place resolves to: these owners' slots in orde
   bell-tower: {owners: [bell-tower]}
   band_a_camp: {owners: ["band_a_camp:fire-pit"]}
   band_b_camp: {owners: ["band_b_camp:fire-pit"]}
-  rice-fields: # in paddy-5, a row of tiles apart
-    slots:
-      - {name: farm-1, kind: work, task: farm, skill: farming, at: [-123, 51], heading: 0, words: in the paddies}
-      - {name: farm-2, kind: work, task: farm, skill: farming, at: [-119, 51], heading: 0, words: in the paddies}
-      - {name: farm-3, kind: work, task: farm, skill: farming, at: [-123, 57], heading: 0, words: in the paddies}
-      - {name: farm-4, kind: work, task: farm, skill: farming, at: [-119, 57], heading: 0, words: in the paddies}
-      - {name: farm-5, kind: work, task: farm, skill: farming, at: [-123, 63], heading: 0, words: in the paddies}
-      - {name: farm-6, kind: work, task: farm, skill: farming, at: [-119, 63], heading: 0, words: in the paddies}
+  # the rice fields: farmers work at the paddies' own spots (nodes, data/world/node_stages.yaml; app/sim/paddies.py)
   gaol: # on the ground inside the pen
     slots:
       - {name: confined-1, kind: seat, task: confined, skill: confined, at: [-14.6, -15.6], heading: 90, posture: sitting_ground, words: in the gaol}

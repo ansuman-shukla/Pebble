@@ -14,11 +14,13 @@ from typing import Literal, get_args
 import numpy as np
 
 from app.sim import fire as fires
+from app.sim import nodes
 from app.sim.bodies import body_words
 from app.sim.clock import local_minute, time_of_day
 from app.sim.core import FOREST_BIOMES, SimCore
 from app.sim.fauna import DANGEROUS, SPECIES
-from app.sim.items import GATHERED, ITEMS, RESOURCE_INDEX, amount_words
+from app.sim.items import ITEMS, amount_words, tool_in
+from app.sim.node_table import GATHERED
 from app.sim.state import ActionState, Animal, Citizen
 from app.sim.vec import Vec3, bearing_deg, lat_lon_deg
 from app.sim.world import CAMP_STRUCTURE_LABELS, HOME_KINDS, STRUCTURE_LABELS, WATER_BIOMES
@@ -46,7 +48,7 @@ GROUP_NOUNS: dict[str, str] = {  # structure kinds seen in numbers
     "castle_gatehouse": "gatehouses",
     "lean_to": "lean-tos",
 }
-FOOD_PLANTS = frozenset({"berries", "roots", "nuts"})
+FOOD_PLANTS = frozenset({"berries", "roots", "nuts", "rice", "fish"})
 # importance of what's seen; every water and the nearest of each other tier below IMPORTANT are always told
 TIERS: dict[ThingKind, int] = {
     "water": 0,
@@ -60,7 +62,7 @@ TIERS: dict[ThingKind, int] = {
     "building": 7,
 }
 IMPORTANT = 5
-RESOURCE_NAMES: dict[str, ResourceName] = {name: name for name in get_args(ResourceName)}
+RESOURCE_NAMES: dict[str, ResourceName] = {name: name for name in get_args(ResourceName)}  # what gather() names
 WATER = frozenset(WATER_BIOMES)
 _CELL_MARGIN_M = 25.0  # cells whose centre is this much beyond sight still count (cells are ~40 m across)
 _ARTICLES = frozenset({"the", "a", "an", "some", "any", "my", "your"})
@@ -115,13 +117,20 @@ ANIMAL_DOING: dict[str, str] = {
     "floating": "floating",
     "swimming": "swimming",
 }
-RESOURCE_KEYWORDS: dict[str, frozenset[str]] = {
+RESOURCE_KEYWORDS: dict[str, frozenset[str]] = {  # the words that name a node by what it yields
     "berries": frozenset({"berries", "berry", "bush", "bushes"}),
     "roots": frozenset({"roots", "root"}),
-    "nuts": frozenset({"nuts", "nut"}),
+    "nuts": frozenset({"nuts", "nut", "oak", "oaks"}),
     "reeds": frozenset({"reeds", "reed"}),
     "wood": frozenset({"wood", "branches", "deadwood", "firewood"}),
+    "rice": frozenset({"rice", "paddy", "paddies"}),
+    "fish": frozenset({"fish", "fishing"}),
+    "flint": frozenset({"flint", "seam"}),
+    "obsidian": frozenset({"obsidian", "glass", "shards"}),
+    "iron sand": frozenset({"iron", "sand"}),
+    "gold": frozenset({"gold", "pool"}),
 }
+TREE_KEYWORDS = frozenset({"tree", "trees", "timber"})
 STRUCTURE_KEYWORDS: dict[str, frozenset[str]] = {
     "well": frozenset({"well", "water"}),
     "storehouse": frozenset({"storehouse", "store"}),
@@ -170,7 +179,7 @@ class Thing:
     goal: Vec3  # where to walk to reach it
     distance_m: float
     bearing: float
-    kind: Literal["structure", "ground", "resource", "water", "fire"]
+    kind: Literal["structure", "ground", "node", "water", "fire"]
     ref: str
     water: Literal["fresh", "salt"] | None = None
     item: str | None = None  # the resource of a plant, the item of a ground stack
@@ -209,22 +218,43 @@ def match_person(core: SimCore, citizen: Citizen, who: str) -> Citizen | None:
     return None
 
 
-def _resource_label(resource: str, count: int) -> str:
-    if resource == "berries":
-        return (
-            "bushes heavy with berries"
-            if count >= 20
-            else "berry bushes"
-            if count >= 5
-            else "a few berries on the bushes"
+NODE_LINE_M = 50.0  # like nodes this close to the nearest one are told with it ("three berry bushes ...")
+
+
+def node_things(core: SimCore, citizen: Citizen, sight: float) -> list[Thing]:
+    """For each thing a node yields, the nearest node in view with some left, told with the like ones (same kind and
+    stage) near it as one line (10 §6.2); standing trees only to someone carrying an axe (they fell them for wood)."""
+    table = core.world.nodes
+    axe = tool_in(citizen.inventory, "axe") is not None
+    nearest: dict[str, tuple[float, int]] = {}
+    stocked: list[tuple[float, int]] = []
+    for metres, node in table.near(core.world.grid, citizen.position, sight):
+        kind_name = table.kinds[node]
+        if (kind_name == nodes.TREE_KIND and not axe) or nodes.stock(core, node) == 0:
+            continue
+        stocked.append((metres, node))
+        key = f"{table.kind(node).item}:{kind_name}" if kind_name == nodes.TREE_KIND else table.kind(node).item
+        nearest.setdefault(key, (metres, node))
+    things: list[Thing] = []
+    for metres, node in nearest.values():
+        kind_name, stage = table.kinds[node], nodes.stage(core, node)
+        like = sum(
+            1
+            for _, other in stocked
+            if table.kinds[other] == kind_name
+            and nodes.stage(core, other) == stage
+            and core.distance_m(table.unit(other), table.unit(node)) <= NODE_LINE_M
         )
-    if resource == "roots":
-        return "plenty of edible roots" if count >= 10 else "a few edible roots"
-    if resource == "nuts":
-        return "nut trees heavy with nuts" if count >= 10 else "a few nuts on the trees"
-    if resource == "reeds":
-        return "thick reeds" if count >= 10 else "a few reeds"
-    return "plenty of fallen wood" if count >= 10 else "a little fallen wood"
+        item = table.kind(node).item
+        unit = table.unit(node)
+        keywords = RESOURCE_KEYWORDS[item] | (TREE_KEYWORDS if kind_name == nodes.TREE_KIND else frozenset())
+        label = nodes.words(core, node, like)
+        things.append(
+            Thing(
+                label, keywords, unit, metres, bearing_deg(citizen.position, unit), "node", table.ids[node], item=item
+            )
+        )
+    return things
 
 
 def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
@@ -237,7 +267,7 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
         label: str,
         keywords: frozenset[str],
         goal: Vec3,
-        kind: Literal["structure", "ground", "resource", "water", "fire"],
+        kind: Literal["structure", "ground", "node", "water", "fire"],
         ref: str,
         water: Literal["fresh", "salt"] | None = None,
         at: Vec3 | None = None,
@@ -300,9 +330,8 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
     cos_limit = math.cos(min(math.pi, (sight + _CELL_MARGIN_M) / world.radius_m))
     cells = np.flatnonzero(world.grid.positions @ np.array(position) >= cos_limit)
     cells = cells[np.argsort(world.grid.positions[cells] @ np.array(position))[::-1]]  # nearest first
+    things.extend(node_things(core, citizen, sight))
     here = citizen.cell
-    resources = state.resources
-    found_resource: set[str] = set()
     found_water: set[str] = set()
     # a lake or the sea next to your cell is right beside you: you can drink from it there (`water_within_reach`)
     beside = {_water_kind(world.biome(other)) for other in world.neighbours[here] if world.biome(other) in WATER}
@@ -311,22 +340,6 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
     for cell in [here, *[int(c) for c in cells if c != here]]:
         unit = world.unit(cell)
         biome = world.biome(cell)
-        for resource, column in RESOURCE_INDEX.items():
-            if resource not in GATHERED:
-                continue  # fish are seen as shoals (animals) and caught with fish()
-            count = int(resources[cell, column])
-            if count > 0 and resource not in found_resource:
-                found_resource.add(resource)
-                at = position if cell == here else unit
-                add(
-                    _resource_label(resource, count),
-                    RESOURCE_KEYWORDS[resource],
-                    unit,
-                    "resource",
-                    f"{cell}:{resource}",
-                    at=at,
-                    item=resource,
-                )
         river = river_here if cell == here else bool(world.river[cell] and not world.in_town[cell])
         if river and "river" not in found_water:
             found_water.add("river")
@@ -604,14 +617,14 @@ def _group_key(core: SimCore, citizen: Citizen, thing: Thing) -> str:
         return f"ground:{thing.item}"
     if thing.kind == "fire":
         return f"fire:{thing.ref}"  # a fire on its own (a pit's fire shares the pit's id)
-    return thing.ref  # each kind of plant and of water is already only its nearest
+    return thing.ref  # each yield of the nodes and each kind of water is already only its nearest
 
 
 def _kind(core: SimCore, citizen: Citizen, thing: Thing) -> ThingKind:
     if thing.water is not None:
         return "water" if thing.water == "fresh" else "sea"
-    if thing.kind == "resource":
-        return "food" if thing.item in FOOD_PLANTS else "material"
+    if thing.kind == "node":
+        return "node"
     if thing.kind == "ground":
         return "item"
     if thing.kind == "fire":
@@ -628,6 +641,8 @@ def _tier(core: SimCore, thing: Thing, kind: ThingKind) -> int:
     """How important it is to mention; food on the ground and the storehouses count as food."""
     if thing.kind == "ground" and thing.item is not None and ITEMS[thing.item].food > 0:
         return TIERS["food"]
+    if thing.kind == "node":  # a node that feeds you is told like food, the rest like materials
+        return TIERS["food"] if thing.item in FOOD_PLANTS else TIERS["material"]
     if thing.kind == "structure" and core.world.structures[thing.ref].kind == "storehouse":
         return TIERS["food"]
     return TIERS[kind]
@@ -656,7 +671,7 @@ def sights(core: SimCore, citizen: Citizen, things: list[Thing]) -> list[Sight]:
             label = f"{_count_words(len(members))} {GROUP_NOUNS[core.world.structures[nearest.ref].kind]}"
         if any(where_words(member.distance_m, member.bearing) != where for member in members[1:]):
             where = NEAREST + where
-        resource = RESOURCE_NAMES[nearest.item] if nearest.kind == "resource" and nearest.item is not None else None
+        resource = RESOURCE_NAMES.get(str(nearest.item)) if nearest.kind == "node" else None
         seen = Seen(
             label=label,
             where=where,
@@ -699,8 +714,10 @@ def fit_to_budget(people: list[Seen], animals: list[Seen], found: list[Sight]) -
     return [sight.seen for index, sight in enumerate(ranked) if index in chosen]
 
 
-if not GATHERED <= set(RESOURCE_NAMES):
-    raise ValueError("every resource the simulation gathers needs its name in the contract")
+if set(RESOURCE_NAMES) != GATHERED:
+    raise ValueError("the contract's resource names must be what nodes yield to gather()")
+if set(RESOURCE_KEYWORDS) != GATHERED | {"fish"}:
+    raise ValueError("every node yield needs the words that name it")
 _LABELS = {**STRUCTURE_LABELS, **CAMP_STRUCTURE_LABELS}
 _UNGROUPED = {kind for kind, label in _LABELS.items() if label.startswith("a ")} - set(GROUP_NOUNS)
 if _UNGROUPED:

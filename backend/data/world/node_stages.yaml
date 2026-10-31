@@ -1,0 +1,172 @@
+# Nodes (docs/design/10-world-v1.md §1.1, §1.4; D150-D152): every usable wild thing, what it yields, how fast it
+# grows back, where people stand to work it and how it looks and is said at each stage. Read by app/sim/node_table.py
+# (the static table) and app/sim/nodes.py (stock, regrowth, stages). One table gives both the renderer's stage and
+# the perception words, so what is said is what is drawn.
+#
+# kinds.<node kind>:
+#   item        what taking from it yields (gather(item); fishing spots: fish())
+#   cap         the most it holds (a feature's own `cap` in hotspots.yaml wins; sea fishing spots `sea_cap`)
+#   take        [low, high]: taken per session (rolled; never more than the stock or the room to carry)
+#   chance      a session yields at all only this often (fish 35 % by hand, D70; gold 50 %)
+#   minutes     one session; `axe_minutes` per axe for trees (a stone axe is slower)
+#   regrow      +1 every `regrow_hours`, or full in `full_days` from bare (`full_days_by_cap` per cap);
+#               none: it never grows back (gold). Trees: stump `stump_days`, then sapling `sapling_days`, then a tree.
+#               Paddies grow by tending (app/sim/paddies.py), not on their own.
+#   spots       work spots round it: `spots` of them `spot_m` from its centre (trees: on the side away from the way
+#               they fall); fishing spots and the gold pool: along the shore, `spot_gap_m` apart, a metre inland;
+#               paddies: four inside the rect (`paddy_spot_m` off its centre); `start_growth` per paddy
+#   one, many   the node said alone ("a berry bush") and in numbers ("berry bushes")
+#   stage       the drawn stage from the stock: {pieces: name, of: N, round: nearest | up} = "<name>-<k>" with
+#               k = round(N × stock / cap) (pieces mode: parts named `<name>-k`), or {levels: [[from, name], ...]}
+#               (the first whose `from` share of the cap the stock reaches; `by: stock` compares the stock itself)
+#   words       what a person sees, by stage: pieces kinds key on the least piece count, the rest on the stage name;
+#               {noun} is "a berry bush" or "three berry bushes" (identical nodes nearby are told as one line)
+
+kinds:
+  berry_bush:
+    item: berries
+    cap: 12
+    take: [4, 6]
+    minutes: 20
+    regrow_hours: 6 # full in 3 days
+    spots: 2
+    spot_m: 1.2
+    one: a berry bush
+    many: berry bushes
+    stage: {pieces: fruit, of: 8, round: nearest}
+    words: {0: "{noun} stripped bare", 1: "{noun} with a few berries left", 4: "{noun} with berries", 6: "{noun} heavy with fruit"}
+  root_patch:
+    item: roots
+    cap: 8
+    take: [2, 4]
+    minutes: 30
+    regrow_hours: 15 # 5 days
+    spots: 2
+    spot_m: 1.0
+    one: a patch of edible roots
+    many: patches of edible roots
+    stage: {levels: [[0.6, leafy], [0.01, thin], [0, dug]]}
+    words: {leafy: "{noun}, leafy", thin: "{noun}, thin and picked over", dug: "{noun}, dug over"}
+  reed_bed:
+    item: reeds
+    cap: 20
+    take: [5, 8]
+    minutes: 20
+    regrow_hours: 4.8 # 4 days
+    spots: 3
+    spot_m: 1.5
+    one: a reed bed
+    many: reed beds
+    stage: {pieces: reeds, of: 5, round: up}
+    words: {0: "{noun} cut to the stubble", 1: "{noun}, thin", 3: "{noun}", 5: "{noun}, thick and tall"}
+  deadwood:
+    item: wood
+    cap: 6
+    take: [2, 3]
+    minutes: 20
+    regrow_hours: 8 # 2 days
+    spots: 2
+    spot_m: 1.2
+    one: some fallen wood
+    many: piles of fallen wood
+    stage: {pieces: pile, of: 4, round: up}
+    words: {0: "{noun}, all gathered up", 1: "{noun}, a little left", 3: "{noun}"}
+  nut_tree:
+    item: nuts
+    cap: 15
+    take: [4, 8]
+    minutes: 20
+    regrow_hours: 11 # 7 days
+    spots: 2
+    spot_m: 1.4
+    one: an oak dropping nuts
+    many: oaks dropping nuts
+    stage: {pieces: nuts, of: 5, round: up} # nuts on the ground: ceil(stock / 3)
+    words: {0: "{noun}, the ground beneath picked clean", 1: "{noun}, a few nuts beneath", 3: "{noun}, nuts thick beneath"}
+  tree:
+    item: wood
+    cap: 10 # logs
+    take: [10, 10] # all of it: the tree falls
+    minutes: 60
+    axe_minutes: {iron axe: 60, stone axe: 90}
+    stump_days: 5
+    sapling_days: 5
+    spots: 1
+    spot_m: 0.9
+    one: a tall tree
+    many: tall trees
+    words: {standing: "{noun}", stump: "{noun} felled to a stump", sapling: "{noun} grown back as a sapling"}
+  fishing_spot:
+    item: fish
+    cap: 20
+    sea_cap: 30
+    take: [1, 3]
+    chance: 0.35
+    minutes: 30
+    regrow_hours: 4.8 # 4 days (the sea's 6)
+    spots: 3
+    spot_gap_m: 3.0
+    one: a good fishing spot
+    many: good fishing spots
+    stage: {levels: [[6, ripples], [0, still]], by: stock} # ripples and jumping fish while stock > 5
+    words: {ripples: "{noun}, fish jumping", still: "{noun}, the water still"}
+  flint_seam:
+    item: flint
+    cap: 30
+    take: [1, 1]
+    minutes: 10
+    full_days: 20
+    full_days_by_cap: {40: 15} # the eastern wall scar
+    spots: 2
+    spot_m: 1.5
+    one: a flint seam
+    many: flint seams
+    stage: {levels: [[0.75, heap-4], [0.5, heap-3], [0.01, heap-2], [0, rubble]]}
+    words: {heap-4: "{noun} rich with nodules", heap-3: "{noun}", heap-2: "{noun}, nearly worked out", rubble: "{noun}, worked out to rubble"}
+  obsidian_field:
+    item: obsidian
+    cap: 40
+    take: [1, 1]
+    minutes: 15
+    full_days: 30
+    spots: 2
+    spot_m: 2.0
+    one: a field of black glassy rock
+    many: fields of black glassy rock
+    stage: {levels: [[0.75, heap-4], [0.5, heap-3], [0.01, heap-2], [0, rubble]]}
+    words: {heap-4: "{noun}, sharp shards everywhere", heap-3: "{noun}", heap-2: "{noun}, few shards left", rubble: "{noun}, picked over"}
+  iron_sand_bar:
+    item: iron sand
+    cap: 60
+    take: [1, 1]
+    minutes: 15
+    full_days: 10 # the river brings sand
+    spots: 2
+    spot_m: 1.5
+    one: a bar of dark iron sand
+    many: bars of dark iron sand
+    stage: {pieces: sand, of: 4, round: up}
+    words: {0: "{noun}, scraped bare", 1: "{noun}, thin", 3: "{noun}"}
+  gold_pool:
+    item: gold
+    cap: 40 # never grows back: the gold race
+    take: [1, 1]
+    chance: 0.5
+    minutes: 30
+    spots: 2
+    spot_gap_m: 1.5
+    one: a pool glinting with gold
+    many: pools glinting with gold
+    stage: {pieces: glints, of: 4, round: up}
+    words: {0: "a pool where gold once glinted", 1: "{noun}, a few glints left", 3: "{noun}"}
+  rice_paddy:
+    item: rice
+    cap: 60
+    take: [10, 10] # a sickle 15 (the paddies' own numbers live in app/sim/paddies.py)
+    minutes: 20
+    spots: 4
+    paddy_spot_m: [3.0, 4.0]
+    start_growth: [0, 0, 50, 50, 100, 100] # paddy-1 ... paddy-6 (100 = ripe, 60 rice standing)
+    one: a rice paddy
+    many: rice paddies
+    words: {seedlings: "{noun} of young seedlings", green: "{noun}, green and growing", gold: "{noun}, gold and ripe", stubble: "{noun}, harvested to stubble"}

@@ -6,49 +6,22 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from app.observability.events import ItemLocation, JsonScalar
-from app.sim import crafting, market, slots, society, tax
+from app.observability.events import JsonScalar
+from app.sim import crafting, market, paddies, reach, slots, society, tax
 from app.sim.acting import begin, settled
 from app.sim.core import SimCore
 from app.sim.exchange import storehouse_in_reach
-from app.sim.items import ITEMS, amount_words
+from app.sim.items import ITEMS
 from app.sim.perception import HOME_RADIUS_M, normalize
 from app.sim.state import ActionState, Citizen
 from app.sim.vec import Vec3
 from app.world_api.models import Work
 
-FARM_GROWTH = 12  # measures of rice an hour of tending ripens
-FIELD_ID = "rice-fields"  # the town's paddies: a place, and the store their ripe rice waits in
+FIELD_ID = "rice-fields"  # the town's paddies: a place
 
 WorkFinisher = Callable[[SimCore, Citizen, ActionState], str]  # does the task's work; returns the result text
 WorkTiming = Callable[[SimCore, Citizen], int | str]  # minutes the task takes now, or why it can't be done now
-
-
-def farm(core: SimCore, citizen: Citizen, _action: ActionState) -> str:
-    """An hour of tending ripens rice in the field; the farmer harvests what they can carry, the rest waits there."""
-    field = core.state.stores.setdefault(FIELD_ID, {})
-    field["rice"] = field.get("rice", 0) + FARM_GROWTH
-    grown = core.item_moved(
-        citizen, "rice", FARM_GROWTH, ItemLocation(kind="world"), ItemLocation(kind="store", id=FIELD_ID)
-    )
-    taken = min(field["rice"], core.room_for(citizen, "rice"))
-    if taken == 0:
-        return "You tend the rice paddies, but you can't carry any more rice."
-    field["rice"] -= taken
-    if field["rice"] == 0:
-        del field["rice"]
-    citizen.inventory["rice"] = citizen.inventory.get("rice", 0) + taken
-    harvested = core.item_moved(
-        citizen,
-        "rice",
-        taken,
-        ItemLocation(kind="store", id=FIELD_ID),
-        ItemLocation(kind="inventory", id=citizen.id),
-        cause_seq=grown,
-    )
-    tax.assess_harvest(core, citizen, taken, harvested)  # the rice tax's one seam (N1: call it from paddies.harvest)
-    left = " The rest stays in the field." if field.get("rice", 0) else ""
-    return f"You tend the rice paddies and harvest {amount_words(taken, ITEMS['rice'])}.{left}"
+WorkSpotFinder = Callable[[SimCore, Citizen], slots.Slot | str]  # a node's spot it is done at (claimed), or why none
 
 
 @dataclass(frozen=True)
@@ -66,6 +39,7 @@ class WorkTask:
     done: str = ""  # the result text when finished (tasks without a finisher)
     finish: WorkFinisher | None = None  # what finishing the task does to the world, and the result text
     timing: WorkTiming | None = None  # a task whose length or chance hangs on the world (else `minutes`, any time)
+    spot: WorkSpotFinder | None = None  # a task done at a node's spot (the paddies) rather than at a layout slot
 
 
 WORK_TASKS: tuple[WorkTask, ...] = (
@@ -77,7 +51,9 @@ WORK_TASKS: tuple[WorkTask, ...] = (
         places=(FIELD_ID,),
         nowhere="There are no fields here to tend.",
         label="tending the rice paddies",
-        finish=farm,
+        finish=paddies.farm,
+        timing=paddies.minutes,
+        spot=paddies.take_spot,
     ),
     WorkTask(
         "store food",
@@ -182,10 +158,20 @@ def start_work(core: SimCore, citizen: Citizen, action: Work) -> int:
         if not here:
             return settled(core, citizen, "work", "failed", task.nowhere)
         area = (here[0].centre, here[0].radius_m)
-    minutes = task.minutes if task.timing is None else task.timing(core, citizen)
-    if isinstance(minutes, str):  # before a slot is claimed, so a refusal holds none
-        return settled(core, citizen, "work", "failed", minutes)
-    slot = slots.take_work_slot(core, citizen, task.name, area)  # a task with slots is done at one (loom, stall)
+    if task.spot is None:
+        minutes = task.minutes if task.timing is None else task.timing(core, citizen)
+        if isinstance(minutes, str):  # before a slot is claimed, so a refusal holds none
+            return settled(core, citizen, "work", "failed", minutes)
+        slot = slots.take_work_slot(core, citizen, task.name, area)  # a task with slots is done at one (loom, stall)
+    else:  # done at a node's spot (the paddies): the spot taken decides how long (harvest or tend)
+        found = task.spot(core, citizen)
+        if isinstance(found, str):
+            return settled(core, citizen, "work", "failed", found)
+        slot = found
+        minutes = task.minutes if task.timing is None else task.timing(core, citizen)
+        if isinstance(minutes, str):
+            slots.release(core, citizen)
+            return settled(core, citizen, "work", "failed", minutes)
     if slot == "none here":
         return settled(core, citizen, "work", "failed", task.nowhere)
     if slot == "all taken":
@@ -193,7 +179,9 @@ def start_work(core: SimCore, citizen: Citizen, action: Work) -> int:
     args: dict[str, JsonScalar] = {"task": task.name}
     if isinstance(slot, slots.Slot):
         args |= slots.spot_args(slot)
-    work = begin(core, citizen, "work", task.label, args)
+    node = core.world.nodes.index.get(slot.owner) if isinstance(slot, slots.Slot) else None
+    target = reach.node_target(core, node) if node is not None else None  # a paddy farmed: the renderer marks it
+    work = begin(core, citizen, "work", task.label, args, target=target)
     work.item, work.store_id, work.until_tick = task.name, store_id, core.state.tick + minutes
     return work.number
 

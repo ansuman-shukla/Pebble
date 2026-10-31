@@ -157,12 +157,15 @@ def food_value(food: dict[str, int]) -> float:
     return sum(FOOD_VALUE[name] * count for name, count in food.items())
 
 
+THIN = ("a few", "a little", "thin", "picked over")  # a node's words when there's little left on it
+FISHING_SPOT = "a good fishing spot"  # how a fishing spot is told (data/world/node_stages.yaml)
+
+
 def resources_in_view(perception: Perception) -> list[Resource]:
-    """Wild plants in view (a plant's words say whether there's plenty: "a few nuts on the trees" is not)."""
+    """Wild plants in view (a plant's words say whether there's plenty: "a berry bush with a few berries left" or "a
+    patch of edible roots, thin and picked over" is not)."""
     return [
-        Resource(
-            thing.resource, DISTANCE[thing.nearness], not thing.label.startswith(("a few", "a little")), thing.label
-        )
+        Resource(thing.resource, DISTANCE[thing.nearness], not any(w in thing.label for w in THIN), thing.label)
         for thing in perception.things
         if thing.resource is not None
     ]
@@ -170,6 +173,13 @@ def resources_in_view(perception: Perception) -> list[Resource]:
 
 def fire_in_view(perception: Perception) -> Seen | None:
     return next((thing for thing in perception.things if thing.kind == "fire"), None)
+
+
+def fishing_here(perception: Perception) -> bool:
+    """A fishing spot right here (fish gather only at the drawn spots, 10 §1.1)."""
+    return any(
+        thing.label.startswith(FISHING_SPOT) and DISTANCE[thing.nearness] == "here" for thing in perception.things
+    )
 
 
 def water_here(perception: Perception) -> bool:

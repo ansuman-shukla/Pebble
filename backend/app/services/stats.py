@@ -1,10 +1,8 @@
-"""World stats for spectators, now or at a past tick: population, deaths, food stocks, wild resources and how busy
-each game day was."""
+"""World stats for spectators, now or at a past tick: population, deaths, food stocks, wild resources (what the nodes
+hold) and how busy each game day was."""
 
-import base64
 from typing import Literal
 
-import numpy as np
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlmodel import Session, col, select
@@ -14,7 +12,8 @@ from app.services.citizens import PersonRef, roster
 from app.services.entities import world_at
 from app.services.places import PlaceIndex
 from app.sim.clock import DAY_MINUTES, town_clock
-from app.sim.items import ITEMS, RESOURCES
+from app.sim.items import ITEMS
+from app.sim.nodes import NodeView, node_views
 from app.sim.state import Region
 
 REGION_NAMES: dict[Region, str] = {"town": "the castle town", "band_a": "Band A", "band_b": "Band B"}
@@ -43,9 +42,9 @@ class FoodStock(BaseModel):
 
 class ResourceStock(BaseModel):
     resource: str
-    now: int  # pieces in the wild, all cells together
+    now: int  # pieces in the wild, all nodes together
     start: int  # at the run's first snapshot
-    emptied_cells: int  # cells that had some at the start and have none now
+    emptied_nodes: int  # nodes that had some at the start and have none now
 
 
 class DayCount(BaseModel):
@@ -77,18 +76,21 @@ def _food(items: dict[str, int]) -> dict[str, int]:
     return {item: count for item, count in sorted(items.items()) if item in ITEMS and ITEMS[item].food > 0}
 
 
-def _start_resources(session: Session, run_id: str) -> np.ndarray | None:
+def _start_nodes(session: Session, run_id: str) -> dict[str, NodeView] | None:
+    """The nodes that differed from full at the run's first snapshot."""
     statement = (
-        select(col(Snapshot.state)["resources"].astext, col(Snapshot.state)["resource_columns"].as_integer())
+        select(col(Snapshot.state)["systems"]["nodes"]["data"])
         .where(Snapshot.run_id == run_id)
         .order_by(col(Snapshot.tick))
         .limit(1)
     )
     first = session.exec(statement).first()
-    if first is None:
-        return None
-    encoded, columns = first
-    return np.frombuffer(base64.b64decode(encoded), dtype=np.uint8).reshape(-1, columns)
+    return None if first is None else node_views(first)
+
+
+def _short(nodes: dict[str, NodeView], item: str) -> int:
+    """How far the nodes of an item are below their caps, together."""
+    return sum(view.cap - view.stock for view in nodes.values() if view.item == item)
 
 
 def world_stats(
@@ -138,19 +140,24 @@ def world_stats(
                 )
             )
 
-    start = _start_resources(session, run.id)
-    resources = []
-    for column, resource in enumerate(RESOURCES):
-        now_counts = state.resources[:, column].astype(np.int64)
-        start_counts = start[:, column].astype(np.int64) if start is not None else now_counts
-        resources.append(
-            ResourceStock(
-                resource=resource,
-                now=int(now_counts.sum()),
-                start=int(start_counts.sum()),
-                emptied_cells=int(((start_counts > 0) & (now_counts == 0)).sum()),
-            )
+    start = _start_nodes(session, run.id)
+    now = state.nodes
+    if start is None:
+        start = now
+    full = places.world.nodes.full_stock()
+    resources = [
+        ResourceStock(
+            resource=item,
+            now=total - _short(now, item),
+            start=total - _short(start, item),
+            emptied_nodes=sum(
+                1
+                for node_id, view in now.items()
+                if view.item == item and view.stock == 0 and (node_id not in start or start[node_id].stock > 0)
+            ),
         )
+        for item, total in full.items()
+    ]
 
     day_of = (col(Event.game_time) // DAY_MINUTES).label("day")
     counted = session.exec(

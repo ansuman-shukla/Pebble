@@ -6,7 +6,7 @@
      hunt: chance by skill × spear × strength × helpers ─▶ meat and hide, or it gets away (and may turn on you)
      attack: a blow that wounds it; a predator that survives is driven off (and may bite back)
  attack a person within reach: a blow that hurts them
- fish: 30 minutes at a river, lake or shallow sea shore ─▶ a few fish from the water's stock (or none)
+ fish: 30 minutes at a fishing spot's spot (10-world-v1 §1.1) ─▶ a few fish from its stock (or none)
  make_fire (skill "fire", wood): light a hearth within reach or a campfire where you stand
  feed_fire (wood): more fuel for a lit fire within reach; wood carried first, then wood on the ground beside it
 ```
@@ -14,14 +14,13 @@
 
 import math
 
-from app.observability.events import ItemLocation, ResourceChanged
-from app.sim import animals, fire, wear
+from app.observability.events import ItemLocation, JsonScalar
+from app.sim import animals, fire, nodes, reach, slots, wear
 from app.sim.acting import begin, capital, settled
 from app.sim.clock import SECONDS_PER_TICK
 from app.sim.core import REACH_M, WALK_AHEAD_TICKS, SimCore, Stride, TimedPoint
-from app.sim.ecology import schedule_regrowth
 from app.sim.fauna import SPECIES
-from app.sim.items import ITEMS, RESOURCE_INDEX, amount_words, tool_in
+from app.sim.items import ITEMS, amount_words, tool_in
 from app.sim.locomotion import gait_mps
 from app.sim.navigation import Route, WalkProgress, walk_along
 from app.sim.perception import match_animal, match_person, person_label
@@ -43,9 +42,7 @@ HELPER_M = 30.0
 CHANCE_RANGE = (0.05, 0.9)
 BLOW = (10.0, 25.0)  # an attack's injury, × strength (× spear)
 FIGHT_BACK = 0.5  # chance an attacked predator bites back
-FISH_MINUTES = 30
-FISH_CHANCE = 0.35  # by hand
-FISH_CATCH = (1, 3)
+FISHING_SPOT = "fishing_spot"
 WOODPILE_M = 5.0  # wood on the ground this close to a fire is its woodpile
 MAKE_FIRE_MINUTES = 10
 FEED_FIRE_MINUTES = 2
@@ -290,60 +287,63 @@ def _verb(action: ActionState) -> str:
 # --- fishing ---
 
 
-def fishing_cell(core: SimCore, citizen: Citizen) -> int | str:
-    """The water cell to fish from (the one with the most fish within reach), or why there's none."""
+def fishing_spot(core: SimCore, citizen: Citizen) -> reach.AtNode | str:
+    """The fishing spot to fish at (a free spot of one within reach), or why there's none: fish gather only at the
+    drawn fishing spots."""
     world = core.world
     if world.town_point(citizen.position) is not None:
         return "There's no water to fish in here."
-    column = RESOURCE_INDEX["fish"]
-    options = [citizen.cell] if world.river[citizen.cell] else []
-    options += [cell for cell in world.neighbours[citizen.cell] if world.biome(cell) in FISHING_WATERS]
-    if not options:
-        deep = any(world.biome(cell) == "deep_ocean" for cell in world.neighbours[citizen.cell])
-        return "The water here is too deep to fish without a boat." if deep else "There's no water to fish in here."
-    return max(options, key=lambda cell: (int(core.state.resources[cell, column]), -cell))
+    at = reach.at_node(core, citizen, "fish", {FISHING_SPOT})
+    if not isinstance(at, str) or not at.startswith("There are no fish"):
+        return at
+    if world.river[citizen.cell]:
+        return "The water here is too fast and shallow for fish."
+    around = {world.biome(cell) for cell in world.neighbours[citizen.cell]}
+    if around & FISHING_WATERS:
+        return "No fish come in close to the shore here."
+    if "deep_ocean" in around:
+        return "The water here is too deep to fish without a boat."
+    return "There's no water to fish in here."
+
+
+def catch_chance(by_hand: float, citizen: Citizen) -> float:
+    """A fishing session's chance of a catch: by hand (D70), better with a spear, a hunter's skill and strength."""
+    chance = by_hand * (SPEAR if tool_in(citizen.inventory, "spear") else 1.0)
+    chance *= (1.3 if "hunting" in citizen.skills else 1.0) * math.sqrt(citizen.traits.strength)
+    return min(CHANCE_RANGE[1], chance)
 
 
 def start_fish(core: SimCore, citizen: Citizen) -> int:
-    cell = fishing_cell(core, citizen)
-    if isinstance(cell, str):
-        return settled(core, citizen, "fish", "failed", cell)
     if core.room_for(citizen, "fish") == 0:
         return settled(core, citizen, "fish", "failed", "You can't carry any more.")
-    fish = begin(core, citizen, "fish", "fish", {})
-    fish.amount, fish.until_tick = cell, core.state.tick + FISH_MINUTES
+    at = fishing_spot(core, citizen)
+    if isinstance(at, str):
+        return settled(core, citizen, "fish", "failed", at)
+    reach.take_spot(core, citizen, at)
+    node_id = core.world.nodes.ids[at.node]
+    args: dict[str, JsonScalar] = {"node": node_id, "node_kind": FISHING_SPOT}
+    fish = begin(
+        core, citizen, "fish", "fish", args | slots.spot_args(at.slot), target=reach.node_target(core, at.node)
+    )
+    fish.target_id, fish.until_tick = node_id, core.state.tick + core.world.nodes.kind(at.node).minutes
     return fish.number
 
 
 def _finish_fish(core: SimCore, citizen: Citizen, action: ActionState) -> None:
-    cell, column = action.amount, RESOURCE_INDEX["fish"]
-    stock = int(core.state.resources[cell, column])
+    table = core.world.nodes
+    node = table.index[str(action.target_id)]
+    kind = table.kind(node)
+    stock = nodes.stock(core, node)
     if stock == 0:
         core.end_action(citizen, "failed", "You catch nothing; the water seems empty of fish.")
         return
     rng = core.state.rng("wild.fish")
-    chance = FISH_CHANCE * (SPEAR if tool_in(citizen.inventory, "spear") else 1.0)
-    chance *= (1.3 if "hunting" in citizen.skills else 1.0) * math.sqrt(citizen.traits.strength)
-    if rng.random() >= min(CHANCE_RANGE[1], chance):
+    if rng.random() >= catch_chance(kind.chance, citizen):
         core.end_action(citizen, "failed", "The fish slip away from you.")
         return
-    count = min(rng.randint(*FISH_CATCH), stock, core.room_for(citizen, "fish"))
-    core.state.resources[cell, column] = stock - count
-    schedule_regrowth(core, cell, "fish")
-    seq = core.emit(
-        "resource_changed",
-        ResourceChanged(cell=cell, resource="fish", before=stock, after=stock - count),
-        actor=citizen,
-    )
-    citizen.inventory["fish"] = citizen.inventory.get("fish", 0) + count
-    core.item_moved(
-        citizen,
-        "fish",
-        count,
-        ItemLocation(kind="resource", cell=cell),
-        ItemLocation(kind="inventory", id=citizen.id),
-        cause_seq=seq,
-    )
+    count = min(rng.randint(*kind.take), stock, core.room_for(citizen, "fish"))
+    seq = nodes.change(core, node, stock - count, citizen)
+    nodes.take_into(core, citizen, node, "fish", count, seq)
     core.end_action(citizen, "done", f"You catch {amount_words(count, ITEMS['fish'])}.")
 
 

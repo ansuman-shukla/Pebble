@@ -1,21 +1,24 @@
 """Gathering, eating and drinking (03): durative actions that take a while in one spot and change the body or the
 inventory when done; an eat or drink cut short keeps what it achieved so far.
+
+Gathering takes from a node (10-world-v1 §1.1) at one of its spots (`app.sim.reach`): berries from a bush, wood from
+fallen wood (or, with an axe, a whole tree felled into a stack of logs), flint from a seam, gold panned from the pool,
+rice from a ripe paddy (`app.sim.paddies`).
 """
 
 import math
 
-from app.observability.events import ItemLocation, ResourceChanged
-from app.sim import fire, ownership
+from app.observability.events import ItemLocation
+from app.sim import fire, nodes, ownership, paddies, reach, slots, wear
 from app.sim.acting import begin, item_name, settled, stack_in_reach
 from app.sim.core import REACH_M, SimCore
-from app.sim.ecology import schedule_regrowth
 from app.sim.exchange import store_in_reach
-from app.sim.items import GATHERED, ITEMS, RESOURCE_INDEX, amount_words
+from app.sim.items import ITEMS, amount_words, tool_in
+from app.sim.node_table import GATHERED, PADDY_KIND
 from app.sim.state import ActionState, Citizen
 from app.world_api.models import Drink, Eat, Gather
 
-GATHER_MINUTES = 20
-GATHER_YIELD = (3, 6)
+MINED = frozenset({"flint", "obsidian", "iron sand"})
 DRINK_MINUTES = 3
 COOKED = 1.5  # raw meat or fish eaten beside a fire is roasted: this much more filling
 RAW_SICK_CHANCE = 0.3
@@ -28,13 +31,36 @@ def start_gather(core: SimCore, citizen: Citizen, action: Gather) -> int:
         return settled(core, citizen, "gather", "failed", "Fish have to be caught; try fishing.")
     if resource is None or resource not in GATHERED:
         return settled(core, citizen, "gather", "failed", f"You can't gather {action.resource} here.")
-    if core.state.resources[citizen.cell, RESOURCE_INDEX[resource]] == 0:
-        return settled(core, citizen, "gather", "failed", f"There are no {resource} within reach.")
     if core.room_for(citizen, resource) == 0:
         return settled(core, citizen, "gather", "failed", "You can't carry any more.")
-    gather = begin(core, citizen, "gather", resource, {"resource": resource})
-    gather.item, gather.until_tick = resource, core.state.tick + GATHER_MINUTES
+    at = _gather_at(core, citizen, resource)
+    if isinstance(at, str):
+        return settled(core, citizen, "gather", "failed", at)
+    reach.take_spot(core, citizen, at)
+    table = core.world.nodes
+    kind_name, kind = table.kinds[at.node], table.kind(at.node)
+    minutes = kind.minutes
+    if kind_name == nodes.TREE_KIND:
+        minutes = kind.axe_minutes.get(str(tool_in(citizen.inventory, "axe")), minutes)
+    args = {"resource": resource, "node": table.ids[at.node], "node_kind": kind_name} | slots.spot_args(at.slot)
+    gather = begin(core, citizen, "gather", resource, args, target=reach.node_target(core, at.node))
+    gather.item, gather.target_id, gather.until_tick = resource, table.ids[at.node], core.state.tick + minutes
     return gather.number
+
+
+def _gather_at(core: SimCore, citizen: Citizen, resource: str) -> reach.AtNode | str:
+    """Wood comes from fallen wood first; with an axe and none within reach, a standing tree is felled."""
+    if resource != "wood":
+        return reach.at_node(core, citizen, resource)
+    deadwood = reach.at_node(core, citizen, "wood", {"deadwood"})
+    if not isinstance(deadwood, str):
+        return deadwood
+    tree = reach.at_node(core, citizen, "wood", {nodes.TREE_KIND})
+    if isinstance(tree, str):
+        return deadwood
+    if tool_in(citizen.inventory, "axe") is None:
+        return f"{deadwood.removesuffix('.')}, and felling a tree takes an axe."
+    return tree
 
 
 def start_eat(core: SimCore, citizen: Citizen, action: Eat) -> int:
@@ -91,35 +117,57 @@ def start_drink(core: SimCore, citizen: Citizen, action: Drink) -> int:
 
 def finish_gather(core: SimCore, citizen: Citizen, action: ActionState) -> None:
     resource = action.item
-    if resource is None:
-        raise ValueError("a gather action needs a resource")
-    column = RESOURCE_INDEX[resource]
-    cell = citizen.cell
-    before = int(core.state.resources[cell, column])
+    if resource is None or action.target_id is None:
+        raise ValueError("a gather action needs a resource and a node")
+    table = core.world.nodes
+    node = table.index[action.target_id]
+    kind_name, kind = table.kinds[node], table.kind(node)
+    if kind_name == nodes.TREE_KIND:
+        _fell(core, citizen, node)
+        return
+    if kind_name == PADDY_KIND:
+        text = paddies.harvest(core, citizen, node, sessions=1)
+        core.end_action(citizen, "done" if text.startswith("You harvest") else "failed", text)
+        return
+    before = nodes.stock(core, node)
     room = core.room_for(citizen, resource)
-    count = min(core.state.rng("doing.gather").randint(*GATHER_YIELD), before, room)
+    count = min(core.state.rng("doing.gather").randint(*kind.take), before, room)
     if count == 0:
         core.end_action(
             citizen, "failed", "You can't carry any more." if before else "You find nothing left to gather."
         )
         return
-    core.state.resources[cell, column] = before - count
-    schedule_regrowth(core, cell, resource)
-    seq = core.emit(
-        "resource_changed",
-        ResourceChanged(cell=cell, resource=resource, before=before, after=before - count),
-        actor=citizen,
-    )
-    citizen.inventory[resource] = citizen.inventory.get(resource, 0) + count
+    if kind.chance < 1 and core.state.rng("doing.pan").random() >= kind.chance:
+        core.end_action(citizen, "failed", f"You work a long while but find no {resource}.")
+        return
+    seq = nodes.change(core, node, before - count, citizen)
+    nodes.take_into(core, citizen, node, resource, count, seq)
+    verb = "pan" if resource == "gold" else "mine" if resource in MINED else "gather"
+    core.end_action(citizen, "done", f"You {verb} {amount_words(count, ITEMS[resource])}.")
+
+
+def _fell(core: SimCore, citizen: Citizen, node: int) -> None:
+    """The tree comes down along its yaw: its logs land as a stack at the trunk; the axe may break."""
+    axe = tool_in(citizen.inventory, "axe")
+    if axe is None:
+        core.end_action(citizen, "failed", "You have no axe to fell the tree with.")
+        return
+    table = core.world.nodes
+    logs = nodes.stock(core, node)
+    trunk = table.unit(node)
+    stack = core.new_stack("wood", logs, trunk, core.world.nearest_cell(trunk, citizen.cell))
+    seq = nodes.fell(core, citizen, node, stack.id)
     core.item_moved(
         citizen,
-        resource,
-        count,
-        ItemLocation(kind="resource", cell=cell),
-        ItemLocation(kind="inventory", id=citizen.id),
+        "wood",
+        logs,
+        ItemLocation(kind="resource", id=table.ids[node], cell=int(table.cells[node])),
+        ItemLocation(kind="ground", id=stack.id, cell=stack.cell, position=stack.position),
         cause_seq=seq,
     )
-    core.end_action(citizen, "done", f"You gather {amount_words(count, ITEMS[resource])}.")
+    broke = wear.use_tool(core, citizen, axe, cause_seq=seq)
+    text = f"The tree falls with a crash; {amount_words(logs, ITEMS['wood'])} lies by the stump."
+    core.end_action(citizen, "done", text + (f" Your {axe} breaks." if broke else ""))
 
 
 def finish_eat(core: SimCore, citizen: Citizen, action: ActionState) -> None:

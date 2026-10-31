@@ -48,6 +48,7 @@ from app.services.entities import (
     wild_entities,
 )
 from app.sim.clock import town_clock
+from app.sim.nodes import NodeView
 from app.sim.snapshot import SimSnapshot
 
 log = logging.getLogger("pebble.live")
@@ -57,6 +58,10 @@ log = logging.getLogger("pebble.live")
 LIVE_EVENT_TYPES = frozenset({"said", "died", "action_started", "action_finished", "node_changed"})
 LISTEN_TIMEOUT_S = 1.0  # how often the listener looks at the clock while no ticks arrive (pause, speed changes)
 RESYNC = None  # queued to clients that must reconnect for a fresh snapshot (a newer run, a rewritten history)
+
+
+class NodeEntity(NodeView):
+    id: str  # "flora:<index in GET /world/flora>", a feature's id, or a paddy's ("paddy-1")
 
 
 class LiveState(BaseModel):
@@ -75,6 +80,9 @@ class LiveState(BaseModel):
     citizens: list[CitizenEntity]
     animals: list[AnimalEntity]
     fires: list[FireEntity]
+    # every node that differs from full (10-world-v1 §1.1: a picked bush, a stump, a paddy short of ripe), in
+    # `snapshot` messages only; after it each change comes as a `node_changed` event (its `stage` and `after`)
+    nodes: list[NodeEntity] = []
 
 
 class LiveEventDetail(BaseModel):
@@ -136,6 +144,9 @@ class RunFeed:
             citizens=citizens,
             animals=animals,
             fires=fires,
+            nodes=[NodeEntity(id=node_id, **view.model_dump()) for node_id, view in sorted(self.state.nodes.items())]
+            if kind == "snapshot"
+            else [],
         )
 
     def advance(self, session: Session, run: Run) -> list[LiveMessage] | None:

@@ -5,7 +5,7 @@ finding them within reach. Every failure is an in-world sentence.
 import re
 from collections.abc import Mapping
 
-from app.observability.events import ActionEnded, ActionStarted, JsonScalar
+from app.observability.events import ActionEnded, ActionStarted, JsonScalar, Target
 from app.sim.core import REACH_M, SimCore
 from app.sim.items import ITEM_WORDS, TOOL_WORDS, tool_in
 from app.sim.perception import normalize
@@ -39,11 +39,18 @@ VERB: dict[str, str] = {
 
 
 def begin(
-    core: SimCore, citizen: Citizen, kind: ActionName, label: str, args: dict[str, JsonScalar], destination: str = ""
+    core: SimCore,
+    citizen: Citizen,
+    kind: ActionName,
+    label: str,
+    args: dict[str, JsonScalar],
+    destination: str = "",
+    target: Target | None = None,
 ) -> ActionState:
     number = citizen.next_action
     citizen.next_action += 1
-    seq = core.emit("action_started", ActionStarted(number=number, action=kind, args=args, label=label), actor=citizen)
+    started = ActionStarted(number=number, action=kind, args=args, label=label, target=target)
+    seq = core.emit("action_started", started, actor=citizen)
     action = ActionState(
         number=number,
         kind=kind,
