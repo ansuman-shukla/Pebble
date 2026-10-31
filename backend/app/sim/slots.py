@@ -585,8 +585,10 @@ def reserve_place(core: SimCore, citizen: Citizen, place_id: str) -> Vec3:
     return _arrival(core, citizen, layout(core).places.get(place_id, ()), place.stand, with_centre=True)
 
 
-def reserve_home(core: SimCore, citizen: Citizen, home: Structure) -> Vec3:
-    return _arrival(core, citizen, layout(core).homes.get(home.id, ()), home.door, with_centre=True)
+def reserve_home(core: SimCore, citizen: Citizen, home: Structure, work: bool = True) -> Vec3:
+    """Walking home: a work slot within reach of the door (`work`; the loom for its weaver), else before the door."""
+    slots = tuple(slot for slot in layout(core).homes.get(home.id, ()) if work or slot.kind != "work")
+    return _arrival(core, citizen, slots, home.door, with_centre=True)
 
 
 def reserve_owner(core: SimCore, citizen: Citizen, owner_id: str, centre: Vec3, goal: Vec3) -> Vec3:
@@ -706,8 +708,7 @@ def settle(core: SimCore) -> None:
 def _come_out(core: SimCore, citizen: Citizen, home: Structure) -> None:
     """Awake again: out of the door to a free spot before the house (a stand, the queue, else round the door), never
     straight onto a work slot (the lord's seat, the loom's stool): they walk to work when they set to it."""
-    before_door = tuple(slot for slot in layout(core).homes.get(home.id, ()) if slot.kind != "work")
-    step_to(core, citizen, _arrival(core, citizen, before_door, home.door, with_centre=True), straight=True)
+    step_to(core, citizen, reserve_home(core, citizen, home, work=False), straight=True)
 
 
 def _move_queues(core: SimCore) -> None:
