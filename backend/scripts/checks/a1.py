@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from typing import ClassVar, override
 
 from app.observability.events import Died, EventDraft, Injured, TickSummary
-from app.sim.animals import CHARGE_M, DEN_CHARGE_M, DUSK_ALTITUDE_DEG, GROUP_M, WILDLIFE
+from app.sim.animals import ALARM_M, CHARGE_M, DEN_CHARGE_M, DUSK_ALTITUDE_DEG, GROUP_M, WILDLIFE
 from app.sim.clock import DAY_MINUTES, SECONDS_PER_TICK
 from app.sim.courses import metres
 from app.sim.fauna import LIVING_SITES, SPECIES, den_of, near_people
@@ -17,7 +17,6 @@ from app.sim.state import Citizen
 from app.sim.vec import Vec3
 from scripts.checks.base import Check, Outcome
 
-ALARM_M = 60.0
 CAMP_M = 1000.0  # "near a camp": this close to a living site
 
 
