@@ -13,12 +13,22 @@ from app.brains.profile import BrainProfile, known_titles
 from app.brains.routines import Context
 from app.brains.senses import Needs
 from app.observability.events import Gestured, GoalSet, Said
+from app.sim import fire as fires
 from app.sim.simulation import Simulation
 from app.sim.slots import OCCUPY_M, held_slot
+from app.sim.state import Fire
 from app.sim.vec import step_towards
 from app.world_api.facade import ActionHandle, WorldApi
 from app.world_api.models import ActionResult, Perception
-from tests.sim_helpers import add_animal, make_spec, put_in_the_wild, skip_to, wild_cell, without_animals
+from tests.sim_helpers import (
+    add_animal,
+    make_spec,
+    move_animal,
+    put_in_the_wild,
+    skip_to,
+    wild_cell,
+    without_animals,
+)
 
 SEED = 7
 ROAD = (0.0, 150.0)  # on the approach road, outside the walls
@@ -159,6 +169,22 @@ def test_a_predator_prowling_in_view_hurries_you_unless_walls_or_a_fire_keep_it_
     wolf.activity = "sleeping"
     assert brain.pace(brain.api.look_around(), calm) == "walk"
     assert brain.pace(brain.api.look_around(), Needs(0, 3, 0)) == "run"  # desperate for water
+
+    wolf.activity = "walking"
+    camp = Fire(id="fire:9", kind="campfire", position=forager.position, cell=forager.cell, height_m=forager.height_m)
+    fires.add_fuel(camp, 300)
+    sim.state.fires[camp.id] = camp
+    seen = brain.api.look_around()
+    assert any(t.kind == "fire" and t.doing == "burning" for t in seen.things)
+    assert brain.pace(seen, calm) == "walk"  # a burning fire keeps it off
+
+    townie = sim.add_citizen(make_spec("townie", at=(0.0, 98.0)))  # inside the main gate
+    skip_to(sim, townie.position, night=False)
+    move_animal(sim, wolf, sim.world.town.to_unit(0.0, 170.0))  # out on the approach road, 72 m off
+    town = _brain(sim, townie.id, "townsperson")
+    seen = town.api.look_around()
+    assert [(a.label, a.doing) for a in seen.animals] == [("a wolf", "on the move")]
+    assert town.pace(seen, calm) == "walk"  # the walls keep it out
 
 
 def _near_camp(sim: Simulation) -> int:
