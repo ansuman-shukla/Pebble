@@ -50,6 +50,7 @@ import type {
   GlobePlayerState,
 } from '@/components/world/globe/globe-player';
 import { GlobeWalker } from '@/components/world/globe/globe-walker';
+import { GlobeWildMarks } from '@/components/world/globe/wild-marks';
 import { Minimap, type MinimapTown } from '@/components/world/globe/minimap';
 import { EventFeed } from '@/components/world/globe/event-feed';
 import {
@@ -473,6 +474,7 @@ const GlobeScene = memo(function GlobeScene({
           terrain={terrain}
           furniture={furniture}
         />
+        <GlobeWildMarks places={view.places} terrain={terrain} />
         <BiomeScatter
           scatter={planet.scatter}
           focusRef={focusRef}
