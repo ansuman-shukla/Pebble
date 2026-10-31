@@ -12,10 +12,12 @@ PROGRESS = frozenset({"walk_to", "gather", "eat", "drink", "work", "sleep"})
 MAX_STALL_H = 6.0  # test_living's MAX_STALL_TICKS
 MAX_NEED_DAMAGE = 10.0  # health lost to hunger and thirst
 USED_ACTIONS = frozenset(
-    {"walk_to", "follow", "gather", "fish", "hunt", "eat", "drink", "make_fire", "feed_fire", "rest", "sleep", "work"}
+    {"walk_to", "follow", "gather", "hunt", "eat", "drink", "make_fire", "feed_fire", "rest", "sleep", "work"}
     | {"wait"}
 )  # the durative actions a run must use (test_the_brains_use_every_action_but_recall)
-LUCKY_ACTIONS = frozenset({"attack", "flee"})  # reported, not required: a predator must happen to come close (D107)
+# reported, not required: a predator must happen to come close (D107); a forager must happen to stand at one of the
+# few drawn fishing spots (D152)
+LUCKY_ACTIONS = frozenset({"attack", "flee", "fish"})
 
 
 class Stall(Check):
