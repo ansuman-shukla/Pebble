@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from app.observability.events import ActionEnded, EventDraft, Injured, ItemLocation, Took, Trespassed
+from app.observability.events import ActionEnded, EventDraft, Injured, ItemLocation, Took, TreeFelled, Trespassed
 from app.sim import animals as animal_life
 from app.sim import society, territory, wild
 from app.sim.animals import WILDLIFE
@@ -20,7 +20,7 @@ from app.sim.state import Animal, AnimalGroup, Fire
 from app.sim.territory import TERRITORY, Claim, claim_at, ground_words, safety
 from app.sim.vec import Vec3, step_towards
 from app.world_api.facade import WorldApi, run_until_done
-from tests.sim_helpers import make_spec, put_in_the_wild, skip_to, wild_cell, without_animals
+from tests.sim_helpers import make_spec, put_in_the_wild, skip_to, stand_at_node, wild_cell, without_animals
 
 R = 2000.0  # the world's radius (m), for offsets
 TOWN = ["town", "well", "main-gate"]
@@ -303,16 +303,58 @@ def test_taking_from_the_wild_on_another_groups_ground_is_poaching(
 
 
 def test_takes_from_stores_the_ground_or_the_world_are_never_poaching(new_sim: Callable[..., Simulation]) -> None:
+    """Goods from a store, a ground pile (finders keepers), the world or a pack are no take from the wild; nor are the
+    wild's goods put into someone else's hands. The wild's goods dropped onto a pile by the taker are (a felling)."""
     sim = _scene(new_sim)
     kaz = _person(sim, "kaz", _hotspot(sim, "lords_woods"), region="band_b")
     sim.drain()
     for kind in ("store", "ground", "world", "inventory"):
         _take(sim, kaz, ItemLocation(kind=kind, id="somewhere"))
-    citizen = sim.citizen(kaz)  # the wild's goods dropped beside him, not taken into his hands
-    wild = ItemLocation(kind="animal", id="deer:1")
-    sim.core.item_moved(citizen, "meat", 2, wild, ItemLocation(kind="ground", id="stack-9", position=citizen.position))
-    sim.core.item_moved(citizen, "meat", 2, wild, ItemLocation(kind="inventory", id="someone-else"))
+    citizen = sim.citizen(kaz)
+    wild = ItemLocation(kind="resource", id="flora:1")
+    sim.core.item_moved(citizen, "wood", 2, wild, ItemLocation(kind="inventory", id="someone-else"))
     assert _trespasses(sim.drain()) == []
+    pile = ItemLocation(kind="ground", id="stack-9", position=citizen.position)
+    sim.core.item_moved(citizen, "wood", 10, wild, pile)
+    assert [(t.owner, t.took) for _, t in _trespasses(sim.drain())] == [("town", Took(item="wood", count=10))]
+
+
+def _tree_in(sim: Simulation, hotspot: str) -> int:
+    """A tree of the hotspot with no fallen wood within 8 m (an axe there fells the tree)."""
+    table = sim.world.nodes
+    for node, kind in enumerate(table.kinds):
+        if kind != "tree" or table.hotspots[node] != hotspot:
+            continue
+        near = table.near(sim.world.grid, table.unit(node), 8.0)
+        if all(table.kinds[other] != "deadwood" for _, other in near):
+            return node
+    raise LookupError(hotspot)
+
+
+@pytest.mark.parametrize(
+    ("region", "where", "owner"),
+    [
+        ("band_a", "b_wood", "band_b"),
+        ("band_b", "b_wood", None),
+        ("band_b", "lords_woods", "town"),
+        ("town", "lords_woods", None),  # town folk may take wood in the Lord's woods: only hunting is the lord's
+    ],
+)
+def test_felling_a_tree_on_another_groups_ground_is_poaching_its_logs(
+    new_sim: Callable[..., Simulation], region: str, where: str, owner: str | None
+) -> None:
+    sim = _scene(new_sim)
+    tree = _tree_in(sim, where)
+    feller = _person(sim, "feller", sim.world.nodes.unit(tree), region=region, inventory={"iron axe": 1})
+    stand_at_node(sim, feller, tree)
+    skip_to(sim, sim.citizen(feller).position, night=False)
+    sim.drain()
+    result = run_until_done(sim, WorldApi(sim, feller).gather("wood"), 120)
+    assert result.outcome == "done" and result.text.startswith("The tree falls")
+    events = sim.drain()
+    logs = next(e.payload.logs for e in events if isinstance(e.payload, TreeFelled))
+    told = [(t.owner, t.took) for _, t in _trespasses(events)]
+    assert told == ([(owner, Took(item="wood", count=logs))] if owner else [])
 
 
 def test_band_a_hunting_on_band_b_ground_poaches_and_on_its_own_does_not(

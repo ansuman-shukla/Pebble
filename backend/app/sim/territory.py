@@ -9,9 +9,10 @@ safe a spot is, and the dens people learned to fear.
   anyone but the lord, samurai and ashigaru inside the castle walls a `castle` deed, once per entry: again only after
   they left, or on a later night.
 - **Poaching** (`trespassed {kind: ground, took}`): taking from the wild (a node, a fishing water, a hunted animal:
-  any `item_moved` from a `resource` or an `animal` into the taker's hands) on another group's ground, or hunting in
-  the Lord's woods without the lord's or a samurai's title. One deed per take (a hunt's meat and hide are one take).
-  Learned from the events as they are emitted, so no action calls in here.
+  any `item_moved` by a citizen from a `resource` or an `animal` into their hands or onto a ground pile, as a felled
+  tree's logs fall) on another group's ground, or hunting in the Lord's woods without the lord's or a samurai's
+  title. One deed per take (a hunt's meat and hide are one take). Learned from the events as they are emitted, so no
+  action calls in here.
 - **Safety** (`you.safety`): inside the walls, by a lit fire, in company (two others close), on home ground, else
   exposed; the first three are where predators don't attack (D68, `animals.exposed`).
 - **Dens.** Someone a predator charges at its den learns that den and keeps DEN_KEEP_AWAY_M from it after (brains
@@ -255,8 +256,8 @@ def _took(core: SimCore, event: EventDraft, moved: ItemMoved) -> None:
     destination = moved.destination
     if taker is None or moved.source.kind not in WILD_SOURCES:
         return
-    if destination.kind != "inventory" or destination.id != taker.id:
-        return
+    if not (destination.kind == "inventory" and destination.id == taker.id) and destination.kind != "ground":
+        return  # into the taker's hands, or onto a pile (a felled tree's logs); never into someone else's
     territory = TERRITORY.of(core.state)
     if event.cause_seq is not None and event.cause_seq == territory.last_take:
         return  # the same take's other goods (a hunt's hide after its meat)
