@@ -34,7 +34,7 @@ from app.brains.senses import (
     wood_at_hand,
 )
 from app.world_api.facade import ActionHandle, WorldApi
-from app.world_api.models import Compass, Perception, RoughDistance
+from app.world_api.models import Compass, Perception, RoughDistance, TimeOfDay
 
 WORK = 30.0  # the score of an ordinary day's routine
 FIELDS = "the rice fields"
@@ -51,6 +51,10 @@ HUNT_TRIES = 3  # hunts (and as many searches for game) a hunter tries a day
 FISH_CHANCE = 0.3  # a forager standing at a river or lake fishes instead of gathering this often
 FIRE = "the fire pit"
 BASKETS = "the main gate"  # where the guard lights the fire baskets at dusk
+BELL_TOWER = "the bell tower"
+BELL = 88.0  # the bell can't wait: above hungry (85) and thirsty (80), below starving, parched, exhausted (90), danger
+# when to go: the words of the sun where the monk stands (a bell's moment is the town's clock, see `sim/society.py`)
+BELLS: dict[TimeOfDay, str] = {"dawn": "dawn bell", "midday": "noon bell", "sunset": "dusk bell", "dusk": "dusk bell"}
 
 
 @dataclass(frozen=True)
@@ -246,10 +250,37 @@ def town_child(ctx: Context) -> list[Option]:
 
 
 def monk(ctx: Context) -> list[Option]:
-    """Prays at the temple by day (the bell, alms and tending come with their own systems)."""
+    """Rings the bell at dawn, noon and dusk; prays at the temple by day (alms and tending come with their own
+    systems)."""
+    bell = BELLS.get(ctx.perception.time_of_day)
+    if bell is not None and not ctx.done_today(bell) and _rang(ctx, bell):
+        ctx.mark_done(bell)
+    if bell is not None and not ctx.done_today(bell):
+        return [_ring(ctx, bell)]
     if not _daytime(ctx):
         return []
     return [_work_at(ctx, TEMPLE, "pray")]
+
+
+def _ring(ctx: Context, bell: str) -> Option:
+    if not at(ctx.perception, BELL_TOWER):
+        return _go(ctx, BELL_TOWER, BELL)
+
+    def start() -> ActionHandle:
+        handle = ctx.api.work("ring bell")
+        ctx.notes["bell"] = [bell, handle.number]
+        return handle
+
+    return Option(BELL, "ring the bell", start)
+
+
+def _rang(ctx: Context, bell: str) -> bool:
+    """The last try at this bell rang it, or found it rung (an interrupted one didn't)."""
+    tried = ctx.notes.get("bell")
+    if not isinstance(tried, list) or len(tried) != 2 or tried[0] != bell or not isinstance(tried[1], int):
+        return False
+    result = ctx.api.handle(tried[1]).result
+    return result is not None and (result.outcome == "done" or "rung" in result.text)
 
 
 def townsperson(ctx: Context) -> list[Option]:

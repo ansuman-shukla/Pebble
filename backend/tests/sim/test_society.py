@@ -7,6 +7,8 @@ from typing import Any
 
 import pytest
 
+from app.brains.brain import UtilityBrain
+from app.brains.profile import BrainProfile
 from app.observability.events import (
     Accused,
     BellRang,
@@ -30,6 +32,7 @@ from app.sim.snapshot import restore, take_snapshot
 from app.sim.society import SOCIETY, Laws, load_laws
 from app.sim.state import ActionState, Citizen
 from app.sim.wear import WEAR
+from app.world_api.facade import WorldApi
 from app.world_api.models import Work
 from tests.sim_helpers import GATE, make_spec, without_animals
 
@@ -585,6 +588,32 @@ def test_a_run_starting_in_the_small_hours_starts_under_the_night_law(new_sim: C
     sim.state.tick = _at(3 * 60)
     society.keep_night(sim.core)
     assert society.night_law(sim.core)
+
+
+def test_the_monk_rings_three_bells_a_day_near_dawn_noon_and_dusk(new_sim: Callable[..., Simulation]) -> None:
+    """The scripted monk: three bells each town day, each within 10 minutes of its moment by the town's clock."""
+    sim = _scene(
+        new_sim,
+        {
+            "citizen_id": "ennen",
+            "home": "temple-hall",
+            "at": (70.0, -62.0),
+            "skills": ["healing"],
+            "knows_places": ["town", "temple", "bell-tower", "well", "storehouses"],
+        },
+    )
+    sim.stock_store("store-2", "rice", 50)  # the granary he eats from
+    profile = BrainProfile("ennen", "Ennen", "monk of the temple", "town", "The castle town", ("healing",))
+    brain = UtilityBrain(WorldApi(sim, "ennen"), profile, seed=3)
+    rung: list[tuple[int, str]] = []
+    for _ in range(DAY_MINUTES + 10 * 60):  # 08:00 on day 0 to 18:00 on day 1
+        brain.tick()
+        sim.step()
+        rung += [(event.tick, event.payload.kind) for event in sim.drain() if isinstance(event.payload, BellRang)]
+    moments = {"dawn": 6 * 60, "noon": 12 * 60, "dusk": 18 * 60}
+    assert [kind for _, kind in rung] == ["noon", "dusk", "dawn", "noon", "dusk"]
+    for tick, kind in rung:
+        assert 0 <= (tick + START_MINUTE) % DAY_MINUTES - moments[kind] <= 10
 
 
 # --- determinism and snapshots ---
