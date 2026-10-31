@@ -14,18 +14,18 @@ def phrase(label: str, where: str, doing: str | None) -> str:
     return f"{label}{joint}{where}" + (f" ({doing})" if doing else "")
 
 
-def phrases(entries: Iterable[tuple[str, str, str | None]]) -> list[str]:
-    """Entries (label, where, doing) at the same place doing the same share one phrase ("Suna and Tek a few paces to
-    the east (resting)")."""
-    groups: list[tuple[str, str | None, list[str]]] = []
-    for label, where, doing in entries:
-        shared = not where.startswith(NEAREST)
-        same = next((g for g in groups if shared and (g[0], g[1]) == (where, doing)), None)
+def phrases(entries: Iterable[tuple[str, str, str | None, bool]]) -> list[str]:
+    """Entries (label, where, doing, alone) at the same place doing the same share one phrase ("Suna and Tek a few
+    paces to the east (resting)"); an entry told `alone` ("Genzo, your father,") never shares one."""
+    groups: list[tuple[str, str | None, list[str], bool]] = []
+    for label, where, doing, alone in entries:
+        shared = not alone and not where.startswith(NEAREST)
+        same = next((g for g in groups if shared and g[3] and (g[0], g[1]) == (where, doing)), None)
         if same is None:
-            groups.append((where, doing, [label]))
+            groups.append((where, doing, [label], shared))
         else:
             same[2].append(label)
-    return [phrase(join(labels), where, doing) for where, doing, labels in groups]
+    return [phrase(join(labels), where, doing) for where, doing, labels, _ in groups]
 
 
 def join(parts: list[str]) -> str:

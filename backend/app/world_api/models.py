@@ -514,10 +514,10 @@ class Perception(_Model):
 
 
 def _said(seen: list[Seen]) -> list[str]:
-    return phrases((_known_as(entry), entry.where, entry.doing) for entry in seen)
-
-
-def _known_as(seen: Seen) -> str:
-    """A person with what you know of them ("Genzo, your father,"); anyone else as they are seen."""
-    known = [words for words in (seen.relation, seen.regard) if words]
-    return ", ".join([seen.label, *known]) + "," if known else seen.label
+    """A person with what you know of them is told in a phrase of their own ("Genzo, your father, a few paces …")."""
+    told = []
+    for entry in seen:
+        known = [words for words in (entry.relation, entry.regard) if words]
+        label = ", ".join([entry.label, *known]) + "," if known else entry.label
+        told.append((label, entry.where, entry.doing, bool(known)))
+    return phrases(told)

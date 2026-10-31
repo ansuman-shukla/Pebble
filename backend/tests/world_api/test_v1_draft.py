@@ -234,3 +234,24 @@ def test_the_v1_fields_are_told_in_words_when_set() -> None:
     )
     with pytest.raises(ValueError):
         _look(safety="safe enough")
+
+
+def test_someone_known_is_told_apart_from_a_group_without_doubled_commas() -> None:
+    here = {"where": "a few paces to the north", "nearness": "a few paces", "doing": "farming"}
+    people = [
+        {"label": "Suna", **here},
+        {"label": "Genzo", "relation": "your father", **here},
+        {"label": "Tek", **here},
+        {"label": "Ama", **here},
+    ]
+    text = _look(people=people).text()
+    assert text.splitlines()[2] == (
+        "You see Suna, Tek and Ama a few paces to the north (farming); "
+        "Genzo, your father, a few paces to the north (farming)."
+    )
+    assert ",," not in text
+    first = _look(people=[people[1], people[0], people[2]]).text().splitlines()[2]
+    assert first == (
+        "You see Genzo, your father, a few paces to the north (farming); "
+        "Suna and Tek a few paces to the north (farming)."
+    )
