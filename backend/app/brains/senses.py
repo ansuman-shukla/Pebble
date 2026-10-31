@@ -85,6 +85,19 @@ class Needs:
         )
 
 
+NEED_TOP = (30.0, 60.0, 90.0, 100.0)  # the most a need told at each level (0-3) can be, out of 100
+HARMFUL_NEED = 90.0  # starving or terribly thirsty: the body loses health
+# How much hungrier and thirstier a long night asleep makes you (02, D50: 4 and 6 an hour, ×0.75 asleep, ~12 h)
+NIGHT_HUNGER = 36.0
+NIGHT_THIRST = 54.0
+
+
+def harmful_by_morning(level: int, night_rise: float) -> bool:
+    """A night's sleep could carry a need told at this level to where it hurts (the words tell it only roughly, so
+    the worst they can mean counts)."""
+    return NEED_TOP[level] + night_rise >= HARMFUL_NEED
+
+
 DANGER_WORDS = ("wolf", "wolves", "bear", "lion", "shark")  # animals everyone knows can kill
 THREAT_DOING = frozenset({"coming at you", "watching you"})
 GAME_WORDS: tuple[tuple[str, str], ...] = (  # (word in what is seen, what a hunter calls it)
