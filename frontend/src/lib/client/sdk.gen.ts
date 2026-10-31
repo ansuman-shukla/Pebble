@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AdminChangeClockData, AdminChangeClockErrors, AdminChangeClockResponses, CitizensReadCitizenData, CitizensReadCitizenErrors, CitizensReadCitizenNeedsData, CitizensReadCitizenNeedsErrors, CitizensReadCitizenNeedsResponses, CitizensReadCitizenResponses, CitizensReadCitizensData, CitizensReadCitizensErrors, CitizensReadCitizensResponses, CitizensReadCitizenTimelineData, CitizensReadCitizenTimelineErrors, CitizensReadCitizenTimelineResponses, ClockReadGameClockData, ClockReadGameClockErrors, ClockReadGameClockResponses, ConversationsReadConversationsData, ConversationsReadConversationsErrors, ConversationsReadConversationsResponses, EntitiesReadEntitiesData, EntitiesReadEntitiesErrors, EntitiesReadEntitiesResponses, EventsReadEventsData, EventsReadEventsErrors, EventsReadEventsResponses, HealthReadHealthData, HealthReadHealthResponses, LiveLiveSchemaData, LiveLiveSchemaErrors, LiveLiveSchemaResponses, StatsReadStatsData, StatsReadStatsErrors, StatsReadStatsResponses, TownReadTownData, TownReadTownResponses, WorldReadFloraData, WorldReadFloraResponses, WorldReadPlacesData, WorldReadPlacesResponses, WorldReadWorldData, WorldReadWorldResponses } from './types.gen';
+import type { AdminChangeClockData, AdminChangeClockErrors, AdminChangeClockResponses, CitizensReadCitizenData, CitizensReadCitizenErrors, CitizensReadCitizenNeedsData, CitizensReadCitizenNeedsErrors, CitizensReadCitizenNeedsResponses, CitizensReadCitizenResponses, CitizensReadCitizensData, CitizensReadCitizensErrors, CitizensReadCitizensResponses, CitizensReadCitizenTimelineData, CitizensReadCitizenTimelineErrors, CitizensReadCitizenTimelineResponses, ClockReadGameClockData, ClockReadGameClockErrors, ClockReadGameClockResponses, ConversationsReadConversationsData, ConversationsReadConversationsErrors, ConversationsReadConversationsResponses, EntitiesReadEntitiesData, EntitiesReadEntitiesErrors, EntitiesReadEntitiesResponses, EventsReadEventsData, EventsReadEventsErrors, EventsReadEventsResponses, HealthReadHealthData, HealthReadHealthResponses, LiveLiveSchemaData, LiveLiveSchemaErrors, LiveLiveSchemaResponses, StatsReadStatsData, StatsReadStatsErrors, StatsReadStatsResponses, TownReadTownData, TownReadTownResponses, WorldReadFloraData, WorldReadFloraResponses, WorldReadFurnitureData, WorldReadFurnitureResponses, WorldReadPlacesData, WorldReadPlacesResponses, WorldReadWorldData, WorldReadWorldResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -126,6 +126,13 @@ export const worldReadWorld = <ThrowOnError extends boolean = false>(options?: O
  * Hotspots, hunting grounds, fixed features (nodes, dens, signposts, markers), roads, bridges and flora kinds.
  */
 export const worldReadPlaces = <ThrowOnError extends boolean = false>(options?: Options<WorldReadPlacesData, ThrowOnError>): RequestResult<WorldReadPlacesResponses, unknown, ThrowOnError> => (options?.client ?? client).get<WorldReadPlacesResponses, unknown, ThrowOnError>({ url: '/api/v1/world/places', ...options });
+
+/**
+ * Read Furniture
+ *
+ * The log seats, stools and mats people sit and lie on, where their slots are, in each site's local metres.
+ */
+export const worldReadFurniture = <ThrowOnError extends boolean = false>(options?: Options<WorldReadFurnitureData, ThrowOnError>): RequestResult<WorldReadFurnitureResponses, unknown, ThrowOnError> => (options?.client ?? client).get<WorldReadFurnitureResponses, unknown, ThrowOnError>({ url: '/api/v1/world/furniture', ...options });
 
 /**
  * Read Flora

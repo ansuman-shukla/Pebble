@@ -754,7 +754,7 @@ C1 publishes these models as a **draft** in wave 1; streams implement behind the
 Citizen `motion`, `posture`, `slot_heading`, `goal`, `driver`, `target {kind, id, name, position}`, `needs`,
 `carrying`, `coins`, `rank`, `standing`, `titles`; animal `goal`, `speed_mps`, `gait`, `target`, extended activity;
 route-ahead for stalks; changed node stages per tick; every live event gains `line`, `importance`, `position`.
-New endpoints: `GET /world/flora`, `GET /world/places` (hotspots, roads, dens, markers), `GET /scoreboard?at=`.
+New endpoints: `GET /world/flora`, `GET /world/places` (hotspots, roads, dens, markers), `GET /world/furniture` (log seats, mats, stools under slots, D198), `GET /scoreboard?at=`.
 
 ### 6.5 Determinism
 Same seed + same inputs → same events, as in v0. Every system rolls only on its own **named RNG stream**

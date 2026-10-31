@@ -344,7 +344,7 @@ test('the mock feed carries the spectator fields: motion, why, needs, purse, ran
   server.skip(3);
   const { citizens, animals } = server.entities();
   const byId = new Map(citizens.map((citizen) => [citizen.id, citizen]));
-  // Genzo starts in the paddies, Aiko at her loom: their motion says so, not their label
+  // Genzo starts in the paddies, Aiko on the stool at her loom: their motion says so, not their label
   expect(byId.get('genzo')).toMatchObject({
     activity: 'working',
     motion: 'farm',
@@ -355,7 +355,9 @@ test('the mock feed carries the spectator fields: motion, why, needs, purse, ran
   });
   expect(byId.get('aiko')).toMatchObject({
     motion: 'craft',
-    posture: 'crouching',
+    posture: 'sitting',
+    slot_heading: 180,
+    slot_height_m: 0.3,
   });
   expect(byId.get('tadamasa')).toMatchObject({ rank: 5, titles: ['lord'] });
   for (const citizen of citizens) {

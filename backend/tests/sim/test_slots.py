@@ -4,6 +4,7 @@ bodies that stand, sit or lie are within 0.8 m of each other."""
 
 from collections import Counter
 from collections.abc import Callable
+from dataclasses import replace
 
 import pytest
 
@@ -668,3 +669,104 @@ def test_the_first_in_line_still_on_the_way_keeps_the_freed_stand(new_sim: Calla
     sim.step()
     assert walker.action is not None and walker.action.kind == "walk_to"  # still on the way...
     assert _slot(sim, idle).id == "well#queue-2"  # ...so the one behind them doesn't take the stand
+
+
+def test_rest_never_claims_a_seat_it_cant_step_to(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    x, z = sim.world.structures["main-w-3"].door_xz
+    inside = sim.world.town.to_unit(x - 3.0, z)  # deep in the house, behind its walls: no way there in a few steps
+    behind_wall = Slot("main-w-3#seat-x", "main-w-3", "seat", inside, 0.0, "sitting", 0.45, words="on a stool")
+    lay = layout(sim.core)
+    SLOTS.of(sim.state).layout = replace(lay, slots={**lay.slots, behind_wall.id: behind_wall})
+    rester = sim.add_citizen(make_spec("rester", at=(x, z)))
+    assert sim.world.distance_m(rester.position, behind_wall.position) < STEP_MAX_M  # near, but inside the house
+    rest = WorldApi(sim, rester.id).rest(5)
+    started = [e.payload.model_dump()["args"] for e in sim.drain() if e.type == "action_started"]
+    assert started == [{"minutes": 5, "slot": None, "where": "on the ground"}] and claim_of(sim.core, rester) is None
+    spot = rester.position
+    sim.step()
+    assert rester.position == spot  # sits where they stand: the args never name a seat they don't sit on
+    assert run_until_done(sim, rest, 10).text == "You rest a while on the ground."
+
+
+def test_steps_over_open_ground_go_straight_only_a_few_metres(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    pit = sim.world.structures["band_a_camp:fire-pit"]
+    x, z = pit.centre_xz
+    camper = sim.add_citizen(make_spec("camper", site="band_a_camp", at=(x + 4.0, z), region="band_a"))
+    start = camper.position
+    near = step_towards(start, 0.0, STEP_MAX_M - 0.5, sim.world.radius_m)
+    assert step_to(sim.core, camper, near)  # straight over open ground (no walls; the outer grid is coarse)
+    assert sim.core.strides[camper.id].walked[0][0] == start and len(sim.core.strides[camper.id].walked) == 2
+    sim.core.strides.clear()
+    sim.core.place_at(camper, start)
+    beyond = step_towards(start, 0.0, STEP_MAX_M + 4.0, sim.world.radius_m)
+    assert sim.world.town_point(beyond) is None
+    assert not step_to(sim.core, camper, beyond) and camper.position == start  # no 12 m step at a tick's end
+
+
+def test_someone_who_moved_off_their_spot_this_tick_lets_it_go(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    stand = layout(sim.core).slots["well#stand-2"]
+    x, z = sim.world.town_point(stand.position) or (0.0, 0.0)
+    leader = sim.add_citizen(make_spec("leader", at=(x - 20.0, z)))
+    follower = sim.add_citizen(make_spec("follower", at=(x, z + 0.5), knows_people=["leader"]))
+    assert run_until_done(sim, WorldApi(sim, follower.id).walk_to_place("the well"), 1).text == "You are already there."
+    sim.step()
+    claimed = claim_of(sim.core, follower)
+    assert claimed is not None and claimed.approach and follower.position == stand.position
+    follow = WorldApi(sim, follower.id).follow("leader")  # the leader stands still: caught up within the tick
+    sim.step()
+    assert follow.result is not None and follow.result.text == "Leader stops, and you stop beside them."
+    assert claim_of(sim.core, follower) is None  # let go of the stand, not walked back to it
+    assert 1.1 < sim.world.distance_m(follower.position, leader.position) < 1.3
+
+
+def test_waking_up_comes_out_of_the_door_not_onto_the_seat_of_ones_work(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    sleepers = [
+        sim.add_citizen(make_spec(person, at=sim.world.structures[home].door_xz, home=home, skills=[skill]))
+        for person, home, skill in (("lord", "castle-keep", "governing"), ("weaver", "farmhouse-1", "weaving"))
+    ]
+    skip_to(sim, sleepers[0].position, night=True)
+    sleeps = [WorldApi(sim, person.id).sleep() for person in sleepers]
+    for sleep in sleeps:
+        assert run_until_done(sim, sleep, 18 * 60).text == "You wake up; it is morning."
+    sim.step()
+    for person in sleepers:
+        slot = _slot(sim, person)
+        assert slot.kind == "stand" and slot.id.endswith("#door"), slot.id  # not the lord's seat nor the loom's
+        assert sim.world.distance_m(person.position, slot.position) < 0.01
+    work = [slot for slot in layout(sim.core).slots.values() if slot.kind == "work"]
+    assert all(sim.world.distance_m(p.position, slot.position) >= PERSONAL_M for p in sleepers for slot in work)
+
+
+@pytest.mark.parametrize("stander", ["a-stander", "z-stander"])  # kept before or after the sitter is
+def test_nobody_loose_ends_on_the_legs_of_someone_sitting_loose(
+    new_sim: Callable[..., Simulation], stander: str
+) -> None:
+    sim = _sim(new_sim)
+    sitter = sim.add_citizen(make_spec("m-sitter", at=(-40.0, 61.0)))
+    WorldApi(sim, sitter.id).rest(30)  # no seat near: on the ground, holding no slot
+    assert claim_of(sim.core, sitter) is None
+    ahead = step_towards(sitter.position, (180.0 - sitter.heading_deg) % 360.0, 1.1, sim.world.radius_m)
+    other = sim.add_citizen(make_spec(stander, at=sim.world.town_point(ahead) or (0.0, 0.0)))
+    assert sim.world.distance_m(other.position, sitter.position) > PERSONAL_M  # clear of the body, on its legs
+    settle(sim.core)
+    feet = legs(sim.world, sitter.position, sitter.heading_deg)
+    assert sim.world.distance_m(other.position, feet) >= PERSONAL_M and crowded(sim.core) == []
+
+
+def test_a_rest_by_the_lean_tos_takes_a_free_log_by_the_fire(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    camper = sim.add_citizen(make_spec("camper", site="band_a_camp", at=(4.5, -4.5), region="band_a"))
+    pit = sim.world.structures["band_a_camp:fire-pit"]
+    seats = [slot for slot in layout(sim.core).owners[pit.id] if slot.kind == "seat"]
+    nearest = min(sim.world.distance_m(camper.position, seat.position) for seat in seats)
+    assert 4.0 < nearest < STEP_MAX_M  # past the old 4 m reach, within a few steps
+    rest = WorldApi(sim, camper.id).rest(10)
+    sim.step()
+    seat = _slot(sim, camper)
+    assert seat.owner == pit.id and seat.kind == "seat"
+    assert sim.world.distance_m(camper.position, seat.position) < 0.01 and _summary(sim).moved["camper"].route
+    assert run_until_done(sim, rest, 15).text == "You rest a while on a log by the fire."

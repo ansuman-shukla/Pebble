@@ -844,6 +844,46 @@ export type Footprint = {
 };
 
 /**
+ * Furniture
+ *
+ * A piece of furniture as the client draws it (`GET /api/v1/world/furniture`).
+ */
+export type Furniture = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Site
+     */
+    site: string;
+    /**
+     * Kind
+     */
+    kind: 'log_seat' | 'sleeping_mat' | 'stool' | 'lord_seat';
+    /**
+     * X
+     */
+    x: number;
+    /**
+     * Z
+     */
+    z: number;
+    /**
+     * Heading Deg
+     */
+    heading_deg: number;
+    /**
+     * Seat M
+     */
+    seat_m: number;
+    /**
+     * Span M
+     */
+    span_m?: number;
+};
+
+/**
  * Ground
  *
  * A hunting ground around a settlement.
@@ -2430,6 +2470,24 @@ export type WorldReadPlacesResponses = {
 };
 
 export type WorldReadPlacesResponse = WorldReadPlacesResponses[keyof WorldReadPlacesResponses];
+
+export type WorldReadFurnitureData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/world/furniture';
+};
+
+export type WorldReadFurnitureResponses = {
+    /**
+     * Response World-Read Furniture
+     *
+     * Successful Response
+     */
+    200: Array<Furniture>;
+};
+
+export type WorldReadFurnitureResponse = WorldReadFurnitureResponses[keyof WorldReadFurnitureResponses];
 
 export type WorldReadFloraData = {
     body?: never;
