@@ -38,11 +38,25 @@ export function tierMeshes(
   });
 }
 
-/** Draws `models` (instance matrices) with every part's mesh; an empty mesh is hidden (it would still cost a call). */
+/** Tiers that overflowed their capacity, by label: told once each. */
+const overflowed = new Set<string>();
+
+/**
+ * Draws `models` (instance matrices) with every part's mesh; an empty mesh is hidden (it would still cost a call).
+ * More models than the meshes hold is a sizing bug: the extra ones are not drawn, and `label` is reported once.
+ */
 export function fillMeshes(
   meshes: readonly InstancedMesh[],
   models: readonly Matrix4[],
+  label: string,
 ) {
+  const capacity = meshes[0]?.instanceMatrix.count ?? 0;
+  if (models.length > capacity && !overflowed.has(label)) {
+    overflowed.add(label);
+    console.error(
+      `${label}: ${models.length} instances in a tier of ${capacity}; the rest are not drawn`,
+    );
+  }
   for (const mesh of meshes) {
     const count = Math.min(models.length, mesh.instanceMatrix.count);
     for (let i = 0; i < count; i++) mesh.setMatrixAt(i, models[i]);

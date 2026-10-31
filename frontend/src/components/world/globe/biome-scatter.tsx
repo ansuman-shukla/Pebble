@@ -132,8 +132,8 @@ export function BiomeScatter({
           if (distance < SHADOW_REACH) near.push(model);
           else if (distance < set.reach) far.push(model);
         }
-        fillMeshes(set.near, near);
-        fillMeshes(set.far, far);
+        fillMeshes(set.near, near, `decor ${set.kind} near`);
+        fillMeshes(set.far, far, `decor ${set.kind} far`);
       }
     }
   });

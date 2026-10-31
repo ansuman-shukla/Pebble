@@ -168,17 +168,21 @@ export function GlobeNodes({
           if (distance < SHADOW_REACH) near.push(gathered);
           else if (distance < set.reach) far.push(gathered);
         }
-        const nearShown = near.slice(0, NEAR_CAPACITY);
-        const farShown = far.slice(0, CAPACITY);
         fillMeshes(
           set.near,
-          nearShown.map(({ model }) => model),
+          near.map(({ model }) => model),
+          `nodes ${set.kind} near`,
         );
         fillMeshes(
           set.far,
-          farShown.map(({ model }) => model),
+          far.map(({ model }) => model),
+          `nodes ${set.kind} far`,
         );
-        for (const { node } of [...nearShown, ...farShown])
+        // what is drawn (fillMeshes reports a tier that overflows)
+        for (const { node } of [
+          ...near.slice(0, NEAR_CAPACITY),
+          ...far.slice(0, CAPACITY),
+        ])
           current.drawn.push(node);
       }
     }

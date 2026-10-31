@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { Vector3 } from 'three';
+import { BoxGeometry, Matrix4, MeshBasicMaterial, Vector3 } from 'three';
 
 import type { WorldView } from '../../src/lib/client/types.gen';
 import {
@@ -25,6 +25,11 @@ import {
   groundWeights,
 } from '../../src/lib/world/globe-mesh';
 import { GROUND_LAYERS } from '../../src/lib/world/ground-shader';
+import {
+  fillMeshes,
+  type KindPart,
+  tierMeshes,
+} from '../../src/lib/world/instanced-tiers';
 import {
   createScatter,
   NODE_CLEARANCE,
@@ -267,4 +272,33 @@ test('decor keeps off nodes and their spots, roads and paths, and rocks keep out
   expect(decor).toBeGreaterThan(2000);
   // decor still grows right beside the roads: the rule is exercised, not a blanket clearing
   expect(nearRoads).toBeGreaterThan(20);
+});
+
+test('a tier that overflows its capacity is reported once, not dropped silently', () => {
+  const errors: string[] = [];
+  const original = console.error;
+  console.error = (message: string) => errors.push(message);
+  try {
+    const meshes = tierMeshes(
+      [
+        {
+          geometry: new BoxGeometry(),
+          material: new MeshBasicMaterial(),
+        } as unknown as KindPart,
+      ],
+      2,
+      false,
+    );
+    const models = [new Matrix4(), new Matrix4(), new Matrix4()];
+    fillMeshes(meshes, models.slice(0, 2), 'test oak far');
+    expect(errors).toEqual([]);
+    fillMeshes(meshes, models, 'test oak far');
+    fillMeshes(meshes, models, 'test oak far');
+    expect(errors).toEqual([
+      'test oak far: 3 instances in a tier of 2; the rest are not drawn',
+    ]);
+    expect(meshes[0].count).toBe(2);
+  } finally {
+    console.error = original;
+  }
 });
