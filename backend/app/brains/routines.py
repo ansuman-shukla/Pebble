@@ -98,6 +98,12 @@ class Context:
         chores = self.notes.get("chores", [])
         return isinstance(chores, list) and chore in chores
 
+    def finished(self, name: str) -> bool:
+        """The option chosen last was this one and its action ran to its end, not cut short (`chosen`: its number)."""
+        number = self.notes.get("chosen")
+        result = self.api.handle(number).result if isinstance(number, int) else None
+        return self.notes.get("last") == name and result is not None and result.outcome == "done"
+
     def mark_done(self, chore: str) -> None:
         chores = self.notes.setdefault("chores", [])
         if isinstance(chores, list):
@@ -302,6 +308,8 @@ class Forager:
 
 def _forage(ctx: Context, style: Forager) -> list[Option]:
     p, api = ctx.perception, ctx.api
+    if style.chore is not None and ctx.finished(f"gather {style.chore}"):  # gathered to the end, not cut short
+        ctx.mark_done(style.chore)
     home_area = ctx.profile.home_area
     food = carried_food(p.you)
     hungry_empty = ctx.needs.hunger >= 2 and not food
@@ -324,7 +332,7 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
         return [Option(score, "go home", head_back)]
     full = full_load(p, ctx.notes.get("full"))  # told there is no room for more
     wanted = [] if fresh >= OUTING_FOOD or full else list(FOODS)  # enough (or no room): chores, a look around, a rest
-    if style.chore is not None and not ctx.done_today(style.chore) and food:
+    if style.chore is not None and not ctx.done_today(style.chore) and food and not full:  # the chore once there's room
         wanted.insert(0, style.chore)
     if not hungry_empty:
         hunting = _hunt(ctx)
@@ -347,8 +355,6 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
 
         def gathered() -> None:
             _set(ctx, "outing", gathers + 1)
-            if resource.kind == style.chore:
-                ctx.mark_done(resource.kind)
 
         return [Option(score, f"gather {resource.kind}", _then(gathered, lambda: api.gather(resource.kind)))]
     visible = [r for r in seen if r.kind in wanted]
@@ -422,6 +428,8 @@ def _keep_fire(ctx: Context, score: float, only_failing: bool = False) -> list[O
     and anyone awake at night tends a fire burning low; only those with the skill make one that went out."""
     p, api = ctx.perception, ctx.api
     state = fire_here(p)
+    if ctx.finished("feed the fire"):  # fed to the end: talk or someone walking up cuts a feeding short
+        ctx.mark_done("fed fire")
     if state is None or (state == "burning" and (only_failing or ctx.done_today("fed fire"))):
         return []
     if not wood_at_hand(p):
@@ -431,7 +439,7 @@ def _keep_fire(ctx: Context, score: float, only_failing: bool = False) -> list[O
         return [Option(score, "go to the fire", lambda: api.walk_to_thing(FIRE))]
     if state == "out":
         return [Option(score, "make a fire", api.make_fire)] if "fire" in ctx.profile.skills else []
-    return [Option(score, "feed the fire", _then(lambda: ctx.mark_done("fed fire"), api.feed_fire))]
+    return [Option(score, "feed the fire", api.feed_fire)]
 
 
 def _reach(resource: Resource) -> int:

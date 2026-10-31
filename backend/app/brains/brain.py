@@ -112,7 +112,7 @@ class UtilityBrain:
             handle = api.wait(2)  # stand and talk a moment
         else:
             handle = best.start()
-            notes["last"] = best.name
+            notes["last"], notes["chosen"] = best.name, handle.number
         if handle.result is not None and handle.result.outcome != "interrupted":
             previous = notes.get("instant")
             streak = (previous if isinstance(previous, int) else 0) + 1
