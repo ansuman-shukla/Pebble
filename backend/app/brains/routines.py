@@ -51,7 +51,7 @@ OUTING_FOOD = 150.0  # bands head back to camp carrying about this much (a day a
 COMPASS: tuple[Compass, ...] = get_args(Compass)
 HUNT_TRIES = 3  # hunts (and as many searches for game) a hunter tries a day
 TRIP_TIMES = frozenset({"dawn", "early morning", "mid-morning", "midday", "early afternoon"})  # time to be back
-TRIP_LEGS = 4  # short walks on past where a forage trip's long walk ended, while no food shows
+TRIP_LEGS = 4  # short walks on past where a forage trip's long walk ended, while no food shows (fewer near a den)
 FISH_CHANCE = 0.3  # a forager standing at a river or lake fishes instead of gathering this often
 FIRE = "the fire pit"
 BASKETS = "the main gate"  # where the guard lights the fire baskets at dusk
@@ -476,7 +476,7 @@ def _forage_trip(ctx: Context, score: float, aim: str, why: Driver) -> list[Opti
         if not grounds or not near(p, ctx.profile.home_area) or p.time_of_day not in TRIP_TIMES:
             return []
         trips = ctx.counter("trips")
-        way = grounds[trips % len(grounds)]
+        way = grounds[trips % len(grounds)].way
 
         def set_out(way: Compass = way) -> None:
             _set(ctx, "trip", way)
@@ -494,8 +494,8 @@ def _forage_trip(ctx: Context, score: float, aim: str, why: Driver) -> list[Opti
     legs = ctx.counter("trip_legs")
     if _cut_short(ctx, "search further"):
         legs -= 1  # the leg cut short doesn't count
-    if legs >= TRIP_LEGS:
-        return []
+    if legs >= next((ground.legs for ground in ctx.profile.grounds if ground.way == way), 0):
+        return []  # as far as the way stays clear of dens
     on = _then(lambda: _set(ctx, "trip_legs", legs + 1), lambda: api.walk_towards(way, "a short walk"))
     return [Option(score, "search further", on, aim, why)]
 

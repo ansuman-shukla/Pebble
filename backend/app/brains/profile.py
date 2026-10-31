@@ -55,6 +55,15 @@ def known_titles(people: Iterable[tuple[str, str]]) -> tuple[tuple[str, Title], 
 
 
 @dataclass(frozen=True)
+class Ground:
+    """A way from camp a band's food lies, and how many short walks on past the long walk out it stays clear of the
+    dens the band knows of."""
+
+    way: Compass
+    legs: int
+
+
+@dataclass(frozen=True)
 class BrainProfile:
     citizen_id: str
     name: str
@@ -65,8 +74,8 @@ class BrainProfile:
     titled: tuple[tuple[str, Title], ...] = ()  # people they know who hold a title ("Masanori", "lord")
     granary: bool = False  # town folk the lord's granary feeds (his household, and those he grants rice, §2.6)
     honesty: float = 0.5  # 0-1 (§3.1 traits): an honest starving soul is slower to take what isn't theirs
-    # bands: the ways from camp their land's food lies, beyond the thin home ring (10 §1.2), most first ("east")
-    grounds: tuple[Compass, ...] = ()
+    # bands: the ways from camp their land's food lies, beyond the thin home ring (10 §1.2), most first
+    grounds: tuple[Ground, ...] = ()
 
     def bows_to(self, name: str) -> bool:
         """They hold a title bowed to (lord, samurai, band leader) that outranks yours."""

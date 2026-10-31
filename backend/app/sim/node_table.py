@@ -182,14 +182,27 @@ class NodeTable:
         return dict(sorted(totals.items()))
 
     def food_by_bearing(
-        self, grid: Grid, centre: Vec3, inner_m: float, outer_m: float, items: frozenset[str], sectors: int = 8
+        self,
+        grid: Grid,
+        centre: Vec3,
+        inner_m: float,
+        outer_m: float,
+        items: frozenset[str],
+        sectors: int = 8,
+        avoid: Sequence[Vec3] = (),
+        clear_m: float = 0.0,
     ) -> list[int]:
         """What the nodes of these items hold when full, between `inner_m` and `outer_m` of a point, in `sectors`
-        compass sectors (the first centred on north, then clockwise)."""
+        compass sectors (the first centred on north, then clockwise), leaving out nodes within `clear_m` of a point
+        to `avoid`."""
         totals = [0] * sectors
         width = 360.0 / sectors
+        avoided = np.array(avoid, dtype=np.float64).reshape(-1, 3)
         for metres, node in self.near(grid, centre, outer_m):
-            if metres >= inner_m and self.kind(node).item in items:
+            if metres < inner_m or self.kind(node).item not in items:
+                continue
+            gaps = np.arccos(np.clip(avoided @ self.units[node], -1.0, 1.0)) * self.radius_m
+            if (gaps >= clear_m).all():
                 sector = int(((bearing_deg(centre, self.unit(node)) + width / 2) % 360.0) // width)
                 totals[sector] += int(self.caps[node])
         return totals
