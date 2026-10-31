@@ -8,11 +8,12 @@ and the live feed tell the same motion at every tick as the sim had.
     dead / asleep / collapsed ─▶ lie            moved this tick ─▶ walk | carry_walk | jog | run | stalk (by gait)
     otherwise by action:  rest ─▶ sit_ground   gather ─▶ gather_low | gather_high | mine | pan (by what)
                           work ─▶ farm | craft | trade | pick_up | ring_bell | pray | talk | idle (by task) ...
+    asleep in a house ─▶ inside                 still on a slot ─▶ its posture and facing (rest on a seat ─▶ sit)
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, cast
 
 from app.observability.events import JsonScalar
 from app.sim.items import ITEMS
@@ -115,7 +116,8 @@ _ACTIONS: dict[str, Motion] = {
 class BodyMotion:
     motion: Motion
     posture: Posture
-    slot_heading: float | None = None  # the seat's or work slot's facing, once slots exist (S1)
+    slot_heading: float | None = None  # the seat's, mat's or work slot's facing while on it (S1)
+    slot_height_m: float | None = None  # how high the seat they sit on is (S1)
 
 
 def load_share(inventory: Mapping[str, int], age_group: AgeGroup) -> float:
@@ -135,9 +137,24 @@ def body_motion(
     talking: bool,
 ) -> BodyMotion:
     """`gait` is how they moved this tick (None when they didn't); `talking` that they spoke just now (shown while
-    their body is otherwise idle)."""
+    their body is otherwise idle). An action done at a slot (S1: its args carry the slot's `posture`, `facing` and
+    `seat_m`) rests the body the slot's way once they stand still on it: inside a house, on a seat, a mat or at a work
+    slot, facing the way it faces."""
     motion = _motion(alive, asleep, action, args, gait, load, talking)
-    return BodyMotion(motion=motion, posture=POSTURES.get(motion, "standing"))
+    posture = POSTURES.get(motion, "standing")
+    slot_posture, facing, seat_m = args.get("posture"), args.get("facing"), args.get("seat_m")
+    if not alive or not isinstance(slot_posture, str) or not isinstance(facing, float | int):
+        return BodyMotion(motion=motion, posture=posture)
+    if slot_posture == "inside":
+        return BodyMotion(motion="inside", posture="inside")
+    if gait is not None:  # still stepping onto it
+        return BodyMotion(motion=motion, posture=posture)
+    if motion == "sit_ground" and slot_posture == "sitting":
+        motion = "sit"
+    if slot_posture != "standing":
+        posture = cast(Posture, slot_posture)
+    height = float(seat_m) if posture == "sitting" and isinstance(seat_m, float | int) else None
+    return BodyMotion(motion, posture, float(facing), height)
 
 
 def _motion(

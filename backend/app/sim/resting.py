@@ -4,6 +4,7 @@ Rest takes a free seat within a few steps, else sits on the ground; sleep goes i
 your mat at camp, else lies down where you are (10-world-v1 §4.3, `app.sim.slots`).
 """
 
+from app.observability.events import JsonScalar
 from app.sim import slots
 from app.sim.acting import begin, settled
 from app.sim.bodies import COLLAPSE_WAKE_ENERGY
@@ -18,11 +19,10 @@ ON_THE_GROUND = "on the ground"
 
 
 def start_rest(core: SimCore, citizen: Citizen, action: Rest | Wait) -> int:
-    args: dict[str, str | int | None] = {"minutes": action.minutes}
+    args: dict[str, JsonScalar] = {"minutes": action.minutes}
     if action.action == "rest":
-        seat = slots.take_seat(core, citizen)
-        args |= {"slot": seat.id if seat is not None else None, "where": seat.words if seat else ON_THE_GROUND}
-    begin(core, citizen, action.action, "", dict(args)).until_tick = core.state.tick + action.minutes
+        args |= _spot(slots.take_seat(core, citizen))
+    begin(core, citizen, action.action, "", args).until_tick = core.state.tick + action.minutes
     return citizen.next_action - 1
 
 
@@ -31,15 +31,14 @@ def start_sleep(core: SimCore, citizen: Citizen, _action: Sleep) -> int:
         return settled(core, citizen, "sleep", "failed", "You aren't tired enough to sleep.")
     citizen.body.asleep = True
     bed = slots.take_bed(core, citizen)
-    begin(core, citizen, "sleep", "", _bed_args(bed))
+    begin(core, citizen, "sleep", "", _spot(bed))
     return citizen.next_action - 1
 
 
-def _bed_args(bed: slots.Slot | None) -> dict[str, str | int | float | bool | None]:
-    """Where the sleeper lies, for spectators (`inside` hides the body after the door)."""
-    if bed is None:
-        return {"slot": None, "where": ON_THE_GROUND}
-    return {"slot": bed.id, "where": bed.words if bed.kind != "inside" else "inside", "inside": bed.kind == "inside"}
+def _spot(slot: slots.Slot | None) -> dict[str, JsonScalar]:
+    """Where they rest or sleep, for spectators: the seat, mat or house taken (`inside` hides the body after the
+    door), else on the ground where they are."""
+    return slots.spot_args(slot) if slot is not None else {"slot": None, "where": ON_THE_GROUND}
 
 
 def advance_sleep(core: SimCore, citizen: Citizen, action: ActionState) -> None:

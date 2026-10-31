@@ -28,6 +28,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, model_validator
 
 from app.core.config import WORLD_DATA_DIR
+from app.observability.events import JsonScalar
 from app.sim.clock import SECONDS_PER_TICK
 from app.sim.core import SimCore, Stride, TimedPoint
 from app.sim.ground_speed import ground_mps
@@ -209,7 +210,9 @@ def build_layout(world: SimWorld, town: TownView, spec: SlotsSpec) -> Layout:
                 solids.append(Solid(in_camp(placement.x, placement.z), half + _SOLID_MARGIN_M))
     for structure in world.structures.values():
         if structure.is_home and structure.kind != "lean_to":
-            inside = Slot(f"{structure.id}#inside", structure.id, "inside", structure.centre, 0.0, "inside")
+            inside = Slot(
+                f"{structure.id}#inside", structure.id, "inside", structure.centre, 0.0, "inside", words="inside"
+            )
             owners.setdefault(structure.id, []).append(inside)
 
     places: dict[str, tuple[Slot, ...]] = {}
@@ -347,6 +350,18 @@ def claim(
 
 def release(core: SimCore, citizen: Citizen) -> None:
     slot_state(core).claims.pop(citizen.id, None)
+
+
+def spot_args(slot: Slot) -> dict[str, JsonScalar]:
+    """What an action done at a slot tells spectators (D119): the slot, in words, and how a body rests on it (its
+    posture, facing and seat height), so the feed's motion reads it from the events alone."""
+    return {
+        "slot": slot.id,
+        "where": slot.words,
+        "posture": slot.posture,
+        "facing": slot.heading_deg,
+        "seat_m": slot.height_m,
+    }
 
 
 # --- what is free ---

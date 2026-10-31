@@ -998,6 +998,7 @@ export class MockLiveServer {
     | 'motion'
     | 'posture'
     | 'slot_heading'
+    | 'slot_height_m'
     | 'goal'
     | 'driver'
     | 'target'
@@ -1024,6 +1025,7 @@ export class MockLiveServer {
       motion,
       posture: POSTURES[motion] ?? 'standing',
       slot_heading: null,
+      slot_height_m: null,
       goal,
       driver,
       target,

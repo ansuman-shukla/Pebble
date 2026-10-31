@@ -193,7 +193,7 @@ def start_work(core: SimCore, citizen: Citizen, action: Work) -> int:
         return settled(core, citizen, "work", "failed", "Others are working there; there's no room for you.")
     args: dict[str, JsonScalar] = {"task": task.name}
     if isinstance(slot, slots.Slot):
-        args |= {"slot": slot.id, "where": slot.words}
+        args |= slots.spot_args(slot)
     work = begin(core, citizen, "work", task.label, args)
     work.item, work.store_id, work.until_tick = task.name, store_id, core.state.tick + task.minutes
     return work.number

@@ -2,14 +2,16 @@
 inside or onto a mat, work is done at its task's slot, claims let go when they should, and at every tick's end no two
 bodies that stand, sit or lie are within 0.8 m of each other."""
 
+from collections import Counter
 from collections.abc import Callable
 
 import pytest
 
-from app.observability.events import TickSummary
+from app.observability.events import JsonScalar, TickSummary
 from app.sim.core import Stride
 from app.sim.doing import water_within_reach
 from app.sim.ground_speed import ground_mps
+from app.sim.motion import BodyMotion, body_motion
 from app.sim.simulation import Simulation
 from app.sim.slots import (
     LEGS_M,
@@ -159,7 +161,19 @@ def test_a_weaver_walks_home_to_the_loom_and_weaves_there(new_sim: Callable[...,
     assert held_slot(sim.core, farmer) == layout(sim.core).slots["farmhouse-1#door"]
     work = WorldApi(sim, weaver.id).work("weave")
     started = [e.payload.model_dump() for e in sim.drain() if e.type == "action_started" and e.actor_id == "aiko"]
-    assert started[-1]["args"] == {"task": "weave", "slot": loom.id, "where": "at the loom"}
+    assert started[-1]["args"] == {
+        "task": "weave",
+        "slot": loom.id,
+        "where": "at the loom",
+        "posture": "sitting",
+        "facing": loom.heading_deg,
+        "seat_m": 0.3,
+    }
+    sim.step()
+    action = weaver.action
+    assert action is not None
+    body = body_motion(alive=True, asleep=False, action="work", args=action.args, gait=None, load=0, talking=False)
+    assert body == BodyMotion("craft", "sitting", loom.heading_deg, 0.3)  # on the loom's stool, facing it
     assert run_until_done(sim, work, 61).text == "You weave a length of cloth."
     assert WorldApi(sim, farmer.id).look_around().place.startswith("at your home")
 
@@ -212,6 +226,14 @@ def test_rest_takes_a_free_bench_seat_nearby_else_the_ground(new_sim: Callable[.
     for person in seated:
         assert sim.world.distance_m(person.position, _slot(sim, person).position) < 0.01
     assert _apart(sim, people) >= PERSONAL_M  # the third sits on the ground beside them
+    sim.step()  # they sit still on the bench now: drawn on its seats at its height, facing its way
+    bodies = Counter(
+        body_motion(alive=True, asleep=False, action="rest", args=p.action.args, gait=None, load=0, talking=False)
+        for p in people
+        if p.action is not None
+    )
+    on_bench = [BodyMotion("sit", "sitting", _slot(sim, p).heading_deg, 0.45) for p in seated]
+    assert bodies == Counter([*on_bench, BodyMotion("sit_ground", "sitting_ground")])
     texts = sorted(run_until_done(sim, rest, 10).text for rest in rests)
     assert texts == ["You rest a while on the bench."] * 2 + ["You rest a while on the ground."]
 
@@ -223,7 +245,16 @@ def test_a_family_sleeps_inside_and_steps_out_apart_in_the_morning(new_sim: Call
     skip_to(sim, family[0].position, night=True)
     sleeps = [WorldApi(sim, member.id).sleep() for member in family]
     started = [e.payload.model_dump()["args"] for e in sim.drain() if e.type == "action_started"]
-    assert started == [{"slot": "farmhouse-1#inside", "where": "inside", "inside": True}] * 3
+    inside: dict[str, JsonScalar] = {
+        "slot": "farmhouse-1#inside",
+        "where": "inside",
+        "posture": "inside",
+        "facing": 0.0,
+        "seat_m": 0.0,
+    }
+    assert started == [inside] * 3
+    body = body_motion(alive=True, asleep=True, action="sleep", args=inside, gait="walk", load=0, talking=False)
+    assert body == BodyMotion("inside", "inside")  # hidden after the door, even while still stepping in
     sim.step()
     assert all(claim_of(sim.core, m) is not None for m in family) and crowded(sim.core) == []  # inside, out of sight
     middle = sim.world.structures["farmhouse-1"].centre
