@@ -134,4 +134,16 @@ test('the mock feed seats and beds people on drawn furniture, never in the air',
     'sleeping_mat',
     'stool',
   ]);
+  // at night everyone sleeps where they are: nobody lies at a seat's height on a log they were sitting on
+  server.skip(14 * 60);
+  for (let tick = 0; tick < 60; tick += 10) {
+    const { citizens } = server.entities();
+    expect(citizens.every((citizen) => citizen.activity === 'sleeping')).toBe(
+      true,
+    );
+    expect(
+      citizens.filter((citizen) => citizen.slot_height_m !== null),
+    ).toEqual([]);
+    server.skip(10);
+  }
 });
