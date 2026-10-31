@@ -171,6 +171,11 @@ def test_crafting_refuses_what_the_crafter_couldn_t_carry(new_sim: Callable[...,
 
     full = weaver({"reeds": 2, "iron sand": 24})  # 24.2 kg; the cloth's 1 kg for 0.2 kg of reeds: 25.0, just fits
     assert full.result("aiko", full.start("aiko", Craft(recipe="cloth"))) is None
+    loaded = weaver({"reeds": 2, "iron sand": 24})
+    meanwhile = loaded.start("aiko", Craft(recipe="cloth"))
+    loaded.citizen("aiko").inventory["coins"] = 1  # handed a coin while at the loom: now the cloth won't fit
+    assert _run(loaded, "aiko", meanwhile, 61) == "failed: You couldn't carry a length of cloth as well."
+    assert loaded.citizen("aiko").inventory == {"reeds": 2, "iron sand": 24, "coins": 1}
     over = weaver({"reeds": 2, "iron sand": 24, "coins": 1})
     too_heavy = over.start("aiko", Craft(recipe="cloth"))
     assert _run(over, "aiko", too_heavy, 0) == "failed: You couldn't carry a length of cloth as well."

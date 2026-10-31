@@ -169,12 +169,15 @@ def start_craft(core: SimCore, citizen: Citizen, action: Craft) -> int:
 
 def finish_craft(core: SimCore, citizen: Citizen, action: ActionState) -> None:
     """Time is up: use the inputs and fuel and make the yield in one step, as many rounds as were started and are
-    still carried (none: nothing happens)."""
+    still carried, if the crafter can still carry what they make (else nothing happens)."""
     name = str(action.item)
     recipe = load_recipes().recipes[name]
     rounds = min(action.amount, _rounds(recipe, citizen.inventory))
     if rounds == 0:
         core.end_action(citizen, "failed", "You no longer have what it takes.")
+        return
+    if not _fits(core, citizen, recipe, rounds):  # they picked up more meanwhile
+        core.end_action(citizen, "failed", f"You couldn't carry {_made_words(recipe.yields, rounds)} as well.")
         return
     _make(core, citizen, name, rounds, str(action.args.get("station")))
     core.end_action(citizen, "done", f"You make {_made_words(recipe.yields, rounds)}.")
