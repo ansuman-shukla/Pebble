@@ -174,6 +174,10 @@ class Simulation:
                 skills=list(citizen.skills),
                 heading_deg=citizen.heading_deg,
                 inventory=dict(citizen.inventory),
+                rank=spec.rank,
+                titles=list(spec.titles),
+                family=dict(spec.family),
+                bonds=dict(spec.bonds),
             ),
             actor=citizen,
         )
