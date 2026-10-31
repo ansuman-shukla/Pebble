@@ -221,7 +221,11 @@ LINES: dict[str, Line] = {  # by event type
         "{actor} dies ({cause})",
         3,
         (
+            Variant(
+                _both(_by("animal"), _field("cause", "hunted"), _set("attacker")), "{attacker} brings down {actor}", 2
+            ),
             Variant(_both(_by("animal"), _field("cause", "hunted")), "{actor} is brought down by a hunter", 2),
+            Variant(_both(_killed_by_a_predator, _set("attacker")), "{attacker} brings down {actor}", 3),
             Variant(_killed_by_a_predator, "{actor} is {cause}", 3),
             Variant(_by("animal"), "{actor} dies ({cause})", 1),
             Variant(_set("attacker"), "{attacker} kills {actor}", 3),

@@ -108,6 +108,14 @@ def test_a_v1_event_a_citizen_does_reads_on_their_timeline_without_their_name(ev
         ("died", {"cause": "violence", "attacker": "kaz"}, "genzo", "citizen", "Kaz kills Genzo", 3),
         ("died", {"cause": "animal attack", "attacker": "wolf:2"}, "tek", "citizen", "A wolf kills Tek", 3),
         ("died", {"cause": "killed by a wolf"}, "deer:7", "animal", "A deer is killed by a wolf", 3),
+        (
+            "died",
+            {"cause": "killed by a wolf", "attacker": "wolf:2"},
+            "deer:7",
+            "animal",
+            "A wolf brings down a deer",
+            3,
+        ),
         ("injured", {"amount": 9.0, "cause": "violence", "attacker": "kaz"}, "goro", "citizen", "Kaz strikes Goro", 3),
         (
             "injured",
@@ -135,6 +143,7 @@ def test_a_v1_event_a_citizen_does_reads_on_their_timeline_without_their_name(ev
         ),
         # 2: a hunter's kill, a sale, trespass, a tree felled, an injury, a harvest
         ("died", {"cause": "hunted"}, "deer:7", "animal", "A deer is brought down by a hunter", 2),
+        ("died", {"cause": "hunted", "attacker": "tek"}, "goat:3", "animal", "Tek brings down a goat", 2),
         ("injured", {"amount": 4.0, "cause": "a fall"}, "tek", "citizen", "Tek is hurt (a fall)", 2),
         (
             "stole",
