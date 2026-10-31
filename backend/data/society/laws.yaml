@@ -1,0 +1,66 @@
+# Society and law (docs/design/10-world-v1.md §3.2, 3.3, 3.5, 3.6; D92, D93, D162-D164). Read by app/sim/society.py.
+# Standing is per citizen per group (town, band_a, band_b), -100..100; bonds are per pair, -100..100.
+
+standing:
+  own: 50 # a member's start in their own group
+  leader: 70 # the lord's in the town, a band leader's in their band
+  guests: # a group's start for members of another group (unlisted: 0)
+    town: {band_a: 10, band_b: -10}
+  drift: 1 # every value moves this much a day toward its start, at its holder's dawn
+  words: # the word of a value: the first row whose floor it reaches
+    - {floor: 60, word: honoured}
+    - {floor: 20, word: well regarded}
+    - {floor: -19, word: nothing said}
+    - {floor: -59, word: distrusted}
+    - {floor: -100, word: outcast}
+
+# What the world detects (§3.3) and what each deed costs the doer with the wronged group, once per deed, as soon as
+# one member of that group knows of it (a witness, or told by `accuse`).
+deeds:
+  theft: {event: stole, standing: -15}
+  poaching: {event: trespassed, standing: -10} # a trespass with `took`
+  trespass: {event: trespassed, standing: -5}
+  assault: {event: injured, standing: -25} # an injury with cause violence
+  killing: {event: died, standing: -60} # a death with cause violence; the killing blow's assault counts toward it
+
+merits: # good deeds, with the group of the member they are done for
+  sale: 3 # a sale or purchase with a member of another group (the stall's merchant)
+  gift: 2
+  gift_per_day: 6 # the most a giver's gifts raise their standing a day
+  shared_food: 3 # food given to a member of your own band (instead of `gift`)
+  tended: 5
+  accusation: 3 # an accusation that ended in a judgement, with the judge's group
+  served: 5 # a sentence served, with the judge's group
+
+leader: # a band leader's standing in their band at their dawn
+  fed: 1 # every living member below "hungry"
+  starving: -2 # any member starving
+
+leadership:
+  margin: 25 # an adult this far above the leader's band standing ...
+  dawns: 3 # ... on this many of the leader's dawns running: the highest-standing adult leads
+
+bonds:
+  kin: 60
+  mate: 70
+  gift: 4
+  gift_per_day: 8 # the most a pair's gifts raise their bond a day
+  sale: 3
+  tended: 10
+  struck: -30
+  robbed: -20 # a theft from your household, known
+  accused_by: -10
+  seized_by: -15
+
+week:
+  days: 7
+  market_day: 1
+  court_day: 7
+
+bell:
+  ring_minutes: 5 # the bell rings when the ringing ends: at the moment, or this long after a late start
+  moments: {dawn: 360, noon: 720, dusk: 1080} # minute of the day by the town's clock (sunrise at the castle: 06:00)
+  early_minutes: 90 # the ringer may start this long before a moment and keeps the hour till it comes
+  late_minutes: 5 # ... or this long after it, if that bell hasn't rung
+  heard_m: 600
+  night_grace_minutes: 30 # no dusk (dawn) bell this long after sunset (sunrise): the night law starts (ends) anyway
