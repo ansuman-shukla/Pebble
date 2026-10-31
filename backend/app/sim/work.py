@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from app.observability.events import ItemLocation, JsonScalar
-from app.sim import slots
+from app.sim import slots, society
 from app.sim.acting import begin, settled
 from app.sim.core import SimCore
 from app.sim.exchange import store_in_reach
@@ -155,6 +155,17 @@ WORK_TASKS: tuple[WorkTask, ...] = (
         nowhere="There is no temple here.",
         label="praying at the temple",
         done="You chant the sutras and sweep the temple steps.",
+    ),
+    WorkTask(
+        "ring bell",
+        frozenset({"bell", "bells", "ring"}),
+        5,
+        None,
+        places=(society.BELL_TOWER,),
+        nowhere="There is no bell here.",
+        label="waiting to ring the temple bell",  # keeping the hour; it rings as the work ends
+        finish=society.ring_bell,
+        timing=society.ring_timing,
     ),
 )
 WORK_BY_NAME = {task.name: task for task in WORK_TASKS}
