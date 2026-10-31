@@ -449,7 +449,10 @@ def test_a_bear_goes_for_boar_before_deer_and_for_a_carcass_before_either(new_si
     WILDLIFE.of(sim.state).courses.pop(bear.id, None)
     WILDLIFE.of(sim.state).catches.pop(bear.id, None)
     sim.step()
-    assert bear.target == deer[0].id and bear.hunger < 1.0  # and off carcasses first
+    assert bear.target == deer[0].id and bear.hunger > 50.0  # and off carcasses first: hungry until it eats
+    for _ in range(5):
+        sim.step()
+    assert bear.activity == "feeding" and bear.hunger < 1.0
 
 
 def test_sharks_and_fish_are_only_drawn_swimming_or_attacking(new_sim: Callable[..., Simulation]) -> None:
@@ -477,4 +480,12 @@ def test_a_kill_lies_as_bones_before_its_group_replaces_it(new_sim: Callable[...
     sim.run(round(SPECIES["rabbit"].respawn_days * DAY_MINUTES))  # its respawn time: one day, the day it lies dead
     assert sim.state.animals[rabbits[0].id].activity == "remains"
     sim.run(animal_life.REMAINS_SHOWN_TICKS)
+    assert rabbits[0].id not in sim.state.animals
+
+
+def test_a_hunters_kill_is_replaced_on_time(new_sim: Callable[..., Simulation]) -> None:
+    sim, centre = _open_ground(new_sim, night=False)
+    rabbits = _herd(sim, "rabbit", [centre, step_towards(centre, 90.0, 5.0, R)], activity="grazing", until=10**9)
+    animal_life.kill(sim.core, rabbits[0], "hunted", attacker="tek", remains=True)  # bones at once
+    sim.run(round(SPECIES["rabbit"].respawn_days * DAY_MINUTES))
     assert rabbits[0].id not in sim.state.animals

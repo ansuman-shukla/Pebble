@@ -130,6 +130,7 @@ class Wildlife:
     drinks: dict[str, int] = field(default_factory=dict)  # herd -> the tick its drink at the waterhole ends
     charges: dict[str, str] = field(default_factory=dict)  # predator -> "den" or "hunt" while it goes for a person
     tries: dict[str, int] = field(default_factory=dict)  # predator group -> hunts it tried since dusk
+    bodies: set[str] = field(default_factory=set)  # dead animals lying as bodies a day before they turn to bones
     shied: dict[str, str] = field(default_factory=dict)  # animal -> who it flees or watches (citizen or animal)
     walks: dict[str, Walk] = field(default_factory=dict)  # this tick's moves (not saved)
     fires: list[Fire] = field(default_factory=list)  # lit fires this tick (not saved)
@@ -162,6 +163,7 @@ def _dump(life: Wildlife) -> JsonValue:
         "drinks": dict[str, JsonValue](sorted(life.drinks.items())),
         "charges": dict[str, JsonValue](sorted(life.charges.items())),
         "tries": dict[str, JsonValue](sorted(life.tries.items())),
+        "bodies": list[JsonValue](sorted(life.bodies)),
         "shied": dict[str, JsonValue](sorted(life.shied.items())),
     }
 
@@ -191,6 +193,7 @@ def _load(data: JsonValue) -> Wildlife:
         drinks={k: int(cast(int, v)) for k, v in block["drinks"].items()},
         charges={k: str(v) for k, v in block["charges"].items()},
         tries={k: int(cast(int, v)) for k, v in block["tries"].items()},
+        bodies={str(v) for v in cast(list[JsonValue], block["bodies"])},
         shied={k: str(v) for k, v in block["shied"].items()},
     )
 
@@ -543,7 +546,7 @@ def _predator(core: SimCore, animal: Animal, life: Wildlife, start: float) -> No
             return
         carcass = _carcass(core, animal) if species.scavenges else None
         if carcass is not None:  # bears live off carcasses before they hunt (10 §4.6)
-            animal.target, animal.hunger = carcass.id, 0.0
+            animal.target = carcass.id
             animal.until = tick + core.state.rng("animals.scavenge").randint(*FEED_TICKS)
             _feed(core, animal, carcass, life, start)
             return
@@ -924,7 +927,7 @@ def _feed(core: SimCore, animal: Animal, carcass: Animal, life: Wildlife, start:
         animal.activity = "alert"
         animal.heading_deg = _heading(animal.position, person.position, animal.heading_deg)
         return
-    animal.activity = "feeding"
+    animal.activity, animal.hunger = "feeding", 0.0  # it eats
     animal.heading_deg = _heading(animal.position, carcass.position, animal.heading_deg)
 
 
@@ -1011,6 +1014,8 @@ def kill(
     for other in (life.catches, life.bursts, life.shied):
         other.pop(animal.id, None)
     animal.alive, animal.health, animal.activity = False, 0.0, "remains" if remains else "dead"
+    if not remains:
+        life.bodies.add(animal.id)
     animal.goal, animal.target, animal.died_tick = None, None, core.state.tick
     return core.emit("died", Died(cause=cause, attacker=attacker), actor=animal, cause_seq=cause_seq)
 
@@ -1318,7 +1323,9 @@ def _respawn(core: SimCore) -> None:
         days = SPECIES[group.kind].respawn_days
         for slot, member_id in enumerate(group.members):
             dead = state.animals[member_id]
-            due = max(round(days * DAY_MINUTES), REMAINS_TICKS + REMAINS_SHOWN_TICKS)  # its bones show a while first
+            due = round(days * DAY_MINUTES)
+            if member_id in life.bodies:  # a body lies a day: its bones show a while before it is replaced
+                due = max(due, REMAINS_TICKS + REMAINS_SHOWN_TICKS)
             if dead.alive or dead.died_tick is None or tick < dead.died_tick + due:
                 continue
             living = [state.animals[m] for m in group.members if state.animals[m].alive]
@@ -1328,6 +1335,7 @@ def _respawn(core: SimCore) -> None:
             del state.animals[member_id]
             life.courses.pop(member_id, None)
             life.carcasses.pop(member_id, None)
+            life.bodies.discard(member_id)
             state.animals[animal.id] = animal
             group.members[slot] = animal.id
             core.emit(
