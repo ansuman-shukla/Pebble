@@ -498,3 +498,19 @@ def test_a_wolf_gives_up_once_its_quarry_has_company(new_sim: Callable[..., Simu
     assert mate.body.alive
     _run(sim, 1)
     assert wolf.target is None
+
+
+# --- herds, dens and waterholes ---
+
+
+@pytest.mark.parametrize(("activity", "shies"), [("sleeping", False), ("idle", True)])
+def test_herds_shy_from_an_awake_predator_not_a_sleeping_one(
+    new_sim: Callable[..., Simulation], activity: str, shies: bool
+) -> None:
+    """A den's sleepers 50-80 m from its hunting ground's waterhole must not keep the herds from drinking."""
+    sim, centre = _open_ground(new_sim, night=False)
+    deer = _animal(sim, "deer", centre, activity="grazing", until=10**9)
+    _animal(sim, "wolf", step_towards(centre, 90.0, 60.0, R), activity=activity, until=10**9, hunger=0.0)
+    sim.drain()
+    _run(sim, 1)
+    assert (deer.activity in ("alert", "fleeing")) is shies

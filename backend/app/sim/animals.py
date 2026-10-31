@@ -397,7 +397,7 @@ def _threats(core: SimCore, herbivores: list[Animal], living: list[Animal]) -> l
     if not herbivores:
         return found
     people = [c for c in core.living() if core.world.town_point(c.position) is None]
-    predators = [a for a in living if SPECIES[a.kind].predator and a.activity not in OPEN_TO]
+    predators = [a for a in living if SPECIES[a.kind].predator and a.activity not in OPEN_TO | {"sleeping"}]
     positions = np.array([a.position for a in herbivores])
     groups = np.array([a.group for a in herbivores])
     candidates: list[tuple[np.ndarray, np.ndarray, list[str], list[Vec3]]] = []
