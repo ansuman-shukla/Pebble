@@ -26,10 +26,11 @@ import {
   WORLD_URL,
   TOWN_GROUND_RADIUS,
 } from './explore-helpers';
+import { FLORA_URL, floraOf } from './globe-helpers';
 
 /*
  * The globe walker's collisions outside the town and the exploring helpers, without a browser, on the real
- * world: scattered trees, camp and landmark placements and citizens block; ground cover doesn't; cliffs
+ * world: flora trees, camp and landmark placements and citizens block; ground cover doesn't; cliffs
  * can't be climbed; the camera's spring arm sees walls; drops refuse water. The page builds the same walk.
  */
 
@@ -37,14 +38,16 @@ let world: Explore;
 
 test.beforeAll(async ({ playwright }) => {
   const api = await playwright.request.newContext();
-  const [worldResponse, townResponse] = await Promise.all([
+  const [worldResponse, townResponse, floraResponse] = await Promise.all([
     api.get(WORLD_URL),
     api.get(TOWN_URL),
+    api.get(FLORA_URL),
   ]);
   const view = (await worldResponse.json()) as WorldView;
   const town = (await townResponse.json()) as TownView;
+  const flora = floraOf(view, await floraResponse.body());
   await api.dispose();
-  world = explore(view, town);
+  world = explore(view, town, flora);
 });
 
 /** A point `distance` metres from a direction along a bearing (degrees from north). */
@@ -117,7 +120,7 @@ function loneInstances(kind: string, clear: number, limit = 3) {
   return found;
 }
 
-test('a scattered tree blocks the walk; without props the walk goes through it', () => {
+test('a flora tree blocks the walk; without props the walk goes through it', () => {
   const walk = world.walk();
   const free = world.walk({ props: false });
   for (const tree of loneInstances('oak_tree', 4)) {
@@ -135,9 +138,9 @@ test('a scattered tree blocks the walk; without props the walk goes through it',
   }
 });
 
-test('ground cover never blocks, even tall reeds', () => {
+test('ground cover and soft plants never block, even tall reed beds', () => {
   const walk = world.walk();
-  for (const kind of ['cattail', 'reeds']) {
+  for (const kind of ['cattail', 'reed_bed', 'root_patch']) {
     const [tuft] = loneInstances(kind, 4, 1);
     const spot = tuft.position.clone().normalize();
     const path = walkTowards(world, walk, offset(spot, 90, 2.5), spot);
