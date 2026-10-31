@@ -688,3 +688,36 @@ def test_rest_never_claims_a_seat_it_cant_step_to(new_sim: Callable[..., Simulat
     sim.step()
     assert rester.position == spot  # sits where they stand: the args never name a seat they don't sit on
     assert run_until_done(sim, rest, 10).text == "You rest a while on the ground."
+
+
+def test_steps_over_open_ground_go_straight_only_a_few_metres(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    pit = sim.world.structures["band_a_camp:fire-pit"]
+    x, z = pit.centre_xz
+    camper = sim.add_citizen(make_spec("camper", site="band_a_camp", at=(x + 4.0, z), region="band_a"))
+    start = camper.position
+    near = step_towards(start, 0.0, STEP_MAX_M - 0.5, sim.world.radius_m)
+    assert step_to(sim.core, camper, near)  # straight over open ground (no walls; the outer grid is coarse)
+    assert sim.core.strides[camper.id].walked[0][0] == start and len(sim.core.strides[camper.id].walked) == 2
+    sim.core.strides.clear()
+    sim.core.place_at(camper, start)
+    beyond = step_towards(start, 0.0, STEP_MAX_M + 4.0, sim.world.radius_m)
+    assert sim.world.town_point(beyond) is None
+    assert not step_to(sim.core, camper, beyond) and camper.position == start  # no 12 m step at a tick's end
+
+
+def test_someone_who_moved_off_their_spot_this_tick_lets_it_go(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    stand = layout(sim.core).slots["well#stand-2"]
+    x, z = sim.world.town_point(stand.position) or (0.0, 0.0)
+    leader = sim.add_citizen(make_spec("leader", at=(x - 20.0, z)))
+    follower = sim.add_citizen(make_spec("follower", at=(x, z + 0.5), knows_people=["leader"]))
+    assert run_until_done(sim, WorldApi(sim, follower.id).walk_to_place("the well"), 1).text == "You are already there."
+    sim.step()
+    claimed = claim_of(sim.core, follower)
+    assert claimed is not None and claimed.approach and follower.position == stand.position
+    follow = WorldApi(sim, follower.id).follow("leader")  # the leader stands still: caught up within the tick
+    sim.step()
+    assert follow.result is not None and follow.result.text == "Leader stops, and you stop beside them."
+    assert claim_of(sim.core, follower) is None  # let go of the stand, not walked back to it
+    assert 1.1 < sim.world.distance_m(follower.position, leader.position) < 1.3

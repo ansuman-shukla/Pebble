@@ -721,7 +721,8 @@ def _still_held(core: SimCore, citizen: Citizen, claimed: Claim, slot: Slot | No
     distance = core.distance_m(citizen.position, claimed.position)
     if distance <= OCCUPY_M:
         return True
-    # a walk that stopped short lets go; a claim taken standing still (a seat, a mat) is stepped to
+    # a walk that stopped short lets go, and so does anyone who moved off it this tick on their own (a follow that
+    # caught up within the tick); a claim taken standing still (a seat, a mat) is stepped to
     return claimed.approach and citizen.id not in core.strides
 
 
