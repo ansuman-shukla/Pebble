@@ -87,8 +87,8 @@ def account(core: SimCore, household: str) -> Account:
 
 def assess_harvest(core: SimCore, citizen: Citizen, count: int, cause_seq: int | None = None) -> int | None:
     """The citizen harvested `count` rice: their household owes ⌈40 %⌉ of it more (`tax_assessed`, its seq, caused by
-    `cause_seq`, the harvest's `item_moved`). The one seam whatever harvests rice calls (today `work.farm`; with the
-    paddies, `paddies.harvest`)."""
+    `cause_seq`, the harvest's `item_moved`). The one seam whatever harvests rice calls (`paddies.harvest`, right after
+    the rice moves from the paddy to the harvester)."""
     if citizen.home is None or count <= 0 or citizen.region != "town":
         return None
     owed = account(core, citizen.home)
