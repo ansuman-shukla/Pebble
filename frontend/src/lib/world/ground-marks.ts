@@ -32,6 +32,7 @@ import type {
   Road,
   Site,
   TownArea,
+  TownPlacement,
   WorldPlaces,
 } from '../client/types.gen';
 import {
@@ -346,13 +347,16 @@ export function bridgeSpans(
   ribbons: Ribbon[],
   rivers: RiverLayout,
   radius: number,
+  keepOut: (direction: Vector3) => boolean = () => false,
 ): BridgeSpan[] {
   const water = riverIndex(rivers, radius);
   const spans: BridgeSpan[] = [];
   const span = (from: Vector3, to: Vector3, width: number) => {
+    const centre = from.clone().add(to).normalize();
+    if (keepOut(centre)) return;
     const along = tangent(new Vector3().subVectors(to, from), from);
     spans.push({
-      centre: from.clone().add(to).normalize(),
+      centre,
       along,
       length: from.angleTo(to) * radius + 2 * BRIDGE_BANK,
       width,
@@ -413,13 +417,38 @@ export function planetMarks({
   places,
   sites,
   rivers,
+  town,
 }: {
   globe: Globe;
   places: Pick<WorldPlaces, 'roads' | 'features'>;
   sites: Site[];
   rivers: RiverLayout;
+  /**
+   * The town's placements and water (local metres): its walkable surfaces over the water are its own bridges, and
+   * a crossing they already carry (the mill stream's channel is a drawn river too) gets no planet bridge.
+   */
+  town: {
+    placements: Pick<TownPlacement, 'x' | 'z' | 'footprint' | 'walk'>[];
+    water: WalkWater[];
+  };
 }): PlanetMarks {
   const { radius } = globe;
+  const townSite = sites.find((site) => site.kind === 'town');
+  const townMapping = townSite && anchorMapping(townSite.anchor, radius);
+  const wet = buildWalkWorld([], town.water, new Map());
+  const townBridges = town.placements.filter(
+    ({ walk, x, z }) => walk === 'surface' && isWater(wet, [x, z]),
+  );
+  const local = new Vector3();
+  const bridgedByTown = (direction: Vector3) => {
+    if (!townMapping) return false;
+    townMapping.toLocal(local.copy(direction).multiplyScalar(radius), local);
+    return townBridges.some(
+      ({ x, z, footprint }) =>
+        Math.abs(local.x - x) < footprint.x / 2 + 2 * BRIDGE_BANK &&
+        Math.abs(local.z - z) < footprint.z / 2 + 2 * BRIDGE_BANK,
+    );
+  };
   const cell = (index: number) => cellDirection(globe, index, new Vector3());
   const { chains, ends } = routeChains(places.roads);
   const ribbon = (
@@ -487,7 +516,7 @@ export function planetMarks({
   return {
     ribbons,
     patches,
-    bridges: bridgeSpans(ribbons, rivers, radius),
+    bridges: bridgeSpans(ribbons, rivers, radius, bridgedByTown),
   };
 }
 

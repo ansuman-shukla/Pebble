@@ -163,7 +163,13 @@ export function GlobeTown({
       rivers,
       town: { mapping, groundRadius, height, water, areas: town.areas },
     });
-    const marks = planetMarks({ globe: terrain.globe, places, sites, rivers });
+    const marks = planetMarks({
+      globe: terrain.globe,
+      places,
+      sites,
+      rivers,
+      town: { placements: town.placements, water },
+    });
     const signposts = places.features.filter(
       (feature) => feature.kind === 'signpost',
     );

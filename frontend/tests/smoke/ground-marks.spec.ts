@@ -106,13 +106,14 @@ async function loadWorld(playwright: PlaywrightWorkerArgs['playwright']) {
       channels: streamChannels(town.water, mapping, height, TOWN_WATER_Y),
     },
   );
+  const water = clipWater(town.water, TOWN_GROUND_RADIUS);
   const marks = planetMarks({
     globe,
     places: view.places,
     sites: view.sites,
     rivers,
+    town: { placements: town.placements, water },
   });
-  const water = clipWater(town.water, TOWN_GROUND_RADIUS);
   const ground = globeMarkGround({
     terrain,
     rivers,
@@ -410,6 +411,16 @@ test.describe('ground marks of the real world', () => {
       expect(ends.map(({ gap }) => gap > 0)).toEqual([true, true]);
       expect(ends[0].side * ends[1].side).toBe(-1);
     }
+    // none over the town's own water: the town stands its own bridges (the mill stream's channel is a river too)
+    const townBridges = town.placements
+      .filter((placement) => placement.kind.endsWith('bridge'))
+      .map((placement) =>
+        mapping.toWorld(placement.x, 0, placement.z, new Vector3()).normalize(),
+      );
+    expect(townBridges.length).toBeGreaterThan(0);
+    for (const bridge of marks.bridges)
+      for (const own of townBridges)
+        expect(bridge.centre.angleTo(own) * radius).toBeGreaterThan(5);
     // every crossing the world routes over a river cell is drawn as a bridge
     for (const bridge of view.places.bridges) {
       if (bridge.cell === null) continue;
