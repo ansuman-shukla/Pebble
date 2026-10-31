@@ -328,8 +328,16 @@ export function motionLook(
   };
 }
 
-/** Every clip a motion of the table can play at rest for any bearer (the tests load and check each). */
-export function motionClips(motion: Motion): NpcClip[] {
+/**
+ * Every clip a motion of the table can play at rest for any bearer (the tests load and check each): resting the way
+ * the table says, or drawn in `pose` (the feed's posture laid it so: a weaver seated at the loom).
+ */
+export function motionClips(motion: Motion, pose?: BodyPose): NpcClip[] {
+  const posture = pose
+    ? (Object.keys(FED_POSES) as FedPosture[]).find((fed) =>
+        FED_POSES[fed].includes(pose),
+      )
+    : undefined;
   const bearers: Bearer[] = [];
   for (const look of [
     'town-farmer',
@@ -346,7 +354,11 @@ export function motionClips(motion: Motion): NpcClip[] {
     spear: true,
     dark: false,
   });
-  return [...new Set(bearers.map((bearer) => motionLook(motion, bearer).clip))];
+  return [
+    ...new Set(
+      bearers.map((bearer) => motionLook(motion, bearer, { posture }).clip),
+    ),
+  ];
 }
 
 /** Ground speeds at which the gait changes (game m/s, 10 §4.5): jog from 1.9, run from 2.8. */

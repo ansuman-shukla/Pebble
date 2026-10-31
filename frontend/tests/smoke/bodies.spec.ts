@@ -15,6 +15,7 @@ import { applyMessage, EMPTY_LIVE } from '../../src/lib/live/live-state';
 import {
   type Bearer,
   BAKED_HIP,
+  type BodyPose,
   type FedPosture,
   CAPTURED_SPEED,
   fallbackMotion,
@@ -78,7 +79,23 @@ const FARMER: Bearer = {
 
 test.describe('the motion table', () => {
   test('every motion plays a Polyfork clip', async () => {
-    const clips = [...new Set(MOTIONS.flatMap(motionClips))];
+    // resting the table's way or drawn in any pose the feed's posture lays
+    const poses: (BodyPose | undefined)[] = [
+      undefined,
+      'standing',
+      'seated',
+      'sitting',
+      'kneeling',
+      'sleeping',
+      'inside',
+    ];
+    const clips = [
+      ...new Set(
+        MOTIONS.flatMap((motion) =>
+          poses.flatMap((pose) => motionClips(motion, pose)),
+        ),
+      ),
+    ];
     expect(clips.length).toBeGreaterThan(15);
     const character = createCharacter(lookOf('town-farmer').config);
     // each clip is fetched from Polyfork's CDN (a name it doesn't have fails the load)
@@ -237,6 +254,13 @@ test.describe('the motion table', () => {
       clip: 'Sitting',
       seat: null,
     });
+    // the clips a drawn body may play go by the pose it is drawn in
+    expect(motionClips('craft', 'seated')).toEqual(['Sitting']);
+    expect(motionClips('talk', 'sitting')).toEqual(['Sitting']);
+    expect(motionClips('talk', 'standing')).toEqual(['Talking']);
+    expect(motionClips('pray', 'kneeling')).toEqual(['Idle']);
+    expect(motionClips('sit', 'seated')).toEqual(['Sitting']);
+    expect(motionClips('craft')).not.toContain('Sitting');
     expect(look('idle', 'lying')).toMatchObject({
       pose: 'sleeping',
       still: true,
