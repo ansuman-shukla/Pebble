@@ -67,8 +67,6 @@ interface KindPart {
   material: Material;
   /** The still shadow pass's material when the part sways (else the default). */
   depthMaterial?: Material;
-  /** The part's transform inside the model: identity, as the geometry is baked at rest. */
-  inModel: Matrix4;
   /** The sub-meshes inside it that move (empty for a part that never moves). */
   moving: MovingPart[];
   /** The GLB's own material and the model's wind, to build moving looks from. */
@@ -232,7 +230,6 @@ function buildModel(
     return {
       geometry,
       ...stillLooks(material, wind),
-      inModel: new Matrix4(),
       moving,
       base: material,
       wind,
