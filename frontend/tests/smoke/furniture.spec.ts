@@ -1,19 +1,25 @@
 import { expect, test } from '@playwright/test';
-import { Box3 } from 'three';
+import { Box3, Vector3 } from 'three';
 
-import type { Furniture } from '../../src/lib/client/types.gen';
+import type { Furniture, WorldView } from '../../src/lib/client/types.gen';
+import { MockLiveServer } from '../../src/lib/live/mock-live';
 import { assetSize, PROPS } from '../../src/lib/world/assets';
 import {
   furniturePlacements,
   LOG_PAST_SEATS_M,
   MAT_SIZE,
 } from '../../src/lib/world/furniture';
+import { anchorMapping } from '../../src/lib/world/globe';
 import { proceduralScene } from '../../src/lib/world/procedural-props';
+import { WORLD_URL } from './globe-helpers';
 
 /*
  * The furniture under slots (D198, issue #80): drawn at each slot's height, a log as long as the seats on it, a mat
- * long under a lying body.
+ * long under a lying body; and the mock feed's seated and lying people are on such a piece, never in the air.
  */
+
+/** A seat on a piece lies this close to where the feed puts its sitter. */
+const ON_M = 0.05;
 
 const piece = (overrides: Partial<Furniture>): Furniture => ({
   id: 'camp:fire-pit#seat-1',
@@ -66,4 +72,65 @@ test('each piece is drawn at its slot, turned its way, its seat at the slot heig
   expect(
     furniturePlacements([piece({}), piece({ site: 'town' })], 'town'),
   ).toHaveLength(1);
+});
+
+test('the mock feed seats and beds people on drawn furniture, never in the air', async ({
+  request,
+}) => {
+  const world = (await (await request.get(WORLD_URL)).json()) as WorldView;
+  const pieces = (await (
+    await request.get(`${WORLD_URL}/furniture`)
+  ).json()) as Furniture[];
+  const sites = new Map(world.sites.map((site) => [site.id, site]));
+  const seats = pieces.flatMap((one) => {
+    const site = sites.get(one.site);
+    if (!site) throw new Error(`no site ${one.site}`);
+    const mapping = anchorMapping(site.anchor, world.radius_m);
+    const turn = (one.heading_deg * Math.PI) / 180;
+    const half = (one.span_m ?? 0) / 2;
+    return [-half, half].map((along) => ({
+      piece: one,
+      unit: mapping
+        .toWorld(
+          one.x + Math.cos(turn) * along,
+          0,
+          one.z - Math.sin(turn) * along,
+          new Vector3(),
+        )
+        .normalize(),
+    }));
+  });
+  const server = new MockLiveServer(world);
+  const used = new Set<string>();
+  for (let tick = 0; tick < 60; tick += 1) {
+    for (const citizen of server.entities().citizens) {
+      if (citizen.posture !== 'sitting' && citizen.slot_heading === null)
+        continue;
+      const at = new Vector3(...citizen.position.unit);
+      const [nearest] = seats
+        .map((seat) => ({
+          ...seat,
+          metres: seat.unit.angleTo(at) * world.radius_m,
+        }))
+        .sort((a, b) => a.metres - b.metres);
+      const where = `${citizen.id} at tick ${tick}`;
+      expect(nearest.metres, where).toBeLessThan(ON_M);
+      expect(citizen.slot_heading, where).toBeCloseTo(
+        nearest.piece.heading_deg,
+        -1.5,
+      );
+      expect(citizen.slot_height_m ?? 0, where).toBeCloseTo(
+        nearest.piece.seat_m,
+        2,
+      );
+      used.add(nearest.piece.kind);
+    }
+    server.skip(1);
+  }
+  expect([...used].sort()).toEqual([
+    'log_seat',
+    'lord_seat',
+    'sleeping_mat',
+    'stool',
+  ]);
 });

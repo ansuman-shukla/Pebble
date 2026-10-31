@@ -52,6 +52,13 @@ const DARK = { from: 18 * 60 + 30, to: 6 * 60 };
 
 type Spot = [number, number];
 
+/** A slot with furniture someone sits or lies on (the backend's `data/slots.yaml`): its facing and seat height. */
+interface Seat {
+  heading: number;
+  /** Where the hips rest; 0 on a mat. */
+  height: number;
+}
+
 type Step =
   | { walk: Spot; to: string }
   | {
@@ -59,6 +66,8 @@ type Step =
       label?: string;
       ticks: number;
       say?: string;
+      /** Done on the furniture of the slot they stand on (the walk before it ends there). */
+      seat?: Seat;
     };
 
 interface MockPerson {
@@ -74,6 +83,28 @@ interface MockPerson {
 }
 
 const WELL: Spot = [-21, 52];
+
+/** A log seat by a camp's fire pit (slots.yaml `fire_pit` seat-N): 2.2 m out at a compass bearing, facing the fire. */
+function fireSeat(bearing: number): [Spot, Seat] {
+  const turn = (bearing * Math.PI) / 180;
+  return [
+    [2.2 * Math.sin(turn), -2.2 * Math.cos(turn)],
+    { heading: (360 - bearing) % 360, height: 0.4 },
+  ];
+}
+/** fire_pit seat-4 and seat-7, seat-8. */
+const [EAST_LOG, EAST_SEAT] = fireSeat(121);
+const [WEST_LOG, WEST_SEAT] = fireSeat(289);
+const [NORTH_WEST_LOG, NORTH_WEST_SEAT] = fireSeat(311);
+/** The lord's seat in the castle court (castle_keep lord-seat, the keep at (0, -6)). */
+const LORD_SEAT_AT: Spot = [0, 3.5];
+const LORD_SEAT: Seat = { heading: 0, height: 0.45 };
+/** The weaver's stool at farmhouse-1's loom (loom seat, the loom at (-87, 91.4)). */
+const LOOM_STOOL_AT: Spot = [-87, 92.15];
+const LOOM_STOOL: Seat = { heading: 180, height: 0.3 };
+/** A mat under band B's north lean-to (lean_to mat-1, the lean-to at (0, -6)), heads in. */
+const LEAN_TO_MAT_AT: Spot = [-0.45, -6.2];
+const LEAN_TO_MAT: Seat = { heading: 0, height: 0 };
 
 type Motion = CitizenEntity['motion'];
 type Posture = CitizenEntity['posture'];
@@ -165,13 +196,19 @@ const PEOPLE: MockPerson[] = [
     appearance: 'a young woman in an indigo robe',
     site: 'town',
     pace: 1,
-    home: [-78, 93],
+    home: LOOM_STOOL_AT,
     plan: [
-      { activity: 'working', label: 'weaving at the loom', ticks: 14 },
+      {
+        activity: 'working',
+        label: 'weaving at the loom',
+        ticks: 14,
+        seat: LOOM_STOOL,
+      },
       { walk: [-24, 54], to: 'the well' },
       { activity: 'drinking', label: 'the well', ticks: 4 },
       { walk: [-78, 93], to: 'home' },
       { activity: 'eating', label: 'a bowl of rice', ticks: 6 },
+      { walk: LOOM_STOOL_AT, to: 'the loom' },
     ],
   },
   {
@@ -239,10 +276,17 @@ const PEOPLE: MockPerson[] = [
     appearance: 'a grey-bearded lord in a dark robe',
     site: 'town',
     pace: 0.9,
-    home: [0, 3],
+    home: [0, 2.4],
     plan: [
       { activity: 'idle', label: 'the courtyard', ticks: 10 },
-      { activity: 'resting', label: 'the courtyard', ticks: 10 },
+      { walk: LORD_SEAT_AT, to: 'his seat' },
+      {
+        activity: 'resting',
+        label: 'the courtyard',
+        ticks: 10,
+        seat: LORD_SEAT,
+      },
+      { walk: [0, 2.4], to: 'the courtyard' },
       { activity: 'eating', label: 'his midday meal', ticks: 5 },
     ],
   },
@@ -253,17 +297,23 @@ const PEOPLE: MockPerson[] = [
     appearance: 'a tall man in a fur stole',
     site: 'band_a_camp',
     pace: 0.9,
-    home: [1.8, 1.6],
+    home: EAST_LOG,
     plan: [
-      { activity: 'resting', label: 'the fire pit', ticks: 8 },
+      {
+        activity: 'resting',
+        label: 'the fire pit',
+        ticks: 8,
+        seat: EAST_SEAT,
+      },
       { walk: [32, 24], to: 'the thicket' },
       { activity: 'gathering', label: 'firewood', ticks: 8 },
-      { walk: [1.8, 1.6], to: 'camp' },
+      { walk: EAST_LOG, to: 'camp' },
       {
         activity: 'talking',
         label: 'Mena',
         ticks: 4,
         say: 'The berries by the thicket are ripe again.',
+        seat: EAST_SEAT,
       },
     ],
   },
@@ -274,13 +324,23 @@ const PEOPLE: MockPerson[] = [
     appearance: 'an old woman with long white hair',
     site: 'band_a_camp',
     pace: 0.6,
-    home: [-1.6, -1.8],
+    home: NORTH_WEST_LOG,
     plan: [
-      { activity: 'resting', label: 'the fire pit', ticks: 6 },
-      { activity: 'eating', label: 'roasted roots', ticks: 5 },
+      {
+        activity: 'resting',
+        label: 'the fire pit',
+        ticks: 6,
+        seat: NORTH_WEST_SEAT,
+      },
+      {
+        activity: 'eating',
+        label: 'roasted roots',
+        ticks: 5,
+        seat: NORTH_WEST_SEAT,
+      },
       { walk: [-24, 18], to: 'the root patch' },
       { activity: 'gathering', label: 'roots', ticks: 10 },
-      { walk: [-1.6, -1.8], to: 'camp' },
+      { walk: NORTH_WEST_LOG, to: 'camp' },
     ],
   },
   {
@@ -337,18 +397,24 @@ const PEOPLE: MockPerson[] = [
     appearance: 'a heavy-set man with a beard',
     site: 'band_b_camp',
     pace: 0.9,
-    home: [1.8, 1.6],
+    home: EAST_LOG,
     plan: [
       {
         activity: 'talking',
         label: 'Sela',
         ticks: 4,
         say: 'We move to the hills when the nuts are gone.',
+        seat: EAST_SEAT,
       },
       { walk: [28, 30], to: 'the nut trees' },
       { activity: 'gathering', label: 'nuts', ticks: 9 },
-      { walk: [1.8, 1.6], to: 'camp' },
-      { activity: 'resting', label: 'the fire pit', ticks: 6 },
+      { walk: EAST_LOG, to: 'camp' },
+      {
+        activity: 'resting',
+        label: 'the fire pit',
+        ticks: 6,
+        seat: EAST_SEAT,
+      },
     ],
   },
   {
@@ -358,13 +424,23 @@ const PEOPLE: MockPerson[] = [
     appearance: 'a woman with a baby sling',
     site: 'band_b_camp',
     pace: 1,
-    home: [-1.6, -1.8],
+    home: NORTH_WEST_LOG,
     plan: [
-      { activity: 'resting', label: 'the fire pit', ticks: 5 },
-      { activity: 'eating', label: 'dried fish', ticks: 5 },
+      {
+        activity: 'resting',
+        label: 'the fire pit',
+        ticks: 5,
+        seat: NORTH_WEST_SEAT,
+      },
+      {
+        activity: 'eating',
+        label: 'dried fish',
+        ticks: 5,
+        seat: NORTH_WEST_SEAT,
+      },
       { walk: [-26, 20], to: 'the berry bushes' },
       { activity: 'gathering', label: 'berries', ticks: 8 },
-      { walk: [-1.6, -1.8], to: 'camp' },
+      { walk: NORTH_WEST_LOG, to: 'camp' },
     ],
   },
   {
@@ -389,13 +465,19 @@ const PEOPLE: MockPerson[] = [
     appearance: 'a small child in a hide tunic',
     site: 'band_b_camp',
     pace: 0.7,
-    home: [0, -5],
+    home: LEAN_TO_MAT_AT,
     plan: [
-      { activity: 'sleeping', label: 'the lean-to', ticks: 12 },
+      {
+        activity: 'sleeping',
+        label: 'the lean-to',
+        ticks: 12,
+        seat: LEAN_TO_MAT,
+      },
+      { walk: [0, -4.4], to: 'camp' },
       { activity: 'idle', label: 'camp', ticks: 4 },
       { walk: [8, 8], to: 'the drying rack' },
       { activity: 'gathering', label: 'sticks', ticks: 5 },
-      { walk: [0, -5], to: 'the lean-to' },
+      { walk: LEAN_TO_MAT_AT, to: 'the lean-to' },
     ],
   },
   {
@@ -503,12 +585,17 @@ const PEOPLE: MockPerson[] = [
     appearance: 'a white-haired old woman in a fur mantle',
     site: 'band_b_camp',
     pace: 0.6,
-    home: [-1.3, -1.2],
+    home: WEST_LOG,
     plan: [
-      { activity: 'resting', label: 'the fire pit', ticks: 10 },
+      {
+        activity: 'resting',
+        label: 'the fire pit',
+        ticks: 10,
+        seat: WEST_SEAT,
+      },
       { walk: [-20, 16], to: 'the root patch' },
       { activity: 'gathering', label: 'roots', ticks: 8 },
-      { walk: [-1.3, -1.2], to: 'camp' },
+      { walk: WEST_LOG, to: 'camp' },
     ],
   },
 ];
@@ -1010,7 +1097,15 @@ export class MockLiveServer {
     | 'titles'
   > {
     const step = state.person.plan[state.step];
-    const motion = mockMotion(activity, labelOf(step), moved);
+    // on a seat, a mat or a stool, as the backend's motion reads a slot (D119): resting there sits on it
+    const seat =
+      !moved && 'seat' in step && step.activity === activity
+        ? step.seat
+        : undefined;
+    const motion =
+      seat && activity === 'resting'
+        ? 'sit'
+        : mockMotion(activity, labelOf(step), moved);
     const [goal, driver] = GOALS[activity] ?? ['', null];
     const target =
       'walk' in step && activity === 'walking'
@@ -1023,9 +1118,13 @@ export class MockLiveServer {
         : null;
     return {
       motion,
-      posture: POSTURES[motion] ?? 'standing',
-      slot_heading: null,
-      slot_height_m: null,
+      posture: seat
+        ? motion === 'lie'
+          ? 'lying'
+          : 'sitting'
+        : (POSTURES[motion] ?? 'standing'),
+      slot_heading: seat?.heading ?? null,
+      slot_height_m: seat && seat.height > 0 ? seat.height : null,
       goal,
       driver,
       target,
