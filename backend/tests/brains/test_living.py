@@ -257,8 +257,10 @@ def test_bands_sleep_at_camp_at_night_and_forage_by_day(life: Life) -> None:
         assert len(samples) > 3 * 60 * (DAYS - 1)  # every night was sampled
         assert all(asleep for asleep, _ in samples), f"{citizen.id} was awake in the middle of the night"
         assert max(distance for _, distance in samples) <= HOME_RADIUS_M, f"{citizen.id} slept away from home"
-        for day in range(1, DAYS):
-            assert life.started[(citizen.id, day, "gather")] >= 1, f"{citizen.id} didn't forage on day {day}"
+        # a forager still carrying a day and a half of food rests and strolls about camp instead (N1: food comes
+        # from farther off now, so a big outing can feed someone a whole day; seed 20261028: Pip on day 3)
+        idle = [day for day in range(1, DAYS) if life.started[(citizen.id, day, "gather")] == 0]
+        assert len(idle) <= 1, f"{citizen.id} didn't forage on days {idle}"
     for day in range(1, DAYS):
         assert sum(life.started[(c.id, day, "gather")] for c in bands) >= 3 * len(bands)
 
