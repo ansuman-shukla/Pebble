@@ -163,7 +163,7 @@ WORK_TASKS: tuple[WorkTask, ...] = (
         None,
         places=(society.BELL_TOWER,),
         nowhere="There is no bell here.",
-        label="ringing the temple bell",
+        label="waiting to ring the temple bell",  # keeping the hour; it rings as the work ends
         finish=society.ring_bell,
         timing=society.ring_timing,
     ),
