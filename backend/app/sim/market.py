@@ -11,8 +11,9 @@ prices per lot from that:
     sells for ⌈value × factor × lot⌉      pays max(1, ⌊0.75 × sells for⌋)
     word: dear above the price at the target, fair at it, cheap below
 
-A sale of several lots prices each lot at the stock it leaves (or meets), so the price walks the curve as the stock
-moves. The stall buys only goods it sells and holds at most twice their target. A good whose word changes tells
+A purchase prices each lot at the stock it takes from, a sale to the stall at the stock it makes, so the price walks
+the curve as the stock moves and the stall always pays less for a lot than it asks for that same lot back (no round
+trip pays). The stall buys only goods it sells and holds at most twice their target. A good whose word changes tells
 `prices_changed` (after the sale that moved it, or at the tick's end for any other cause: a stash, a theft).
 """
 
@@ -55,8 +56,14 @@ def sell_price(item: str, stock: int) -> int:
 
 
 def buy_price(item: str, stock: int) -> int:
-    """What the stall pays for one lot of the good at this stock."""
+    """Three quarters of what the stall asks for one lot at this stock (at least a coin)."""
     return max(1, math.floor(BUY_SHARE * sell_price(item, stock) + _EPSILON))
+
+
+def pays_for(item: str, stock: int) -> int:
+    """What the stall pays for the next lot sold to it while it holds `stock`: priced at the stock that lot makes,
+    so selling a lot and buying it back never gains a coin."""
+    return buy_price(item, stock + _lot(item).lot)
 
 
 def price_word(item: str, stock: int) -> PriceWord:
@@ -214,7 +221,7 @@ def sell(core: SimCore, citizen: Citizen, action: Sell) -> ActionResult:
     stock, till = stock_of(core, stall, item), merchant.inventory.get("coins", 0)
     deal, paid, stopped = 0, 0, ""
     while deal < min(action.amount, carried) // lot.lot:
-        price = buy_price(item, stock)
+        price = pays_for(item, stock)
         if stock + lot.lot > HOLD_TARGETS * lot.target:
             stopped = f"The stall has all the {ITEMS[item].plural or item} it wants."
         elif till - paid < price:
@@ -329,7 +336,7 @@ def note_prices(core: SimCore, stall: Station, cause_seq: int | None = None) -> 
             before=before,
             lot=lot,
             sell=sell_price(item, stock),
-            buy=buy_price(item, stock),
+            buy=pays_for(item, stock),
         )
         core.emit("prices_changed", payload, cause_seq=cause_seq)
 
@@ -356,7 +363,7 @@ def market_view(core: SimCore, citizen: Citizen) -> MarketView | None:
         sells = f"{_coins(sell_price(item, stock))} {each}" if stock >= lot else "none left"
         seen.append(
             PriceSeen(
-                item=item, price=f"{sells}; it pays {_coins(buy_price(item, stock))}", word=price_word(item, stock)
+                item=item, price=f"{sells}; it pays {_coins(pays_for(item, stock))}", word=price_word(item, stock)
             )
         )
     return MarketView(items=seen)

@@ -15,6 +15,7 @@ from app.sim.market import (
     buy_price,
     factor,
     market_view,
+    pays_for,
     price_word,
     sell_price,
     stall_goods,
@@ -82,6 +83,14 @@ def test_the_stall_always_pays_at_least_a_coin_a_lot(monkeypatch: pytest.MonkeyP
 )
 def test_rice_is_dear_below_its_target_fair_up_to_214_and_cheap_beyond(stock: int, word: str, sell: int) -> None:
     assert (price_word("rice", stock), sell_price("rice", stock)) == (word, sell)
+
+
+@pytest.mark.parametrize("item", stall_goods())
+def test_the_stall_pays_less_for_a_lot_than_it_asks_for_that_lot_back(item: str) -> None:
+    lot = load_economy().goods[item].stall
+    assert lot is not None
+    for stock in range(2 * lot.target - lot.lot + 1):  # sold in: stock -> stock + lot; bought back: the reverse
+        assert pays_for(item, stock) < sell_price(item, stock + lot.lot), (item, stock)
 
 
 def test_the_stall_trades_exactly_the_goods_with_a_stall_row() -> None:
@@ -212,16 +221,26 @@ def test_buying_names_the_lot_and_the_goods_the_stall_sells(new_sim: Callable[..
 def test_a_sale_to_the_stall_is_paid_from_the_merchant_s_purse(new_sim: Callable[..., Simulation]) -> None:
     sim = _market(new_sim, inventory={"hide": 3, "rice": 7})
     _open(sim)
-    result = sim.instant("goro", Sell(item="hides", amount=2))  # the stall pays 11 at 6 in stock and at 7
-    assert (result.outcome, result.text) == ("done", "You sell two hides for twenty-two coins.")
-    assert sim.citizen("goro").inventory == {"coins": 22, "hide": 1, "rice": 7}
-    assert sim.citizen("fumiko").inventory == {"coins": 78}
+    result = sim.instant("goro", Sell(item="hides", amount=2))  # priced at the stock each makes: 11 at 7, 10 at 8
+    assert (result.outcome, result.text) == ("done", "You sell two hides for twenty-one coins.")
+    assert sim.citizen("goro").inventory == {"coins": 21, "hide": 1, "rice": 7}
+    assert sim.citizen("fumiko").inventory == {"coins": 79}
     assert sim.state.stores[STALL]["hide"] == 8
     sold = next(e for e in sim.drain() if e.type == "sold")
-    assert sold.payload == Traded(item="hide", count=2, lots=2, coins=22, stall=STALL, merchant="fumiko")
+    assert sold.payload == Traded(item="hide", count=2, lots=2, coins=21, stall=STALL, merchant="fumiko")
     rice = sim.instant("goro", Sell(item="rice", amount=9))  # 7 carried: 3 lots
     assert rice.text == "You sell six measures of rice for nine coins."
-    assert sim.citizen("goro").inventory == {"coins": 31, "hide": 1, "rice": 1}
+    assert sim.citizen("goro").inventory == {"coins": 30, "hide": 1, "rice": 1}
+
+
+def test_buying_a_sickle_and_selling_it_back_leaves_the_buyer_no_richer(new_sim: Callable[..., Simulation]) -> None:
+    sim = _market(new_sim, merchant_coins=200, inventory={"coins": 200})
+    sim.state.stores[STALL]["sickle"] = 1
+    _open(sim)
+    assert sim.instant("goro", Buy(item="sickle", amount=1)).text == "You buy a sickle for sixty-two coins."
+    assert sim.instant("goro", Sell(item="sickle", amount=1)).text == "You sell a sickle for forty-six coins."
+    assert sim.citizen("goro").inventory == {"coins": 184} and sim.state.stores[STALL]["sickle"] == 1
+    assert sim.instant("goro", Sell(item="iron axe", amount=1)).text == "You don't have an iron axe to sell."
 
 
 def test_the_stall_buys_only_what_it_sells_up_to_twice_its_target(new_sim: Callable[..., Simulation]) -> None:
@@ -230,8 +249,8 @@ def test_the_stall_buys_only_what_it_sells_up_to_twice_its_target(new_sim: Calla
     assert sim.instant("goro", Sell(item="berries", amount=5)).text == "The stall doesn't buy berries."
     assert sim.instant("goro", Sell(item="flint", amount=2)).text == "The stall doesn't buy flint."
     assert sim.instant("goro", Sell(item="coins", amount=3)).text == "The stall doesn't buy coins."
-    full = sim.instant("goro", Sell(item="hide", amount=8))  # 6 in stock, room for 6 more: 11 + 11 + 10 + 9 + 9 + 9
-    assert full.text == "You sell six hides for fifty-nine coins. The stall has all the hides it wants."
+    full = sim.instant("goro", Sell(item="hide", amount=8))  # 6 in stock, room for 6 more: 11 + 10 + 9 + 9 + 9 + 9
+    assert full.text == "You sell six hides for fifty-seven coins. The stall has all the hides it wants."
     assert sim.state.stores[STALL]["hide"] == 12 and sim.citizen("goro").inventory["hide"] == 2
     assert sim.instant("goro", Sell(item="hide", amount=1)).text == "The stall has all the hides it wants."
 
@@ -281,7 +300,7 @@ def test_a_word_moved_by_anything_but_a_sale_is_told_at_the_tick_s_end(new_sim: 
     sim.state.stores[STALL]["cloth"] = 1  # as if taken from the stall
     sim.step()
     changed = [e.payload for e in sim.drain() if isinstance(e.payload, PricesChanged)]
-    assert changed == [PricesChanged(stall=STALL, item="cloth", word="dear", before="fair", lot=1, sell=47, buy=35)]
+    assert changed == [PricesChanged(stall=STALL, item="cloth", word="dear", before="fair", lot=1, sell=47, buy=29)]
 
 
 def test_someone_at_the_open_stall_sees_each_good_s_price_and_word(new_sim: Callable[..., Simulation]) -> None:
@@ -295,8 +314,8 @@ def test_someone_at_the_open_stall_sees_each_good_s_price_and_word(new_sim: Call
     assert seen["wood"].price == "four coins for four pieces; it pays three coins"
     assert seen["dried meat"].price == "six coins for two strips; it pays four coins"
     assert seen["hide"].price == "fifteen coins each; it pays eleven coins"
-    assert seen["gold"] == PriceSeen(item="gold", price="none left; it pays thirty coins", word="dear")
-    assert seen["iron axe"].price == "sixty coins each; it pays forty-five coins"
+    assert seen["gold"] == PriceSeen(item="gold", price="none left; it pays twenty-six coins", word="dear")
+    assert seen["iron axe"].price == "sixty coins each; it pays thirty-nine coins"  # priced at 3 in stock
 
 
 def test_the_merchant_s_session_tells_how_many_sales_she_made(new_sim: Callable[..., Simulation]) -> None:
