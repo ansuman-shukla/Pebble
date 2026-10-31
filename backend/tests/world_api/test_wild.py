@@ -328,7 +328,7 @@ def test_animals_are_seen_by_kind_and_group(new_sim: Callable[..., Simulation]) 
     assert seen[0].where == "close by to the west"
     wolf.activity = "sleeping"
     assert api.look_around().animals[0].doing == "asleep"
-    wolf.target, wolf.activity = "hunter", "hunting"
+    wolf.target, wolf.activity = "hunter", "chasing"
     assert api.look_around().animals[0].doing == "coming at you"
     text = api.look_around().text()
     assert "Animals: a wolf close by to the west (coming at you)" in text

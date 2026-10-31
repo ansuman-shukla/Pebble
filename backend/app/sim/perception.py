@@ -99,8 +99,6 @@ DOING: dict[str, str] = {
 ANIMAL_DOING: dict[str, str] = {
     "grazing": "grazing",
     "walking": "on the move",
-    "running": "running",
-    "hunting": "hunting",
     "sleeping": "asleep",
     # the finer words of 10-world-v1 §4.6 (A1)
     "alert": "on the alert",
