@@ -205,6 +205,25 @@ def danger(perception: Perception) -> Seen | None:
     )
 
 
+def prowler(perception: Perception) -> Seen | None:
+    """A dangerous animal awake in view, near or not (its remains, or one asleep, are no reason to hurry)."""
+    return next(
+        (
+            animal
+            for animal in perception.animals
+            if animal.doing not in (None, "asleep")
+            and not animal.label.startswith("the remains")
+            and any(word in animal.label for word in DANGER_WORDS)
+        ),
+        None,
+    )
+
+
+def desperate(needs: Needs) -> bool:
+    """Starving or terribly thirsty: worth running for food or water."""
+    return needs.hunger >= 3 or needs.thirst >= 3
+
+
 def game(perception: Perception) -> list[tuple[str, Seen]]:
     """Animals worth hunting in view, nearest first: (what to call it, how it is seen)."""
     found: list[tuple[str, Seen]] = []

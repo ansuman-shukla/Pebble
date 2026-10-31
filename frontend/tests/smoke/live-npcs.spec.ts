@@ -12,7 +12,11 @@ import {
   tickMs,
 } from '../../src/lib/live/live-contract';
 import { LANE_M } from '../../src/lib/live/drawn-track';
-import { motionClips, type Motion } from '../../src/lib/live/motion';
+import {
+  type BodyPose,
+  motionClips,
+  type Motion,
+} from '../../src/lib/live/motion';
 import { KEEP_M } from '../../src/lib/live/separation';
 import type { MockStartHook } from '../../src/lib/live/mock-live';
 import { citizenPath, pointAt } from '../../src/lib/live/walk-path';
@@ -74,8 +78,8 @@ interface Npc {
   facing: Vector3;
   /** Seconds of clip time its animation has played. */
   clipClock: number;
-  /** How the body is posed: standing, sitting or lying. */
-  posture: string;
+  /** How the body is posed: standing, seated, sitting on the ground, lying... */
+  posture: BodyPose;
   /** What the body is shown doing (`motion.ts`). */
   motion: Motion;
 }
@@ -124,7 +128,7 @@ async function npcs(page: Page): Promise<Npc[]> {
     feet: data.npcFeet ? footPair(data.npcFeet) : [],
     facing: new Vector3(...(data.npcFacing ?? '0,0,0').split(',').map(Number)),
     clipClock: Number(data.npcClipClock),
-    posture: data.npcPosture ?? '',
+    posture: (data.npcPosture ?? 'standing') as BodyPose,
     motion: (data.npcMotion ?? 'idle') as Motion,
   }));
 }
@@ -281,7 +285,9 @@ test('the 22 citizens glide between ticks, stand on the ground and play their ac
       .filter((npc) =>
         npc.activity === 'walking'
           ? !GAIT_CLIPS.includes(npc.clip)
-          : !motionClips(npc.motion).some((clip) => clip === npc.clip),
+          : !motionClips(npc.motion, npc.posture).some(
+              (clip) => clip === npc.clip,
+            ),
       )
       .map((npc) => `${npc.id} ${npc.activity} ${npc.motion}: ${npc.clip}`);
   await expect.poll(async () => mismatches(await npcs(page))).toEqual([]);
@@ -1071,7 +1077,10 @@ test('the real feed: the 22 citizens stand where the engine says, on the ground,
       (await npcs(page))
         .filter((npc) => npc.loaded && npc.clip && npc.activity !== 'walking')
         .filter(
-          (npc) => !motionClips(npc.motion).some((clip) => clip === npc.clip),
+          (npc) =>
+            !motionClips(npc.motion, npc.posture).some(
+              (clip) => clip === npc.clip,
+            ),
         )
         .map((npc) => `${npc.id} ${npc.activity} ${npc.motion}: ${npc.clip}`),
     )
