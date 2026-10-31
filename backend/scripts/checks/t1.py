@@ -1,6 +1,7 @@
 """T1's run checks (10-world-v1 §1.5, 1.6, 3.3, 4.6): herds drink at their waterholes at dawn, animals live where
 people meet them, every `trespassed` is a deed the rules name (and poaching happens), and whoever a den charged knows
-that den. Counts and shares marked "over the seeds" are summed over both seeds."""
+that den. Over the seeds: poaching counts are summed, the waterhole share is the seeds' mean and the near-people share
+the worst seed's."""
 
 from collections import Counter
 from collections.abc import Mapping
@@ -8,12 +9,13 @@ from typing import override
 
 import numpy as np
 
-from app.observability.events import EventDraft, Trespassed
+from app.observability.events import EventDraft, ItemMoved, Trespassed
 from app.sim import society
 from app.sim.animals import WILDLIFE
 from app.sim.clock import sun_altitude_deg, sun_direction
 from app.sim.fauna import SPECIES, pin_of, waterhole_of
 from app.sim.simulation import Simulation
+from app.sim.state import Citizen
 from app.sim.territory import CASTLE_TITLES, TERRITORY, poached
 from app.sim.vec import Vec3
 from scripts.checks.a1 import CAMP_M, EXPOSURE
@@ -142,6 +144,7 @@ class Trespasses(Check):
 
     @override
     def after_step(self, sim: Simulation, events: list[EventDraft]) -> None:
+        by_seq = {event.seq: event for event in events}
         for event in events:
             if not isinstance(event.payload, Trespassed) or event.actor_id is None:
                 continue
@@ -156,10 +159,19 @@ class Trespasses(Check):
                 why = "a castle title in the castle"
             elif deed.kind == "ground" and deed.took is None:
                 why = "poaching without a take"
-            elif deed.kind == "ground" and poached(sim.core, doer, doer.position, hunting=True) is None:
+            elif deed.kind == "ground" and not self._wronged(sim, doer, by_seq.get(event.cause_seq or -1)):
                 why = "a take on ground the taker may take from"
             if why:
                 self.wrong.append(f"{doer.id} {deed.kind} at tick {sim.tick}: {why}")
+
+    @staticmethod
+    def _wronged(sim: Simulation, doer: Citizen, cause: EventDraft | None) -> bool:
+        """The take the deed names (its cause, an `item_moved` out of the wild) wronged a ground where it was made:
+        a hunt if it came from an animal, else a gathering or a felling."""
+        if cause is None or not isinstance(cause.payload, ItemMoved) or cause.position is None:
+            return False
+        hunting = cause.payload.source.kind == "animal"
+        return poached(sim.core, doer, cause.position, hunting=hunting) is not None
 
     @override
     def outcome(self, sim: Simulation) -> Outcome:
