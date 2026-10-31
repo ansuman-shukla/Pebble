@@ -1,7 +1,8 @@
 """The M7 and M6 done-whens: the 22 scripted citizens live 10 game days headless among the animals.
 
 One 10-day run (~40 s) feeds every test here: nobody dies (deaths only from real causes, and the default cast
-doesn't starve or parch), everyone keeps making progress and moving, nobody passes through the town's walls,
+doesn't starve or parch), everyone keeps making progress and moving, says what they are after, greets and talks,
+runs only when they must and walks onto their work slots themselves, nobody passes through the town's walls,
 bands sleep at camp at night and forage by day, the farmers work the fields and the storehouse fills up; animal
 populations stay within their caps, predators hurt people only at dusk or night when they're alone and away from
 fire, hunters hunt, the camp fires burn through the nights and the guard lights the gate's fire baskets.
@@ -26,6 +27,8 @@ from app.sim.simulation import Simulation
 from app.sim.slots import PERSONAL_M, crowded, held_slot, is_inside, off_work_slot
 from app.sim.vec import Vec3
 from app.sim.world import SimWorld
+from scripts.checks import br0
+from scripts.checks.base import Check, Outcome
 from tests.sim_helpers import drawn_on, local_hour
 
 DAYS = 10
@@ -61,6 +64,7 @@ class Life:
     crowded: list[tuple[int, str, str, float]] = field(default_factory=list)  # (tick, a, b, metres) closer than 0.8 m
     off_slot: list[tuple[int, str]] = field(default_factory=list)  # (tick, citizen) working off their task's slots
     beds: Counter[str] = field(default_factory=Counter)  # (citizen:bed kind) sleeper-minutes in the small hours
+    brains: dict[str, Outcome] = field(default_factory=dict)  # BR0's run checks over this run, by name
 
 
 @pytest.fixture(scope="module")
@@ -74,6 +78,9 @@ def life(sim_world: SimWorld, planner: Planner) -> Life:
         sim.add_citizen(spec)
     brains = citizen_brains(sim, SEED)
     sim.drain()
+    checks: list[Check] = [kind() for kind in br0.CHECKS]
+    for check in checks:
+        check.start(sim)
     out = Life(sim=sim, stall=dict.fromkeys(sim.state.citizens, 0), rice=[sim.state.stores[STORE]["rice"]])
     walk = sim_world.town.walk
     last_progress = dict.fromkeys(sim.state.citizens, 0)
@@ -84,9 +91,14 @@ def life(sim_world: SimWorld, planner: Planner) -> Life:
         health = {c.id: c.body.health for c in sim.state.citizens.values()}
         injured: set[str] = set()
         moving = {c.id: c.action.kind for c in sim.state.citizens.values() if c.action is not None}
+        for check in checks:
+            check.before_step(sim)
         sim.step()
         day = (sim.tick - 1) // DAY_MINUTES
-        for event in sim.drain():
+        events = sim.drain()
+        for check in checks:
+            check.after_step(sim, events)
+        for event in events:
             if event.type == "tick_summary":
                 assert isinstance(event.payload, TickSummary)
                 _draw(out, event.payload, drawn, before, moving)
@@ -152,6 +164,7 @@ def life(sim_world: SimWorld, planner: Planner) -> Life:
         if sim.tick % DAY_MINUTES == 0:
             out.rice.append(sim.state.stores[STORE].get("rice", 0))
             out.populations.append(Counter(a.kind for a in sim.state.animals.values() if a.alive))
+    out.brains = {check.name: check.outcome(sim) for check in checks}
     return out
 
 
@@ -196,7 +209,23 @@ def test_everyone_keeps_doing_things_and_moving(life: Life) -> None:
     for citizen_id in life.sim.state.citizens:
         for day in range(DAYS):
             assert life.moved_m[(citizen_id, day)] > 100, f"{citizen_id} barely moved on day {day}"
-    assert life.said > 15 * DAYS  # people greet each other
+    # people greet each other and pass the time of day: at least 3 things said a citizen-day (audit F8: about 1;
+    # BR0's 5-seed sweep, 10 days: 15.2-16.1, D165)
+    assert life.said >= br0.SAID_PER_DAY * len(life.sim.state.citizens) * DAYS
+
+
+def test_brains_say_what_they_are_after_and_greet_with_a_bow_or_a_wave(life: Life) -> None:
+    """BR0: a goal set since waking for nearly every busy tick (the inspector's "why"), a wave or bow with every
+    greeting, and the town bowing to its lord daily."""
+    for name in ("br0.goals", "br0.gestures"):
+        assert life.brains[name].ok, life.brains[name].words
+
+
+def test_runners_flee_or_are_desperate_and_workers_walk_onto_their_slots(life: Life) -> None:
+    """BR0: nobody runs about their day; and nobody sets to work far from the slot it takes, to be walked there at
+    the tick's end under the work's label (issue #89: 86-116 times a run before)."""
+    for name in ("br0.runners", "br0.work_walks"):
+        assert life.brains[name].ok, life.brains[name].words
 
 
 def test_no_two_bodies_end_a_tick_closer_than_personal_space(life: Life) -> None:
