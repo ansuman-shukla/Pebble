@@ -17,7 +17,6 @@ from app.sim.simulation import Simulation
 from app.sim.slots import (
     LEGS_M,
     PERSONAL_M,
-    SEAT_M,
     SLOTS,
     STEP_MAX_M,
     Slot,
@@ -680,7 +679,7 @@ def test_rest_never_claims_a_seat_it_cant_step_to(new_sim: Callable[..., Simulat
     lay = layout(sim.core)
     SLOTS.of(sim.state).layout = replace(lay, slots={**lay.slots, behind_wall.id: behind_wall})
     rester = sim.add_citizen(make_spec("rester", at=(x, z)))
-    assert sim.world.distance_m(rester.position, behind_wall.position) < SEAT_M  # near, but inside the house
+    assert sim.world.distance_m(rester.position, behind_wall.position) < STEP_MAX_M  # near, but inside the house
     rest = WorldApi(sim, rester.id).rest(5)
     started = [e.payload.model_dump()["args"] for e in sim.drain() if e.type == "action_started"]
     assert started == [{"minutes": 5, "slot": None, "where": "on the ground"}] and claim_of(sim.core, rester) is None
@@ -756,3 +755,18 @@ def test_nobody_loose_ends_on_the_legs_of_someone_sitting_loose(
     settle(sim.core)
     feet = legs(sim.world, sitter.position, sitter.heading_deg)
     assert sim.world.distance_m(other.position, feet) >= PERSONAL_M and crowded(sim.core) == []
+
+
+def test_a_rest_by_the_lean_tos_takes_a_free_log_by_the_fire(new_sim: Callable[..., Simulation]) -> None:
+    sim = _sim(new_sim)
+    camper = sim.add_citizen(make_spec("camper", site="band_a_camp", at=(4.5, -4.5), region="band_a"))
+    pit = sim.world.structures["band_a_camp:fire-pit"]
+    seats = [slot for slot in layout(sim.core).owners[pit.id] if slot.kind == "seat"]
+    nearest = min(sim.world.distance_m(camper.position, seat.position) for seat in seats)
+    assert 4.0 < nearest < STEP_MAX_M  # past the old 4 m reach, within a few steps
+    rest = WorldApi(sim, camper.id).rest(10)
+    sim.step()
+    seat = _slot(sim, camper)
+    assert seat.owner == pit.id and seat.kind == "seat"
+    assert sim.world.distance_m(camper.position, seat.position) < 0.01 and _summary(sim).moved["camper"].route
+    assert run_until_done(sim, rest, 15).text == "You rest a while on a log by the fire."

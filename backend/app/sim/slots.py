@@ -50,7 +50,6 @@ PERSONAL_M = 0.8  # no two bodies end an action closer than this (D117)
 LEGS_M = 0.7  # the legs of someone sitting or lying reach this far before them (kept clear like a body)
 OCCUPY_M = 0.05  # a body this close to its claim is on it
 STEP_MAX_M = 8.0  # the longest walk at a tick's end, to a seat, mat or stand or aside (work slots excepted): ~6 s
-SEAT_M = 4.0  # rest takes a free seat this close
 ALREADY_THERE_M = 1.0  # a walk to a spot this close is no walk (movement's "You are already there")
 RING_M = (1.2, 2.0, 2.8, 3.6)  # the ring fallback's radii (a pace off the centre, then a body's space apart)
 RING_SPACING_M = 1.0  # neighbouring spots on one ring lie at least this far apart
@@ -611,9 +610,10 @@ def reserve_near(core: SimCore, citizen: Citizen, point: Vec3, with_centre: bool
 
 
 def take_seat(core: SimCore, citizen: Citizen) -> Slot | None:
-    """A free seat within SEAT_M they can step to (at the tick's end), else None: they sit where they are."""
+    """The nearest free seat they can step to at the tick's end (a bench, a log by the fire: within STEP_MAX_M), else
+    None: they sit where they are."""
     seats = (slot for slot in layout(core).slots.values() if slot.kind == "seat" and slot.task is None)
-    seat = _nearest_reachable(core, citizen, seats, SEAT_M)
+    seat = _nearest_reachable(core, citizen, seats, STEP_MAX_M)
     if seat is not None:
         claim(core, citizen, seat, seat.position, approach=True)
     return seat
