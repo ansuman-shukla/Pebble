@@ -32,6 +32,7 @@ function citizen(overrides: Partial<LiveCitizen> = {}): LiveCitizen {
     motion: 'farm',
     posture: 'standing',
     slot_heading: null,
+    slot_height_m: null,
     goal: '',
     driver: null,
     target: null,

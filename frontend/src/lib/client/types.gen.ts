@@ -198,6 +198,10 @@ export type CitizenEntity = {
      */
     slot_heading: number | null;
     /**
+     * Slot Height M
+     */
+    slot_height_m: number | null;
+    /**
      * Goal
      */
     goal: string;

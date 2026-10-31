@@ -2,7 +2,8 @@
 
 A system registers its `System` (name, state, snapshot block and version) in `REGISTRY.systems` and its per-tick work
 in the hook lists. Each tick, after bodies and ecology and before perception and interrupts, the simulation runs
-`every_tick` hooks, then `at_dawn` hooks, then `at_midnight` hooks, each list in its order here. Dawn and midnight
+`every_tick` hooks, then `at_dawn` hooks, then `at_midnight` hooks, each list in its order here; `at_tick_end` hooks
+run last, after interrupts and before the tick's summary (where bodies end the tick). Dawn and midnight
 are local: a dawn or midnight hook gets a test `now(unit)` that says whether it is that moment at a spot this tick
 (sunrise there; local midnight by its longitude), so each system checks its own holders (citizens, stores, camps).
 Append rows; keep every row another stream added.
@@ -12,7 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from app.sim import movement, wear
+from app.sim import movement, slots, wear
 from app.sim.clock import local_minute, sun_altitude_deg, sun_direction
 from app.sim.core import SimCore
 from app.sim.state import System
@@ -29,6 +30,7 @@ class Registry:
     every_tick: tuple[TickHook, ...] = ()
     at_dawn: tuple[LocalHook, ...] = ()
     at_midnight: tuple[LocalHook, ...] = ()
+    at_tick_end: tuple[TickHook, ...] = ()
 
     def __post_init__(self) -> None:
         names = [system.name for system in self.systems]
@@ -40,6 +42,7 @@ REGISTRY = Registry(
     systems=(
         movement.RUNNING,
         wear.WEAR,
+        slots.SLOTS,
     ),
     every_tick=(
         movement.catch_breath,
@@ -50,6 +53,7 @@ REGISTRY = Registry(
         wear.wear_packs_at_dawn,
     ),
     at_midnight=(),
+    at_tick_end=(slots.settle,),
 )
 
 
@@ -64,6 +68,11 @@ def midnight_at(core: SimCore, unit: Vec3) -> bool:
     _, lon = lat_lon_deg(unit)
     town_lon = core.world.town_lon_deg
     return local_minute(core.state.tick, town_lon, lon) < local_minute(core.state.tick - 1, town_lon, lon)
+
+
+def run_tick_end(core: SimCore, registry: Registry) -> None:
+    for hook in registry.at_tick_end:
+        hook(core)
 
 
 def run_hooks(core: SimCore, registry: Registry) -> None:

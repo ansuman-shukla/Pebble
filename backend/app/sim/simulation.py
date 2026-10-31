@@ -1,7 +1,8 @@
 """The simulation: the single authority on what is true (02-simulation).
 
 Each tick (= 1 game minute): advance durative actions (walkers move) → bodies → ecology (M6) → the systems' hooks
-(`app.sim.systems`) → perception and interrupts → visits → one `tick_summary`. Actions from brains arrive between
+(`app.sim.systems`) → perception and interrupts → visits → the tick-end hooks (bodies take their spots) → one
+`tick_summary`. Actions from brains arrive between
 ticks. The simulation never reads the wall clock and draws randomness only from its seeded streams, so the same seed
 and inputs give the same state.
 """
@@ -331,6 +332,7 @@ class Simulation:
             citizen.animals_in_view = set(groups_seen[citizen.id])
             citizen.threats = stalkers[citizen.id]
             self._visit(citizen)
+        systems.run_tick_end(core, self.registry)
 
         summary = TickSummary(
             moved=feed_citizens.moves(core, before),

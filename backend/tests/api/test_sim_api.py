@@ -107,7 +107,8 @@ def test_entities_now_match_the_simulation(client: TestClient, loop: EngineLoop)
         assert entity["activity"] == {"walk_to": "walking", "sleep": "sleeping"}.get(entity["action"], "idle")
     aiko = by_id["dev-aiko"]
     assert aiko["heading_deg"] != 0.0  # she walked to the gate and faces the way she went
-    assert loop.sim.world.distance_m(tuple(aiko["position"]["unit"]), loop.sim.world.places["main-gate"].stand) < 1
+    gate = loop.sim.world.places["main-gate"]
+    assert loop.sim.world.distance_m(tuple(aiko["position"]["unit"]), gate.stand) < gate.radius_m  # on a stand there
     lat, lon = lat_lon_deg(loop.sim.citizen("dev-aiko").position)
     assert (aiko["position"]["lat"], aiko["position"]["lon"]) == pytest.approx((lat, lon))
     assert lat == pytest.approx(38 - 104 / (2000 * math.pi / 180), abs=0.05)  # ~104 m south of the town centre

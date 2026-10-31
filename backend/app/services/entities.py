@@ -104,7 +104,8 @@ class CitizenEntity(BaseModel):
     # poses, `sim/motion.py`), why and on what they act, their needs, purse and standing
     motion: Motion
     posture: Posture
-    slot_heading: float | None  # facing on a seat or work slot (yaw like heading_deg); None: their own heading
+    slot_heading: float | None  # facing on a seat, mat or work slot (yaw like heading_deg); None: their own heading
+    slot_height_m: float | None  # how high the seat they sit on is (posture sitting); None: not on a seat
     goal: str  # what they are after, in their words (their latest set_goal); "" when unsaid
     driver: Driver | None  # why: hunger, thirst, rest, danger, duty, ambition, social, night
     target: Target | None  # what their action is about
@@ -199,6 +200,7 @@ def citizen_entity(citizen: ReplayCitizen, tick: int) -> CitizenEntity:
         motion=body.motion,
         posture=body.posture,
         slot_heading=body.slot_heading,
+        slot_height_m=body.slot_height_m,
         goal=citizen.goal,
         driver=citizen.driver,
         target=citizen.target,
