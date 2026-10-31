@@ -79,7 +79,7 @@ const FARMER: Bearer = {
 
 test.describe('the motion table', () => {
   test('every motion plays a Polyfork clip', async () => {
-    // resting the table's way or drawn in any pose the feed's posture lays
+    // resting the table's way or drawn in any pose the feed's posture lays (seated work keeps at it)
     const poses: (BodyPose | undefined)[] = [
       undefined,
       'standing',
@@ -233,21 +233,51 @@ test.describe('the motion table', () => {
       more: { dead?: boolean; seat?: number } = {},
       bearer: Partial<Bearer> = {},
     ) => motionLook(motion, { ...FARMER, ...bearer }, { posture, ...more });
-    // the weaver at the loom sits on its stool (the slot's height), with the chair clip
+    // the weaver at the loom sits on its stool (the slot's height), the chair clip with the hands weaving
     expect(
       look('craft', 'sitting', { seat: 0.3 }, { look: 'town-weaver' }),
-    ).toMatchObject({ pose: 'seated', clip: 'Sitting', seat: 0.3, pace: 1 });
-    // a seat whose height the feed doesn't say is a bench's
-    expect(look('talk', 'sitting')).toMatchObject({
+    ).toMatchObject({
       pose: 'seated',
       clip: 'Sitting',
+      layer: 'weave',
+      seat: 0.3,
+      pace: 1,
+    });
+    // the lord holding court talks from his seat; a seat whose height the feed doesn't say is a bench's
+    expect(look('talk', 'sitting')).toMatchObject({
+      pose: 'seated',
+      clip: 'Sitting talking',
+      layer: null,
       seat: SEAT_HEIGHT,
     });
-    expect(look('sit', 'sitting', { seat: 0.4 }).seat).toBe(0.4);
-    // the smith hammering seated sits still (no hammer pace on the chair clip)
+    expect(look('sit', 'sitting', { seat: 0.4 })).toMatchObject({
+      clip: 'Sitting',
+      layer: null,
+      seat: 0.4,
+    });
+    // the smith or a toolmaker crafting seated works with the hands too (no hammer pace or crouch on the chair clip)
     expect(look('craft', 'sitting', {}, { look: 'town-smith' })).toMatchObject({
       clip: 'Sitting',
+      layer: 'weave',
       pace: 1,
+    });
+    expect(
+      look(
+        'craft',
+        'sitting',
+        {},
+        { look: 'band-a-toolmaker', region: 'band_a' },
+      ),
+    ).toMatchObject({ clip: 'Sitting', layer: 'weave' });
+    // other motions seated rest with the plain chair clip; seated work keeps at it only on a seat
+    expect(look('eat', 'sitting')).toMatchObject({
+      clip: 'Sitting',
+      layer: null,
+    });
+    expect(look('craft', 'sitting_ground')).toMatchObject({
+      pose: 'sitting',
+      clip: 'Sitting',
+      layer: null,
     });
     expect(look('talk', 'sitting_ground')).toMatchObject({
       pose: 'sitting',
@@ -256,6 +286,7 @@ test.describe('the motion table', () => {
     });
     // the clips a drawn body may play go by the pose it is drawn in
     expect(motionClips('craft', 'seated')).toEqual(['Sitting']);
+    expect(motionClips('talk', 'seated')).toEqual(['Sitting talking']);
     expect(motionClips('talk', 'sitting')).toEqual(['Sitting']);
     expect(motionClips('talk', 'standing')).toEqual(['Talking']);
     expect(motionClips('pray', 'kneeling')).toEqual(['Idle']);
@@ -966,7 +997,7 @@ test.describe('on the globe', () => {
         { activity: 'working', motion: 'pray' },
         { clip: 'Idle', posture: 'kneeling', layer: 'pray', prop: '' },
       ],
-      // the feed's posture: crafting seated at the loom (hands at rest, the hammer put away)
+      // the feed's posture: crafting seated at the loom (the hands weaving, the hammer put away), holding court
       [
         {
           activity: 'working',
@@ -974,7 +1005,16 @@ test.describe('on the globe', () => {
           posture: 'sitting',
           slot_height_m: 0.3,
         },
-        { clip: 'Sitting', posture: 'seated', prop: '' },
+        { clip: 'Sitting', posture: 'seated', layer: 'weave', prop: '' },
+      ],
+      [
+        {
+          activity: 'working',
+          motion: 'talk',
+          posture: 'sitting',
+          slot_height_m: 0.45,
+        },
+        { clip: 'Sitting talking', posture: 'seated', layer: '' },
       ],
       [
         { activity: 'resting', motion: 'sit_ground' },

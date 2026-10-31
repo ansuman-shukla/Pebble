@@ -84,6 +84,7 @@ export type NpcClip =
   | 'Walk formal'
   | 'Run'
   | 'Sitting'
+  | 'Sitting talking'
   | 'Sit down'
   | 'Stand up'
   | 'Opening'
@@ -261,6 +262,14 @@ const REST_CLIPS: Record<BodyPose, NpcClip> = {
   lying: 'Idle',
   inside: 'Opening',
 };
+/**
+ * Work that goes on seated (10 §4.5): the lord holding court talks from his seat, the weaver at the loom's stool
+ * passes the shuttle; any other motion seated rests with the pose's plain clip.
+ */
+const SEATED: Partial<Record<Motion, Entry>> = {
+  talk: { clip: 'Sitting talking' },
+  craft: { clip: 'Sitting', layer: 'weave' },
+};
 
 /**
  * The look of `motion` for this bearer: the table's entry, with what differs by person (10 §4.5): a guard folds its
@@ -268,7 +277,8 @@ const REST_CLIPS: Record<BodyPose, NpcClip> = {
  * anvil, the merchant talks a sale, a spear-bearer thrusts instead of punching (and keeps its own spear), the dead
  * lie straight, a gesture names its kind. The feed's `posture` says where the body rests (on a seat at the slot's
  * height, on the ground, lying, inside): a motion the table rests some other way rests the feed's way, with that
- * pose's plain clip (the weaver at the loom sits on its stool).
+ * pose's plain clip, unless it is work that goes on seated (the weaver at the loom weaves on its stool, the lord
+ * talks from his seat).
  */
 export function motionLook(
   motion: Motion,
@@ -311,12 +321,11 @@ export function motionLook(
   const poses = options.posture && FED_POSES[options.posture];
   if (poses && !poses.includes(entry.pose ?? 'standing')) {
     const pose = poses[0];
-    Object.assign(entry, {
-      pose,
-      clip: REST_CLIPS[pose],
-      pace: 1,
-      still: pose === 'sleeping',
-    });
+    Object.assign(
+      entry,
+      { pose, clip: REST_CLIPS[pose], pace: 1, still: pose === 'sleeping' },
+      pose === 'seated' ? SEATED[motion] : undefined,
+    );
   }
   if (entry.pose === 'sleeping' && options.dead) entry.pose = 'lying';
   if (motion === 'gesture' && options.gesture) entry.layer = options.gesture;
