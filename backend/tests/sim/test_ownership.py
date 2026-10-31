@@ -250,8 +250,23 @@ def test_a_starving_townsman_with_no_food_and_no_coins_takes_rice_from_the_store
     sim.stock_store("store-2", "rice", 50)
     sim.citizen("tetsu").body.hunger = 95.0
     sim.drain()
-    _brain(sim, "tetsu", honesty=0.0).decide()
+    brain = _brain(sim, "tetsu", honesty=0.0)
+    brain.decide()  # nothing tells them the chest at home is empty yet: home first
+    walk = sim.citizen("tetsu").action
+    assert walk is not None and walk.label == "home" and _stole(sim.drain()) == []
+    brain.api.notes["chest empty"] = True  # as a failed meal at home leaves it
+    brain.decide()
     assert [(who, s.store, s.count) for who, s in _stole(sim.drain())] == [("tetsu", "store-2", 5)]
+
+
+def test_a_failed_meal_at_home_tells_the_brain_the_chest_is_empty(new_sim: Callable[..., Simulation]) -> None:
+    sim = _scene(new_sim, ("tetsu", "main-w-3", "main-w-3"), ("kenji", "castle-keep", "castle-keep"))
+    sim.citizen("tetsu").body.hunger = 95.0
+    sim.drain()
+    brain = _brain(sim, "tetsu", honesty=0.0)
+    brain.decide()  # eats from the chest: there is none
+    brain.decide()
+    assert brain.api.notes.get("chest empty") is True
 
 
 @pytest.mark.parametrize(
@@ -270,6 +285,7 @@ def test_nobody_else_steals(
     sim.citizen("tetsu").body.hunger = hunger
     sim.drain()
     brain = _brain(sim, "tetsu", honesty=honesty)
+    brain.api.notes["chest empty"] = True  # nothing at home either
     for _ in range(30):
         brain.tick()
         sim.step()
