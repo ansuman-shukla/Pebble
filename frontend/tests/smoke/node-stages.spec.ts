@@ -9,6 +9,7 @@ import {
 import {
   FULL_STAGE,
   nodeStage,
+  ROW_WIDTH,
   StageTexture,
 } from '../../src/lib/world/staged-material';
 
@@ -78,7 +79,16 @@ test('a stage texture keeps one row per instance, full until set', () => {
   rows.set(2, { pieces: 3, level: 0.5, growth: 0.75, tint: 1 });
   expect(rows.get(2)).toEqual({ pieces: 3, level: 0.5, growth: 0.75, tint: 1 });
   expect(rows.get(1)).toEqual(FULL_STAGE);
-  expect(rows.texture.image.height).toBe(4);
+  // rows lie ROW_WIDTH to a line: 6000 rows fit a 64 × 94 texture, far under WebGL's 4096 a side
+  expect([rows.texture.image.width, rows.texture.image.height]).toEqual([
+    ROW_WIDTH,
+    1,
+  ]);
+  const big = new StageTexture(6000);
+  expect([big.texture.image.width, big.texture.image.height]).toEqual([64, 94]);
+  big.set(5999, { pieces: 1, level: 1, growth: 1, tint: 0 });
+  expect(big.get(5999).pieces).toBe(1);
+  expect(big.get(5998)).toEqual(FULL_STAGE);
   const pieces = rows.chunk(0.97, true);
   expect(pieces.defines).toEqual({ STAGE_PIECES: '' });
   expect(pieces.uniforms.stageHeight.value).toBe(0.97);
@@ -236,6 +246,114 @@ test('a gather at a node marks it worked until its actor finishes, is interrupte
   stages.apply(event('said', 'tek', { words: 'hi' }), 0);
   stages.apply(event('action_finished', 'nobody', { number: 1 }), 0);
   expect(stages.version).toBe(version);
+});
+
+test('an unrelated next action ends the shake (the live feed never sends action_interrupted)', () => {
+  const stages = new NodeStages();
+  stages.apply(snapshot(RUN), 0);
+  const started = (
+    actor: string,
+    action: string,
+    target: Record<string, unknown> | null,
+  ) =>
+    event('action_started', actor, {
+      number: 1,
+      action,
+      args: {},
+      label: 'x',
+      target,
+    });
+  stages.apply(
+    started('tek', 'gather', { kind: 'node', id: 'flora:5', name: 'an oak' }),
+    0,
+  );
+  stages.apply(
+    started('ama', 'gather', { kind: 'node', id: 'flora:6', name: 'an oak' }),
+    0,
+  );
+  expect(stages.worked('flora:5')).toBe(true);
+  // tek's chop was interrupted (not sent); his next action walks somewhere
+  stages.apply(
+    started('tek', 'walk_to', { kind: 'place', id: 'well', name: 'the well' }),
+    0,
+  );
+  expect(stages.worked('flora:5')).toBe(false);
+  expect(stages.worked('flora:6')).toBe(true);
+  // an action without a target ends it too
+  stages.apply(started('ama', 'rest', null), 0);
+  expect(stages.worked('flora:6')).toBe(false);
+});
+
+test('changes are told by node, so a drawing re-draws only for its own nodes', () => {
+  const stages = new NodeStages();
+  stages.apply(snapshot(RUN), 0);
+  const start = stages.version;
+  expect(stages.changedSince(start)).toEqual([]);
+  stages.apply(changed('flora:1', 'berry_bush', 3), 0);
+  stages.apply(
+    event('tree_felled', 'tek', { node: 'flora:2', yaw_deg: 0, logs: 10 }),
+    0,
+  );
+  stages.apply(
+    event('action_started', 'ama', {
+      number: 1,
+      action: 'gather',
+      args: {},
+      label: 'x',
+      target: { kind: 'node', id: 'flora:3', name: 'x' },
+    }),
+    0,
+  );
+  stages.apply(
+    event('action_started', 'ama', {
+      number: 2,
+      action: 'gather',
+      args: {},
+      label: 'x',
+      target: { kind: 'node', id: 'flora:4', name: 'x' },
+    }),
+    0,
+  );
+  expect(stages.changedSince(start)).toEqual([
+    'flora:1',
+    'flora:2',
+    'flora:3',
+    'flora:3',
+    'flora:4',
+  ]);
+  // events that touch no node keep the version
+  const version = stages.version;
+  stages.apply(event('said', 'tek', { words: 'hi' }), 0);
+  stages.apply(
+    event('action_started', 'kaz', {
+      number: 1,
+      action: 'rest',
+      args: {},
+      label: 'x',
+      target: null,
+    }),
+    0,
+  );
+  stages.apply(
+    event('action_finished', 'kaz', {
+      number: 1,
+      action: 'rest',
+      outcome: 'done',
+    }),
+    0,
+  );
+  expect(stages.version).toBe(version);
+  // a reset changes every node; so does a gap longer than what is remembered
+  stages.reset();
+  expect(stages.changedSince(version)).toBeNull();
+  const after = stages.version;
+  for (let i = 0; i < 300; i++)
+    stages.apply(changed(`flora:${i}`, 'berry_bush', 1), 0);
+  expect(stages.changedSince(after)).toBeNull();
+  expect(stages.changedSince(stages.version - 2)).toEqual([
+    'flora:298',
+    'flora:299',
+  ]);
 });
 
 test('a snapshot of another run starts every node full again', () => {

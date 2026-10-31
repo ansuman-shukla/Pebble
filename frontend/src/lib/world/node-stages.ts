@@ -40,9 +40,14 @@ interface Work {
   node: string;
 }
 
+/** Changes remembered for `changedSince` (older ones count as "anything may have changed"). */
+const LOG_KEEP = 256;
+
 export class NodeStages {
   /** Bumped by every change a drawing must follow. */
   version = 0;
+  /** The node each version changed (null: every node, a reset). */
+  private log: { version: number; node: string | null }[] = [];
   private runId: string | null = null;
   private states = new Map<string, NodeState>();
   private falls = new Map<string, { at: number; bearing: number | null }>();
@@ -71,12 +76,45 @@ export class NodeStages {
     return this.work.some(({ node }) => node === id);
   }
 
+  /**
+   * The nodes changed since `version` ([] when none), or null when any may have (a reset, or more changes ago than
+   * are remembered): a drawing re-draws only when one of its own nodes changed.
+   */
+  changedSince(version: number): string[] | null {
+    if (version >= this.version) return [];
+    if (this.log.length === 0 || this.log[0].version > version + 1) return null;
+    const nodes: string[] = [];
+    for (const entry of this.log) {
+      if (entry.version <= version) continue;
+      if (entry.node === null) return null;
+      nodes.push(entry.node);
+    }
+    return nodes;
+  }
+
+  private touch(node: string | null) {
+    this.version += 1;
+    this.log.push({ version: this.version, node });
+    if (this.log.length > LOG_KEEP)
+      this.log.splice(0, this.log.length - LOG_KEEP);
+  }
+
   /** Every node full and standing again, except `states` (the non-full nodes of a snapshot). */
   reset(states: ReadonlyMap<string, NodeState> = new Map()) {
     this.states = new Map(states);
     this.falls.clear();
     this.work = [];
-    this.version += 1;
+    this.touch(null);
+  }
+
+  /** `actor` now works `node` (null: nothing): the node they left and the one they took change. */
+  private setWork(actor: string, node: string | null) {
+    const before = this.work.find((work) => work.actor === actor)?.node ?? null;
+    if (before === node) return;
+    this.work = this.work.filter((work) => work.actor !== actor);
+    if (node !== null) this.work.push({ actor, node });
+    if (before !== null) this.touch(before);
+    if (node !== null) this.touch(node);
   }
 
   /** Follows one feed message; `now` is the client clock in seconds (falls are timed by it). */
@@ -101,6 +139,7 @@ export class NodeStages {
       });
       // the felled tree's logs lie by its stump until it grows again
       if (isSapling(this.states.get(node)!.stage)) this.falls.delete(node);
+      this.touch(node);
     } else if (type === 'tree_felled') {
       const node = String(payload.node);
       // `yaw_deg` is a heading (0 south, 90 east, like citizens'): bearing = 180° − heading
@@ -111,22 +150,21 @@ export class NodeStages {
       this.falls.set(node, { at: now, bearing });
       this.states.set(node, { fill: 0, stage: 'stump' });
       this.work = this.work.filter((work) => work.node !== node);
-    } else if (type === 'action_started') {
+      this.touch(node);
+    } else if (type === 'action_started' && actor) {
+      // the live feed never sends `action_interrupted`: an actor's next action ends whatever they worked before
       const target = payload.target as { kind?: string; id?: string } | null;
-      if (!actor || target?.kind !== 'node' || !target.id) return;
-      this.work = [
-        ...this.work.filter((work) => work.actor !== actor),
-        { actor, node: target.id },
-      ];
+      this.setWork(
+        actor,
+        target?.kind === 'node' && target.id ? target.id : null,
+      );
     } else if (
-      type === 'action_finished' ||
-      type === 'action_interrupted' ||
-      type === 'died'
-    ) {
-      if (!this.work.some((work) => work.actor === actor)) return;
-      this.work = this.work.filter((work) => work.actor !== actor);
-    } else return;
-    this.version += 1;
+      (type === 'action_finished' ||
+        type === 'action_interrupted' ||
+        type === 'died') &&
+      actor
+    )
+      this.setWork(actor, null);
   }
 }
 

@@ -133,6 +133,7 @@ export class NodeField {
   private splitAt: Vector3 | null = null;
   private seen = -1;
   private gathered: { node: NodeInstance; model: Matrix4 }[] = [];
+  private gatheredIds = new Set<string>();
   private moving: Moving[] = [];
   /** The client time the next fall in view ends (a split then draws its stump). */
   private nextLanding = Infinity;
@@ -269,6 +270,16 @@ export class NodeField {
     }
   }
 
+  /** One of the gathered nodes changed stage since the last split (changes elsewhere are only noted as seen). */
+  private changedHere() {
+    if (this.stages.version === this.seen) return false;
+    const changed = this.stages.changedSince(this.seen);
+    if (changed === null || changed.some((id) => this.gatheredIds.has(id)))
+      return true;
+    this.seen = this.stages.version;
+    return false;
+  }
+
   /** Advances to client time `now` (seconds) around `focus`; `hidden` (the camera too high) draws nothing. */
   frame(focus: Vector3, hidden: boolean, now: number) {
     if (hidden) {
@@ -289,11 +300,12 @@ export class NodeField {
       for (const cell of this.scatter.cellsAround(focus, FAR_REACH + REBUILD))
         for (const node of this.scatter.nodes(cell))
           this.gathered.push({ node, model: scatterMatrix(node) });
+      this.gatheredIds = new Set(this.gathered.map(({ node }) => node.id));
     }
     if (
       !this.splitAt ||
       this.splitAt.distanceTo(focus) > RESPLIT ||
-      this.stages.version !== this.seen ||
+      this.changedHere() ||
       now >= this.nextLanding
     )
       this.split(focus, now);

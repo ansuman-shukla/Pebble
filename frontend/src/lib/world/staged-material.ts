@@ -1,7 +1,7 @@
 /*
  * Nodes drawn by their stage (10 §1.1, §5.2): what is said of a node is what is drawn. A float texture holds a row
- * per instance (pieces shown, level, growth, tint), read in the vertex shader by gl_InstanceID, so every stage of a
- * kind draws in the same call:
+ * per instance (pieces shown, level, growth, tint; ROW_WIDTH rows a line), read in the vertex shader by
+ * gl_InstanceID, so every stage of a kind draws in the same call:
  *   - pieces: the model's stage pieces (`fruit-N`, `leaf-N`, ...: kind-parts.ts `stagePiece`) past the count shown
  *     collapse to nothing;
  *   - level: the model is flattened to that fraction of its height (a deadwood pile, a log stack);
@@ -12,6 +12,9 @@
 import { Color, DataTexture, FloatType, RGBAFormat } from 'three';
 
 import type { VertexChunk } from './vertex-chunks';
+
+/** Rows per texture line: the texture is ROW_WIDTH × ⌈count / ROW_WIDTH⌉ (WebGL caps a side at 4096 or so). */
+export const ROW_WIDTH = 64;
 
 export interface Stage {
   /** Stage pieces shown (pieces ranked past it collapse). */
@@ -85,7 +88,7 @@ attribute float stagePiece;
 #endif
 vec4 nodeStage() {
 #ifdef USE_INSTANCING
-  return texelFetch(nodeStages, ivec2(0, gl_InstanceID), 0);
+  return texelFetch(nodeStages, ivec2(gl_InstanceID % ${ROW_WIDTH}, gl_InstanceID / ${ROW_WIDTH}), 0);
 #else
   return vec4(1e4, 1.0, 1.0, 0.0);
 #endif
@@ -110,9 +113,16 @@ export class StageTexture {
   private dirty = false;
 
   constructor(readonly count: number) {
-    this.data = new Float32Array(count * 4);
-    for (let i = 0; i < count; i++) this.write(i, FULL_STAGE);
-    this.texture = new DataTexture(this.data, 1, count, RGBAFormat, FloatType);
+    const lines = Math.ceil(count / ROW_WIDTH);
+    this.data = new Float32Array(ROW_WIDTH * lines * 4);
+    for (let i = 0; i < ROW_WIDTH * lines; i++) this.write(i, FULL_STAGE);
+    this.texture = new DataTexture(
+      this.data,
+      ROW_WIDTH,
+      lines,
+      RGBAFormat,
+      FloatType,
+    );
     this.texture.needsUpdate = true;
   }
 

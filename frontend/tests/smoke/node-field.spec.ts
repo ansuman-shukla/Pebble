@@ -169,6 +169,43 @@ test("a picked bush is drawn with fewer fruit in its tier's stage row", () => {
   expect(rows.get(shown.indexOf('flora:2')).pieces).toBe(9);
 });
 
+test('a stage change re-draws only when it is one of the gathered nodes', () => {
+  const {
+    field: f,
+    stages,
+    looks,
+  } = field([node('flora:1', 'berry_bush', 'berry_bush', 10, 0)]);
+  f.frame(FOCUS, false, 0);
+  const matrices = looks.get('berry_bush')!.near[0].instanceMatrix;
+  const drawnAt = matrices.version;
+  const change = (id: string) =>
+    stages.apply(
+      event('node_changed', {
+        node: id,
+        kind: 'berry_bush',
+        item: 'berries',
+        before: 12,
+        after: 3,
+        stage: 'x',
+      }),
+      1,
+    );
+  change('flora:far-away');
+  f.frame(FOCUS, false, 1);
+  expect(matrices.version).toBe(drawnAt);
+  change('flora:1');
+  f.frame(FOCUS, false, 2);
+  expect(matrices.version).toBeGreaterThan(drawnAt);
+  expect(drawnOf(f, 'flora:1')[0].stage!.pieces).toBe(2);
+  // a new run makes every node full: drawn again whatever was changed
+  stages.apply(
+    { type: 'snapshot', run_id: 'r2', tick: 1 } as unknown as LiveMessage,
+    3,
+  );
+  f.frame(FOCUS, false, 3);
+  expect(drawnOf(f, 'flora:1')[0].stage!.pieces).toBe(9);
+});
+
 /** Where the instance's local point (0, 10, 0) (up the trunk) is drawn, relative to the node's base. */
 function topOf(mesh: InstancedMesh, slot: number, base: Vector3) {
   const matrix = mesh.getMatrixAt(slot, new Matrix4());
