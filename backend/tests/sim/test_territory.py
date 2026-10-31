@@ -11,7 +11,7 @@ from app.observability.events import ActionEnded, EventDraft, Injured, ItemLocat
 from app.sim import animals as animal_life
 from app.sim import society, territory, wild
 from app.sim.animals import WILDLIFE
-from app.sim.clock import DAY_MINUTES, START_MINUTE
+from app.sim.clock import DAY_MINUTES, START_MINUTE, sun_altitude_deg, sun_direction
 from app.sim.fauna import SPECIES, den_of, pin_of, terrain
 from app.sim.fire import add_fuel
 from app.sim.simulation import Simulation
@@ -514,3 +514,44 @@ def test_herds_shy_from_an_awake_predator_not_a_sleeping_one(
     sim.drain()
     _run(sim, 1)
     assert (deer.activity in ("alert", "fleeing")) is shies
+
+
+def _just_before(sim: Simulation, unit: Vec3, crossing: Callable[[float, float], bool]) -> None:
+    """Set the clock to the tick before the sun's crossing (by altitudes before and after) at the spot."""
+    tick = sim.tick
+    while not crossing(
+        sun_altitude_deg(unit, sun_direction(tick, sim.world.town_lon_deg)),
+        sun_altitude_deg(unit, sun_direction(tick + 1, sim.world.town_lon_deg)),
+    ):
+        tick += 1
+    sim.state.tick = tick - 1
+
+
+def test_a_herd_goes_to_drink_at_its_homes_dawn_wherever_its_goal_lies(new_sim: Callable[..., Simulation]) -> None:
+    """Its wander goal 400 m east is lit before its home: a dawn test at the goal never sees the sun rise there."""
+    sim = without_animals(new_sim())
+    home = sim.world.unit(wild_cell(sim, flat_m=15.0))
+    (deer,) = [_animal(sim, "deer", home, activity="sleeping", until=10**9)]
+    group = sim.state.groups[deer.group]
+    _just_before(sim, home, lambda before, after: before <= 0 < after)
+    group.goal = step_towards(home, 90.0, 400.0, R)
+    assert sim.core.altitude(group.goal) > 0  # already day there
+    sim.drain()
+    _run(sim, 2)
+    assert group.id in WILDLIFE.of(sim.state).drinks
+
+
+def test_a_predator_groups_night_starts_at_its_homes_dusk_wherever_its_goal_lies(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    sim = without_animals(new_sim())
+    home = sim.world.unit(wild_cell(sim, flat_m=15.0))
+    (wolf,) = [_animal(sim, "wolf", home, activity="sleeping", until=10**9)]
+    group = sim.state.groups[wolf.group]
+    WILDLIFE.of(sim.state).tries[group.id] = 4  # last night's hunts, all tried
+    _just_before(sim, home, lambda before, after: before >= animal_life.DUSK_ALTITUDE_DEG > after)
+    group.goal = step_towards(home, 90.0, 400.0, R)
+    assert sim.core.altitude(group.goal) < animal_life.DUSK_ALTITUDE_DEG  # dusk passed there already
+    sim.drain()
+    _run(sim, 2)
+    assert group.id not in WILDLIFE.of(sim.state).tries

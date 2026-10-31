@@ -255,8 +255,9 @@ def now_s(core: SimCore) -> float:
 def _group(core: SimCore, group: AnimalGroup, life: Wildlife) -> None:
     tick = core.state.tick
     species = SPECIES[group.kind]
-    spot = group.goal or core.world.unit(group.home)
-    if not species.predator and not species.swims and _dawn_or_dusk(core, spot) and group.id not in life.drinks:
+    home = core.world.unit(group.home)  # its dawn and dusk: a moving goal can skip the sun's crossing
+    spot = group.goal or home
+    if not species.predator and not species.swims and _dawn_or_dusk(core, home) and group.id not in life.drinks:
         hole = waterhole_of(core.world, group) or spot
         travel = math.ceil(core.distance_m(spot, hole) / species.walk_mps / SECONDS_PER_TICK)
         life.drinks[group.id] = tick + travel + DRINK_TICKS
@@ -264,7 +265,7 @@ def _group(core: SimCore, group: AnimalGroup, life: Wildlife) -> None:
         return
     if life.drinks.get(group.id, tick) <= tick:
         life.drinks.pop(group.id, None)
-    if species.predator and _dusk(core, spot):
+    if species.predator and _dusk(core, home):
         life.tries.pop(group.id, None)  # a new night's hunts
         ambush = waterhole_of(core.world, group)
         if ambush is not None:  # it lies in wait where the herds come to drink
