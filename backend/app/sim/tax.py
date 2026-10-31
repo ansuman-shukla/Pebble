@@ -116,6 +116,8 @@ def store_food(core: SimCore, citizen: Citizen, action: ActionState) -> str:
         stored = [_move(core, citizen, store, store_id, item, citizen.inventory[item], None) for item in _food(citizen)]
         if stored:
             told.append(f"You put {' and '.join(stored)} in the storehouse.")
+    if not told and owed is not None and owed.rice:
+        told.append("You carry no rice for the tax.")
     if not told:
         told.append("You owe no rice tax, and the storehouse isn't yours to fill.")
     return " ".join([*told, noticed] if noticed else told)

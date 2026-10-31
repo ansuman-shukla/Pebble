@@ -104,6 +104,13 @@ def test_short_of_rice_pays_what_it_carries_and_still_owes(new_sim: Callable[...
     assert tax.account(sim.core, "farmhouse-2").rice == 5
 
 
+def test_owing_rice_but_carrying_none_is_told_so(new_sim: Callable[..., Simulation]) -> None:
+    sim = _scene(new_sim, ("tokuji", "farmhouse-2", "store-2"), tokuji={"inventory": {"berries": 3}})
+    tax.account(sim.core, "farmhouse-2").rice = 4
+    assert run_until_done(sim, WorldApi(sim, "tokuji").work("store food"), 10).text == "You carry no rice for the tax."
+    assert tax.account(sim.core, "farmhouse-2").rice == 4
+
+
 def test_the_keep_fills_its_own_granary_and_others_owing_nothing_keep_their_food(
     new_sim: Callable[..., Simulation],
 ) -> None:
