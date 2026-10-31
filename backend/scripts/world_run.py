@@ -4,7 +4,8 @@
 
 `--seeds` takes a comma list of seeds ("7," is the one seed 7) or a count N for the first N sweep seeds
 (20261028, 7, 1, 2, 3, ...): `--seeds 5` is the 5-seed sweep of the probe-first triage. `--only` keeps the checks
-with those names or of those streams. Prints each check per seed and over all seeds; exits 1 if any check fails.
+with those names or of those streams. Prints each check per seed and over all seeds; exits 1 if any check fails,
+except checks marked pending (waiting for another stream), printed as "pending (<reason>)".
 """
 
 import argparse
@@ -90,8 +91,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     for kind in kinds:
         overall = kind.overall({seed: outcomes[kind.name] for seed, outcomes in per_seed.items()})
         cells = "  ".join(
-            f"{per_seed[seed][kind.name].words}{'' if per_seed[seed][kind.name].ok else ' FAIL'}" for seed in args.seeds
+            f"{per_seed[seed][kind.name].words}{'' if per_seed[seed][kind.name].ok or kind.pending else ' FAIL'}"
+            for seed in args.seeds
         )
+        if kind.pending is not None:
+            print(f"pending ({kind.pending}) {kind.name:<20} {overall.words:<32} | {cells}")
+            continue
         print(f"{'ok  ' if overall.ok else 'FAIL'} {kind.name:<20} {overall.words:<32} | {cells}")
         failed += not overall.ok
     return 1 if failed else 0

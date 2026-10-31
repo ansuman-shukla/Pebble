@@ -21,6 +21,9 @@ ALARM_M = 60.0
 CAMP_M = 1000.0  # "near a camp": this close to a living site
 
 
+EXPOSURE = "BR1/BR2 exposure schedules"  # people out where predators and herds are (10 §1.6), not there yet
+
+
 def _kind(animal_id: str) -> str:
     return animal_id.partition(":")[0]
 
@@ -215,6 +218,7 @@ class Approaches(_Counted):
     """Predators setting out for a person ("coming at" them), over the seeds (≥ 16)."""
 
     name = "a1.approaches"
+    pending = EXPOSURE
     least = 16
 
     @override
@@ -235,6 +239,7 @@ class Attacks(_Counted):
     """Predator attacks on a person that came to a bite (one per predator and person), over the seeds (≥ 4)."""
 
     name = "a1.attacks"
+    pending = EXPOSURE
     least = 4
 
     @override
@@ -258,6 +263,7 @@ class DenCharges(_Counted):
     """Predators charging someone near their den by day, over the seeds (≥ 1)."""
 
     name = "a1.den_charges"
+    pending = EXPOSURE
     least = 1
 
     @override
@@ -322,6 +328,7 @@ class PeopleFlights(Check):
     """Days on which some herd near each camp bolted from a person, as a share of the days (≥ 1 a day per camp)."""
 
     name = "a1.people_flights"
+    pending = EXPOSURE
 
     @override
     def start(self, sim: Simulation) -> None:

@@ -20,6 +20,9 @@ class Check(ABC):
     """One check over one seed's run; a new instance per seed."""
 
     name: ClassVar[str]  # "<stream>.<what>"
+    # why the check can't pass yet (the stream it waits for): world_run prints it as "pending (<reason>)" and leaves it
+    # out of its exit code; None = it counts
+    pending: ClassVar[str | None] = None
 
     def start(self, sim: Simulation) -> None:  # noqa: B027  # optional hook
         """Once the citizens are in and their brains made, before the first tick."""

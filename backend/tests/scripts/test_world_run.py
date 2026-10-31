@@ -95,6 +95,28 @@ def test_a_run_prints_and_exits_by_its_checks(
     assert "FAIL test.failing" in capsys.readouterr().out
 
 
+class Waiting(Failing):
+    name = "test.waiting"
+    pending = "another stream"
+
+
+def test_a_pending_check_is_printed_but_does_not_fail_the_run(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(world_run, "CHECKS", (Waiting,))
+    assert main(["--days", "1", "--seeds", "7,"]) == 0
+    out = capsys.readouterr().out
+    assert "pending (another stream) test.waiting" in out and "FAIL" not in out
+    monkeypatch.setattr(world_run, "CHECKS", (Waiting, Failing))
+    assert main(["--days", "1", "--seeds", "7,"]) == 1
+
+
+def test_the_threat_checks_wait_for_the_exposure_schedules() -> None:
+    pending = {check.name for check in CHECKS if check.pending is not None}
+    assert {"a1.approaches", "a1.attacks", "a1.den_charges", "a1.people_flights"} <= pending
+    assert "a1.kills" not in pending and "a1.herds_kept" not in pending
+
+
 def test_a_death_fails_the_deaths_check(new_sim: Callable[..., Simulation]) -> None:
     sim = new_sim()
     victim = sim.add_citizen(make_spec("victim"))
