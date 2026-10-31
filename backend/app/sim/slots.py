@@ -44,12 +44,12 @@ from app.world.view import Site
 SLOTS_FILE = WORLD_DATA_DIR / "slots.yaml"
 SlotKind = Literal["seat", "mat", "inside", "stand", "queue", "work"]
 SlotPosture = Literal["standing", "sitting", "sitting_ground", "lying", "inside"]
+FurnitureKind = Literal["log_seat", "sleeping_mat", "stool", "lord_seat"]
 
 PERSONAL_M = 0.8  # no two bodies end an action closer than this (D117)
 LEGS_M = 0.7  # the legs of someone sitting or lying reach this far before them (kept clear like a body)
 OCCUPY_M = 0.05  # a body this close to its claim is on it
 STEP_MAX_M = 8.0  # the longest walk at a tick's end, to a seat, mat or stand or aside (work slots excepted): ~6 s
-SEAT_M = 4.0  # rest takes a free seat this close
 ALREADY_THERE_M = 1.0  # a walk to a spot this close is no walk (movement's "You are already there")
 RING_M = (1.2, 2.0, 2.8, 3.6)  # the ring fallback's radii (a pace off the centre, then a body's space apart)
 RING_SPACING_M = 1.0  # neighbouring spots on one ring lie at least this far apart
@@ -83,6 +83,7 @@ class SlotSpec(_Spec):
     posture: SlotPosture | None = None
     height_m: float = Field(default=0.0, ge=0)
     words: str | None = None
+    furniture: FurnitureKind | None = None  # what is drawn under a body on it (sim/furniture.py)
 
     @model_validator(mode="after")
     def _one_position(self) -> "SlotSpec":
@@ -166,18 +167,48 @@ class Layout:
     solids: tuple[Solid, ...]
 
 
+@dataclass(frozen=True)
+class LocalSlot:
+    """A slot's spec where it lies in its chart's metres (the town's, or a camp's round its anchor), facing its way."""
+
+    spec: SlotSpec
+    x: float
+    z: float
+    heading_deg: float
+
+
+def local_slots(
+    slot_specs: Iterable[SlotSpec], rotation: Rotation = 0, origin: tuple[float, float] = (0.0, 0.0)
+) -> list[LocalSlot]:
+    """Slot specs laid out in their chart: turned with their owner and moved to its centre."""
+    located: list[LocalSlot] = []
+    for item in slot_specs:
+        x, z = rotate_point(*item.local(), rotation)
+        heading = round((item.local_heading() + rotation) % 360.0, 2)
+        located.append(LocalSlot(item, origin[0] + x, origin[1] + z, heading))
+    return located
+
+
+def placement_slots(spec: SlotsSpec, placement: TownPlacement) -> list[LocalSlot]:
+    """A placement's slots: its kind's (unless the placement replaces them), then its own."""
+    override = spec.placements.get(placement.id)
+    kind_slots = [] if override is not None and override.replace else spec.kinds.get(placement.kind, [])
+    extra = override.slots if override is not None else []
+    return local_slots([*kind_slots, *extra], placement.rotation_deg, (placement.x, placement.z))
+
+
 def build_layout(world: SimWorld, town: TownView, spec: SlotsSpec) -> Layout:
     owners: dict[str, list[Slot]] = {}
 
-    def add(owner: str, slot_specs: Iterable[SlotSpec], to_unit: ToUnit, rotation: Rotation = 0) -> None:
-        for item in slot_specs:
-            x, z = rotate_point(*item.local(), rotation)
+    def add(owner: str, located: Iterable[LocalSlot], to_unit: ToUnit) -> None:
+        for at in located:
+            item = at.spec
             slot = Slot(
                 id=f"{owner}#{item.name}",
                 owner=owner,
                 kind=item.kind,
-                position=to_unit(x, z),
-                heading_deg=round((item.local_heading() + rotation) % 360.0, 2),
+                position=to_unit(at.x, at.z),
+                heading_deg=at.heading_deg,
                 posture=item.posture or _POSTURES.get(item.kind, "standing"),
                 height_m=item.height_m,
                 task=item.task,
@@ -186,25 +217,15 @@ def build_layout(world: SimWorld, town: TownView, spec: SlotsSpec) -> Layout:
             )
             owners.setdefault(owner, []).append(slot)
 
-    def placed(owner: str, placement: TownPlacement, origin: ToUnit) -> None:
-        override = spec.placements.get(placement.id)
-        kind_slots = [] if override is not None and override.replace else spec.kinds.get(placement.kind, [])
-        extra = override.slots if override is not None else []
-
-        def at(x: float, z: float) -> Vec3:
-            return origin(placement.x + x, placement.z + z)
-
-        add(owner, [*kind_slots, *extra], at, placement.rotation_deg)
-
     for placement in town.placements:
-        placed(placement.id, placement, world.town.to_unit)
+        add(placement.id, placement_slots(spec, placement), world.town.to_unit)
     solids: list[Solid] = []
     for site in world.sites:
         if site.kind != "camp":
             continue
         in_camp = _site_frame(world, site)
         for placement in site.placements:
-            placed(f"{site.id}:{placement.id}", placement, in_camp)
+            add(f"{site.id}:{placement.id}", placement_slots(spec, placement), in_camp)
             if placement.walk == "solid":
                 half = max(placement.footprint.x, placement.footprint.z) / 2
                 solids.append(Solid(in_camp(placement.x, placement.z), half + _SOLID_MARGIN_M))
@@ -222,7 +243,7 @@ def build_layout(world: SimWorld, town: TownView, spec: SlotsSpec) -> Layout:
         unknown = [owner for owner in place_spec.owners if owner not in owners]
         if unknown:
             raise ValueError(f"place {place_id}: no slots for owners {unknown}")
-        add(place_id, place_spec.slots, world.town.to_unit)
+        add(place_id, local_slots(place_spec.slots), world.town.to_unit)
         own = owners.get(place_id, [])
         places[place_id] = tuple(slot for owner in place_spec.owners for slot in owners[owner]) + tuple(own)
 
@@ -419,21 +440,39 @@ def walkable(core: SimCore, spot: Vec3) -> bool:
     return all(core.distance_m(spot, solid.centre) >= solid.radius_m for solid in layout(core).solids)
 
 
-def nearest_free(
-    core: SimCore, citizen: Citizen, candidates: Iterable[Slot], within_m: float = math.inf
-) -> Slot | None:
-    """The nearest free slot among the candidates the citizen may take (ties by id): no one else's body or claim
-    within PERSONAL_M of it (their own claim counts as free)."""
+def _free_by_distance(
+    core: SimCore, citizen: Citizen, candidates: Iterable[Slot], within_m: float
+) -> list[tuple[float, str, Slot]]:
+    """The free slots among the candidates the citizen may take, nearest first (ties by id): no one else's body or
+    claim within PERSONAL_M of it (their own claim counts as free)."""
     spots = _taken(core, citizen.id)
-    free = [
+    return sorted(
         (distance, slot.id, slot)
         for slot in candidates
         if slot.usable_by(citizen)
         and slot.kind != "inside"
         and (distance := core.distance_m(citizen.position, slot.position)) <= within_m
         and _clear(core, slot.position, spots)
-    ]
-    return min(free)[2] if free else None
+    )
+
+
+def nearest_free(
+    core: SimCore, citizen: Citizen, candidates: Iterable[Slot], within_m: float = math.inf
+) -> Slot | None:
+    """The nearest free slot among the candidates the citizen may take (ties by id)."""
+    free = _free_by_distance(core, citizen, candidates, within_m)
+    return free[0][2] if free else None
+
+
+def _nearest_reachable(
+    core: SimCore, citizen: Citizen, candidates: Iterable[Slot], within_m: float = math.inf, far: bool = False
+) -> Slot | None:
+    """The nearest free slot the citizen can step to at this tick's end (`step_to`'s way there; `far`: a work slot
+    anywhere in the place), so a claim taken standing still never names a slot they can't reach."""
+    for distance, _, slot in _free_by_distance(core, citizen, candidates, within_m):
+        if distance <= OCCUPY_M or _path(core, citizen, slot.position, far=far) is not None:
+            return slot
+    return None
 
 
 def ring_bearings(radius: float) -> int:
@@ -546,8 +585,10 @@ def reserve_place(core: SimCore, citizen: Citizen, place_id: str) -> Vec3:
     return _arrival(core, citizen, layout(core).places.get(place_id, ()), place.stand, with_centre=True)
 
 
-def reserve_home(core: SimCore, citizen: Citizen, home: Structure) -> Vec3:
-    return _arrival(core, citizen, layout(core).homes.get(home.id, ()), home.door, with_centre=True)
+def reserve_home(core: SimCore, citizen: Citizen, home: Structure, work: bool = True) -> Vec3:
+    """Walking home: a work slot within reach of the door (`work`; the loom for its weaver), else before the door."""
+    slots = tuple(slot for slot in layout(core).homes.get(home.id, ()) if work or slot.kind != "work")
+    return _arrival(core, citizen, slots, home.door, with_centre=True)
 
 
 def reserve_owner(core: SimCore, citizen: Citizen, owner_id: str, centre: Vec3, goal: Vec3) -> Vec3:
@@ -571,9 +612,10 @@ def reserve_near(core: SimCore, citizen: Citizen, point: Vec3, with_centre: bool
 
 
 def take_seat(core: SimCore, citizen: Citizen) -> Slot | None:
-    """A free seat within SEAT_M (stepped to at the tick's end), else None: they sit where they are."""
+    """The nearest free seat they can step to at the tick's end (a bench, a log by the fire: within STEP_MAX_M), else
+    None: they sit where they are."""
     seats = (slot for slot in layout(core).slots.values() if slot.kind == "seat" and slot.task is None)
-    seat = nearest_free(core, citizen, seats, SEAT_M)
+    seat = _nearest_reachable(core, citizen, seats, STEP_MAX_M)
     if seat is not None:
         claim(core, citizen, seat, seat.position, approach=True)
     return seat
@@ -599,7 +641,7 @@ def take_bed(core: SimCore, citizen: Citizen) -> Slot | None:
             for slot in lay.owners.get(owner, ())
             if slot.kind == "mat" and core.distance_m(slot.position, home.door) <= HOME_RADIUS_M
         ]
-        mat = nearest_free(core, citizen, mats, STEP_MAX_M)
+        mat = _nearest_reachable(core, citizen, mats, STEP_MAX_M)
         if mat is not None:
             claim(core, citizen, mat, mat.position, approach=True)
             return mat
@@ -626,19 +668,11 @@ def take_work_slot(core: SimCore, citizen: Citizen, task: str, area: tuple[Vec3,
     ]
     if not near:
         return "none here"
-    spots = _taken(core, citizen.id)
-    options = sorted(
-        (core.distance_m(citizen.position, slot.position), slot.id, slot)
-        for slot in near
-        if _clear(core, slot.position, spots)
-    )
-    for _, _, slot in options:
-        if core.distance_m(citizen.position, slot.position) <= OCCUPY_M or _path(
-            core, citizen, slot.position, far=True
-        ):
-            claim(core, citizen, slot, slot.position, approach=True)
-            return slot
-    return "all taken"
+    slot = _nearest_reachable(core, citizen, near, far=True)
+    if slot is None:
+        return "all taken"
+    claim(core, citizen, slot, slot.position, approach=True)
+    return slot
 
 
 # --- the tick's end ---
@@ -672,8 +706,9 @@ def settle(core: SimCore) -> None:
 
 
 def _come_out(core: SimCore, citizen: Citizen, home: Structure) -> None:
-    """Awake again: out of the door to a free spot before the house (a stand, the queue, else round the door)."""
-    step_to(core, citizen, reserve_home(core, citizen, home), straight=True)
+    """Awake again: out of the door to a free spot before the house (a stand, the queue, else round the door), never
+    straight onto a work slot (the lord's seat, the loom's stool): they walk to work when they set to it."""
+    step_to(core, citizen, reserve_home(core, citizen, home, work=False), straight=True)
 
 
 def _move_queues(core: SimCore) -> None:
@@ -711,34 +746,42 @@ def _still_held(core: SimCore, citizen: Citizen, claimed: Claim, slot: Slot | No
     distance = core.distance_m(citizen.position, claimed.position)
     if distance <= OCCUPY_M:
         return True
-    # a walk that stopped short lets go; a claim taken standing still (a seat, a mat) is stepped to
+    # a walk that stopped short lets go, and so does anyone who moved off it this tick on their own (a follow that
+    # caught up within the tick); a claim taken standing still (a seat, a mat) is stepped to
     return claimed.approach and citizen.id not in core.strides
 
 
 def _keep_apart(core: SimCore) -> None:
     state = slot_state(core)
     bodies = [c for c in core.living() if not is_moving(c) and not is_inside(core, c)]
-    placed: list[Vec3] = []
+    placed: list[Vec3] = []  # the bodies kept where they are
+    feet: list[Vec3] = []  # and the legs of those of them sitting or lying: nobody stands on them either
+
+    def keep(citizen: Citizen) -> None:
+        placed.append(citizen.position)
+        if _down(citizen):
+            feet.append(legs(core.world, citizen.position, citizen.heading_deg))
+
+    def fits(citizen: Citizen) -> bool:
+        """Clear of every body and legs kept, and (sitting or lying) with their own legs clear of every body."""
+        if not _clear(core, citizen.position, [*placed, *feet]):
+            return False
+        return not _down(citizen) or _clear(core, legs(core.world, citizen.position, citizen.heading_deg), placed)
+
     loose: list[Citizen] = []
     for citizen in bodies:
         claimed = state.claims.get(citizen.id)
         if claimed is not None and core.distance_m(citizen.position, claimed.position) <= OCCUPY_M:
-            placed.append(citizen.position)
-            if _down(citizen):  # nobody stands on their legs either
-                placed.append(legs(core.world, citizen.position, citizen.heading_deg))
+            keep(citizen)
         else:
             loose.append(citizen)
     loose.sort(key=lambda c: (c.id in core.strides, c.id))  # who stood there first keeps the spot
     for citizen in loose:
-        if _clear(core, citizen.position, placed):
-            placed.append(citizen.position)
-            continue
-        spot = ring_spot(core, citizen, citizen.position, with_centre=False)
-        if spot is not None and step_to(core, citizen, spot):
-            release(core, citizen)  # a ring spot of their own now: any claim of theirs elsewhere is let go
-        placed.append(citizen.position)
-        if _down(citizen):
-            placed.append(legs(core.world, citizen.position, citizen.heading_deg))
+        if not fits(citizen):
+            spot = ring_spot(core, citizen, citizen.position, with_centre=False)
+            if spot is not None and step_to(core, citizen, spot):
+                release(core, citizen)  # a ring spot of their own now: any claim of theirs elsewhere is let go
+        keep(citizen)
 
 
 def step_to(core: SimCore, citizen: Citizen, spot: Vec3, straight: bool = False, far: bool = False) -> bool:

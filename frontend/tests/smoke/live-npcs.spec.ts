@@ -623,7 +623,7 @@ test('a walk that ends in a rest within the tick is drawn walking all the way th
 }) => {
   const errors: string[] = [];
   await openLive(page, errors, '?mockLive=1', 1);
-  // Sela gathers berries until tick 19; at tick 20 she walks the 33 m back to the fire pit and sits down to rest
+  // Sela gathers berries until tick 19; at tick 20 she walks the 33 m back to her log by the fire and sits on it
   await page.evaluate(() => {
     const mock = (globalThis as unknown as MockLiveWindow).__pebbleMockLive;
     mock.skip(18);
@@ -658,7 +658,7 @@ test('a walk that ends in a rest within the tick is drawn walking all the way th
       .filter((tag) => !tag.startsWith('Sela · walking')),
   ).toEqual([]);
   const last = samples.at(-1)!;
-  expect([last.activity, last.posture]).toEqual(['resting', 'sitting']);
+  expect([last.activity, last.posture]).toEqual(['resting', 'seated']);
   expect(last.tag).toMatch(/^Sela · resting/);
   expect(errors).toEqual([]);
 });

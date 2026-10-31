@@ -195,7 +195,9 @@ export interface WalkWorld {
 }
 
 /** Extra local height of a placement's base (e.g. standing it on uneven terrain); 0 on flat ground. */
-export type PlacementLift = (placement: WalkPlacement) => number;
+export type PlacementLift = (
+  placement: Pick<WalkPlacement, 'x' | 'z'>,
+) => number;
 
 /**
  * Builds the collision world; `colliders` must hold the colliders file of every solid and surface asset.

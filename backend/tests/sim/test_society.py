@@ -272,10 +272,24 @@ def test_standing_stays_within_a_hundred(new_sim: Callable[..., Simulation]) -> 
     assert changes[-1] == ("tek", "town", 95, 100, "tended")  # clamped, and nothing once there
 
 
-def test_the_owner_of_a_theft_must_be_a_group_or_a_household(new_sim: Callable[..., Simulation]) -> None:
-    sim = _town(new_sim)
-    with pytest.raises(ValueError, match="neither a group nor one household"):
-        sim.core.emit("stole", Stole(owner="nobody-house", store="x", item="rice", count=1), actor=sim.citizen("kaz"))
+def test_a_theft_from_a_household_nobody_lives_in_wrongs_the_town(new_sim: Callable[..., Simulation]) -> None:
+    sim = _town(new_sim)  # nobody of the keep is in this scene
+    seq = _steal(sim, "kaz", owner="castle-keep")
+    deed = SOCIETY.of(sim.state).deeds[seq]
+    assert (deed.group, deed.owner) == ("town", "castle-keep")
+    assert ("kaz", "town", -10, -25, "theft") in _changes(sim.drain())  # seen by the farmers beside him
+
+
+def test_a_theft_from_an_empty_lean_to_wrongs_its_camp_s_band(new_sim: Callable[..., Simulation]) -> None:
+    sim = _town(new_sim)  # band A lives in shelter-n; nobody in shelter-w
+    seq = _steal(sim, "kaz", owner="band_a_camp:shelter-w")
+    assert SOCIETY.of(sim.state).deeds[seq].group == "band_a"
+
+
+def test_a_home_of_two_groups_can_t_own_a_theft(new_sim: Callable[..., Simulation]) -> None:
+    sim = _scene(new_sim, {"citizen_id": "kaz", "region": "band_b"}, {"citizen_id": "genzo"})  # both of main-w-3
+    with pytest.raises(ValueError, match="a home of several groups"):
+        sim.core.emit("stole", Stole(owner="main-w-3", store="x", item="rice", count=1), actor=sim.citizen("kaz"))
 
 
 # --- good deeds ---

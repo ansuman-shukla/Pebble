@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Request, Response
 
-from app.api.deps import SessionDep, WorldGeneratorDep
+from app.api.deps import PlaceIndexDep, SessionDep, WorldGeneratorDep
 from app.services.places import world_layout
+from app.sim.furniture import Furniture, site_furniture
+from app.sim.slots import load_slots_spec
 from app.world.spec import load_site_kinds, load_world_spec
 from app.world.store import load_or_generate
+from app.world.town import load_town
 from app.world.view import WorldPlaces, WorldView
 
 router = APIRouter(prefix="/world", tags=["world"])
@@ -22,6 +25,12 @@ def read_world(session: SessionDep, generator: WorldGeneratorDep) -> Response:
 def read_places(session: SessionDep, generator: WorldGeneratorDep) -> WorldPlaces:
     """Hotspots, hunting grounds, fixed features (nodes, dens, signposts, markers), roads, bridges and flora kinds."""
     return world_layout(session, generator).places
+
+
+@router.get("/furniture", response_model=list[Furniture])
+def read_furniture(places: PlaceIndexDep) -> list[Furniture]:
+    """The log seats, stools and mats people sit and lie on, where their slots are, in each site's local metres."""
+    return site_furniture(load_slots_spec(), load_town(), places.world.sites)
 
 
 @router.get(

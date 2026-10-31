@@ -3,7 +3,7 @@
 One 10-day run (~40 s) feeds every test here: nobody dies (deaths only from real causes, and the default cast
 doesn't starve or parch), everyone keeps making progress and moving, says what they are after, greets and talks,
 runs only when they must and walks onto their work slots themselves, nobody passes through the town's walls,
-bands sleep at camp at night and forage by day, the farmers work the fields and the storehouse fills up; animal
+bands sleep at camp at night and forage by day, the farmers work the fields and their rice tax fills the granary; animal
 populations stay within their caps, predators hurt people only at dusk or night when they're alone and away from
 fire, hunters hunt, the camp fires burn through the nights and the guard lights the gate's fire baskets.
 """
@@ -273,11 +273,13 @@ def test_town_folk_sleep_at_home_and_work_their_roles(life: Life) -> None:
         assert all(life.started[(c, day, "sleep")] >= 1 for c in ("genzo", "aiko", "hana", "masanori"))
 
 
-def test_the_farmers_fill_the_storehouse(life: Life) -> None:
+def test_the_farmers_rice_tax_fills_the_granary(life: Life) -> None:
+    """The granary gets 40 % of each harvest and feeds seven (10-world-v1 §2.6-2.7): it grows, though not every day.
+    5-seed sweep (E2, 10 days): +186, +168, +163, +93, +99; lowest dip 10 below the start."""
     rice = life.rice
     assert len(rice) == DAYS + 1
-    assert rice[-1] > rice[0] + 200  # the harvest outpaces what six people eat
-    assert all(later >= earlier for earlier, later in zip(rice[1:], rice[2:], strict=False))
+    assert rice[-1] > rice[0] + 50
+    assert min(rice) >= rice[0] - 30  # never drawn down
 
 
 def test_animal_populations_stay_within_caps_among_the_people(life: Life) -> None:

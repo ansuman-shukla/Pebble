@@ -289,7 +289,11 @@ LINES: dict[str, Line] = {  # by event type
         ),
     ),
     "tool_broke": Line("{actor} wears out their {item}", 1),
-    "tax_assessed": Line("{actor} adds {rice} rice to the tax {household} owes", 0),
+    "tax_assessed": Line(
+        "{actor} adds {rice} rice to the tax {household} owes",
+        0,
+        (Variant(_field("rice", 0), "{household} owes {coins} mon more in dues", 0),),
+    ),
     "tax_paid": Line(
         "{actor} pays {rice} rice and {coins} mon of tax for {household}",
         1,

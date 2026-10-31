@@ -301,10 +301,10 @@ def test_a_fire_lights_the_night_and_cooks_meat(
     assert any(e.type == "injured" and e.payload.model_dump()["cause"] == "bad food" for e in sim.drain())
 
 
-def test_town_folk_take_wood_from_the_storehouse(new_sim: Callable[..., Simulation]) -> None:
+def test_the_keep_s_household_takes_wood_from_the_granary(new_sim: Callable[..., Simulation]) -> None:
     sim = new_sim()
     sim.stock_store("store-2", "wood", 30)
-    porter = sim.add_citizen(make_spec("porter", at=(70.0, 85.0)))
+    porter = sim.add_citizen(make_spec("porter", at=(70.0, 85.0), home="castle-keep"))
     result = WorldApi(sim, porter.id).pick_up("wood")
     assert result.text == "You take plenty of wood from the storehouse."
     assert porter.inventory == {"wood": 25} and sim.state.stores["store-2"] == {"wood": 5}

@@ -36,6 +36,7 @@ from app.observability.store import EventStore, create_run, discard_after, lates
 from app.sim.citizens import CITIZENS, load_citizens
 from app.sim.clock import SECONDS_PER_TICK, TICKS_PER_HOUR
 from app.sim.navigation import Planner
+from app.sim.ownership import fed_by_granary
 from app.sim.simulation import Simulation
 from app.sim.snapshot import SimSnapshot, restore, take_snapshot
 from app.sim.snapshot import resumable as snapshot_resumable
@@ -62,6 +63,7 @@ def citizen_brains(sim: Simulation, seed: int) -> CitizenBrains:
     """A scripted brain for every citizen, acting through their own `WorldApi`."""
     places = sim.world.places
     cast = sim.state.citizens
+    traits = {spec.id: spec.traits for spec in load_citizens(CITIZENS).citizens if spec.traits is not None}
     return CitizenBrains(
         (
             (
@@ -76,6 +78,8 @@ def citizen_brains(sim: Simulation, seed: int) -> CitizenBrains:
                     titled=known_titles(
                         (cast[other].name, cast[other].role) for other in sorted(citizen.people) if other in cast
                     ),
+                    granary=citizen.region == "town" and fed_by_granary(citizen),
+                    honesty=traits[citizen.id].honesty if citizen.id in traits else 0.5,
                 ),
             )
             for citizen in sim.core.citizens()

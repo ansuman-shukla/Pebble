@@ -5,7 +5,7 @@ places (fields, storehouse, market, gates, castle, loom); bands forage around ca
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import partial
 from typing import get_args
 
@@ -152,21 +152,38 @@ def _daytime(ctx: Context) -> bool:
 # --- the town ---
 
 STORE_RICE = "Bring the rice into the storehouse"
+TAKE_RICE_HOME = "Take the rice home to the chest"
 
 
 def _store_rice(ctx: Context, score: float = WORK + 1) -> Option:
-    return _work_at(ctx, STOREHOUSES, "store food", score, STORE_RICE)
+    """Pay the rice tax on the harvest at the granary ("store food"), then take the rest home to the chest."""
+    if ctx.notes.get("taxed") is False:
+        return _work_at(ctx, STOREHOUSES, "store food", score, STORE_RICE)
+    if at_home(ctx.perception):
+        return Option(score, "stash rice", partial(_stash_rice, ctx), TAKE_RICE_HOME)
+    return Option(score, "go home", lambda: ctx.api.walk_to_place("home"), TAKE_RICE_HOME)
+
+
+def _stash_rice(ctx: Context) -> ActionHandle:
+    """Put the carried rice in the household chest (as much as they reckon they carry), then rest a moment at home."""
+    ctx.api.stash("rice", max(1, carried_food(ctx.perception.you).get("rice", 0)))
+    return ctx.api.rest(10)
 
 
 def _farm(ctx: Context) -> list[Option]:
     rice = carried_food(ctx.perception.you).get("rice", 0)
+    if ctx.notes.get("last") == "store food" and ctx.notes.get("failed") != "store food":  # the tax is paid
+        ctx.notes["taxed"] = True
     if ctx.phase == "dusk" and rice:
         return [_store_rice(ctx, 46)]  # bring the day's harvest in before supper
     if not _daytime(ctx):
         return []
     if rice >= 25:
         return [_store_rice(ctx)]
-    return [_work_at(ctx, FIELDS, "farm", aim="Tend the rice fields")]
+    farm = _work_at(ctx, FIELDS, "farm", aim="Tend the rice fields")
+    if farm.name == "farm":  # each harvest is taxed: the rice goes to the granary before it goes home
+        farm = replace(farm, start=_then(lambda: _set(ctx, "taxed", False), farm.start))
+    return [farm]
 
 
 def farmer(ctx: Context) -> list[Option]:

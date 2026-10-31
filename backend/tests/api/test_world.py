@@ -6,16 +6,20 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
-from app.api.deps import get_session, get_world_generator
+from app.api.deps import get_place_index, get_session, get_world_generator
 from app.core.config import settings
 from app.main import app
 from app.services import places as places_service
+from app.services.places import PlaceIndex
+from app.sim.furniture import Furniture
+from app.sim.world import SimWorld
 from app.world.flora import generate_flora
 from app.world.generate import GENERATOR, generate_view
 from app.world.spec import BIOME_NAMES, SITE_IDS, WorldSpec, load_world_spec
 from app.world.store import WorldGenerator
 from app.world.town import KindSpec
 from app.world.view import WorldPlaces, WorldView, decode_array
+from tests.sim.test_furniture import furniture_of
 
 WORLD_URL = f"{settings.API_V1_STR}/world"
 
@@ -171,3 +175,12 @@ def test_world_schema_names_the_places_models(client: TestClient) -> None:
 
     for name in ("WorldPlaces", "Hotspot", "Feature", "Road", "Bridge", "Ground"):
         assert name in schemas, name
+
+
+def test_furniture_is_served_in_each_sites_chart(client: TestClient, sim_world: SimWorld) -> None:
+    app.dependency_overrides[get_place_index] = lambda: PlaceIndex(sim_world)
+    response = client.get(f"{WORLD_URL}/furniture")
+
+    assert response.status_code == 200
+    assert [Furniture.model_validate(piece) for piece in response.json()] == furniture_of(sim_world)
+    assert set(response.json()[0]) == {"id", "site", "kind", "x", "z", "heading_deg", "seat_m", "span_m"}

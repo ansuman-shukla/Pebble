@@ -106,6 +106,8 @@ class UtilityBrain:
             notes["asleep"] = False
             notes["greeted"] = []  # a new day: greet people again
             notes["chores"] = []
+            notes.pop("tempted", None)
+            notes.pop("chest empty", None)  # look in the chest again today
             notes.pop("full", None)  # carrying words are rough: a little eaten may not change them, so try again
             notes.pop("goal", None)  # a new day: say what you're after again
         number = notes.get("action")
@@ -252,12 +254,42 @@ class UtilityBrain:
         if cooked or (raw and needs.hunger >= 2):
             item = cooked[0] if cooked else raw[0]
             return option(score, "eat", lambda: self.api.eat(item))
-        if self.profile.region == "town":
+        if self.profile.region != "town":
+            return None  # bands go foraging (their routine scores it up when hungry)
+        failed = self.api.notes.get("failed") == "eat"
+        if self.profile.granary:  # the lord's granary feeds them
             # in the storehouses' yard but out of reach of a door (stopped short): walk up to them first
-            if at(p, STOREHOUSES) and self.api.notes.get("failed") != "eat":
+            if at(p, STOREHOUSES) and not failed:
                 return option(score, "eat", lambda: self.api.eat("rice"))
             return option(score - 2, "go eat", lambda: self.api.walk_to_place(STOREHOUSES, pace))
-        return None  # bands go foraging (their routine scores it up when hungry)
+        if at_home(p) and failed:
+            self.api.notes["chest empty"] = True  # nothing to eat at home today
+        starving = needs.hunger >= 3 and not carries(p, "coins") and self.api.notes.get("chest empty") is True
+        if starving and self.tempted():  # no food carried, none at home, no coins to buy any
+            return self.steal_option(p, score, pace)
+        if not at_home(p):  # the household's own rice is in the chest at home
+            return option(score - 2, "go eat", lambda: self.api.walk_to_place("home", pace))
+        return None if failed else option(score, "eat", lambda: self.api.eat("rice"))
+
+    def tempted(self) -> bool:
+        """A starving town citizen with no food (carried or in the chest at home) and no coins takes rice that isn't
+        theirs with p = 1 - honesty (§3.6), rolled once a waking day."""
+        notes = self.api.notes
+        if "tempted" not in notes:
+            notes["tempted"] = self.chance(1.0 - self.profile.honesty)
+        return notes["tempted"] is True
+
+    def steal_option(self, p: Perception, score: float, pace: Pace) -> Option:
+        """Take five measures of rice from the nearest store (the storehouses) and eat."""
+        option = partial(Option, aim="Take rice to eat", driver="hunger")
+        if not at(p, STOREHOUSES):
+            return option(score - 2, "go take rice", lambda: self.api.walk_to_place(STOREHOUSES, pace))
+
+        def take_and_eat() -> ActionHandle:
+            self.api.pick_up("5 rice")
+            return self.api.eat("rice")
+
+        return option(score, "take rice", take_and_eat)
 
     def rest_options(self, p: Perception, needs: Needs, now: str, pace: Pace) -> list[Option]:
         options: list[Option] = []

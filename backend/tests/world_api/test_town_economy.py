@@ -1,8 +1,10 @@
-"""The town economy through `world_api`: farming ripens and harvests rice, food goes into the storehouse, town folk
-eat from it, role tasks need the skill and the place, and every change replays from its events."""
+"""The town economy through `world_api`: farming ripens and harvests rice, food goes into the lord's granary (the
+storehouses) and his household eats from it, others take from it only by stealing, role tasks need the skill and the
+place, and every change replays from its events."""
 
 from collections.abc import Callable
 
+from app.observability.events import Stole
 from app.observability.replay import ReplayEvent, from_snapshot, replay
 from app.sim.bodies import ACTIVE_RATE, HUNGER_PER_HOUR
 from app.sim.simulation import Simulation
@@ -53,10 +55,10 @@ def test_a_full_farmer_leaves_the_ripe_rice_in_the_field(new_sim: Callable[..., 
     assert sim.state.stores[FIELD_ID] == {"rice": 2 * FARM_GROWTH - 5}
 
 
-def test_rice_goes_into_the_storehouse_and_town_folk_eat_from_it(new_sim: Callable[..., Simulation]) -> None:
+def test_rice_goes_into_the_granary_and_the_keep_s_household_eats_from_it(new_sim: Callable[..., Simulation]) -> None:
     sim = new_sim()
     sim.stock_store(STORE, "rice", 30)
-    api = _farmer(sim, at=STOREHOUSES, inventory={"rice": 20, "reeds": 3})
+    api = _farmer(sim, at=STOREHOUSES, inventory={"rice": 20, "reeds": 3}, home="castle-keep")
     stored = run_until_done(sim, api.work("store food"), 10)
     assert stored.text == "You put plenty of rice in the storehouse."
     assert sim.state.stores[STORE] == {"rice": 50}
@@ -71,17 +73,22 @@ def test_rice_goes_into_the_storehouse_and_town_folk_eat_from_it(new_sim: Callab
     assert farmer.inventory == {"reeds": 3}
 
 
-def test_the_storehouse_is_only_for_the_town_and_only_within_reach(new_sim: Callable[..., Simulation]) -> None:
+def test_a_stranger_eating_from_the_granary_steals_and_it_is_reached_only_close_by(
+    new_sim: Callable[..., Simulation],
+) -> None:
     sim = new_sim()
     sim.stock_store(STORE, "rice", 30)
+    sim.add_citizen(make_spec("kenji", at=(0.0, 3.0), home="castle-keep"))  # the robbed household
     stranger = WorldApi(sim, sim.add_citizen(make_spec("stranger", at=STOREHOUSES, region="band_a")).id)
     sim.citizen("stranger").body.hunger = 50.0
-    assert run_until_done(sim, stranger.eat("rice"), 1).text == "You have no rice, and there are none within reach."
+    sim.drain()
+    assert run_until_done(sim, stranger.eat("rice"), 10).outcome == "done"
+    assert [e.payload.count for e in sim.drain() if isinstance(e.payload, Stole)] == [5]
     townsman = WorldApi(sim, sim.add_citizen(make_spec("townsman", at=MARKET, knows_places=TOWN_PLACES)).id)
     sim.citizen("townsman").body.hunger = 50.0
     assert run_until_done(sim, townsman.eat("rice"), 1).outcome == "failed"
     assert run_until_done(sim, townsman.work("store food"), 1).text == "There's no storehouse within reach."
-    assert sim.state.stores[STORE] == {"rice": 30}
+    assert sim.state.stores[STORE] == {"rice": 25}
 
 
 def test_role_tasks_need_the_skill_and_the_place(new_sim: Callable[..., Simulation]) -> None:
@@ -118,4 +125,4 @@ def test_storing_and_farming_replay_from_events(new_sim: Callable[..., Simulatio
     events = [ReplayEvent(e.tick, e.type, e.actor_id, e.payload.model_dump(mode="json")) for e in sim.drain()]
     rebuilt = replay(start, events)
     assert rebuilt.same_as(from_snapshot(take_snapshot(sim.state)))
-    assert rebuilt.stores[STORE] == {"rice": 30 + FARM_GROWTH}
+    assert rebuilt.stores[STORE] == {"rice": 30 + 5}  # the rice tax on the harvest: ⌈40 % of 12⌉
