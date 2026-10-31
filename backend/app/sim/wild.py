@@ -25,7 +25,7 @@ from app.sim.items import ITEMS, RESOURCE_INDEX, amount_words, tool_in
 from app.sim.locomotion import gait_mps
 from app.sim.perception import match_animal, match_person, person_label
 from app.sim.state import ActionState, Animal, Citizen, Fire
-from app.sim.vec import Vec3, bearing_deg, normalize
+from app.sim.vec import Vec3, normalize
 from app.world_api.models import Attack, Hunt
 
 HUNT_MINUTES = 60  # stalking gives up after this long ("You lose the trail.")
@@ -159,7 +159,7 @@ def _strike_hunt(core: SimCore, citizen: Citizen, animal: Animal) -> None:
     species = SPECIES[animal.kind]
     rng = core.state.rng("wild.hunt")
     if rng.random() < hunt_chance(core, citizen, animal):
-        died = animals.kill(core, animal, "hunted")
+        died = animals.kill(core, animal, "hunted", attacker=citizen.id, remains=True)
         taken = [
             _take_from(core, citizen, animal, item, count, died)
             for item, count in (("meat", species.meat), ("hide", species.hide))
@@ -169,7 +169,7 @@ def _strike_hunt(core: SimCore, citizen: Citizen, animal: Animal) -> None:
         tail = f" You take {got}." if got else " You can't carry any of it."
         core.end_action(citizen, "done", f"You bring down {species.one}.{tail}")
         return
-    _scatter(core, animal, citizen.position)
+    _scatter(core, animal, citizen)
     text = f"{capital(species.one)} gets away."
     if species.fights_back and rng.random() < species.fights_back:
         low, high = species.hurts
@@ -191,10 +191,10 @@ def _strike_animal(core: SimCore, citizen: Citizen, animal: Animal) -> None:
     rng = core.state.rng("wild.attack")
     blow = (BLOW[0] + (BLOW[1] - BLOW[0]) * rng.random()) * citizen.traits.strength
     blow *= SPEAR if tool_in(citizen.inventory, "spear") else 1.0
-    if animals.wound(core, animal, blow, f"attacked by {citizen.name}"):
+    if animals.wound(core, animal, blow, f"attacked by {citizen.name}", attacker=citizen.id):
         core.end_action(citizen, "done", f"You kill {species.one}.")
         return
-    _scatter(core, animal, citizen.position)
+    _scatter(core, animal, citizen)
     if species.bite[1] > 0 and rng.random() < FIGHT_BACK:
         core.end_action(citizen, "done", f"You strike {species.one}; it bites back and runs off.")
         low, high = species.bite
@@ -220,15 +220,9 @@ def _strike_person(core: SimCore, citizen: Citizen, action: ActionState) -> None
     core.injure(victim, blow, "violence", f"{person_label(victim, citizen)} strikes you", attacker=citizen.id)
 
 
-def _scatter(core: SimCore, animal: Animal, threat: Vec3) -> None:
-    """A missed animal's group bolts away from the hunter."""
-    for member_id in core.state.groups[animal.group].members:
-        member = core.state.animals[member_id]
-        if member.alive and not SPECIES[member.kind].predator:
-            away = bearing_deg(threat, member.position)
-            animals.run_from(core, member, away)
-    if SPECIES[animal.kind].predator:
-        animals.drive_off(core, animal, threat)
+def _scatter(core: SimCore, animal: Animal, citizen: Citizen) -> None:
+    """A missed animal bolts away from the hunter, its herd with it (a predator is driven off)."""
+    animals.scatter(core, animal, citizen.position, citizen.id)
 
 
 def _take_from(core: SimCore, citizen: Citizen, animal: Animal, item: str, count: int, cause_seq: int) -> str:

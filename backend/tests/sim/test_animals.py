@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 import pytest
 
-from app.observability.events import EventDraft
+from app.observability.events import EventDraft, TickSummary
 from app.observability.replay import ReplayEvent, from_snapshot, replay
 from app.sim import animals as animal_life
 from app.sim.clock import DAY_MINUTES
@@ -132,23 +132,30 @@ def test_herbivores_sleep_at_night_and_predators_by_day(
 # --- herds run from people and predators ---
 
 
+def _ran(sim: Simulation, animal_id: str) -> bool:
+    """Whether the animal ran (a flight) in the tick just stepped."""
+    summary = [e.payload for e in sim.drain() if isinstance(e.payload, TickSummary)][-1]
+    pose = summary.animals.get(animal_id)
+    return pose is not None and pose.gait == "run" and len(pose.route) >= 2
+
+
 def test_a_deer_runs_from_a_person_and_from_a_wolf(new_sim: Callable[..., Simulation]) -> None:
     sim = without_animals(new_sim())
     cell = wild_cell(sim)
     walker = put_in_the_wild(sim, sim.add_citizen(make_spec(home=None)).id, cell)
     skip_to(sim, walker.position, night=False)
     deer = add_animal(sim, "deer", step_towards(walker.position, 90.0, 25.0, sim.world.radius_m))
+    sim.drain()
     sim.step()
-    assert deer.activity == "running"
-    sim.step()
+    assert _ran(sim, deer.id) and deer.activity == "alert"  # bolted, and watches from where it stopped
     assert sim.world.distance_m(deer.position, walker.position) > 100
 
     far = add_animal(sim, "deer", step_towards(walker.position, 270.0, 120.0, sim.world.radius_m))
     sim.step()
-    assert far.activity != "running"  # people far off don't bother it
+    assert not _ran(sim, far.id)  # people far off don't bother it
     add_animal(sim, "wolf", step_towards(far.position, 0.0, 30.0, sim.world.radius_m), activity="idle", until=10**9)
     sim.step()
-    assert sim.state.animals[far.id].activity == "running"
+    assert _ran(sim, far.id)
 
 
 # --- predators and people ---
@@ -257,15 +264,17 @@ def test_animals_keep_away_from_a_lit_fire(new_sim: Callable[..., Simulation]) -
     add_fuel(camp, 600)
     sim.state.fires[camp.id] = camp
     deer = add_animal(sim, "deer", step_towards(centre, 90.0, 60.0, sim.world.radius_m))
-    deer.goal, deer.pace_m = step_towards(centre, 270.0, 60.0, sim.world.radius_m), 40.0  # straight through it
-    for _ in range(5):
+    group = sim.state.groups[deer.group]
+    group.goal, group.next_move = step_towards(centre, 270.0, 60.0, sim.world.radius_m), 10**9  # straight through it
+    skip_to(sim, centre, night=False)
+    for _ in range(10):
         sim.step()
         assert sim.world.distance_m(deer.position, centre) > 25.0 - 1e-6
-        deer.until = sim.tick + 100
+        deer.until = 0
     camp.fuel, camp.lit = 0, False
-    deer.goal, deer.pace_m = step_towards(centre, 270.0, 60.0, sim.world.radius_m), 40.0
-    sim.run(4)
-    assert sim.world.distance_m(deer.position, centre) > 50  # walked past once the fire was out
+    group.goal = step_towards(centre, 270.0, 60.0, sim.world.radius_m)
+    sim.run(6)
+    assert sim.world.distance_m(deer.position, group.goal) <= animal_life.SPREAD_M  # walked past once it was out
 
 
 # --- respawning and events ---

@@ -54,12 +54,14 @@ def test_a_hunter_stalks_a_deer_and_brings_it_down(
     result = run_until_done(sim, api.hunt("the deer"), 10)
     assert result.outcome == "done"
     assert result.text == "You bring down a deer. You take some meat and a hide."
-    assert not deer.alive and deer.activity == "dead"
+    assert not deer.alive and deer.activity == "remains"  # a hunter's kill is bones at once (10 §4.6)
     hunter = sim.citizen("hunter")
     assert hunter.inventory == {"flint spear": 1, "meat": SPECIES["deer"].meat, "hide": SPECIES["deer"].hide}
     events = sim.drain()
     died = [e for e in events if e.type == "died"]
-    assert [(e.actor_id, e.payload.model_dump()["cause"]) for e in died] == [(deer.id, "hunted")]
+    assert [(e.actor_id, e.payload.model_dump()) for e in died] == [
+        (deer.id, {"cause": "hunted", "attacker": "hunter"})
+    ]
     moved = [e.payload.model_dump() for e in events if e.type == "item_moved"]
     assert {(m["item"], m["source"]["kind"], m["source"]["id"]) for m in moved} == {
         ("meat", "animal", deer.id),
@@ -76,11 +78,13 @@ def test_a_missed_animal_bolts_and_a_boar_can_turn_on_you(
     monkeypatch.setattr(wild, "hunt_chance", lambda *_: 0.0)
     monkeypatch.setitem(SPECIES, "boar", SPECIES["boar"].__class__(**{**SPECIES["boar"].__dict__, "fights_back": 1.0}))
     handle = api.hunt("boar")
+    start = boar.position
     sim.step()
     result = handle.result
     assert result is not None and result.outcome == "failed"
     assert result.text == "A boar turns on you and gets away."
-    assert boar.alive and boar.activity == "running"
+    assert boar.alive and boar.activity == "alert"  # it bolted, and watches from where it stopped
+    assert sim.world.distance_m(start, boar.position) > 100
     hurt = 100.0 - sim.citizen("hunter").body.health
     assert SPECIES["boar"].hurts[0] <= hurt <= SPECIES["boar"].hurts[1]
     injured = [e for e in sim.drain() if e.type == "injured"]
