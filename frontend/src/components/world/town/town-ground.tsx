@@ -4,6 +4,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 import type { TownArea } from '@/lib/client/types.gen';
 import type { Point, WalkWater } from '@/lib/world/collision';
+import { buildMarks, markMaterial } from '@/lib/world/ground-marks';
 import { groundMaterial, groundQuality } from '@/lib/world/ground-shader';
 import { groundShape, TOWN_WATER_Y } from '@/lib/world/ground-shape';
 import { FLAT_MAPPING, type LocalMapping } from '@/lib/world/local-mapping';
@@ -13,8 +14,10 @@ import { waterMaterial } from '@/lib/world/water-material';
 /*
  * The town ground: grass (on the ground shader) with holes where water is (an island inside a moat ring is land
  * again), water surfaces a little below it with bank walls around every edge so the sky never shows through, and the
- * areas (streets, plazas, courtyards, fields) as coloured polygons just above the grass. Built in local metres and
- * carried through the mapping (flat on the town page, wrapped onto the planet on the globe).
+ * ground marks: the areas (packed streets, gravel roads, paved plazas, raked courtyards, furrowed fields) in one
+ * merged mesh with any marks the caller lays beyond them (on the globe: every road, path, camp and work spot of the
+ * world). Built in local metres and carried through the mapping (flat on the town page, wrapped onto the planet on
+ * the globe).
  */
 
 // far enough out that the fog (town-sky.tsx) hides the edge even from the orbit camera
@@ -26,19 +29,11 @@ const FLAT_OUTLINE: Point[] = [
   [-GROUND_HALF, GROUND_HALF],
 ];
 const BANK_BOTTOM = -0.8;
-const AREA_Y = 0.005;
 
 const GRASS = '#9fb37a';
 /** Depth the water shader gives the moat and the stream (they have walled banks, no shallows). */
 const POOL_DEPTH = 2.5;
 const BANK = '#6a5d47';
-const AREA_COLORS: Record<TownArea['kind'], string> = {
-  street: '#b8a07a',
-  road: '#b09670',
-  plaza: '#d2c9b4',
-  courtyard: '#c7bda8',
-  field: '#86a05c',
-};
 
 /** Vertical quads from y = 0 down to `bottom` along every edge of a closed ring. */
 function bankWalls(rings: Point[][], bottom: number) {
@@ -94,6 +89,8 @@ type TownGroundProps = {
   /** Depth of a wall hanging from the outline, hiding the gap to terrain below it (0 = none). */
   skirt?: number;
   grass?: string;
+  /** Marks beyond the areas, already draped on the ground (ground-marks.ts), merged into the areas' mesh. */
+  marks?: BufferGeometry;
 };
 
 export function TownGround({
@@ -103,6 +100,7 @@ export function TownGround({
   outline = FLAT_OUTLINE,
   skirt = 0,
   grass: grassColor = GRASS,
+  marks,
 }: TownGroundProps) {
   const [grass, surface, banks] = useDisposed(
     useMemo(() => {
@@ -155,24 +153,20 @@ export function TownGround({
   );
   useEffect(() => () => grassMaterial.dispose(), [grassMaterial]);
 
-  const areaKinds = useMemo(
-    () => [...new Set(areas.map((area) => area.kind))],
-    [areas],
+  const [markGeometry] = useDisposed(
+    useMemo(() => {
+      const own = buildMarks({ areas: { areas, mapping } });
+      if (!marks) return [own];
+      const merged = mergeGeometries([own, marks]);
+      own.dispose();
+      return [merged];
+    }, [areas, mapping, marks]),
   );
-  const areaGeometries = useDisposed(
-    useMemo(
-      () =>
-        areaKinds.map((kind) =>
-          mapAll(
-            areas
-              .filter((area) => area.kind === kind)
-              .map((area) => shapeAt(area.polygon, [], AREA_Y)),
-            mapping,
-          ),
-        ),
-      [areas, areaKinds, mapping],
-    ),
+  const markLook = useMemo(
+    () => markMaterial(groundQuality(window.location.search)),
+    [],
   );
+  useEffect(() => () => markLook.dispose(), [markLook]);
 
   return (
     <>
@@ -181,16 +175,13 @@ export function TownGround({
       <mesh geometry={banks} receiveShadow>
         <meshStandardMaterial color={BANK} side={DoubleSide} />
       </mesh>
-      {areaGeometries.map((geometry, index) => (
-        <mesh key={areaKinds[index]} geometry={geometry} receiveShadow>
-          <meshStandardMaterial
-            color={AREA_COLORS[areaKinds[index]]}
-            polygonOffset
-            polygonOffsetFactor={-1}
-            polygonOffsetUnits={-1}
-          />
-        </mesh>
-      ))}
+      {/* drawn before the ground, so the ground's fragments under a mark fail the depth test before shading */}
+      <mesh
+        geometry={markGeometry}
+        material={markLook}
+        renderOrder={-1}
+        receiveShadow
+      />
     </>
   );
 }
