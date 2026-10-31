@@ -81,6 +81,7 @@ class Simulation:
         registry: systems.Registry = systems.REGISTRY,
     ) -> None:
         self.core = SimCore(world, planner or Planner(world), state, accepts_gift)
+        self.core.listeners = registry.on_event
         self.registry = registry
 
     @classmethod
