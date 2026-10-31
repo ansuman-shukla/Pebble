@@ -16,6 +16,8 @@ same way.
 
 from functools import partial
 
+from pydantic import JsonValue
+
 from app.brains.profile import BrainProfile
 from app.brains.routines import ROUTINES, Context, Option
 from app.brains.senses import (
@@ -28,11 +30,13 @@ from app.brains.senses import (
     carries,
     compass_word,
     danger,
+    desperate,
     fire_here,
     fire_in_view,
     is_name,
     near,
     phase,
+    prowler,
     told_full,
     water_here,
     water_in_view,
@@ -40,13 +44,14 @@ from app.brains.senses import (
 )
 from app.core.rng import Rng
 from app.world_api.facade import ActionHandle, WorldApi
-from app.world_api.models import Perception
+from app.world_api.models import GestureKind, Pace, Perception
 
 STOREHOUSES = "the storehouses"
 WELL = "the well"
 FIRE = "the fire pit"
-GREET_CHANCE = 0.5
+CHAT_CHANCE = 0.3  # with someone greeted already in earshot and nothing pressing, a word in passing this often
 EAT_ORDER = ("berries", "nuts", "roots", "rice", "dried meat")  # what spoils first goes first; dried meat keeps
+MOVING = frozenset({"walk_to", "follow", "flee", "hunt", "attack", "rest", "sleep"})  # they move the body
 RAW = ("meat", "fish")  # roasted by a fire, else eaten raw only when there's nothing else (it can make you sick)
 
 
@@ -88,6 +93,7 @@ class UtilityBrain:
 
     def decide(self) -> None:
         api, notes = self.api, self.api.notes
+        self.note_arrival()
         again = self.eat_or_drink_again()
         if again is not None:
             notes["action"] = again.number
@@ -100,6 +106,7 @@ class UtilityBrain:
             notes["greeted"] = []  # a new day: greet people again
             notes["chores"] = []
             notes.pop("full", None)  # carrying words are rough: a little eaten may not change them, so try again
+            notes.pop("goal", None)  # a new day: say what you're after again
         number = notes.get("action")
         if isinstance(number, int) and told_full(api.handle(number).result):  # the load filled as it went on
             notes["full"] = list(perception.you.carrying)
@@ -111,6 +118,7 @@ class UtilityBrain:
         if best.score < 60 and self.socialise(perception):
             handle = api.wait(2)  # stand and talk a moment
         else:
+            self.aim(best)
             handle = best.start()
             notes["last"], notes["chosen"] = best.name, handle.number
         if handle.result is not None and handle.result.outcome != "interrupted":
@@ -129,6 +137,25 @@ class UtilityBrain:
         notes["action"] = handle.number
         if best.name == "sleep" and handle.result is None:
             notes["asleep"] = True
+
+    def note_arrival(self) -> None:
+        """Remember where the last walk chosen ended (`arrived`: its option's name) until the body moves again: any
+        chosen action that moves it (another walk, a walk cut short, a follow, a flee, a hunt, a seat or a bed taken)
+        forgets it, while standing there (work, talk, waiting, eating) keeps it."""
+        notes = self.api.notes
+        number = notes.get("chosen")
+        result = self.api.handle(number).result if isinstance(number, int) else None
+        if result is None or result.action not in MOVING:
+            return
+        notes["arrived"] = notes.get("last") if result.action == "walk_to" and result.outcome == "done" else None
+
+    def aim(self, option: Option) -> None:
+        """Say to yourself what you're after (`set_goal`, free and seen only by spectators) whenever a choice serves a
+        new aim; the steps of one aim (walk there, then work) keep it."""
+        goal: list[JsonValue] = [option.aim, option.driver]
+        if option.aim and self.api.notes.get("goal") != goal:
+            self.api.notes["goal"] = goal
+            self.api.set_goal(option.aim, option.driver)
 
     def eat_or_drink_again(self) -> ActionHandle | None:
         """After a meal or a drink, feel whether it was enough (`check_self`) before looking about: still hungry with
@@ -154,100 +181,118 @@ class UtilityBrain:
     def options(self, p: Perception) -> list[Option]:
         needs = Needs.read(p.you.feeling)
         now = phase(p)
-        ctx = Context(self.api, self.profile, p, needs, now, self.chance, self.pick)
+        pace = self.pace(p, needs)
+        ctx = Context(self.api, self.profile, p, needs, now, self.chance, self.pick, pace)
         options = [Option(1, "idle", lambda: self.api.wait(15))]
         behind_walls = self.profile.region == "town" and at(p, self.profile.home_area)  # walls keep animals out
         threat = danger(p)
         if threat is not None and not behind_walls and fire_here(p) not in ("burning", "low"):  # fire too
             if carries(p, "spear") and DISTANCE[threat.nearness] in ("here", "near", "close"):  # armed: drive it off
-                options.append(Option(200, "fight off", partial(self.api.attack, threat.label)))
+                aim = f"Drive off {threat.label}"
+                options.append(Option(200, "fight off", partial(self.api.attack, threat.label), aim, "danger"))
             else:
-                options.append(Option(200, "flee", self.api.flee))
+                options.append(Option(200, "flee", self.api.flee, f"Get away from {threat.label}", "danger"))
         thirst = self.thirst_option(p, needs, now)
         if thirst is not None:
             options.append(thirst)
         hunger = self.hunger_option(p, needs, now)
         if hunger is not None:
             options.append(hunger)
-        options += self.rest_options(p, needs, now)
+        options += self.rest_options(p, needs, now, pace)
         options += ROUTINES[self.profile.routine](ctx)
         return options
+
+    def pace(self, p: Perception, needs: Needs) -> Pace:
+        """Run only when desperate (starving, parched) or with a predator prowling in view out in the open; running
+        tires and parches, so nobody runs about their day (10 §4.1)."""
+        exposed = not (self.profile.region == "town" and at(p, self.profile.home_area))
+        if desperate(needs) or (exposed and prowler(p) is not None and fire_here(p) not in ("burning", "low")):
+            return "run"
+        return "walk"
 
     def thirst_option(self, p: Perception, needs: Needs, now: str) -> Option | None:
         before_bed = now in ("dusk", "night") and needs.thirst >= 1
         if needs.thirst < 2 and not before_bed and not (now == "morning" and needs.thirst >= 1):
             return None
         score = {0: 0.0, 1: 50.0, 2: 80.0, 3: 110.0}[needs.thirst]
+        pace: Pace = "run" if desperate(needs) else "walk"
+        option = partial(Option, aim="Get a drink", driver="thirst")
         arrived = self.api.notes.get("last") == "go drink" and water_in_view(p)  # at the shore of a lake or river
         # at the well but out of reach of it (stopped short, or brought there by someone): walk up to it first
         at_well = self.profile.region == "town" and at(p, WELL) and self.api.notes.get("failed") != "drink"
         if water_here(p) or arrived or at_well:
-            return Option(score, "drink", self.api.drink)
+            return option(score, "drink", self.api.drink)
         if self.profile.region == "town":
-            return Option(score, "go drink", lambda: self.api.walk_to_place(WELL))
+            return option(score, "go drink", lambda: self.api.walk_to_place(WELL, pace))
         way = compass_word(self.api.notes.get("water_way"))
         on_the_way = self.api.notes.get("last") == "go towards the water" and near(p, self.profile.home_area)
         if way is not None and not water_in_view(p) and (at_home(p) or on_the_way):
             # the camp's water out of sight (dark falls early under trees): set out from home the way it lies from
             # there, a few steps at a time, until it comes into view
-            return Option(score, "go towards the water", lambda: self.api.walk_towards(way, "a few steps"))
+            return option(score, "go towards the water", lambda: self.api.walk_towards(way, "a few steps", pace))
         if water_in_view(p) or self.api.notes.get("last") != "go drink":
             # the water may be in sight without being among the things noticed first; if not, the walk fails
-            return Option(score, "go drink", lambda: self.api.walk_to_thing("water"))
-        return Option(score - 20, "go home", lambda: self.api.walk_to_place("home"))  # the water is near camp
+            return option(score, "go drink", lambda: self.api.walk_to_thing("water", pace))
+        return option(score - 20, "go home", lambda: self.api.walk_to_place("home", pace))  # the water is near camp
 
     def hunger_option(self, p: Perception, needs: Needs, now: str) -> Option | None:
         mealtime = now in ("morning", "dusk") and needs.hunger >= 1
         if needs.hunger < 2 and not mealtime:
             return None
         score = {1: 45.0, 2: 85.0, 3: 105.0}[needs.hunger]
+        pace: Pace = "run" if desperate(needs) else "walk"
+        option = partial(Option, aim="Get something to eat", driver="hunger")
         food = carried_food(p.you)
         raw = [name for name in RAW if name in food]
         if raw and fire_here(p) in ("burning", "low"):
-            return Option(score + 1, "eat by the fire", lambda: self.api.eat(raw[0]))
+            return option(score + 1, "eat by the fire", lambda: self.api.eat(raw[0]))
         cooked = [name for name in EAT_ORDER if name in food]
         if cooked or (raw and needs.hunger >= 2):
             item = cooked[0] if cooked else raw[0]
-            return Option(score, "eat", lambda: self.api.eat(item))
+            return option(score, "eat", lambda: self.api.eat(item))
         if self.profile.region == "town":
             # in the storehouses' yard but out of reach of a door (stopped short): walk up to them first
             if at(p, STOREHOUSES) and self.api.notes.get("failed") != "eat":
-                return Option(score, "eat", lambda: self.api.eat("rice"))
-            return Option(score - 2, "go eat", lambda: self.api.walk_to_place(STOREHOUSES))
+                return option(score, "eat", lambda: self.api.eat("rice"))
+            return option(score - 2, "go eat", lambda: self.api.walk_to_place(STOREHOUSES, pace))
         return None  # bands go foraging (their routine scores it up when hungry)
 
-    def rest_options(self, p: Perception, needs: Needs, now: str) -> list[Option]:
+    def rest_options(self, p: Perception, needs: Needs, now: str, pace: Pace) -> list[Option]:
         options: list[Option] = []
+        home = lambda: self.api.walk_to_place("home", pace)  # noqa: E731  # a tiny closure reads best inline
         if now == "night":
             if at_home(p):
-                options.append(Option(70, "sleep", self.api.sleep))
+                options.append(Option(70, "sleep", self.api.sleep, "Sleep at home", "night"))
             else:
-                options.append(Option(70, "go home", lambda: self.api.walk_to_place("home")))
+                options.append(Option(70, "go home", home, "Sleep at home", "night"))
         elif needs.tiredness >= 3:
-            options.append(Option(90, "sleep", self.api.sleep))
+            options.append(Option(90, "sleep", self.api.sleep, "Sleep off the weariness", "rest"))
         elif needs.tiredness >= 2:
-            options.append(Option(35, "rest", lambda: self.api.rest(30)))
+            options.append(Option(35, "rest", lambda: self.api.rest(30), "Rest a while", "rest"))
         if now == "dusk":
             if self.profile.region == "town":
+                evening = partial(Option, 40, aim="Spend the evening at home", driver="night")
                 if at_home(p):
-                    options.append(Option(40, "rest at home", lambda: self.api.rest(30)))
+                    options.append(evening("rest at home", lambda: self.api.rest(30)))
                 else:
-                    options.append(Option(40, "go home", lambda: self.api.walk_to_place("home")))
+                    options.append(evening("go home", home))
             else:
+                evening = partial(Option, 40, aim="Sit by the fire for the evening", driver="night")
                 fire = fire_in_view(p)
                 if fire is not None and beside(fire):
-                    options.append(Option(40, "rest by the fire", lambda: self.api.rest(30)))
+                    options.append(evening("rest by the fire", lambda: self.api.rest(30)))
                 elif fire is not None:
-                    options.append(Option(40, "go to the fire", lambda: self.api.walk_to_thing(FIRE)))
+                    options.append(evening("go to the fire", lambda: self.api.walk_to_thing(FIRE, pace)))
                 else:
-                    options.append(Option(40, "go home", lambda: self.api.walk_to_place("home")))
+                    options.append(evening("go home", home))
         return options
 
     # --- greetings ---
 
     def socialise(self, p: Perception) -> bool:
-        """Reply to someone who greeted you by name, or greet a known person a few paces off (once a day each), when
-        they're near enough to hear it.
+        """Reply to someone who greeted you by name, answer a question put to you by name, greet a known person a few
+        paces off (once a day each: a bow to your betters, a wave to the rest, and a word), or now and then pass the
+        time with someone already greeted, when they're near enough to hear it.
 
         Only people a few paces off surely hear a normal voice (03: speech carries ~30 m, "close by" reaches 50 m).
         Brains don't shout greetings: a shout carries 150 m and stops everyone's work and sleep there (D97).
@@ -258,22 +303,39 @@ class UtilityBrain:
         name = self.profile.name
         within_earshot = {person.label for person in p.people if beside(person)}
         for heard in p.heard:
-            if is_name(heard.who) and name.lower() in heard.words.lower() and heard.who not in greeted:
-                if heard.who not in within_earshot:
-                    continue  # they've walked out of earshot
+            if not (is_name(heard.who) and name.lower() in heard.words.lower()):
+                continue
+            if heard.who not in within_earshot:
+                continue  # they've walked out of earshot
+            if heard.who not in greeted:
                 greeted.append(heard.who)
+                self.api.gesture(self.salute(heard.who), heard.who)
                 self.api.say(self.reply(heard.who, p))
                 return True
-        for person in p.people:
-            label = person.label
-            if is_name(label) and label not in greeted and label in within_earshot:
-                if person.doing == "asleep":
-                    continue
+            if heard.words.endswith("?"):
+                self.api.say(self.answer(heard.who))
+                return True
+        awake = [
+            person.label
+            for person in p.people
+            if is_name(person.label) and person.label in within_earshot and person.doing != "asleep"
+        ]
+        for label in awake:
+            if label not in greeted:
                 greeted.append(label)
-                if self.chance(GREET_CHANCE):
-                    self.api.say(self.greeting(label, p))
-                    return True
+                self.api.gesture(self.salute(label), label)
+                self.api.say(self.greeting(label, p))
+                return True
+        notes = self.api.notes
+        if awake and notes.get("chatted") != p.time_of_day and self.chance(CHAT_CHANCE):
+            notes["chatted"] = p.time_of_day  # a word in passing at most once each part of the day
+            self.api.say(self.small_talk(awake[self.pick(len(awake))], p))
+            return True
         return False
+
+    def salute(self, name: str) -> GestureKind:
+        """A bow to the lord, a samurai or your band's leader (when they outrank you), a wave to anyone else."""
+        return "bow" if self.profile.bows_to(name) else "wave"
 
     def greeting(self, name: str, p: Perception) -> str:
         now = phase(p)
@@ -297,4 +359,28 @@ class UtilityBrain:
         lines = [f"Hello, {name}.", f"And to you, {name}!", f"{name}! Good to see you."]
         if phase(p) == "dusk":
             lines = [f"Good evening, {name}.", f"Rest well, {name}."]
+        return lines[self.pick(len(lines))]
+
+    def small_talk(self, name: str, p: Perception) -> str:
+        """A word in passing with someone already greeted today; half are questions, which they answer."""
+        if self.profile.region == "town":
+            lines = [
+                f"{name}, how goes the work?",
+                f"Have you eaten, {name}?",
+                f"The rice is coming on well, {name}.",
+                f"Busy day, {name}.",
+            ]
+        else:
+            lines = [
+                f"{name}, seen any game?",
+                f"Is the fire still going, {name}?",
+                f"Stay close to camp, {name}.",
+                f"Good picking today, {name}.",
+            ]
+        if phase(p) == "dusk":
+            lines = [f"Long day, {name}.", f"Will you sleep soon, {name}?"]
+        return lines[self.pick(len(lines))]
+
+    def answer(self, name: str) -> str:
+        lines = [f"Well enough, {name}.", f"Not yet, {name}.", f"Can't complain, {name}."]
         return lines[self.pick(len(lines))]
