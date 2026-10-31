@@ -11,6 +11,7 @@ from app.brains.brain import UtilityBrain
 from app.brains.profile import BrainProfile
 from app.observability.events import (
     Accused,
+    ActionEnded,
     BellRang,
     EventDraft,
     ItemLocation,
@@ -629,6 +630,31 @@ def test_the_monk_rings_three_bells_a_day_near_dawn_noon_and_dusk(new_sim: Calla
     assert [kind for _, kind in rung] == ["noon", "dusk", "dawn", "noon", "dusk"]
     for tick, kind in rung:
         assert 0 <= (tick + START_MINUTE) % DAY_MINUTES - moments[kind] <= 10
+
+
+def test_a_monk_who_misses_the_bell_s_window_doesn_t_keep_trying(new_sim: Callable[..., Simulation]) -> None:
+    """At the bell tower at 18:20 his sun still says dusk, but the dusk bell's window closed at 18:05: the refusal
+    ends the dusk bell for him (no retrying for the rest of the dusk hour)."""
+    sim = _scene(
+        new_sim,
+        {
+            "citizen_id": "ennen",
+            "home": "temple-hall",
+            "at": (85.0, -71.5),
+            "skills": ["healing"],
+            "knows_places": ["town", "temple", "bell-tower", "well", "storehouses"],
+        },
+    )
+    sim.state.tick = _at(18 * 60 + 20, day=0)
+    profile = BrainProfile("ennen", "Ennen", "monk of the temple", "town", "The castle town", ("healing",))
+    brain = UtilityBrain(WorldApi(sim, "ennen"), profile, seed=3)
+    refused = 0
+    for _ in range(40):
+        brain.tick()
+        sim.step()
+        ended = _of(sim.drain(), ActionEnded)
+        refused += sum(1 for end in ended if end.action == "work" and end.outcome == "failed")
+    assert refused == 1
 
 
 # --- determinism and snapshots ---

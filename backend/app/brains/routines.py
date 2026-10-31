@@ -275,12 +275,13 @@ def _ring(ctx: Context, bell: str) -> Option:
 
 
 def _rang(ctx: Context, bell: str) -> bool:
-    """The last try at this bell rang it, or found it rung (an interrupted one didn't)."""
+    """The last try at this bell is over: it rang, or the world refused it (rung already, or its time gone by), so
+    trying again won't ring it; only an interrupted try is tried again."""
     tried = ctx.notes.get("bell")
     if not isinstance(tried, list) or len(tried) != 2 or tried[0] != bell or not isinstance(tried[1], int):
         return False
     result = ctx.api.handle(tried[1]).result
-    return result is not None and (result.outcome == "done" or "rung" in result.text)
+    return result is not None and result.outcome in ("done", "failed")
 
 
 def townsperson(ctx: Context) -> list[Option]:
