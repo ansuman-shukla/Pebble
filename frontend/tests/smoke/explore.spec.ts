@@ -20,6 +20,8 @@ import {
   atParam,
   directionOf,
   DRAW_CALL_BUDGET,
+  FLORA_URL,
+  floraOf,
   hold,
   openGlobe,
   sample,
@@ -43,13 +45,16 @@ test.describe.configure({ timeout: 120_000 });
 
 test.beforeAll(async ({ playwright }) => {
   const api = await playwright.request.newContext();
-  const [worldResponse, townResponse] = await Promise.all([
+  const [worldResponse, townResponse, floraResponse] = await Promise.all([
     api.get(WORLD_URL),
     api.get(TOWN_URL),
+    api.get(FLORA_URL),
   ]);
+  const view = (await worldResponse.json()) as WorldView;
   world = explore(
-    (await worldResponse.json()) as WorldView,
+    view,
     (await townResponse.json()) as TownView,
+    floraOf(view, await floraResponse.body()),
   );
   await api.dispose();
   townMapping = world.townMapping;

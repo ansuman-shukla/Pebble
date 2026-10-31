@@ -15,6 +15,7 @@ import { Matrix4, Vector3 } from 'three';
 
 import { Button } from '@/components/ui/button';
 import { BiomeScatter } from '@/components/world/globe/biome-scatter';
+import { GlobeNodes } from '@/components/world/globe/nodes';
 import {
   type DropApi,
   type DropResult,
@@ -83,6 +84,7 @@ import {
   parseReplayTick,
   useReplayCitizens,
 } from '@/hooks/use-replay-citizens';
+import { useFlora } from '@/hooks/use-flora';
 import { useTown } from '@/hooks/use-town';
 import { useWorld } from '@/hooks/use-world';
 import type { TownView, WorldView } from '@/lib/client/types.gen';
@@ -92,6 +94,7 @@ import type { LiveCitizen } from '@/lib/live/live-contract';
 import { feedMinutes } from '@/lib/live/live-state';
 import { ShownDoings } from '@/lib/live/shown-doings';
 import { BIOME_PROPS } from '@/lib/world/biome-props';
+import type { FloraTable } from '@/lib/world/flora';
 import {
   FAST_RATE,
   formatTime,
@@ -136,7 +139,7 @@ import type { WalkTown } from '@/lib/world/walk-charts';
 const TOWN_GROUND_RADIUS = 225;
 /** Props keep this far from the town anchor (the plateau and its blend). */
 const TOWN_CLEARING = 300;
-/** ... and from camps and landmarks. */
+/** ... and from camps and landmarks (decor only: nodes are drawn wherever the simulation has them). */
 const SITE_CLEARING = 45;
 /** The readout names a camp or landmark within this many metres of its anchor (the town: its clearing). */
 const SITE_NEARBY = 100;
@@ -169,7 +172,11 @@ interface Planet {
   volcano: { frame: ReturnType<typeof tangentFrame>; summit: number } | null;
 }
 
-function buildPlanet(view: WorldView, town: TownView): Planet {
+function buildPlanet(
+  view: WorldView,
+  town: TownView,
+  flora: FloraTable,
+): Planet {
   const globe = decodeWorld(view);
   const terrain = buildTerrain(globe);
   const site = view.sites.find((candidate) => candidate.kind === 'town');
@@ -220,6 +227,8 @@ function buildPlanet(view: WorldView, town: TownView): Planet {
         radius: candidate.kind === 'town' ? TOWN_CLEARING : SITE_CLEARING,
       })),
       rivers: view.rivers.map((river) => river.cells),
+      flora,
+      places: view.places,
     }),
     volcano: volcano
       ? {
@@ -453,6 +462,11 @@ const GlobeScene = memo(function GlobeScene({
           focusRef={focusRef}
           radius={terrain.globe.radius}
         />
+        <GlobeNodes
+          scatter={planet.scatter}
+          focusRef={focusRef}
+          radius={terrain.globe.radius}
+        />
       </Suspense>
       <GlobeNpcs
         citizens={live.citizens}
@@ -583,9 +597,20 @@ function nearestDrawn(
   return nearest;
 }
 
-function GlobeWorld({ view, town }: { view: WorldView; town: TownView }) {
+function GlobeWorld({
+  view,
+  town,
+  flora,
+}: {
+  view: WorldView;
+  town: TownView;
+  flora: FloraTable;
+}) {
   const [params] = useSearchParams();
-  const planet = useMemo(() => buildPlanet(view, town), [view, town]);
+  const planet = useMemo(
+    () => buildPlanet(view, town, flora),
+    [view, town, flora],
+  );
   const at = params.get('at');
   const [start] = useState(() => startFor(planet, town, at));
   // the stream runs on past the ground disc; outside it the terrain's own water rules
@@ -1233,7 +1258,8 @@ function Message({
 export function GlobePage() {
   const world = useWorld();
   const town = useTown();
-  const error = world.error ?? town.error;
+  const flora = useFlora(world.data);
+  const error = world.error ?? town.error ?? flora.error;
   if (error)
     return (
       <Message testId="world-error">
@@ -1243,11 +1269,11 @@ export function GlobePage() {
         </p>
       </Message>
     );
-  if (!world.data || !town.data)
+  if (!world.data || !town.data || !flora.data)
     return (
       <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
         Loading the world…
       </div>
     );
-  return <GlobeWorld view={world.data} town={town.data} />;
+  return <GlobeWorld view={world.data} town={town.data} flora={flora.data} />;
 }

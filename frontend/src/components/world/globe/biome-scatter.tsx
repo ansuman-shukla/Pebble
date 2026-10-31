@@ -18,8 +18,8 @@ import {
 } from '@/lib/world/scatter';
 
 /*
- * Biome props around the focus, in two distance tiers:
- * ground cover (grass, flowers, ferns, pebbles, reeds) within NEAR_REACH, everything else within FAR_REACH.
+ * Decor around the focus (biome props nobody can use; nodes are drawn by GlobeNodes), in two distance tiers:
+ * ground cover (grass, flowers, ferns, pebbles, cattails) within NEAR_REACH, everything else within FAR_REACH.
  * The cells within FAR_REACH + REBUILD are scattered (each cell is cached; it always grows the same) and
  * re-gathered when the focus moves more than REBUILD metres; every RESPLIT metres the gathered instances are
  * re-filtered by tier and drawn as one InstancedMesh per merged part of each kind. Instances within SHADOW_REACH
@@ -112,7 +112,7 @@ export function BiomeScatter({
       for (const cell of scatter.cellsAround(focus, FAR_REACH + REBUILD)) {
         let grown = current.cache.get(cell);
         if (!grown) {
-          grown = scatter.cell(cell);
+          grown = scatter.decor(cell);
           current.cache.set(cell, grown);
         }
         for (const instance of grown)

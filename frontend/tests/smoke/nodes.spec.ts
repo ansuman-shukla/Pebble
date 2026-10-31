@@ -1,0 +1,120 @@
+import { expect, test } from '@playwright/test';
+import { Vector3 } from 'three';
+
+import type { WorldView } from '../../src/lib/client/types.gen';
+import { BIOME_PROPS } from '../../src/lib/world/biome-props';
+import type { FloraTable } from '../../src/lib/world/flora';
+import { buildTerrain, decodeWorld } from '../../src/lib/world/globe';
+import { createScatter, type Scatter } from '../../src/lib/world/scatter';
+import {
+  DRAW_CALL_BUDGET,
+  FLORA_URL,
+  floraOf,
+  openGlobe,
+  WORLD_URL,
+} from './globe-helpers';
+
+/*
+ * The node renderer on the real world (10 §5.2, plan L3): every node near the camera's focus is drawn exactly once,
+ * at its position, as its look: low things out to 300 m, trees, deadwood and seams out to 500 m.
+ */
+
+const SMALL_REACH = 300;
+const FAR_REACH = 500;
+const SMALL = new Set(['berry_bush', 'root_patch', 'reed_bed', 'tree_stump']);
+/** South of the Elder grove's centre, facing it: 25 berry bushes and 10 oaks, broadleaf forest around. */
+const ELDER_GROVE = '?at=11.9,6,0';
+
+let view: WorldView;
+let flora: FloraTable;
+let scatter: Scatter;
+
+test.describe.configure({ timeout: 120_000 });
+
+test.beforeAll(async ({ playwright }) => {
+  const api = await playwright.request.newContext();
+  view = (await (await api.get(WORLD_URL)).json()) as WorldView;
+  flora = floraOf(view, await (await api.get(FLORA_URL)).body());
+  await api.dispose();
+  scatter = createScatter({
+    terrain: buildTerrain(decodeWorld(view)),
+    seed: view.seed,
+    frequency: view.frequency,
+    biomeNames: view.biome_names,
+    table: BIOME_PROPS,
+    clearings: [],
+    rivers: [],
+    flora,
+    places: view.places,
+  });
+});
+
+interface DrawnNode {
+  id: string;
+  look: string;
+  position: [number, number, number];
+}
+type Drawn = { focus: [number, number, number]; nodes: DrawnNode[] } | null;
+/** The page's node hook (nodes.tsx). */
+type NodesWindow = { __pebbleNodes?: { drawn: () => Drawn } };
+
+test('every node within reach of the focus is drawn once, at its place, as its look', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  const world = await openGlobe(page, errors, ELDER_GROVE);
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            (globalThis as NodesWindow).__pebbleNodes?.drawn()?.nodes.length ??
+            0,
+        ),
+      {
+        timeout: 30_000,
+      },
+    )
+    .toBeGreaterThan(100);
+  const drawn = (await page.evaluate(() =>
+    (globalThis as NodesWindow).__pebbleNodes!.drawn(),
+  )) as NonNullable<Drawn>;
+  const focus = new Vector3(...drawn.focus);
+  const byId = new Map<string, DrawnNode[]>();
+  for (const node of drawn.nodes)
+    byId.set(node.id, [...(byId.get(node.id) ?? []), node]);
+
+  const expected = scatter
+    .cellsAround(focus, FAR_REACH + 60)
+    .flatMap((cell) => scatter.nodes(cell))
+    .filter((node) => {
+      const distance = node.position.distanceTo(focus);
+      return distance < (SMALL.has(node.kind) ? SMALL_REACH : FAR_REACH);
+    });
+  expect(
+    expected.filter((node) => node.node === 'berry_bush').length,
+  ).toBeGreaterThanOrEqual(25);
+  const faults: string[] = [];
+  for (const node of expected) {
+    const shown = byId.get(node.id) ?? [];
+    if (shown.length !== 1) {
+      faults.push(`${node.id} drawn ${shown.length} times`);
+      continue;
+    }
+    const [one] = shown;
+    if (one.look !== node.kind) faults.push(`${node.id} drawn as ${one.look}`);
+    const off =
+      new Vector3(...one.position)
+        .normalize()
+        .angleTo(node.position.clone().normalize()) * view.radius_m;
+    if (off > 0.05) faults.push(`${node.id} drawn ${off.toFixed(3)} m off`);
+  }
+  expect(faults).toEqual([]);
+  // nothing else is drawn
+  expect(drawn.nodes.length).toBe(expected.length);
+  await expect(world).toHaveAttribute('data-draw-calls', /\d/);
+  expect(Number(await world.getAttribute('data-draw-calls'))).toBeLessThan(
+    DRAW_CALL_BUDGET,
+  );
+  expect(errors).toEqual([]);
+});

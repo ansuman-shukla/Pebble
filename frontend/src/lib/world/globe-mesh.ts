@@ -61,6 +61,10 @@ const BIOME_GROUND: Record<string, GroundWeights> = {
   volcanic: { gravel: 0.6 },
 };
 
+/** What a biome claims of each ground layer (GROUND_LAYERS order) before slope, height and water. */
+export const biomeGroundClaims = (name: string) =>
+  GROUND_LAYERS.map((layer) => BIOME_GROUND[name]?.[layer] ?? 0);
+
 const LAYER = Object.fromEntries(
   GROUND_LAYERS.map((layer, index) => [layer, index]),
 ) as Record<GroundLayer, number>;
@@ -235,9 +239,7 @@ export function terrainGeometry(
   const { heights, biomes, triangles, cellCount } = globe;
   const { divisions: n, edgeCount, triangleEdges, edgeCells } = surface;
   const palette = biomeNames.map((name) => new Color(biomeColor(name)));
-  const biomeClaims = biomeNames.map((name) =>
-    GROUND_LAYERS.map((layer) => BIOME_GROUND[name]?.[layer] ?? 0),
-  );
+  const biomeClaims = biomeNames.map(biomeGroundClaims);
   // each land cell's colour softened towards its land neighbours', so no cell shows as a patch
   const cellColors = Array.from({ length: cellCount }, (_, cell) => {
     const own = palette[biomes[cell]];
