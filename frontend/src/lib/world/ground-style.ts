@@ -18,6 +18,7 @@
  * breakup already paid for (15 m drifts, 3 m patches, 1 m grain, 11 m drifts), free to reuse. `roughness` comes in
  * as the layer's own and a pattern may change it (glossy puddles).
  */
+import type { MarkKind } from './ground-marks';
 import type { GroundLayer } from './ground-shader';
 
 interface GroundLayerStyle {
@@ -320,4 +321,198 @@ export const GROUND_STYLE: GroundStyle = {
     { from: 'dirt', to: 'gravel', field: 1, cut: 0.6, amount: 0.8 },
   ],
   patterns: PATTERNS,
+};
+
+/*
+ * The ground marks' look (ground-marks.ts draws them over the ground): per kind its far colour, how ragged its
+ * border is (metres of noise eaten into it), roughness and bump depth, the colours its pattern reads as
+ * `mark_<kind>_<name>`, and the GLSL. `markLook(kind, p, across, edge, perp, fw, g, roughness)` gets the planet
+ * point p, the signed metres from the mark's middle line (`across`, 0 on discs), the metres in from its border
+ * (`edge`), the unit vector across its long axis (`perp`, zero on discs; stripes run along that axis) and the
+ * ground's helpers and noises (as groundLook does); it returns the colour and the relief 0..1 (0.5 = mean level).
+ */
+interface MarkKindStyle {
+  base: string;
+  rag: number;
+  roughness: number;
+  bump: number;
+  colors: Record<string, string>;
+}
+
+const MARK_PATTERNS = /* glsl */ `
+vec4 markLook(int kind, vec3 p, float across, float edge, vec3 perp, float fw, vec4 g, inout float roughness) {
+  vec3 c;
+  float relief = 0.5;
+  float stripe = dot(p, perp);
+  float mottle = g.y * 0.6 + g.z * 0.4;
+  if (kind == 0) {
+    // road: packed gravel, two faint wheel ruts of bare earth that wander a little, grass on the crown here and there
+    c = mix(mark_road_dark, mark_road_light, smoothstep(0.3, 0.7, mottle));
+    float k = 1.0 - smoothstep(0.2, 0.5, fw * 9.0);
+    if (k > 0.0) {
+      vec3 cells = gCells(p * 9.0);
+      float r = 0.22 + 0.16 * fract(cells.z * 7.0);
+      float stone = (1.0 - smoothstep(r - 0.05 - 9.0 * fw, r + 0.03, cells.x)) * step(0.35, cells.z) * k;
+      c = mix(c, mark_road_stone * (0.9 + 0.2 * fract(cells.z * 13.0)), stone * 0.6);
+      relief += (1.0 - smoothstep(0.0, r + 0.03, cells.x)) * step(0.35, cells.z) * k * 0.25 - 0.08 * k;
+    }
+    float wander = (g.z - 0.5) * 0.3 + (g.y - 0.5) * 0.2;
+    float rut = (1.0 - smoothstep(0.06, 0.16 + fw, abs(abs(across) - 0.72 + wander))) * smoothstep(0.3, 0.5, g.w + 0.1);
+    c = mix(c, mark_road_rut * (0.88 + 0.24 * g.z), rut * 0.45);
+    float crown = (1.0 - smoothstep(0.15, 0.4, abs(across))) * smoothstep(0.52, 0.66, g.w * 0.6 + gFine(p + 2.0, 1.9, fw) * 0.4);
+    c = mix(c, mark_road_crown * (0.75 + 0.4 * g.z), crown * 0.85);
+    relief += crown * 0.25 - rut * 0.3;
+  } else if (kind == 1) {
+    // path: trodden earth, worn paler and smoother down its middle, a few pebbles
+    float tread = 1.0 - smoothstep(0.1, 0.65, abs(across));
+    c = mix(mark_path_dark, mark_path_light, smoothstep(0.25, 0.75, mottle) * 0.7 + tread * 0.3);
+    float pebbles = gFine(p + 3.0, 9.0, fw);
+    c = mix(c, mark_path_pebble, smoothstep(0.8, 0.9 + 20.0 * fw, pebbles) * 0.6);
+    c *= 0.9 + 0.2 * pebbles;
+    relief = 0.45 + smoothstep(0.65, 0.9, pebbles) * 0.4 - tread * 0.1;
+  } else if (kind == 2) {
+    // paving: stone slabs of uneven tone with dark joints
+    vec3 slabs = gCells(p * 1.1);
+    float keep = 1.0 - smoothstep(0.25, 0.6, fw * 1.1);
+    float joint = (1.0 - smoothstep(0.03, 0.06 + fw * 1.6, slabs.y - slabs.x)) * keep;
+    c = mix(mark_paving_dark, mark_paving_light, mix(0.5, slabs.z, keep) * 0.6 + g.z * 0.4) * (0.92 + 0.16 * gFine(p, 7.0, fw));
+    c = mix(c, mark_paving_joint, joint * 0.85);
+    relief = 0.6 - joint * 0.5 + (slabs.z - 0.5) * 0.15 * keep;
+  } else if (kind == 3) {
+    // raked gravel: pale, in fine lines along the area's long axis
+    float keep = 1.0 - smoothstep(0.03, 0.08, fw);
+    float rake = sin(stripe * 44.88) * 0.5 + 0.5;
+    c = mix(mark_raked_shade, mark_raked_light, mix(0.6, rake, keep * 0.8) * 0.8 + g.z * 0.2) * (0.94 + 0.12 * gFine(p + 4.0, 31.0, fw));
+    relief = mix(0.5, rake, keep);
+  } else if (kind == 4) {
+    // packed earth (streets): pale, smooth, pebbly, a little darker down the middle where feet and carts go
+    float m = mottle * 0.8 + gFine(p + 6.0, 2.3, fw) * 0.2;
+    c = mix(mark_packed_dark, mark_packed_light, smoothstep(0.25, 0.75, m));
+    float pebbles = gFine(p + 3.0, 11.0, fw);
+    c = mix(c, mark_packed_pebble, smoothstep(0.78, 0.88 + 20.0 * fw, pebbles) * 0.6);
+    c *= (0.93 + 0.14 * gFine(p + 1.0, 17.0, fw)) * (0.94 + 0.06 * smoothstep(0.3, 1.6, abs(across)));
+    relief = 0.45 + smoothstep(0.6, 0.9, pebbles) * 0.4;
+  } else if (kind == 5) {
+    // farmland: furrows along the field, dark soil in the troughs, shoots on the ridges
+    float keep = 1.0 - smoothstep(0.1, 0.3, fw);
+    float furrow = sin(stripe * 7.854) * 0.5 + 0.5;
+    c = mix(mark_farmland_furrow, mark_farmland_ridge, mix(0.5, furrow, keep)) * (0.88 + 0.24 * gFine(p + 2.0, 5.0, fw));
+    float shoots = smoothstep(0.72, 0.8, gFine(p + 9.0, 13.0, fw)) * smoothstep(0.6, 0.9, furrow) * keep;
+    c = mix(c, mark_farmland_shoot, shoots);
+    relief = mix(0.5, furrow, keep) + shoots * 0.2;
+  } else if (kind == 6) {
+    // worn ground: bare, trampled earth
+    c = mix(mark_worn_dark, mark_worn_light, smoothstep(0.3, 0.7, mottle)) * (0.88 + 0.24 * gFine(p + 8.0, 7.0, fw));
+    relief = 0.45;
+  } else if (kind == 7) {
+    // dug ground: dark loose soil in clods
+    float keep = 1.0 - smoothstep(0.2, 0.5, fw * 4.0);
+    vec3 clods = gCells(p * 4.0);
+    c = mix(mark_dug_dark, mark_dug_light, mix(0.5, clods.z, keep) * 0.5 + g.z * 0.5);
+    c *= 1.0 - 0.35 * (1.0 - smoothstep(0.0, 0.15, clods.y - clods.x)) * keep;
+    relief = 0.5 + (0.35 - clods.x) * 0.6 * keep;
+  } else if (kind == 8) {
+    // scorch: charcoal at the heart of a fire, flecked with ash, browning out to its rim
+    float burnt = smoothstep(0.1, 1.1, edge);
+    c = mix(mark_scorch_rim, mark_scorch_char, burnt);
+    float ash = smoothstep(0.6, 0.72, gFine(p + 9.0, 5.0, fw) * 0.7 + g.z * 0.3) * burnt;
+    c = mix(c, mark_scorch_ash, ash * 0.7);
+    relief = 0.45 + ash * 0.1;
+  } else {
+    // iron sand: black sand in wind ripples, glinting
+    float keep = 1.0 - smoothstep(0.15, 0.4, fw * 1.2);
+    float ripple = sin(dot(p, vec3(0.83, 0.12, 0.55)) * 7.0 + g.y * 9.0) * 0.5 + 0.5;
+    c = mix(mark_iron_sand_dark, mark_iron_sand_light, g.x * 0.5 + ripple * 0.3 * keep) * (0.9 + 0.2 * gFine(p, 11.0, fw));
+    float glint = smoothstep(0.9, 0.93, gFine(p + 17.0, 23.0, fw)) * keep;
+    c = mix(c, mark_iron_sand_glint, glint);
+    roughness = mix(roughness, 0.25, glint);
+    relief = mix(0.5, ripple, keep);
+  }
+  return vec4(c, relief);
+}
+`;
+
+export const MARK_STYLE: {
+  kinds: Record<MarkKind, MarkKindStyle>;
+  patterns: string;
+} = {
+  kinds: {
+    road: {
+      base: '#a39377',
+      rag: 0.35,
+      roughness: 0.93,
+      bump: 0.03,
+      colors: {
+        light: '#b7a789',
+        dark: '#978670',
+        stone: '#cbbfa6',
+        rut: '#7d644a',
+        crown: '#7b9449',
+      },
+    },
+    path: {
+      base: '#a78d68',
+      rag: 0.45,
+      roughness: 0.96,
+      bump: 0.04,
+      colors: { light: '#b99f77', dark: '#97795a', pebble: '#b3a895' },
+    },
+    paving: {
+      base: '#b5afa2',
+      rag: 0.04,
+      roughness: 0.85,
+      bump: 0.03,
+      colors: { light: '#cbc5b6', dark: '#a39d90', joint: '#6e695f' },
+    },
+    raked: {
+      base: '#cfcabd',
+      rag: 0.06,
+      roughness: 0.92,
+      bump: 0.02,
+      colors: { light: '#ddd9cd', shade: '#b4afa2' },
+    },
+    packed: {
+      base: '#b59d77',
+      rag: 0.2,
+      roughness: 0.96,
+      bump: 0.03,
+      colors: { light: '#c4ab83', dark: '#a68d69', pebble: '#bcb19b' },
+    },
+    farmland: {
+      base: '#6b553c',
+      rag: 0.3,
+      roughness: 0.97,
+      bump: 0.06,
+      colors: { furrow: '#584430', ridge: '#7c6246', shoot: '#7d9b46' },
+    },
+    worn: {
+      base: '#9a8262',
+      rag: 7,
+      roughness: 0.97,
+      bump: 0.03,
+      colors: { light: '#a88f69', dark: '#8a7254' },
+    },
+    dug: {
+      base: '#56442f',
+      rag: 0.5,
+      roughness: 0.98,
+      bump: 0.06,
+      colors: { light: '#6b553a', dark: '#46372a' },
+    },
+    scorch: {
+      base: '#2e2621',
+      rag: 0.7,
+      roughness: 0.98,
+      bump: 0.02,
+      colors: { char: '#1e1a17', ash: '#7c766f', rim: '#4b3b2c' },
+    },
+    iron_sand: {
+      base: '#3b3a3e',
+      rag: 1.5,
+      roughness: 0.8,
+      bump: 0.03,
+      colors: { light: '#4c4b50', dark: '#2c2c30', glint: '#cdd0d8' },
+    },
+  },
+  patterns: MARK_PATTERNS,
 };
