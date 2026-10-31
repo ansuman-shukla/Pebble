@@ -740,3 +740,19 @@ def test_waking_up_comes_out_of_the_door_not_onto_the_seat_of_ones_work(new_sim:
         assert sim.world.distance_m(person.position, slot.position) < 0.01
     work = [slot for slot in layout(sim.core).slots.values() if slot.kind == "work"]
     assert all(sim.world.distance_m(p.position, slot.position) >= PERSONAL_M for p in sleepers for slot in work)
+
+
+@pytest.mark.parametrize("stander", ["a-stander", "z-stander"])  # kept before or after the sitter is
+def test_nobody_loose_ends_on_the_legs_of_someone_sitting_loose(
+    new_sim: Callable[..., Simulation], stander: str
+) -> None:
+    sim = _sim(new_sim)
+    sitter = sim.add_citizen(make_spec("m-sitter", at=(-40.0, 61.0)))
+    WorldApi(sim, sitter.id).rest(30)  # no seat near: on the ground, holding no slot
+    assert claim_of(sim.core, sitter) is None
+    ahead = step_towards(sitter.position, (180.0 - sitter.heading_deg) % 360.0, 1.1, sim.world.radius_m)
+    other = sim.add_citizen(make_spec(stander, at=sim.world.town_point(ahead) or (0.0, 0.0)))
+    assert sim.world.distance_m(other.position, sitter.position) > PERSONAL_M  # clear of the body, on its legs
+    settle(sim.core)
+    feet = legs(sim.world, sitter.position, sitter.heading_deg)
+    assert sim.world.distance_m(other.position, feet) >= PERSONAL_M and crowded(sim.core) == []

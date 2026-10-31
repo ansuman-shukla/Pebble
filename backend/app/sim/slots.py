@@ -731,27 +731,34 @@ def _still_held(core: SimCore, citizen: Citizen, claimed: Claim, slot: Slot | No
 def _keep_apart(core: SimCore) -> None:
     state = slot_state(core)
     bodies = [c for c in core.living() if not is_moving(c) and not is_inside(core, c)]
-    placed: list[Vec3] = []
+    placed: list[Vec3] = []  # the bodies kept where they are
+    feet: list[Vec3] = []  # and the legs of those of them sitting or lying: nobody stands on them either
+
+    def keep(citizen: Citizen) -> None:
+        placed.append(citizen.position)
+        if _down(citizen):
+            feet.append(legs(core.world, citizen.position, citizen.heading_deg))
+
+    def fits(citizen: Citizen) -> bool:
+        """Clear of every body and legs kept, and (sitting or lying) with their own legs clear of every body."""
+        if not _clear(core, citizen.position, [*placed, *feet]):
+            return False
+        return not _down(citizen) or _clear(core, legs(core.world, citizen.position, citizen.heading_deg), placed)
+
     loose: list[Citizen] = []
     for citizen in bodies:
         claimed = state.claims.get(citizen.id)
         if claimed is not None and core.distance_m(citizen.position, claimed.position) <= OCCUPY_M:
-            placed.append(citizen.position)
-            if _down(citizen):  # nobody stands on their legs either
-                placed.append(legs(core.world, citizen.position, citizen.heading_deg))
+            keep(citizen)
         else:
             loose.append(citizen)
     loose.sort(key=lambda c: (c.id in core.strides, c.id))  # who stood there first keeps the spot
     for citizen in loose:
-        if _clear(core, citizen.position, placed):
-            placed.append(citizen.position)
-            continue
-        spot = ring_spot(core, citizen, citizen.position, with_centre=False)
-        if spot is not None and step_to(core, citizen, spot):
-            release(core, citizen)  # a ring spot of their own now: any claim of theirs elsewhere is let go
-        placed.append(citizen.position)
-        if _down(citizen):
-            placed.append(legs(core.world, citizen.position, citizen.heading_deg))
+        if not fits(citizen):
+            spot = ring_spot(core, citizen, citizen.position, with_centre=False)
+            if spot is not None and step_to(core, citizen, spot):
+                release(core, citizen)  # a ring spot of their own now: any claim of theirs elsewhere is let go
+        keep(citizen)
 
 
 def step_to(core: SimCore, citizen: Citizen, spot: Vec3, straight: bool = False, far: bool = False) -> bool:
