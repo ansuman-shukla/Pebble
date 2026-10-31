@@ -5,9 +5,11 @@ from collections.abc import Callable
 
 from app.observability.events import EventDraft, Gestured, GoalSet
 from app.sim.simulation import Simulation
+from app.sim.state import Fire
+from app.sim.vec import step_towards
 from app.world_api.facade import WorldApi
 from app.world_api.models import ActionResult, Gesture, SetGoal
-from tests.sim_helpers import WELL, make_spec, skip_to
+from tests.sim_helpers import WELL, make_spec, put_in_the_wild, skip_to, wild_cell, without_animals
 
 NEAR = (WELL[0] + 6.0, WELL[1])
 OUT_OF_SIGHT = (-20.0, -140.0)  # ~190 m north of the well
@@ -54,6 +56,27 @@ def test_a_gesture_is_seen_by_everyone_awake_in_sight(new_sim: Callable[..., Sim
     assert action is not None and action.number == resting.number
     assert all(citizen.heard == [] for citizen in sim.state.citizens.values())  # seen, never heard
     assert sim.citizen("dora").body.asleep
+
+
+def test_each_onlooker_sees_as_far_as_their_own_light_lets_them(new_sim: Callable[..., Simulation]) -> None:
+    """At night by a campfire: Lit stands at the fire (sees about thirty metres), Dim stands in the dark twenty-five
+    metres off (sees about twenty) and Far another twenty-five metres beyond. Each sees by their own light."""
+    sim = without_animals(new_sim())
+    cell = wild_cell(sim, flat_m=2.0)
+    lit, dim, far = (sim.add_citizen(make_spec(name, home=None)) for name in ("lit", "dim", "far"))
+    put_in_the_wild(sim, lit.id, cell)
+    skip_to(sim, lit.position, night=True)
+    sim.core.place_at(dim, step_towards(lit.position, 90.0, 25.0, sim.world.radius_m))
+    sim.core.place_at(far, step_towards(dim.position, 90.0, 25.0, sim.world.radius_m))
+    camp = Fire(id="fire:9", kind="campfire", position=lit.position, cell=lit.cell, height_m=lit.height_m)
+    camp.fuel, camp.lit, camp.level = 120, True, 3
+    sim.state.fires[camp.id] = camp
+    assert sim.core.sight_range(dim) < 25.0 < sim.core.sight_range(lit)
+    sim.drain()
+    WorldApi(sim, dim.id).gesture("wave")  # Lit sees it from the firelight; Far, in the dark, doesn't
+    WorldApi(sim, lit.id).gesture("wave")  # firelight doesn't let Dim see further
+    seen = [g.seen_by for g in _payloads(sim.drain(), "gestured", Gestured)]
+    assert seen == [["lit"], []]
 
 
 def test_a_gesture_to_someone_out_of_sight_is_refused_and_unseen(new_sim: Callable[..., Simulation]) -> None:
