@@ -189,19 +189,25 @@ def test_two_systems_cannot_share_a_name() -> None:
         Registry(systems=(TALLY, System[Tally]("tally", 3, new=TALLY.new, dump=TALLY.dump, load=TALLY.load)))
 
 
-def test_event_hooks_hear_every_event_as_it_is_emitted_even_their_own(sim_world: SimWorld, planner: Planner) -> None:
-    heard: list[tuple[int, str, int]] = []
+def test_every_event_hook_hears_every_event_once_in_emission_order(sim_world: SimWorld, planner: Planner) -> None:
+    """The first hook emits while hearing an `item_moved`; the second must still hear the `item_moved` before the
+    event the first emitted (first in, first out), and both hear their own and each other's events."""
+    heard: dict[str, list[int]] = {"first": [], "second": []}
 
-    def listen(core: SimCore, event: EventDraft) -> None:
-        heard.append((event.seq, event.type, len(core.outbox)))  # told inside the emitting call, once it's out
+    def first(core: SimCore, event: EventDraft) -> None:
+        heard["first"].append(event.seq)
+        assert event in core.outbox  # told from inside the emitting call, once it's out
         if event.type == "item_moved":
             core.emit("spoiled", Spoiled(holder="tester", holder_kind="inventory", items={"meat": 1}))
 
-    sim = Simulation.new(sim_world, seed=SEED, planner=planner, registry=Registry(on_event=(listen,)))
+    def second(_core: SimCore, event: EventDraft) -> None:
+        heard["second"].append(event.seq)
+
+    sim = Simulation.new(sim_world, seed=SEED, planner=planner, registry=Registry(on_event=(first, second)))
     sim.add_citizen(make_spec(at=GATE))
     sim.stock_store("store-2", "rice", 3)
     sim.step()
     events = sim.drain()
-    assert [(seq, kind) for seq, kind, _ in heard] == [(event.seq, event.type) for event in events]
-    assert all(outbox == seq for seq, _, outbox in heard)  # the outbox holds exactly the events up to this one
+    emitted = [event.seq for event in events]
+    assert heard == {"first": emitted, "second": emitted}
     assert [event.type for event in events][-3:] == ["item_moved", "spoiled", "tick_summary"]

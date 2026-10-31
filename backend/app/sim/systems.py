@@ -6,8 +6,10 @@ in the hook lists. Each tick, after bodies and ecology and before perception and
 run last, after interrupts and before the tick's summary (where bodies end the tick). Dawn and midnight
 are local: a dawn or midnight hook gets a test `now(unit)` that says whether it is that moment at a spot this tick
 (sunrise there; local midnight by its longitude), so each system checks its own holders (citizens, stores, camps).
-An `on_event` hook is told each event as it is emitted (in order, inside the emitting call), for a system that learns
-from what the others do. Append rows; keep every row another stream added.
+An `on_event` hook is told each event as it is emitted (inside the emitting call; every hook hears every event in
+emission order, those emitted by a hook queued behind the one it hears), for a system that learns from what the others
+do. It sees the emitter's state at the `emit` call, possibly half-updated (`SimCore._tell`).
+Append rows; keep every row another stream added.
 """
 
 from collections.abc import Callable

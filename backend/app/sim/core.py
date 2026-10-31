@@ -5,6 +5,7 @@ Perception, actions and the tick loop all work through this object; it is the on
 
 import hashlib
 import math
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -79,6 +80,8 @@ class SimCore:
         self.state = state
         self.outbox: list[EventDraft] = []
         self.listeners: tuple[EventListener, ...] = ()  # the registry's `on_event` hooks (`app.sim.systems`)
+        self._unheard: deque[EventDraft] = deque()  # emitted while listeners were being told an earlier event
+        self._telling = False
         self.hurt: dict[str, tuple[str, int]] = {}  # citizens hurt this tick: (what happened, injured seq)
         self.strides: dict[str, Stride] = {}  # citizens who moved this tick: how (every move must leave one)
         self._sun_tick = -1
@@ -113,9 +116,25 @@ class SimCore:
             payload=payload,
         )
         self.outbox.append(draft)
-        for listen in self.listeners:
-            listen(self, draft)
+        self._tell(draft)
         return seq
+
+    def _tell(self, draft: EventDraft) -> None:
+        """Tell every listener each event, in emission order: one a listener emits while hearing another waits until
+        all listeners have heard that one (first in, first out). A listener sees the world as the emitter left it at
+        the `emit` call, which may be half-way through what the emitter does (a theft's goods not yet moved)."""
+        self._unheard.append(draft)
+        if self._telling:
+            return
+        self._telling = True
+        try:
+            while self._unheard:
+                event = self._unheard.popleft()
+                for listen in self.listeners:
+                    listen(self, event)
+        finally:
+            self._telling = False
+            self._unheard.clear()
 
     # --- time and light ---
 
