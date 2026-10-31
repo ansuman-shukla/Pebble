@@ -356,6 +356,49 @@ test('changes are told by node, so a drawing re-draws only for its own nodes', (
   ]);
 });
 
+test("the snapshot's nodes set every node that differs from full, a felled tree as its stump", () => {
+  const stages = new NodeStages();
+  stages.apply(changed('flora:9', 'berry_bush', 3), 0);
+  const nodes = [
+    {
+      id: 'flora:1',
+      kind: 'berry_bush',
+      item: 'berries',
+      cap: 12,
+      stock: 3,
+      stage: 'fruit-2',
+    },
+    {
+      id: 'flora:2',
+      kind: 'tree',
+      item: 'wood',
+      cap: 10,
+      stock: 0,
+      stage: 'stump',
+    },
+  ];
+  stages.apply({ ...snapshot(RUN), nodes } as unknown as LiveMessage, 0);
+  expect(stages.state('flora:1')).toEqual({ fill: 0.25, stage: 'fruit-2' });
+  expect(isStump(stages.state('flora:2')!.stage)).toBe(true);
+  expect(stages.state('flora:9')).toBeUndefined(); // not listed: full again (a resync of the same run too)
+});
+
+test("the backend's tree_felled yaw_deg (180° − the flora's bearing) falls along that bearing", () => {
+  const stages = new NodeStages();
+  stages.apply(snapshot(RUN), 0);
+  // a flora yaw byte of 96 is a bearing of 96 × 360/256 = 135°: N1 sends yaw_deg (180 − 135) mod 360 = 45
+  const bearing = (96 * 360) / 256;
+  const yaw = (180 - bearing + 360) % 360;
+  stages.apply(
+    event('tree_felled', 'tek', { node: 'flora:5', yaw_deg: yaw, logs: 10 }),
+    0,
+  );
+  expect(stages.fallBearing('flora:5')).toBeCloseTo(
+    (bearing * Math.PI) / 180,
+    9,
+  );
+});
+
 test('a snapshot of another run starts every node full again', () => {
   const stages = new NodeStages();
   stages.apply(snapshot(RUN), 0);

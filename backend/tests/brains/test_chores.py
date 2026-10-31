@@ -14,11 +14,10 @@ from pydantic import JsonValue
 from app.brains.brain import UtilityBrain
 from app.brains.profile import BrainProfile
 from app.sim import fire as fires
-from app.sim.doing import GATHER_MINUTES
-from app.sim.items import RESOURCE_INDEX
 from app.sim.simulation import Simulation
+from app.sim.vec import step_towards
 from app.world_api.facade import WorldApi
-from tests.sim_helpers import make_spec, skip_to, without_animals
+from tests.sim_helpers import make_spec, nearest_node, skip_to, stand_at_node, without_animals
 
 HOME_A = "band_a_camp:shelter-n"
 
@@ -92,8 +91,9 @@ def test_a_wood_gather_cut_short_by_talk_is_gathered_again_and_counts_once_done(
             knows_people=["talker"],
         )
     )  # fmt: skip
-    sim.state.resources[keeper.cell, RESOURCE_INDEX["wood"]] = 40  # fallen wood right here
+    stand_at_node(sim, keeper.id, nearest_node(sim, "deadwood", keeper.position))  # fallen wood right here
     talker = _talker(sim, (1.5, 30.0))
+    sim.core.place_at(sim.citizen(talker.citizen_id), step_towards(keeper.position, 90.0, 1.5, sim.world.radius_m))
     skip_to(sim, keeper.position, night=False)
     brain = _band(sim, keeper.id, monkeypatch)
     brain.decide()
@@ -104,7 +104,7 @@ def test_a_wood_gather_cut_short_by_talk_is_gathered_again_and_counts_once_done(
     assert brain.api.notes["last"] == "gather wood"  # the chore again
     gather = keeper.action
     assert gather is not None
-    sim.run(GATHER_MINUTES + 1)
+    sim.run(21)  # fallen wood: a 20-minute session
     result = brain.api.handle(gather.number).result
     assert result is not None and result.outcome == "done"
     brain.decide()

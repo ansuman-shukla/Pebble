@@ -162,9 +162,10 @@ def test_a_sentence_is_a_fine_in_coins_or_hours_confined() -> None:
 def test_gathering_a_mineral_where_there_is_none_fails_in_world(new_sim: Callable[..., Simulation]) -> None:
     sim = new_sim()
     me = WorldApi(sim, sim.add_citizen(make_spec(at=WELL)).id)
-    for mineral in ("flint", "iron sand", "gold"):
+    told = {"flint": "There are no flint nodules", "iron sand": "There is no iron sand", "gold": "There is no gold"}
+    for mineral, none in told.items():  # minerals are nodes (N1): none in sight of the town's well
         result = run_until_done(sim, me.gather(mineral), 1)
-        assert result == ActionResult(action="gather", outcome="failed", text=f"You can't gather {mineral} here.")
+        assert result == ActionResult(action="gather", outcome="failed", text=f"{none} within reach.")
 
 
 def _look(you: dict[str, object] | None = None, **v1: object) -> Perception:

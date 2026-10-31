@@ -172,6 +172,8 @@ def _motion(
         walk = _GAITS[gait]
         return "carry_walk" if walk == "walk" and load >= CARRY_WALK_LOAD else walk
     if action == "gather":
+        if args.get("node_kind") == "tree":  # N1: felling a standing tree (gather wood with an axe)
+            return "chop"
         return _GATHERED.get(str(args.get("resource")), "gather_low")
     if action == "work":
         return _TASKS.get(str(args.get("task")), "idle")

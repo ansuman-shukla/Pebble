@@ -26,7 +26,8 @@ from sqlalchemy import Engine as DbEngine
 from sqlalchemy.exc import DBAPIError
 from sqlmodel import Session
 
-from app.brains.profile import BrainProfile, known_titles
+from app.brains.profile import BrainProfile, Ground, known_titles
+from app.brains.routines import TRIP_LEGS
 from app.brains.runner import CitizenBrains
 from app.core.db import create_db_engine
 from app.db.models import Run
@@ -35,6 +36,7 @@ from app.lib.ulid import UlidFactory
 from app.observability.store import EventStore, create_run, discard_after, latest_run, latest_snapshot, pending_commands
 from app.sim.citizens import CITIZENS, load_citizens
 from app.sim.clock import SECONDS_PER_TICK, TICKS_PER_HOUR
+from app.sim.grounds import forage_grounds
 from app.sim.navigation import Planner
 from app.sim.ownership import fed_by_granary
 from app.sim.simulation import Simulation
@@ -64,6 +66,11 @@ def citizen_brains(sim: Simulation, seed: int) -> CitizenBrains:
     places = sim.world.places
     cast = sim.state.citizens
     traits = {spec.id: spec.traits for spec in load_citizens(CITIZENS).citizens if spec.traits is not None}
+    grounds = {
+        region: tuple(Ground(way, legs) for way, legs in forage_grounds(sim.world, camp, TRIP_LEGS))
+        for region, camp in HOME_AREAS.items()
+        if region != "town"
+    }
     return CitizenBrains(
         (
             (
@@ -80,6 +87,7 @@ def citizen_brains(sim: Simulation, seed: int) -> CitizenBrains:
                     ),
                     granary=citizen.region == "town" and fed_by_granary(citizen),
                     honesty=traits[citizen.id].honesty if citizen.id in traits else 0.5,
+                    grounds=grounds.get(citizen.region, ()),
                 ),
             )
             for citizen in sim.core.citizens()

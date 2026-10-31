@@ -24,6 +24,7 @@ from app.lib.ulid import UlidFactory
 from app.observability.events import GoalSet, NodeChanged, Stole, Traded
 from app.observability.store import queue_command
 from app.services.live import LIVE_EVENT_TYPES, LiveEvent, LiveState
+from app.sim import nodes
 from app.sim.citizens import CITIZENS
 from app.sim.world import SimWorld
 from app.world.store import WorldKey
@@ -191,6 +192,29 @@ def test_the_feed_sends_public_events_worth_telling_and_names_animals_and_househ
         0,
         "half",
     )
+
+
+def test_the_snapshot_carries_every_node_that_differs_from_full(client: TestClient, committed_run: EngineLoop) -> None:
+    loop = committed_run
+    bush = loop.sim.world.nodes.kinds.index("berry_bush")
+    with client.websocket_connect(f"{API}/live?run_id={loop.run.id}") as ws:
+        first = _receive(ws)
+        assert first["type"] == "snapshot"
+        assert [node["id"] for node in first["nodes"]] == ["paddy-1", "paddy-2", "paddy-3", "paddy-4"]  # growing
+        assert first["nodes"][2] == {"id": "paddy-3", "kind": "rice_paddy", "item": "rice", "cap": 78, "stock": 0,
+                                     "stage": "green"}  # fmt: skip
+        nodes.change(loop.sim.core, bush, 5, None)
+        loop.run_ticks(1, headless=True)
+        messages = _until_tick(ws, 1)
+    assert [m["nodes"] for m in messages if m["type"] == "tick"] == [[]]  # changes come as events, not every tick
+    told = [LiveEvent.model_validate(m).event for m in messages if m["type"] == "event"]
+    grown = next(e for e in told if e.type == "node_changed" and e.payload["node"] == f"flora:{bush}")
+    assert (grown.payload["after"], grown.payload["stage"]) == (5, "fruit-3")
+    with client.websocket_connect(f"{API}/live?run_id={loop.run.id}") as ws:
+        again = _receive(ws)
+    picked = next(node for node in again["nodes"] if node["id"] == f"flora:{bush}")
+    assert picked == {"id": f"flora:{bush}", "kind": "berry_bush", "item": "berries", "cap": 12, "stock": 5,
+                      "stage": "fruit-3"}  # fmt: skip
 
 
 def test_a_page_opened_mid_tick_learns_how_far_into_the_tick_the_world_is(

@@ -9,13 +9,21 @@ from app.brains.brain import UtilityBrain
 from app.brains.profile import BrainProfile
 from app.brains.senses import water_way
 from app.sim import fire as fires
-from app.sim.items import RESOURCE_INDEX
 from app.sim.simulation import Simulation
 from app.sim.state import Fire
 from app.sim.vec import step_towards
 from app.world_api.facade import WorldApi
 from app.world_api.models import Compass
-from tests.sim_helpers import add_animal, make_spec, put_in_the_wild, skip_to, wild_cell, without_animals
+from tests.sim_helpers import (
+    add_animal,
+    make_spec,
+    nearest_node,
+    put_in_the_wild,
+    skip_to,
+    stand_at_node,
+    wild_cell,
+    without_animals,
+)
 
 HOME_A = "band_a_camp:shelter-n"
 HOME_B = "band_b_camp:shelter-n"
@@ -152,11 +160,11 @@ def _gathers(sim: Simulation, brain: UtilityBrain, minutes: int) -> list[str]:
 
 
 @pytest.mark.parametrize(
-    ("role", "age", "meat", "first"),  # 5 and 25 kg: all they can carry; a gatherer's day starts with its wood chore
-    [("child", 9, 10, "gather roots"), ("gatherer", 30, 50, "gather wood")],
+    ("role", "age", "meat", "node", "first"),  # 5 and 25 kg: all they can carry; a gatherer starts with its wood chore
+    [("child", 9, 10, "berry_bush", "gather berries"), ("gatherer", 30, 50, "deadwood", "gather wood")],
 )
 def test_a_forager_with_a_full_load_stops_gathering_until_it_carries_less(
-    new_sim: Callable[..., Simulation], role: str, age: int, meat: int, first: str
+    new_sim: Callable[..., Simulation], role: str, age: int, meat: int, node: str, first: str
 ) -> None:
     sim = without_animals(new_sim())
     forager = sim.add_citizen(
@@ -164,14 +172,14 @@ def test_a_forager_with_a_full_load_stops_gathering_until_it_carries_less(
             "pip", age=age, site="band_a_camp", at=(0.0, 30.0), home=HOME_A, region="band_a", inventory={"meat": meat}
         )
     )
-    bushes = forager.cell
-    sim.state.resources[bushes, RESOURCE_INDEX["berries"]] = 40  # bushes heavy with berries right here
+    bush = nearest_node(sim, node, forager.position)
+    stand_at_node(sim, forager.id, bush)  # a bush heavy with berries (or a pile of fallen wood) right here
     skip_to(sim, forager.position, night=False)
     brain = _brain(sim, forager.id, role=role)
     full = _gathers(sim, brain, 2 * 60)
     assert full == ["You can't carry any more."]  # told once, it stops trying (and strolls off)
 
-    put_in_the_wild(sim, forager.id, bushes)  # back by the bushes
+    stand_at_node(sim, forager.id, bush)  # back by it
     brain.api.notes["asleep"] = True  # a new day (just woken): it tries once more
     brain.decide()
     assert brain.api.notes["last"] == first  # the child's gather shows the reset; the wood chore comes either way
@@ -186,7 +194,7 @@ def test_a_forager_whose_load_fills_while_it_gathers_stops_gathering(new_sim: Ca
     child = sim.add_citizen(
         make_spec("pip", age=9, site="band_a_camp", at=(0.0, 30.0), home=HOME_A, region="band_a", inventory={"meat": 3})
     )
-    sim.state.resources[child.cell, RESOURCE_INDEX["berries"]] = 40
+    stand_at_node(sim, child.id, nearest_node(sim, "berry_bush", child.position))
     skip_to(sim, child.position, night=False)
     brain = _brain(sim, child.id, role="child")
     brain.decide()
@@ -200,10 +208,7 @@ def test_a_forager_walks_to_the_fallen_wood_it_saw_not_the_camp_woodpile(new_sim
     gatherer = sim.add_citizen(
         make_spec("suna", site="band_a_camp", at=(0.0, 1.5), home=HOME_A, region="band_a", inventory={"roots": 30})
     )  # food enough for the outing: only the day's wood chore is left
-    wood = RESOURCE_INDEX["wood"]
-    sim.state.resources[:, wood] = 0
-    plant = sim.world.neighbours[gatherer.cell][0]
-    sim.state.resources[plant, wood] = 40  # fallen wood a short way off; the woodpile by the fire is closer
+    # fallen wood a short way off (the camp's home ring holds six piles); the woodpile by the fire is closer
     api = WorldApi(sim, gatherer.id)
     skip_to(sim, gatherer.position, night=False)
     seen = api.look_around().things
@@ -248,11 +253,13 @@ def test_a_band_finds_its_water_after_dark_the_way_it_lay_by_day(
 ) -> None:
     sim = without_animals(new_sim())
     child = sim.add_citizen(make_spec("pip", age=7, site="band_b_camp", at=(-1.0, -3.0), home=HOME_B, region="band_b"))
+    home = child.position
     skip_to(sim, child.position, night=False)
     brain = _brain(sim, child.id, region="band_b", role="child")
     brain.decide()  # by day the river is in view from home
     while child.action is not None:
         sim.step()
+    sim.core.place_at(child, home)  # back home by dark (the day took it out to the root patches)
     assert _drinks_in_the_dark(sim, brain, sun)
 
 

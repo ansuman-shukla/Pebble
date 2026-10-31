@@ -4,14 +4,12 @@ Sets are stored sorted and the hash dumps with sorted keys, so equal states hash
 registered system (`app.sim.systems`) stores its state in its own block with its own version.
 """
 
-import base64
 import copy
 import hashlib
 import json
 from collections.abc import Mapping
 from typing import Any
 
-import numpy as np
 from pydantic import BaseModel, ConfigDict, JsonValue
 
 from app.core.rng import Rng
@@ -34,9 +32,10 @@ from app.sim.systems import REGISTRY
 from app.sim.vec import Vec3
 from app.world_api.models import ActionResult
 
-# 5: world v1 item kinds (spears by material, coins); 4: the seed and the systems' blocks; 3: animals, groups, fires,
-# fish stocks; 2: identities, regrowth, brain notes
-SNAPSHOT_VERSION = 5
+# 6: wild resources are nodes (the `nodes` system's block), no per-cell counters; 5: world v1 item kinds (spears by
+# material, coins); 4: the seed and the systems' blocks; 3: animals, groups, fires, fish stocks; 2: identities,
+# regrowth, brain notes
+SNAPSHOT_VERSION = 6
 
 
 class _Snap(BaseModel):
@@ -85,10 +84,7 @@ class SimSnapshot(_Snap):
     citizens: list[CitizenSnap]
     ground: list[GroundStack]
     stores: dict[str, dict[str, int]]
-    resources: str  # base64 of uint8 (cells, resources), row-major
-    resource_columns: int
     rngs: dict[str, str]  # stream -> state as a decimal string (64-bit)
-    regrow: dict[str, int]
     notes: dict[str, dict[str, JsonValue]]
     animals: list[Animal]
     groups: list[AnimalGroup]
@@ -148,7 +144,6 @@ def take_snapshot(state: WorldState, systems: tuple[System[Any], ...] = REGISTRY
         )
         for _, c in sorted(state_citizens.items())
     ]
-    resources = np.ascontiguousarray(state.resources, dtype=np.uint8)
     return SimSnapshot(
         seed=state.seed,
         tick=state.tick,
@@ -157,10 +152,7 @@ def take_snapshot(state: WorldState, systems: tuple[System[Any], ...] = REGISTRY
         citizens=citizens,
         ground=[copy.deepcopy(stack) for _, stack in sorted(state.ground.items())],
         stores={store: dict(sorted(items.items())) for store, items in sorted(state.stores.items())},
-        resources=base64.b64encode(resources.tobytes()).decode("ascii"),
-        resource_columns=resources.shape[1],
         rngs={name: str(rng.state) for name, rng in sorted(state.rngs.items())},
-        regrow=dict(sorted(state.regrow.items())),
         notes=copy.deepcopy({cid: dict(sorted(notes.items())) for cid, notes in sorted(state.notes.items())}),
         animals=[copy.deepcopy(animal) for _, animal in sorted(state.animals.items())],
         groups=[copy.deepcopy(group) for _, group in sorted(state.groups.items())],
@@ -180,7 +172,6 @@ def restore(snapshot: SimSnapshot, systems: tuple[System[Any], ...] = REGISTRY.s
     blocks = {name: block.version for name, block in snapshot.systems.items()}
     if not _same_versions(snapshot.version, blocks, systems):
         raise ValueError(f"snapshot version {snapshot.version} with system blocks {blocks} is not this simulation's")
-    resources = np.frombuffer(base64.b64decode(snapshot.resources), dtype=np.uint8)
     citizens = {
         snap.id: Citizen(
             id=snap.id,
@@ -219,9 +210,7 @@ def restore(snapshot: SimSnapshot, systems: tuple[System[Any], ...] = REGISTRY.s
         citizens=citizens,
         ground={stack.id: stack for stack in snapshot.ground},
         stores={store: dict(items) for store, items in snapshot.stores.items()},
-        resources=resources.reshape(-1, snapshot.resource_columns).copy(),
         rngs={name: Rng(int(value)) for name, value in snapshot.rngs.items()},
-        regrow=dict(snapshot.regrow),
         notes={cid: dict(notes) for cid, notes in snapshot.notes.items()},
         animals={animal.id: animal for animal in snapshot.animals},
         groups={group.id: group for group in snapshot.groups},

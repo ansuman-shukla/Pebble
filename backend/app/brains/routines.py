@@ -23,15 +23,16 @@ from app.brains.senses import (
     beside,
     carried_food,
     carries,
+    compass_word,
     fire_here,
     fire_in_view,
+    fishing_here,
     food_value,
     full_load,
     game,
     near,
     prowler,
     resources_in_view,
-    water_here,
     wood_at_hand,
 )
 from app.world_api.facade import ActionHandle, WorldApi
@@ -49,6 +50,8 @@ FOODS = ("roots", "nuts", "berries")  # wild food, most filling first
 OUTING_FOOD = 150.0  # bands head back to camp carrying about this much (a day and a half of food)
 COMPASS: tuple[Compass, ...] = get_args(Compass)
 HUNT_TRIES = 3  # hunts (and as many searches for game) a hunter tries a day
+TRIP_TIMES = frozenset({"dawn", "early morning", "mid-morning", "midday", "early afternoon"})  # time to be back
+TRIP_LEGS = 4  # short walks on past where a forage trip's long walk ended, while no food shows (fewer near a den)
 FISH_CHANCE = 0.3  # a forager standing at a river or lake fishes instead of gathering this often
 FIRE = "the fire pit"
 BASKETS = "the main gate"  # where the guard lights the fire baskets at dusk
@@ -180,10 +183,19 @@ def _farm(ctx: Context) -> list[Option]:
         return []
     if rice >= 25:
         return [_store_rice(ctx)]
+    if _refused(ctx, "farm"):  # another paddy needs them more (N1): walk over to it
+        return [_go(ctx, FIELDS, aim="Tend the rice fields")]
     farm = _work_at(ctx, FIELDS, "farm", aim="Tend the rice fields")
     if farm.name == "farm":  # each harvest is taxed: the rice goes to the granary before it goes home
         farm = replace(farm, start=_then(lambda: _set(ctx, "taxed", False), farm.start))
     return [farm]
+
+
+def _refused(ctx: Context, name: str) -> bool:
+    """The option chosen last was this one and the world refused it at once."""
+    number = ctx.notes.get("chosen")
+    result = ctx.api.handle(number).result if isinstance(number, int) else None
+    return ctx.notes.get("last") == name and result is not None and result.outcome == "failed"
 
 
 def farmer(ctx: Context) -> list[Option]:
@@ -378,6 +390,7 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
         def back() -> None:
             _set(ctx, "returning", False)
             _set(ctx, "outing", 0)
+            _end_trip(ctx)
 
         return [Option(WORK, "rest at camp", _then(back, lambda: api.rest(style.rests)), *AT_EASE)]
     scavenging = _scavenge(ctx)
@@ -395,7 +408,7 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
         hunting = _hunt(ctx)
         if hunting:
             return hunting
-    if wanted and water_here(p) and ctx.chance(FISH_CHANCE):
+    if wanted and fishing_here(p) and ctx.chance(FISH_CHANCE):
         return [Option(score, "fish", api.fish, aim, why)]
     if not wanted:
         rested = ctx.notes.get("last") == "rest at camp"  # one rest at a time: then a look around
@@ -407,6 +420,11 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
             return [Option(score, "go home", lambda: api.walk_to_place("home", ctx.pace), *AT_EASE)]
         return [Option(score, "rest at camp", lambda: api.rest(style.rests), *AT_EASE)]
     seen = resources_in_view(p)
+    food_wanted = [kind for kind in wanted if kind in FOODS]
+    if food_wanted and not any(r.plenty for r in seen if r.kind in food_wanted):  # only scraps about: out farther
+        trip = _forage_trip(ctx, score, aim, why)
+        if trip:
+            return trip
     here = [r for r in seen if r.distance == "here" and r.kind in wanted]
     if here:
         resource = min(here, key=lambda r: (wanted.index(r.kind), not r.plenty))
@@ -421,10 +439,65 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
         target = min(visible, key=lambda r: (_reach(r), not r.plenty, wanted.index(r.kind)))
         start = lambda: api.walk_to_thing(target.label)  # noqa: E731  # a tiny closure reads best inline
         return [Option(score, f"go to {target.kind}", start, _aim(aim, target.kind, style), why)]
+    trip = _forage_trip(ctx, score, aim, why)
+    if trip:
+        return trip
     if near(p, home_area):
         direction = COMPASS[ctx.pick(len(COMPASS))]
         return [Option(score, "search", lambda: api.walk_towards(direction, "a short walk"), aim, why)]
-    return [Option(score, "go home", lambda: api.walk_to_place("home", ctx.pace), "Head back to camp")]
+    return [Option(score, "go home", _then(lambda: _end_trip(ctx), _home(ctx)), "Head back to camp")]
+
+
+def _cut_short(ctx: Context, name: str) -> bool:
+    """The option chosen last was this one and something cut its action short (not a refusal: that ends the trip)."""
+    number = ctx.notes.get("chosen")
+    result = ctx.api.handle(number).result if isinstance(number, int) else None
+    return ctx.notes.get("last") == name and result is not None and result.outcome == "interrupted"
+
+
+def _home(ctx: Context) -> Callable[[], ActionHandle]:
+    return lambda: ctx.api.walk_to_place("home", ctx.pace)
+
+
+def _end_trip(ctx: Context) -> None:
+    ctx.notes.pop("trip", None)
+    ctx.notes.pop("trip_legs", None)
+
+
+def _forage_trip(ctx: Context, score: float, aim: str, why: Driver) -> list[Option]:
+    """No food left in view about camp (the home ring runs thin by day 3-4, 10 §1.2): walk out a long way towards
+    the band's food grounds (`BrainProfile.grounds`, a different one each trip), then on a few short walks the same
+    way until food shows; trips start early enough in the day to be back by dusk. The usual gathering takes over as
+    soon as food is in view, and the outing's gathers bring them home."""
+    p, api = ctx.perception, ctx.api
+    way = compass_word(ctx.notes.get("trip"))
+    if way is None:
+        grounds = ctx.profile.grounds
+        if not grounds or not near(p, ctx.profile.home_area) or p.time_of_day not in TRIP_TIMES:
+            return []
+        trips = ctx.counter("trips")
+        way = grounds[trips % len(grounds)].way
+
+        def set_out(way: Compass = way) -> None:
+            _set(ctx, "trip", way)
+            _set(ctx, "trip_legs", 0)
+            _set(ctx, "trips", trips + 1)
+
+        out = _then(set_out, lambda: api.walk_towards(way, "a long walk"))
+        return [Option(score, "forage trip", out, f"Forage out to the {way}", why)]
+    if p.time_of_day not in TRIP_TIMES:
+        return []
+    if _cut_short(ctx, "forage trip"):  # game came into view on the way out: on out
+        return [
+            Option(score, "forage trip", lambda: api.walk_towards(way, "a long walk"), f"Forage out to the {way}", why)
+        ]
+    legs = ctx.counter("trip_legs")
+    if _cut_short(ctx, "search further"):
+        legs -= 1  # the leg cut short doesn't count
+    if legs >= next((ground.legs for ground in ctx.profile.grounds if ground.way == way), 0):
+        return []  # as far as the way stays clear of dens
+    on = _then(lambda: _set(ctx, "trip_legs", legs + 1), lambda: api.walk_towards(way, "a short walk"))
+    return [Option(score, "search further", on, aim, why)]
 
 
 def _scavenge(ctx: Context) -> list[Option]:

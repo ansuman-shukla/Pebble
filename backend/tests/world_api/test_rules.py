@@ -7,6 +7,7 @@ from collections.abc import Callable
 import pytest
 
 from app.observability.events import EventDraft, TickSummary
+from app.sim import nodes
 from app.sim.clock import SECONDS_PER_TICK
 from app.sim.simulation import Simulation
 from app.sim.slots import PERSONAL_M
@@ -18,8 +19,10 @@ from tests.sim_helpers import (
     WELL,
     drawn_on,
     make_spec,
+    nearest_node,
     put_in_the_wild,
     skip_to,
+    stand_at_node,
     wild_cell,
     without_animals,
 )
@@ -70,7 +73,7 @@ def test_nothing_within_reach_fails_without_changing_the_world(new_sim: Callable
     sim = new_sim()
     citizen = sim.add_citizen(make_spec(at=FAR_IN_TOWN))
     api = WorldApi(sim, citizen.id)
-    resources_before = sim.state.resources.copy()
+    nodes_before = nodes.dump_state(sim.core)
     ground_before = {stack_id: stack.count for stack_id, stack in sim.state.ground.items()}  # the camps' woodpiles
     sim.drain()
     results = [
@@ -84,15 +87,15 @@ def test_nothing_within_reach_fails_without_changing_the_world(new_sim: Callable
     ]
     assert [r.text for r in results] == [
         "There's no water within reach.",
-        "There are no berries within reach.",
-        "You can't gather flint here.",
+        "The nearest berry bush is some way off to the south-west; go to it first.",  # over the walls
+        "There are no flint nodules within reach.",
         "You have no berries, and there are none within reach.",
         "There's no berries within reach.",
         "You aren't carrying any nuts.",
         "You see nothing to run from.",
     ]
     assert all(r.outcome == "failed" for r in results)
-    assert (sim.state.resources == resources_before).all()
+    assert nodes.dump_state(sim.core) == nodes_before
     assert citizen.inventory == {}
     assert {stack_id: stack.count for stack_id, stack in sim.state.ground.items()} == ground_before
     assert "item_moved" not in _types(sim.drain())
@@ -366,20 +369,17 @@ def test_giving_needs_the_receiver_within_reach(new_sim: Callable[..., Simulatio
     assert giver.inventory == {"roots": 2}
 
 
-def test_gathering_never_takes_more_than_grows_there(new_sim: Callable[..., Simulation]) -> None:
+def test_gathering_never_takes_more_than_the_bush_holds(new_sim: Callable[..., Simulation]) -> None:
     sim = without_animals(new_sim())  # nothing comes into view to cut the gathering short
     citizen = sim.add_citizen(make_spec(at=GATE))
-    world = sim.world
-    cell = next(
-        c for c in range(world.cell_count) if sim.state.resources[c, 0] > 0 and sim.core.planner.outer.allowed[c]
-    )
-    sim.core.place_at(citizen, world.unit(cell))
-    sim.state.resources[cell, 0] = 2
+    bush = nearest_node(sim, "berry_bush", citizen.position)
+    stand_at_node(sim, citizen.id, bush)
+    nodes.change(sim.core, bush, 2, None)
     api = WorldApi(sim, citizen.id)
     assert run_until_done(sim, api.gather("berries"), 25).text == "You gather a few berries."
     assert citizen.inventory == {"berries": 2}
-    assert sim.state.resources[cell, 0] == 0
-    assert run_until_done(sim, api.gather("berries"), 1).text == "There are no berries within reach."
+    assert nodes.stock(sim.core, bush) == 0
+    assert run_until_done(sim, api.gather("berries"), 1).text == "There's nothing left to take from the berry bush."
 
 
 def _first_cell(sim: Simulation, test: Callable[[int], bool]) -> int:
@@ -407,11 +407,11 @@ def test_rivers_are_drinkable_and_hot_ground_dries_you_out(new_sim: Callable[...
 def test_even_a_few_berries_are_seen(new_sim: Callable[..., Simulation]) -> None:
     sim = new_sim()
     citizen = sim.add_citizen(make_spec(at=GATE))
-    cell = _first_cell(sim, lambda c: sim.state.resources[c, 0] > 0)
-    sim.core.place_at(citizen, sim.world.unit(cell))
-    sim.state.resources[cell, 0] = 2
+    bush = nearest_node(sim, "berry_bush", citizen.position)
+    stand_at_node(sim, citizen.id, bush)
+    nodes.change(sim.core, bush, 2, None)
     things = WorldApi(sim, citizen.id).look_around().things
-    assert ("a few berries on the bushes", "right beside you") in [(t.label, t.where) for t in things]
+    assert ("a berry bush with a few berries left", "right beside you") in [(t.label, t.where) for t in things]
 
 
 def test_names_are_only_learned_from_someone_you_can_see(new_sim: Callable[..., Simulation]) -> None:
@@ -512,8 +512,8 @@ def test_someone_coming_to_the_same_place_doesnt_stop_your_work(new_sim: Callabl
     work = me.work("farm")
     helper = WorldApi(sim, "helper").walk_to_place("the rice fields")
     assert run_until_done(sim, helper, 30).text == "You arrive at the rice fields."
-    # her own row of the paddies, a few steps from his: well within the 10 m that counts as walking up to someone
-    assert PERSONAL_M <= sim.world.distance_m(farmer.position, sim.citizen("helper").position) < 7.0
+    # her own spot of the paddy, a row from his (spots 6 or 8 m apart): within the 10 m of walking up to someone
+    assert PERSONAL_M <= sim.world.distance_m(farmer.position, sim.citizen("helper").position) < 10.0
     assert work.result is None
 
     to_aiko = WorldApi(sim, "sister").walk_to_person("Aiko")

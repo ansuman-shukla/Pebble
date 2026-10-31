@@ -7,8 +7,6 @@ from collections import Counter
 from collections.abc import Iterator
 from pathlib import Path
 
-import numpy as np
-
 import app.sim
 from app.core.rng import Rng
 from app.sim.state import WorldState
@@ -59,7 +57,6 @@ def _state(seed: int) -> WorldState:
         citizens={},
         ground={},
         stores={},
-        resources=np.zeros((1, 1), np.uint8),
         rngs={},
     )
 

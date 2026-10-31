@@ -6,13 +6,14 @@ from collections.abc import Callable
 import pytest
 
 from app.observability.events import EventDraft
-from app.sim import doing, movement, wear, wild
+from app.sim import doing, movement, nodes, wear, wild
 from app.sim import fire as fires
 from app.sim.clock import NIGHT_ALTITUDE_DEG
 from app.sim.core import SIGHT_FIRE_M, SIGHT_NIGHT_M
 from app.sim.economy import load_economy
 from app.sim.fauna import SPECIES
 from app.sim.simulation import Simulation
+from app.sim.slots import held_slot
 from app.sim.state import Fire
 from app.sim.vec import step_towards
 from app.world_api.facade import WorldApi, run_until_done
@@ -22,6 +23,7 @@ from tests.sim_helpers import (
     move_animal,
     put_in_the_wild,
     skip_to,
+    stand_at_node,
     wild_cell,
     without_animals,
 )
@@ -178,26 +180,48 @@ def test_flee_runs_away_from_the_nearest_danger(new_sim: Callable[..., Simulatio
 # --- fishing ---
 
 
-def test_fishing_at_a_river_takes_from_its_stock(
+def test_fishing_at_a_fishing_spot_takes_from_its_stock(
     new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     sim, api = _hunter(new_sim)
     hunter = sim.citizen("hunter")
     world = sim.world
-    river = next(c for c in range(world.cell_count) if world.river[c] and sim.core.planner.outer.allowed[c])
-    sim.core.place_at(hunter, world.unit(river))
-    column = 5
-    before = int(sim.state.resources[river, column])
-    assert before > 0
-    monkeypatch.setattr(wild, "FISH_CHANCE", 1.0)
-    result = run_until_done(sim, api.fish(), wild.FISH_MINUTES + 1)
+    spot = world.nodes.index["river_marsh:fishing_spot-1"]
+    stand_at_node(sim, hunter.id, spot, 1)
+    monkeypatch.setattr(wild, "catch_chance", lambda _by_hand, _citizen: 1.0)
+    result = run_until_done(sim, api.fish(), 31)
     assert result.outcome == "done" and result.text.startswith("You catch")
     caught = hunter.inventory["fish"]
     assert 1 <= caught <= 3
-    assert int(sim.state.resources[river, column]) == before - caught
-    assert f"{river}:fish" in sim.state.regrow
-    monkeypatch.setattr(wild, "FISH_CHANCE", 0.0)
-    assert run_until_done(sim, api.fish(), wild.FISH_MINUTES + 1).text == "The fish slip away from you."
+    assert nodes.stock(sim.core, spot) == 20 - caught
+    entry = nodes.entry(sim.core, spot)
+    assert entry is not None and entry.regrow_at is not None and entry.regrow_at <= sim.tick + 288  # +1 every 4.8 h
+    held = held_slot(sim.core, hunter)
+    assert held is not None and held.id == "river_marsh:fishing_spot-1#1"  # fished from the spot they stood on
+    monkeypatch.setattr(wild, "catch_chance", lambda _by_hand, _citizen: 0.0)
+    assert run_until_done(sim, api.fish(), 31).text == "The fish slip away from you."
+    assert nodes.stock(sim.core, spot) == 20 - caught
+
+
+def test_fish_gather_only_at_the_drawn_fishing_spots(new_sim: Callable[..., Simulation]) -> None:
+    sim, api = _hunter(new_sim)
+    hunter = sim.citizen("hunter")
+    world = sim.world
+    spot = world.nodes.index["river_marsh:fishing_spot-1"]
+    near = step_towards(world.nodes.unit(spot), 0.0, 12.0, world.radius_m)  # a stone's throw up the bank
+    sim.core.place_at(hunter, near)
+    result = run_until_done(sim, api.fish(), 1)
+    assert result.outcome == "failed" and result.text.startswith("The nearest good fishing spot is a few paces")
+    river = next(
+        c
+        for c in range(world.cell_count)
+        if world.river[c]
+        and sim.core.planner.outer.allowed[c]
+        and all(world.nodes.kinds[n] != "fishing_spot" for _, n in world.nodes.near(world.grid, world.unit(c), 200.0))
+    )
+    sim.core.place_at(hunter, world.unit(river))
+    assert run_until_done(sim, api.fish(), 1).text == "The water here is too fast and shallow for fish."
+    assert "fish" not in hunter.inventory
     deep = next(
         c
         for c in range(world.cell_count)

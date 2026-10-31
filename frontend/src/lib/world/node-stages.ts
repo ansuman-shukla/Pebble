@@ -5,9 +5,8 @@
  * shakes). A node the feed never mentioned is full. A new run (a snapshot of another run) starts every node full
  * again.
  *
- * Seam for N1: the feed tells changes only, so a page opened mid-run draws nodes taken before it opened as full
- * until they change again; a `nodes` list of the non-full nodes on the live snapshot (bible §1.1: snapshots store
- * only nodes that differ from full) would make it exact through `reset`.
+ * The live snapshot lists every node that differs from full (`nodes`, N1's D150), so a page opened mid-run starts
+ * from the exact stocks; changes then come as `node_changed` and `tree_felled`.
  */
 import type { LiveMessage } from '@/lib/live/live-contract';
 
@@ -24,7 +23,7 @@ const NODE_CAPS: Record<string, number> = {
   obsidian_field: 40,
   iron_sand_bar: 60,
   gold_pool: 40,
-  rice_paddy: 60,
+  rice_paddy: 78, // the bible's 60 tuned up 30 % while the granary feeds D156's rations (D152)
 };
 
 export interface NodeState {
@@ -120,9 +119,24 @@ export class NodeStages {
   /** Follows one feed message; `now` is the client clock in seconds (falls are timed by it). */
   apply(message: LiveMessage, now: number) {
     if (message.type !== 'event') {
-      if (message.type === 'snapshot' && message.run_id !== this.runId) {
+      // a snapshot lists every node that differs from full (N1, D150): the record starts from it exactly
+      const listed = message.type === 'snapshot' ? message.nodes : undefined;
+      if (
+        message.type === 'snapshot' &&
+        (message.run_id !== this.runId || listed !== undefined)
+      ) {
         this.runId = message.run_id;
-        this.reset();
+        this.reset(
+          new Map(
+            (listed ?? []).map((node) => [
+              node.id,
+              {
+                fill: node.cap > 0 ? node.stock / node.cap : 0,
+                stage: node.stage,
+              },
+            ]),
+          ),
+        );
       }
       return;
     }

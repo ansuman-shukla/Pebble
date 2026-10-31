@@ -223,9 +223,9 @@ class Died(Payload):
 
 
 class ItemLocation(Payload):
-    """Where items are. `resource` = a cell's wild plants or fish (changed by `resource_changed`); `world` = made by
-    the world (a tended field's harvest growing, a store's starting stock); `animal` = taken from a hunted animal (id);
-    `eaten` and `fire` (id: the fire it burns in) = gone."""
+    """Where items are. `resource` = a node's stock (id: the node, changed by `node_changed`; runs before nodes: a
+    cell's wild plants or fish, changed by `resource_changed`); `world` = made by the world (a store's starting
+    stock); `animal` = taken from a hunted animal (id); `eaten` and `fire` (id: the fire it burns in) = gone."""
 
     kind: Literal["inventory", "ground", "store", "resource", "eaten", "world", "animal", "fire"]
     id: str | None = None  # citizen, ground stack or store id

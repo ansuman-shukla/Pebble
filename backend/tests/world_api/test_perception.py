@@ -132,9 +132,9 @@ def test_things_say_what_they_are(new_sim: Callable[..., Simulation]) -> None:
     assert kinds["the castle gate"] == ("building", TIERS["building"])
     storehouses = next(label for label in kinds if label.endswith("storehouses"))
     assert kinds[storehouses] == ("building", TIERS["food"])  # where the town's food is kept
-    plants = {sight.seen.resource: sight.seen.kind for sight in found.values() if sight.seen.resource is not None}
-    assert plants["berries"] == "food" and plants["wood"] == "material"
-    assert {sight.seen.resource for sight in found.values() if sight.seen.kind not in ("food", "material")} == {None}
+    nodes = {sight.seen.resource: (sight.seen.kind, sight.tier) for sight in found.values() if sight.seen.resource}
+    assert nodes["berries"] == ("node", TIERS["food"]) and nodes["wood"] == ("node", TIERS["material"])  # N1 nodes
+    assert {sight.seen.resource for sight in found.values() if sight.seen.kind != "node"} == {None}
 
     world = sim.world
     oceans = ("shallow_ocean", "deep_ocean")

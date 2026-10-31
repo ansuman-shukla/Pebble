@@ -1,9 +1,7 @@
 """World stats: population, deaths, food, wild resources and events per game day, now and replayed."""
 
-import base64
 from typing import Any
 
-import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func
@@ -11,9 +9,10 @@ from sqlmodel import Session, col, select
 
 from app.db.models import Event, Snapshot
 from app.engine import EngineLoop
-from app.sim import animals
+from app.sim import animals, nodes
 from app.sim.clock import DAY_MINUTES
-from app.sim.items import ITEMS, RESOURCES
+from app.sim.items import ITEMS
+from app.sim.node_table import load_node_kinds
 from app.sim.world import SimWorld
 from tests.api.spectator import API, dev_run
 
@@ -44,18 +43,26 @@ def test_stats_count_people_food_resources_and_days(
     assert food["band_a"]["name"] == "carried by Band A" and food["band_a"]["hunger"] > 0
     first = client.get(f"{API}/stats", params={"at": 0}).json()
     assert {f["id"]: f["items"] for f in first["food"]}["store-2"] == {"rice": 400}
-    for column, resource in enumerate(RESOURCES):
-        row = next(r for r in stats["resources"] if r["resource"] == resource)
-        assert row["now"] == int(state.resources[:, column].astype(np.int64).sum())
-        assert row["start"] == next(r for r in first["resources"] if r["resource"] == resource)["now"]
+    full = cast.sim.world.nodes.full_stock()
+    entries = nodes.node_state(cast.sim.core).entries
+    assert [r["resource"] for r in stats["resources"]] == sorted(full) and "rice" in full and "gold" in full
+    for row in stats["resources"]:
+        item = row["resource"]
+        short = sum(e.cap - e.stock for e in entries.values() if load_node_kinds()[e.kind].item == item)
+        assert row["now"] == full[item] - short  # every node full but those that differ
+        assert row["start"] == next(r for r in first["resources"] if r["resource"] == item)["now"]
+    rice = next(r for r in first["resources"] if r["resource"] == "rice")
+    assert rice["now"] == full["rice"] * 2 // 6  # four of the six paddies start short of ripe
     assert sum(r["start"] - r["now"] for r in stats["resources"]) > 0  # the bands have gathered
     start_state = spectator_session.exec(
         select(Snapshot.state).where(Snapshot.run_id == cast.run.id).order_by(col(Snapshot.tick))
     ).first()
     assert start_state is not None
-    start = np.frombuffer(base64.b64decode(start_state["resources"]), dtype=np.uint8).reshape(state.resources.shape)
-    emptied = [int(((start[:, c] > 0) & (state.resources[:, c] == 0)).sum()) for c in range(len(RESOURCES))]
-    assert [r["emptied_cells"] for r in stats["resources"]] == emptied
+    start = nodes.node_views(start_state["systems"]["nodes"]["data"])
+    bare = [
+        node_id for node_id, e in entries.items() if e.stock == 0 and (node_id not in start or start[node_id].stock)
+    ]
+    assert sum(r["emptied_nodes"] for r in stats["resources"]) == len(bare)
     counted = spectator_session.exec(
         select(func.count()).select_from(Event).where(Event.run_id == cast.run.id, Event.tick <= 70)
     ).one()

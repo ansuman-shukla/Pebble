@@ -1192,6 +1192,10 @@ export type LiveState = {
      * Fires
      */
     fires: Array<FireEntity>;
+    /**
+     * Nodes
+     */
+    nodes?: Array<NodeEntity>;
 };
 
 /**
@@ -1293,6 +1297,36 @@ export type NeedsSeries = {
 };
 
 /**
+ * NodeEntity
+ */
+export type NodeEntity = {
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Item
+     */
+    item: string;
+    /**
+     * Cap
+     */
+    cap: number;
+    /**
+     * Stock
+     */
+    stock: number;
+    /**
+     * Stage
+     */
+    stage: string;
+    /**
+     * Id
+     */
+    id: string;
+};
+
+/**
  * PersonRef
  */
 export type PersonRef = {
@@ -1381,9 +1415,9 @@ export type ResourceStock = {
      */
     start: number;
     /**
-     * Emptied Cells
+     * Emptied Nodes
      */
-    emptied_cells: number;
+    emptied_nodes: number;
 };
 
 /**

@@ -92,7 +92,7 @@ export function StatsPage() {
                 {data.resources.map((resource) => (
                   <Bar
                     key={resource.resource}
-                    label={`${resource.resource}${resource.emptied_cells ? ` · ${resource.emptied_cells} spots picked bare` : ''}`}
+                    label={`${resource.resource}${resource.emptied_nodes ? ` · ${resource.emptied_nodes} picked bare` : ''}`}
                     value={`${resource.now.toLocaleString()} / ${resource.start.toLocaleString()}`}
                     fraction={
                       resource.start ? resource.now / resource.start : 0
