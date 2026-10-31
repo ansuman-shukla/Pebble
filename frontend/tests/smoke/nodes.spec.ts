@@ -137,6 +137,9 @@ test('every node within reach of the focus is drawn once, at its place, as its l
   expect(errors).toEqual([]);
 });
 
+/** JavaScript's own rounding (halves up), as the stage rule uses it. */
+const round = (value: number) => Math.floor(value + 0.5);
+
 /** Berry-red pixels on the scene canvas (browser code as a string: the test TypeScript has no DOM types). */
 const BERRY_PIXELS = `(() => {
   const scene = document.querySelector('canvas[data-engine]');
@@ -195,26 +198,39 @@ test('a picked bush loses its fruit on screen, a felled tree is a stump within 3
   const full = await page.evaluate<number>(BERRY_PIXELS);
   expect(full).toBeGreaterThan(30);
 
-  await send('node_changed', {
-    node: 'flora:3941',
-    kind: 'berry_bush',
-    item: 'berries',
-    before: 12,
-    after: 0,
-    stage: 'stripped',
-  });
-  await expect
-    .poll(
-      async () =>
-        (
-          (await drawnOf('flora:3941'))[0] as unknown as {
-            stage: { pieces: number };
-          }
-        ).stage.pieces,
-    )
-    .toBe(0);
-  await page.waitForTimeout(300);
-  expect(await page.evaluate<number>(BERRY_PIXELS)).toBeLessThan(full / 3);
+  /** The bush at `after` of 12 berries, once drawn: its fruit pieces and the berry-red pixels on screen. */
+  const picked = async (after: number) => {
+    await send('node_changed', {
+      node: 'flora:3941',
+      kind: 'berry_bush',
+      item: 'berries',
+      before: 12,
+      after,
+      stage: 'picked',
+    });
+    const pieces = round((9 * Math.round((8 * after) / 12)) / 8);
+    await expect
+      .poll(
+        async () =>
+          (
+            (await drawnOf('flora:3941'))[0] as unknown as {
+              stage: { pieces: number };
+            }
+          ).stage.pieces,
+      )
+      .toBe(pieces);
+    await page.waitForTimeout(300);
+    return page.evaluate<number>(BERRY_PIXELS);
+  };
+  // half the berries: 5 of the 9 fruit pieces show (measured 0.47 of the red), 7 berries 6 pieces (0.63); one
+  // piece more or less falls outside these bands
+  const half = await picked(6);
+  const more = await picked(7);
+  expect(half / full).toBeGreaterThan(0.4);
+  expect(half / full).toBeLessThan(0.55);
+  expect(more / full).toBeGreaterThan(0.56);
+  expect(more / full).toBeLessThan(0.72);
+  expect(await picked(0)).toBeLessThan(full / 3);
 
   await send('tree_felled', { node: 'flora:3935', yaw_deg: 90, logs: 10 });
   const felled = Date.now();
