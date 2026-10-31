@@ -2,7 +2,7 @@
 tick and end on completion or interrupt. Every failure is an in-world sentence; nothing reveals numbers or ids.
 
 This module dispatches: each action's handlers live in their own module (movement, resting, doing, work, exchange,
-expression, crafting, wild), one row per action in the tables below. It also decides what interrupts a running
+expression, market, crafting, wild), one row per action in the tables below. It also decides what interrupts a running
 action.
 """
 
@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel
 
-from app.sim import crafting, doing, exchange, expression, movement, resting, wild, work
+from app.sim import crafting, doing, exchange, expression, market, movement, resting, wild, work
 from app.sim.acting import VERB, refuse, settled
 from app.sim.bodies import COLLAPSE_WAKE_ENERGY, Crossing
 from app.sim.clock import NIGHT_ALTITUDE_DEG, sun_altitude_deg, sun_direction
@@ -26,6 +26,7 @@ from app.world_api.models import (
     ActionName,
     ActionResult,
     Attack,
+    Buy,
     Craft,
     Drink,
     Drop,
@@ -42,6 +43,7 @@ from app.world_api.models import (
     PickUp,
     Rest,
     Say,
+    Sell,
     SetGoal,
     Sleep,
     Stash,
@@ -92,6 +94,8 @@ INSTANTS: dict[ActionName, Instant] = {
     "gesture": handles(Gesture, expression.gesture),
     "set_goal": handles(SetGoal, expression.set_goal),
     "stash": handles(Stash, exchange.stash),
+    "buy": handles(Buy, market.buy),
+    "sell": handles(Sell, market.sell),
 }
 STARTS: dict[ActionName, Starter] = {
     "walk_to": handles(WalkTo, movement.start_walk),

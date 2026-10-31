@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from app.observability.events import ItemLocation, JsonScalar
-from app.sim import crafting, slots, society, tax
+from app.sim import crafting, market, slots, society, tax
 from app.sim.acting import begin, settled
 from app.sim.core import SimCore
 from app.sim.exchange import storehouse_in_reach
@@ -107,7 +107,7 @@ WORK_TASKS: tuple[WorkTask, ...] = (
         places=("market",),
         nowhere="There is no market here.",
         label="trading at the market",
-        done="You trade with passers-by and haggle over cloth and salt.",
+        finish=market.trade,
     ),
     WorkTask(
         "weave",
