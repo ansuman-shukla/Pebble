@@ -7,6 +7,7 @@ import pytest
 
 from app.observability.events import ItemMoved, PricesChanged, Traded
 from app.observability.replay import ReplayEvent, replay
+from app.sim import market
 from app.sim.citizens import CITIZENS, load_citizens
 from app.sim.economy import coins_held, load_economy
 from app.sim.market import (
@@ -67,7 +68,12 @@ def test_prices_at_an_empty_and_an_overfull_stall() -> None:
     assert (sell_price("rice", 480), buy_price("rice", 480), price_word("rice", 480)) == (3, 2, "cheap")
     assert (sell_price("hide", 0), buy_price("hide", 0)) == (30, 22)
     assert (sell_price("wood", 2000), buy_price("wood", 2000)) == (2, 1)
-    assert buy_price("wood", 10_000) == 1  # the stall always pays at least a coin a lot
+    assert buy_price("wood", 10_000) == 1
+
+
+def test_the_stall_always_pays_at_least_a_coin_a_lot(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(market, "value_of", lambda _item, _region: 0.5)  # a lot of wood worth half a coin a piece
+    assert (sell_price("wood", 10_000), buy_price("wood", 10_000)) == (1, 1)  # ⌊0.75 × 1⌋ = 0, paid as 1
 
 
 @pytest.mark.parametrize(
@@ -132,6 +138,13 @@ def test_the_stall_is_open_only_while_the_merchant_works_trade_at_it(new_sim: Ca
     assert sim.instant("goro", Buy(item="rice", amount=2)).text == "The stall is shut."
     _open(sim)
     sim.core.place_at(sim.citizen("fumiko"), sim.world.town.to_unit(20.0, 46.0))  # 7.5 m behind: off her post
+    assert sim.instant("goro", Buy(item="rice", amount=2)).text == "The stall is shut."
+    sim.core.place_at(sim.citizen("fumiko"), sim.world.town.to_unit(*BEHIND))
+    _open(sim)
+    assert sim.instant("goro", Buy(item="rice", amount=2)).outcome == "done"
+    other = sim.citizen("fumiko").action
+    assert other is not None
+    other.item = "guard"  # at work behind the stall, but not trading
     assert sim.instant("goro", Buy(item="rice", amount=2)).text == "The stall is shut."
 
 

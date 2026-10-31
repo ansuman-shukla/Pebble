@@ -70,7 +70,7 @@ def test_the_rice_price_needs_a_peak_then_fair_again_within_three_days(new_sim: 
     cheap, glut = _rice(new_sim)
     _days(cheap, glut, 80, 1)
     _days(cheap, glut, 400, 13)
-    assert glut.outcome(cheap).words.endswith("fair 0/11 days from day 4") and not glut.outcome(cheap).ok
+    assert glut.outcome(cheap) == Outcome(glut.peak, False, "peak ×1.22, dear at most 1.0 d, fair 0/11 days from day 4")
 
 
 def test_every_recipe_must_be_made_on_some_seed(new_sim: Callable[..., Simulation]) -> None:
