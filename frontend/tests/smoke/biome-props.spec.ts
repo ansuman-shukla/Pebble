@@ -9,7 +9,10 @@ import { PROPS } from '../../src/lib/world/assets';
 import {
   BIOME_NAMES,
   BIOME_PROPS,
+  BLOCKING_KINDS,
   LANDMARK_KINDS,
+  NODE_LOOK_KINDS,
+  nodeFootprint,
 } from '../../src/lib/world/biome-props';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
@@ -87,15 +90,59 @@ test('every scatter entry names a vendored kind once per biome with a sane densi
   }
 });
 
-test('forests read as forests: at least 6 trees per broadleaf and taiga cell, grassland stays open', () => {
-  const trees = (biome: keyof typeof BIOME_PROPS) =>
-    BIOME_PROPS[biome]
-      .filter((entry) => /_tree$|_pine$|_spruce$/.test(entry.kind))
-      .filter((entry) => entry.kind !== 'dwarf_pine')
-      .reduce((sum, entry) => sum + entry.perCell, 0);
-  expect(trees('broadleaf_forest')).toBeGreaterThanOrEqual(6);
-  expect(trees('taiga')).toBeGreaterThanOrEqual(6);
-  expect(trees('grassland')).toBeLessThan(1);
+test('no decor kind is usable or looks like a node', () => {
+  const nodeAssets = new Set(NODE_LOOK_KINDS.map((kind) => PROPS[kind]));
+  for (const [biome, entries] of Object.entries(BIOME_PROPS))
+    for (const { kind } of entries) {
+      expect(NODE_LOOK_KINDS, `${biome}/${kind}`).not.toContain(kind);
+      expect(
+        nodeAssets.has(PROPS[kind]),
+        `${biome}/${kind} looks like a node`,
+      ).toBe(false);
+    }
+  // reed clumps are the town's fixed reed nodes
+  expect(
+    Object.values(BIOME_PROPS)
+      .flat()
+      .map((entry) => entry.kind),
+  ).not.toContain('reeds');
+});
+
+test("a node's footprint is a standing tree's trunk, else its model's half width", () => {
+  expect(nodeFootprint('tree', 'oak_tree', 1.2)).toBeCloseTo(0.6, 9);
+  expect(nodeFootprint('nut_tree', 'nut_tree', 1)).toBeCloseTo(0.5, 9);
+  // a dead tree is deadwood: its whole model (3.19 m wide)
+  expect(nodeFootprint('deadwood', 'dead_tree', 1)).toBeCloseTo(1.595, 9);
+  expect(nodeFootprint('berry_bush', 'berry_bush', 2)).toBeCloseTo(0.73, 9);
+});
+
+test('every node look is a vendored kind and blocks walking unless it is a soft plant', () => {
+  for (const kind of NODE_LOOK_KINDS) expectVendored(kind);
+  expect(NODE_LOOK_KINDS).toEqual(
+    expect.arrayContaining([
+      'oak_tree',
+      'nut_tree',
+      'berry_bush',
+      'tree_stump',
+      'flint_seam',
+      'obsidian_field',
+    ]),
+  );
+  expect(BLOCKING_KINDS).toEqual(
+    expect.arrayContaining([
+      'oak_tree',
+      'berry_bush',
+      'fallen_log',
+      'tree_stump',
+    ]),
+  );
+  for (const soft of [
+    'root_patch',
+    'reed_bed',
+    'grass_tuft',
+    'cattail',
+  ] as const)
+    expect(BLOCKING_KINDS).not.toContain(soft);
 });
 
 test('every landmark kind of the world spec is a vendored registry kind', () => {

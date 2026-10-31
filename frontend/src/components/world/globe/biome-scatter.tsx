@@ -1,11 +1,16 @@
 import { useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { type RefObject, useEffect, useMemo, useRef } from 'react';
-import { InstancedMesh, Matrix4, type Vector3 } from 'three';
+import type { InstancedMesh, Matrix4, Vector3 } from 'three';
 
 import { kindParts } from '@/components/world/kind-parts';
 import { assetUrl, PROPS, type PropKind } from '@/lib/world/assets';
 import { BIOME_PROPS, GROUND_COVER } from '@/lib/world/biome-props';
+import {
+  fillMeshes,
+  hideMeshes,
+  tierMeshes,
+} from '@/lib/world/instanced-tiers';
 import {
   type Scatter,
   type ScatterInstance,
@@ -13,11 +18,12 @@ import {
 } from '@/lib/world/scatter';
 
 /*
- * Biome props around the focus, in two distance tiers: ground cover (grass, flowers, ferns, pebbles, reeds)
- * within NEAR_REACH, everything else within FAR_REACH. The cells within FAR_REACH + REBUILD are scattered
- * (each cell is cached; it always grows the same) and re-gathered when the focus moves more than REBUILD
- * metres; every RESPLIT metres the gathered instances are re-filtered by tier and drawn as one InstancedMesh
- * per sub-mesh of each kind. Instances within SHADOW_REACH go into a second set that casts shadows.
+ * Decor around the focus (biome props nobody can use; nodes are drawn by GlobeNodes), in two distance tiers:
+ * ground cover (grass, flowers, ferns, pebbles, cattails) within NEAR_REACH, everything else within FAR_REACH.
+ * The cells within FAR_REACH + REBUILD are scattered (each cell is cached; it always grows the same) and
+ * re-gathered when the focus moves more than REBUILD metres; every RESPLIT metres the gathered instances are
+ * re-filtered by tier and drawn as one InstancedMesh per merged part of each kind. Instances within SHADOW_REACH
+ * go into a second set that casts shadows.
  */
 
 const NEAR_REACH = 150;
@@ -38,32 +44,14 @@ const KINDS = [
   ),
 ];
 
-const part = new Matrix4();
-
 interface KindSet {
   kind: PropKind;
   reach: number;
-  inModel: Matrix4[];
   near: InstancedMesh[];
   far: InstancedMesh[];
 }
 
-function hide(set: KindSet) {
-  for (const mesh of [...set.near, ...set.far]) mesh.visible = false;
-}
-
-function fill(meshes: InstancedMesh[], inModel: Matrix4[], models: Matrix4[]) {
-  meshes.forEach((mesh, index) => {
-    const count = Math.min(models.length, mesh.instanceMatrix.count);
-    for (let i = 0; i < count; i++)
-      mesh.setMatrixAt(i, part.multiplyMatrices(models[i], inModel[index]));
-    mesh.count = count;
-    // an empty instanced mesh would still cost a draw call
-    mesh.visible = count > 0;
-    mesh.instanceMatrix.needsUpdate = true;
-    mesh.computeBoundingSphere();
-  });
-}
+const hide = (set: KindSet) => hideMeshes([...set.near, ...set.far]);
 
 export function BiomeScatter({
   scatter,
@@ -79,22 +67,11 @@ export function BiomeScatter({
     () =>
       KINDS.map((kind, index): KindSet => {
         const parts = kindParts(models[index].scene, PROPS[kind]);
-        const make = (capacity: number, shadow: boolean) =>
-          parts.map(({ geometry, material, depthMaterial }) => {
-            const mesh = new InstancedMesh(geometry, material, capacity);
-            if (depthMaterial) mesh.customDepthMaterial = depthMaterial;
-            mesh.count = 0;
-            mesh.visible = false;
-            mesh.castShadow = shadow;
-            mesh.receiveShadow = true;
-            return mesh;
-          });
         return {
           kind,
           reach: GROUND_COVER.has(kind) ? NEAR_REACH : FAR_REACH,
-          inModel: parts.map((p) => p.inModel),
-          near: make(NEAR_CAPACITY, true),
-          far: make(CAPACITY, false),
+          near: tierMeshes(parts, NEAR_CAPACITY, true),
+          far: tierMeshes(parts, CAPACITY, false),
         };
       }),
     [models],
@@ -135,7 +112,7 @@ export function BiomeScatter({
       for (const cell of scatter.cellsAround(focus, FAR_REACH + REBUILD)) {
         let grown = current.cache.get(cell);
         if (!grown) {
-          grown = scatter.cell(cell);
+          grown = scatter.decor(cell);
           current.cache.set(cell, grown);
         }
         for (const instance of grown)
@@ -155,8 +132,8 @@ export function BiomeScatter({
           if (distance < SHADOW_REACH) near.push(model);
           else if (distance < set.reach) far.push(model);
         }
-        fill(set.near, set.inModel, near);
-        fill(set.far, set.inModel, far);
+        fillMeshes(set.near, near);
+        fillMeshes(set.far, far);
       }
     }
   });
