@@ -70,7 +70,7 @@ interrupted. **Free** actions take no time at all and leave the body be (a sleep
 | `gather(resource)` | durative | berries, roots, nuts, reeds, wood (*draft:* rice, flint, obsidian, iron sand, gold at their nodes) |
 | `fish()` / `hunt(animal)` | durative | outcome by skill, tool (a spear), strength, group; can hurt you. Fish: at a river, lake or shallow sea shore. Hunt: an animal in view; you creep up on it, then strike |
 | `eat(item)` / `drink()` | durative | from inventory or within reach; raw meat or fish eaten beside a fire is roasted (more filling), raw it can make you sick |
-| `pick_up(item)` / `drop(item)` / `give(item, person)` | instant | within reach (for town folk a storehouse within reach counts); giving needs acceptance; the words may say how many ("a fish", "two berries", "half the meat", "a few nuts"), else all of it |
+| `pick_up(item)` / `drop(item)` / `give(item, person)` | instant | within reach (a store within reach counts: taking from one that isn't yours is theft, 10 §2.6); giving needs acceptance (coins to the lord pay your household's dues); the words may say how many ("a fish", "two berries", "half the meat", "a few nuts"), else all of it |
 | `make_fire()` / `feed_fire()` | durative | make: the fire skill and wood; lights a fire pit or basket within reach, else a campfire where you stand. Feed: wood carried, then wood lying beside the fire. A fire burns down unless fed |
 | `rest(minutes)` / `sleep()` | durative | sleep ends at morning, on danger or when rested |
 | `work(task)` | durative | role tasks (town): farm, store food, guard, trade, weave, govern, pray (*draft:* ring bell); needs the skill and the place |
@@ -81,7 +81,7 @@ interrupted. **Free** actions take no time at all and leave the body be (a sleep
 | `gesture(kind, to?)` | instant | wave, bow, nod, shake_head, point, laugh, jump, to a person in view or nobody; seen by everyone awake who can see you, never heard |
 | `set_goal(text, driver)` | free | what you are after now (a few words) and why: hunger, thirst, rest, danger, duty, ambition, social, night; only spectators learn it |
 | `buy(item, amount)` / `sell(item, amount)` | instant, *draft* | at an open market stall, in coins; goods trade in lots (10 §2.5) |
-| `stash(item, amount)` | instant, *draft* | into your own chest within reach (the merchant: the stall) |
+| `stash(item, amount)` | instant | into your own store within reach: your household's chest (the merchant: the stall) |
 | `craft(recipe)` | durative, *draft* | flint, obsidian or iron spear, stone or iron axe, sickle, cloth, pack, dried meat, at its station (10 §2.3) |
 | `accuse(person, to)` | instant, *draft* | tells `to` every deed you know of `person` (10 §3.4) |
 | `seize(person)` | durative, *draft* | take hold of someone within reach; held, they can only look, speak and wait |
