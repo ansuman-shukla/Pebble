@@ -14,6 +14,7 @@ same way.
 ```
 """
 
+from dataclasses import replace
 from functools import partial
 
 from pydantic import JsonValue
@@ -23,6 +24,8 @@ from app.brains.profile import BrainProfile
 from app.brains.routines import ROUTINES, Context, Option
 from app.brains.senses import (
     DISTANCE,
+    NIGHT_HUNGER,
+    NIGHT_THIRST,
     Needs,
     at,
     at_home,
@@ -34,6 +37,7 @@ from app.brains.senses import (
     desperate,
     fire_here,
     fire_in_view,
+    harmful_by_morning,
     is_name,
     near,
     phase,
@@ -55,6 +59,8 @@ CHAT_CHANCE = 0.3  # with someone greeted already in earshot and nothing pressin
 EAT_ORDER = ("berries", "nuts", "roots", "rice", "dried meat")  # what spoils first goes first; dried meat keeps
 MOVING = frozenset({"walk_to", "follow", "flee", "hunt", "attack", "rest", "sleep"})  # they move the body
 RAW = ("meat", "fish")  # roasted by a fire, else eaten raw only when there's nothing else (it can make you sick)
+BEDTIME = 75.0  # a drink or a meal before sleeping (sleep scores 70) when the night would leave you parched or starving
+BEDTIME_TRIES = 12  # decisions a night spent on it before giving up and sleeping (the water not found in the dark)
 
 
 class UtilityBrain:
@@ -111,6 +117,7 @@ class UtilityBrain:
             notes.pop("chest empty", None)  # look in the chest again today
             notes.pop("full", None)  # carrying words are rough: a little eaten may not change them, so try again
             notes.pop("goal", None)  # a new day: say what you're after again
+            notes.pop("bedtime", None)
         number = notes.get("action")
         if isinstance(number, int) and told_full(api.handle(number).result):  # the load filled as it went on
             notes["full"] = list(perception.you.carrying)
@@ -198,12 +205,9 @@ class UtilityBrain:
             else:
                 options.append(Option(200, "flee", self.api.flee, f"Get away from {threat.label}", "danger"))
         options += justice.options(ctx)
-        thirst = self.thirst_option(p, needs, now)
-        if thirst is not None:
-            options.append(thirst)
-        hunger = self.hunger_option(p, needs, now)
-        if hunger is not None:
-            options.append(hunger)
+        for need in (self.thirst_option(p, needs, now), self.hunger_option(p, needs, now)):
+            if need is not None:
+                options.append(self.before_bed(need, needs, now))
         options += self.rest_options(p, needs, now, pace)
         options += ROUTINES[self.profile.routine](ctx)
         return options
@@ -241,8 +245,24 @@ class UtilityBrain:
             return option(score, "go drink", lambda: self.api.walk_to_thing("water", pace))
         return option(score - 20, "go home", lambda: self.api.walk_to_place("home", pace))  # the water is near camp
 
+    def before_bed(self, option: Option, needs: Needs, now: str) -> Option:
+        """At night a drink or a meal comes before sleep when the night would otherwise carry thirst or hunger, as
+        roughly as the body tells it, to where it hurts; but only for `BEDTIME_TRIES` such choices a night, so someone
+        who can't find the water in the dark goes to sleep rather than search all night."""
+        level, rise = (needs.thirst, NIGHT_THIRST) if option.driver == "thirst" else (needs.hunger, NIGHT_HUNGER)
+        tries = self.api.notes.get("bedtime")
+        spent = tries if isinstance(tries, int) else 0
+        if now != "night" or not harmful_by_morning(level, rise) or spent >= BEDTIME_TRIES:
+            return option
+
+        def start() -> ActionHandle:
+            self.api.notes["bedtime"] = spent + 1
+            return option.start()
+
+        return replace(option, score=max(option.score, BEDTIME), start=start)
+
     def hunger_option(self, p: Perception, needs: Needs, now: str) -> Option | None:
-        mealtime = now in ("morning", "dusk") and needs.hunger >= 1
+        mealtime = now in ("morning", "dusk", "night") and needs.hunger >= 1  # night: a bite before bed
         if needs.hunger < 2 and not mealtime:
             return None
         score = {1: 45.0, 2: 85.0, 3: 105.0}[needs.hunger]
