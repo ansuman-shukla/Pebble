@@ -182,10 +182,6 @@ def _came_at(sim: Simulation, citizen_id: str) -> bool:
     return words.endswith(("attacks you", "charges you"))
 
 
-def _near_camp(sim: Simulation, position: Vec3) -> bool:
-    return any(sim.world.distance_m(position, sim.world.places[site].centre) <= CAMP_M for site in LIVING_SITES)
-
-
 class Kills(Check):
     """Predator kill sequences within 1 km of each settlement: the critic checklist's ≥ 20 a camp over both seeds, as
     ≥ 10 a camp on each seed (10 §4.6 expects ≈ 3 a night near people from the six pinned predator groups)."""
