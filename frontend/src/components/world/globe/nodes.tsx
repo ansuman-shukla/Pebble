@@ -1,37 +1,36 @@
 import { useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import { type RefObject, useEffect, useMemo, useRef } from 'react';
-import type { InstancedMesh, Matrix4, Vector3 } from 'three';
+import { type RefObject, useEffect, useMemo } from 'react';
+import { type Material, MeshDepthMaterial, type Vector3 } from 'three';
 
-import { kindParts } from '@/components/world/kind-parts';
-import { assetUrl, PROPS, type PropKind } from '@/lib/world/assets';
-import { NODE_LOOK_KINDS } from '@/lib/world/biome-props';
+import { kindModel } from '@/components/world/kind-parts';
+import { assetSize, assetUrl, PROPS, type PropKind } from '@/lib/world/assets';
+import { NODE_LOOK_KINDS, STAGED_LOOKS } from '@/lib/world/biome-props';
 import {
-  fillMeshes,
-  hideMeshes,
+  type KindPart,
+  type PartLooks,
   tierMeshes,
 } from '@/lib/world/instanced-tiers';
 import {
-  type NodeInstance,
-  type Scatter,
-  scatterMatrix,
-} from '@/lib/world/scatter';
+  type DrawnNode,
+  FAR_REACH,
+  NodeField,
+  type NodeLook,
+} from '@/lib/world/node-field';
+import type { NodeStages } from '@/lib/world/node-stages';
+import type { Scatter } from '@/lib/world/scatter';
+import { StageTexture } from '@/lib/world/staged-material';
+import { withChunks } from '@/lib/world/vertex-chunks';
+import { windChunk } from '@/lib/world/wind';
 
 /*
- * Every usable wild thing where the simulation has it (10 §1.1, §5.2): the flora table's trees, nut trees, berry
- * bushes, root patches, reed beds and deadwood, and the mineral seams, never cleared around sites. Tiered like the
- * decor: the cells within FAR_REACH + REBUILD are gathered when the focus moves more than REBUILD metres, every
- * RESPLIT metres the instances are split by distance (within SHADOW_REACH into the set that casts shadows, small
- * things out to SMALL_REACH, the rest out to FAR_REACH) into one InstancedMesh per merged part of each look.
+ * Every usable wild thing where the simulation has it and as it is now (10 §1.1, §5.2): the flora table's trees,
+ * nut trees, berry bushes, root patches, reed beds and deadwood, and the mineral seams, never cleared around
+ * sites, drawn by stage from the live feed (NodeField). Low things (bushes, root patches, reed beds, stumps) are
+ * drawn out to SMALL_REACH, the rest out to FAR_REACH.
  */
 
-const SHADOW_REACH = 70;
-/** Low things (bushes, root patches, reed beds, stumps) are drawn this far ... */
 const SMALL_REACH = 300;
-/** ... trees, deadwood and seams this far. */
-const FAR_REACH = 500;
-const REBUILD = 100;
-const RESPLIT = 20;
 /** Above this camera altitude the terrain colours carry the look and no props are drawn. */
 const MAX_ALTITUDE = 1500;
 const CAPACITY = 6000;
@@ -42,26 +41,6 @@ const SMALL_LOOKS = new Set<PropKind>([
   'reed_bed',
   'tree_stump',
 ]);
-
-interface LookSet {
-  kind: PropKind;
-  reach: number;
-  near: InstancedMesh[];
-  far: InstancedMesh[];
-}
-
-interface Gathered {
-  node: NodeInstance;
-  model: Matrix4;
-}
-
-/** What the page's test hooks read: the nodes drawn now. */
-interface DrawnNode {
-  id: string;
-  look: PropKind;
-  /** World metres of the model's base. */
-  position: [number, number, number];
-}
 
 declare global {
   interface Window {
@@ -75,126 +54,105 @@ declare global {
   }
 }
 
+/** A staged look's materials for one tier: its stage rows first, then its wind (their own copies: disposed). */
+function stagedLooks(
+  rows: StageTexture,
+  height: number,
+  pieces: boolean,
+  made: Material[],
+): PartLooks {
+  return (part: KindPart) => {
+    const chunks = [
+      rows.chunk(height, pieces),
+      ...(part.wind ? [windChunk(part.wind)] : []),
+    ];
+    const material = withChunks(part.base.clone(), chunks);
+    const depthMaterial = withChunks(new MeshDepthMaterial(), chunks);
+    made.push(material, depthMaterial);
+    return { material, depthMaterial };
+  };
+}
+
 export function GlobeNodes({
   scatter,
+  stages,
   focusRef,
   radius,
 }: {
   scatter: Scatter;
+  stages: NodeStages;
   focusRef: RefObject<Vector3>;
   radius: number;
 }) {
   const models = useGLTF(NODE_LOOK_KINDS.map((kind) => assetUrl(PROPS[kind])));
-  const sets = useMemo(
-    () =>
-      NODE_LOOK_KINDS.map((kind, index): LookSet => {
-        const parts = kindParts(models[index].scene, PROPS[kind]);
+  const { field, made } = useMemo(() => {
+    const made: Material[] = [];
+    const looks = NODE_LOOK_KINDS.map((kind, index): NodeLook => {
+      const model = kindModel(models[index].scene, PROPS[kind]);
+      const reach = SMALL_LOOKS.has(kind) ? SMALL_REACH : FAR_REACH;
+      if (!STAGED_LOOKS.has(kind))
         return {
           kind,
-          reach: SMALL_LOOKS.has(kind) ? SMALL_REACH : FAR_REACH,
-          near: tierMeshes(parts, NEAR_CAPACITY, true),
-          far: tierMeshes(parts, CAPACITY, false),
+          reach,
+          pieces: model.pieces,
+          near: tierMeshes(model.parts, NEAR_CAPACITY, true),
+          far: tierMeshes(model.parts, CAPACITY, false),
+          stages: null,
         };
-      }),
-    [models],
-  );
+      const height = assetSize(PROPS[kind]).y;
+      const rows = {
+        near: new StageTexture(NEAR_CAPACITY),
+        far: new StageTexture(CAPACITY),
+      };
+      const pieces = model.pieces > 0;
+      return {
+        kind,
+        reach,
+        pieces: model.pieces,
+        near: tierMeshes(
+          model.parts,
+          NEAR_CAPACITY,
+          true,
+          stagedLooks(rows.near, height, pieces, made),
+        ),
+        far: tierMeshes(
+          model.parts,
+          CAPACITY,
+          false,
+          stagedLooks(rows.far, height, pieces, made),
+        ),
+        stages: rows,
+      };
+    });
+    return { field: new NodeField(looks, scatter, stages), made };
+  }, [models, scatter, stages]);
   useEffect(
-    () => () =>
-      sets.forEach((set) =>
-        [...set.near, ...set.far].forEach((mesh) => mesh.dispose()),
-      ),
-    [sets],
+    () => () => {
+      field.dispose();
+      for (const material of made) material.dispose();
+    },
+    [field, made],
   );
-
-  const state = useRef({
-    builtAt: null as Vector3 | null,
-    splitAt: null as Vector3 | null,
-    gathered: new Map<PropKind, Gathered[]>(),
-    drawn: [] as NodeInstance[],
-    hidden: true,
-  });
-
   useEffect(() => {
-    window.__pebbleNodes = {
-      drawn: () => {
-        const { splitAt, drawn } = state.current;
-        return (
-          splitAt && {
-            focus: splitAt.toArray(),
-            nodes: drawn.map(({ id, kind, position }) => ({
-              id,
-              look: kind,
-              position: position.toArray(),
-            })),
-          }
-        );
-      },
-    };
+    window.__pebbleNodes = { drawn: () => field.drawn() };
     return () => {
       delete window.__pebbleNodes;
     };
-  }, []);
+  }, [field]);
 
-  useFrame(({ camera }) => {
-    const current = state.current;
-    const focus = focusRef.current;
-    if (camera.position.length() - radius > MAX_ALTITUDE) {
-      if (!current.hidden)
-        sets.forEach((set) => hideMeshes([...set.near, ...set.far]));
-      current.hidden = true;
-      current.splitAt = null;
-      current.drawn = [];
-      return;
-    }
-    if (!current.builtAt || current.builtAt.distanceTo(focus) > REBUILD) {
-      current.builtAt = focus.clone();
-      current.splitAt = null;
-      current.gathered = new Map(NODE_LOOK_KINDS.map((kind) => [kind, []]));
-      for (const cell of scatter.cellsAround(focus, FAR_REACH + REBUILD))
-        for (const node of scatter.nodes(cell))
-          current.gathered
-            .get(node.kind)!
-            .push({ node, model: scatterMatrix(node) });
-    }
-    if (!current.splitAt || current.splitAt.distanceTo(focus) > RESPLIT) {
-      current.splitAt = focus.clone();
-      current.hidden = false;
-      current.drawn = [];
-      for (const set of sets) {
-        const near: Gathered[] = [];
-        const far: Gathered[] = [];
-        for (const gathered of current.gathered.get(set.kind)!) {
-          const distance = gathered.node.position.distanceTo(focus);
-          if (distance < SHADOW_REACH) near.push(gathered);
-          else if (distance < set.reach) far.push(gathered);
-        }
-        fillMeshes(
-          set.near,
-          near.map(({ model }) => model),
-          `nodes ${set.kind} near`,
-        );
-        fillMeshes(
-          set.far,
-          far.map(({ model }) => model),
-          `nodes ${set.kind} far`,
-        );
-        // what is drawn (fillMeshes reports a tier that overflows)
-        for (const { node } of [
-          ...near.slice(0, NEAR_CAPACITY),
-          ...far.slice(0, CAPACITY),
-        ])
-          current.drawn.push(node);
-      }
-    }
-  });
+  useFrame(({ camera }) =>
+    field.frame(
+      focusRef.current,
+      camera.position.length() - radius > MAX_ALTITUDE,
+      performance.now() / 1000,
+    ),
+  );
 
   return (
     <>
-      {sets.flatMap((set) =>
-        [...set.near, ...set.far].map((mesh) => (
-          <primitive key={mesh.uuid} object={mesh} />
-        )),
-      )}
+      {field.meshes().map((mesh) => (
+        <primitive key={mesh.uuid} object={mesh} />
+      ))}
     </>
   );
 }
