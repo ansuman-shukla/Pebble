@@ -6,6 +6,9 @@ in the hook lists. Each tick, after bodies and ecology and before perception and
 run last, after interrupts and before the tick's summary (where bodies end the tick). Dawn and midnight
 are local: a dawn or midnight hook gets a test `now(unit)` that says whether it is that moment at a spot this tick
 (sunrise there; local midnight by its longitude), so each system checks its own holders (citizens, stores, camps).
+An `on_event` hook is told each event as it is emitted (inside the emitting call; every hook hears every event in
+emission order, those emitted by a hook queued behind the one it hears), for a system that learns from what the others
+do. It sees the emitter's state at the `emit` call, possibly half-updated (`SimCore._tell`).
 Append rows; keep every row another stream added.
 """
 
@@ -15,7 +18,7 @@ from typing import Any
 
 from app.sim import movement, slots, wear
 from app.sim.clock import local_minute, sun_altitude_deg, sun_direction
-from app.sim.core import SimCore
+from app.sim.core import EventListener, SimCore
 from app.sim.state import System
 from app.sim.vec import Vec3, lat_lon_deg
 
@@ -31,6 +34,7 @@ class Registry:
     at_dawn: tuple[LocalHook, ...] = ()
     at_midnight: tuple[LocalHook, ...] = ()
     at_tick_end: tuple[TickHook, ...] = ()
+    on_event: tuple[EventListener, ...] = ()
 
     def __post_init__(self) -> None:
         names = [system.name for system in self.systems]

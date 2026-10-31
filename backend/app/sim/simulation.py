@@ -82,6 +82,7 @@ class Simulation:
         registry: systems.Registry = systems.REGISTRY,
     ) -> None:
         self.core = SimCore(world, planner or Planner(world), state, accepts_gift)
+        self.core.listeners = registry.on_event
         self.registry = registry
 
     @classmethod
@@ -174,6 +175,10 @@ class Simulation:
                 skills=list(citizen.skills),
                 heading_deg=citizen.heading_deg,
                 inventory=dict(citizen.inventory),
+                rank=spec.rank,
+                titles=list(spec.titles),
+                family=dict(spec.family),
+                bonds=dict(spec.bonds),
             ),
             actor=citizen,
         )

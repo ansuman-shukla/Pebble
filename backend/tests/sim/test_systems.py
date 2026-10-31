@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 import pytest
 from pydantic import JsonValue
 
+from app.observability.events import EventDraft, Spoiled
 from app.sim.clock import local_minute
 from app.sim.core import SimCore
 from app.sim.navigation import Planner
@@ -186,3 +187,27 @@ def test_a_snapshot_resumes_only_with_the_same_versions_and_systems(sim_world: S
 def test_two_systems_cannot_share_a_name() -> None:
     with pytest.raises(ValueError):
         Registry(systems=(TALLY, System[Tally]("tally", 3, new=TALLY.new, dump=TALLY.dump, load=TALLY.load)))
+
+
+def test_every_event_hook_hears_every_event_once_in_emission_order(sim_world: SimWorld, planner: Planner) -> None:
+    """The first hook emits while hearing an `item_moved`; the second must still hear the `item_moved` before the
+    event the first emitted (first in, first out), and both hear their own and each other's events."""
+    heard: dict[str, list[int]] = {"first": [], "second": []}
+
+    def first(core: SimCore, event: EventDraft) -> None:
+        heard["first"].append(event.seq)
+        assert event in core.outbox  # told from inside the emitting call, once it's out
+        if event.type == "item_moved":
+            core.emit("spoiled", Spoiled(holder="tester", holder_kind="inventory", items={"meat": 1}))
+
+    def second(_core: SimCore, event: EventDraft) -> None:
+        heard["second"].append(event.seq)
+
+    sim = Simulation.new(sim_world, seed=SEED, planner=planner, registry=Registry(on_event=(first, second)))
+    sim.add_citizen(make_spec(at=GATE))
+    sim.stock_store("store-2", "rice", 3)
+    sim.step()
+    events = sim.drain()
+    emitted = [event.seq for event in events]
+    assert heard == {"first": emitted, "second": emitted}
+    assert [event.type for event in events][-3:] == ["item_moved", "spoiled", "tick_summary"]

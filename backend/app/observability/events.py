@@ -144,6 +144,10 @@ class CitizenSpawned(Payload):
     skills: list[str] = []
     heading_deg: float = 0.0
     inventory: dict[str, int] = {}  # what they start out carrying
+    rank: int = 2  # 10 §3.2: 1 child .. 5 lord
+    titles: list[Literal["lord", "samurai", "ashigaru", "leader"]] = []
+    family: dict[str, str] = {}  # kin by citizen id: what that person is to them ("mate", "parent's sibling")
+    bonds: dict[str, int] = {}  # citizen id -> their bond beyond kin (-100..100), as the cast gives it
 
 
 class AnimalSpawned(Payload):

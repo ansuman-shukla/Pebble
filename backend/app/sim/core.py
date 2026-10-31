@@ -5,6 +5,7 @@ Perception, actions and the tick loop all work through this object; it is the on
 
 import hashlib
 import math
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -48,6 +49,7 @@ WALK_AHEAD_TICKS = 2  # how much of a mover's plan spectators get beyond this ti
 _LEVEL_RANK: dict[KnowledgeLevel, int] = {"rough": 1, "visited": 2}
 
 GiftPolicy = Callable[[Citizen, Citizen, str, int], bool]  # (giver, receiver, item, count) -> accepted
+EventListener = Callable[["SimCore", EventDraft], None]  # told each event as it is emitted (a system's `on_event`)
 TimedPoint = tuple[Vec3, float]  # a spot and the game second after the tick's start someone is there
 
 
@@ -77,6 +79,9 @@ class SimCore:
         self.planner = planner
         self.state = state
         self.outbox: list[EventDraft] = []
+        self.listeners: tuple[EventListener, ...] = ()  # the registry's `on_event` hooks (`app.sim.systems`)
+        self._unheard: deque[EventDraft] = deque()  # emitted while listeners were being told an earlier event
+        self._telling = False
         self.hurt: dict[str, tuple[str, int]] = {}  # citizens hurt this tick: (what happened, injured seq)
         self.strides: dict[str, Stride] = {}  # citizens who moved this tick: how (every move must leave one)
         self._sun_tick = -1
@@ -98,21 +103,38 @@ class SimCore:
         self.state.next_seq += 1
         if actor_kind is None:
             actor_kind = "world" if actor is None else "animal" if isinstance(actor, Animal) else "citizen"
-        self.outbox.append(
-            EventDraft(
-                seq=seq,
-                tick=self.state.tick,
-                type=event_type,
-                actor_kind=actor_kind,
-                actor_id=actor.id if actor is not None else None,
-                cell=actor.cell if actor is not None else None,
-                position=actor.position if actor is not None else None,
-                visibility=visibility,
-                cause_seq=cause_seq,
-                payload=payload,
-            )
+        draft = EventDraft(
+            seq=seq,
+            tick=self.state.tick,
+            type=event_type,
+            actor_kind=actor_kind,
+            actor_id=actor.id if actor is not None else None,
+            cell=actor.cell if actor is not None else None,
+            position=actor.position if actor is not None else None,
+            visibility=visibility,
+            cause_seq=cause_seq,
+            payload=payload,
         )
+        self.outbox.append(draft)
+        self._tell(draft)
         return seq
+
+    def _tell(self, draft: EventDraft) -> None:
+        """Tell every listener each event, in emission order: one a listener emits while hearing another waits until
+        all listeners have heard that one (first in, first out). A listener sees the world as the emitter left it at
+        the `emit` call, which may be half-way through what the emitter does (a theft's goods not yet moved)."""
+        self._unheard.append(draft)
+        if self._telling:
+            return
+        self._telling = True
+        try:
+            while self._unheard:
+                event = self._unheard.popleft()
+                for listen in self.listeners:
+                    listen(self, event)
+        finally:
+            self._telling = False
+            self._unheard.clear()
 
     # --- time and light ---
 

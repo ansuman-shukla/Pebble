@@ -21,6 +21,7 @@ FARM_GROWTH = 12  # measures of rice an hour of tending ripens
 FIELD_ID = "rice-fields"  # the town's paddies: a place, and the store their ripe rice waits in
 
 WorkFinisher = Callable[[SimCore, Citizen, ActionState], str]  # does the task's work; returns the result text
+WorkTiming = Callable[[SimCore, Citizen], int | str]  # minutes the task takes now, or why it can't be done now
 
 
 def farm(core: SimCore, citizen: Citizen, _action: ActionState) -> str:
@@ -81,6 +82,7 @@ class WorkTask:
     label: str = ""  # what they are doing, for spectators
     done: str = ""  # the result text when finished (tasks without a finisher)
     finish: WorkFinisher | None = None  # what finishing the task does to the world, and the result text
+    timing: WorkTiming | None = None  # a task whose length or chance hangs on the world (else `minutes`, any time)
 
 
 WORK_TASKS: tuple[WorkTask, ...] = (
@@ -186,6 +188,9 @@ def start_work(core: SimCore, citizen: Citizen, action: Work) -> int:
         if not here:
             return settled(core, citizen, "work", "failed", task.nowhere)
         area = (here[0].centre, here[0].radius_m)
+    minutes = task.minutes if task.timing is None else task.timing(core, citizen)
+    if isinstance(minutes, str):  # before a slot is claimed, so a refusal holds none
+        return settled(core, citizen, "work", "failed", minutes)
     slot = slots.take_work_slot(core, citizen, task.name, area)  # a task with slots is done at one (loom, stall)
     if slot == "none here":
         return settled(core, citizen, "work", "failed", task.nowhere)
@@ -195,7 +200,7 @@ def start_work(core: SimCore, citizen: Citizen, action: Work) -> int:
     if isinstance(slot, slots.Slot):
         args |= slots.spot_args(slot)
     work = begin(core, citizen, "work", task.label, args)
-    work.item, work.store_id, work.until_tick = task.name, store_id, core.state.tick + task.minutes
+    work.item, work.store_id, work.until_tick = task.name, store_id, core.state.tick + minutes
     return work.number
 
 
