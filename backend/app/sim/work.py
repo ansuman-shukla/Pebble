@@ -10,7 +10,7 @@ from app.observability.events import ItemLocation, JsonScalar
 from app.sim import slots, society
 from app.sim.acting import begin, settled
 from app.sim.core import SimCore
-from app.sim.exchange import store_in_reach
+from app.sim.exchange import storehouse_in_reach
 from app.sim.items import ITEMS, amount_words
 from app.sim.perception import HOME_RADIUS_M, normalize
 from app.sim.state import ActionState, Citizen
@@ -183,7 +183,7 @@ def start_work(core: SimCore, citizen: Citizen, action: Work) -> int:
     store_id = None
     area: tuple[Vec3, float] = (citizen.position, 0.0)  # where its slots may be: the place, or round the home's door
     if task.at == "storehouse":
-        store_id = store_in_reach(core, citizen)
+        store_id = storehouse_in_reach(core, citizen)
         if store_id is None:
             return settled(core, citizen, "work", "failed", task.nowhere)
         if not any(ITEMS[item].food > 0 for item in citizen.inventory):

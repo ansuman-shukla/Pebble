@@ -5,7 +5,7 @@ inventory when done; an eat or drink cut short keeps what it achieved so far.
 import math
 
 from app.observability.events import ItemLocation, ResourceChanged
-from app.sim import fire
+from app.sim import fire, ownership
 from app.sim.acting import begin, item_name, settled, stack_in_reach
 from app.sim.core import REACH_M, SimCore
 from app.sim.ecology import schedule_regrowth
@@ -149,7 +149,9 @@ def _eat(core: SimCore, citizen: Citizen, action: ActionState, pieces: int) -> s
     eaten = min(pieces, available)
     if eaten <= 0:
         return None
+    stole = None
     if store is not None:
+        stole = ownership.took(core, citizen, str(action.store_id), item, eaten)  # someone else's: stolen (§2.6)
         store[item] -= eaten
         if store[item] == 0:
             del store[item]
@@ -167,7 +169,7 @@ def _eat(core: SimCore, citizen: Citizen, action: ActionState, pieces: int) -> s
     kind = ITEMS[item]
     cooked = kind.raw and fire.near_lit_fire(core, citizen.position, fire.REACH_M)
     citizen.body.hunger = max(0.0, citizen.body.hunger - eaten * kind.food * (COOKED if cooked else 1.0))
-    eaten_seq = core.item_moved(citizen, item, eaten, source, ItemLocation(kind="eaten", id=citizen.id))
+    eaten_seq = core.item_moved(citizen, item, eaten, source, ItemLocation(kind="eaten", id=citizen.id), stole)
     full = " You feel full." if citizen.body.hunger < 10 else ""
     words = amount_words(eaten, kind)
     if cooked:
