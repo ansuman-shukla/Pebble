@@ -521,8 +521,10 @@ def _owner_group(society: Society, owner: str) -> Region:
     if owner in GROUPS:
         return owner
     groups = {member.group for member in society.members.values() if member.home == owner}
-    if not groups:  # nobody in society lives there (an empty house's chest): only town households own stores
-        return "town"
+    if not groups:  # nobody in society lives there: a camp's empty lean-to is its band's, an empty house the town's
+        site, colon, _ = owner.rpartition(":")
+        camp = {member.group for member in society.members.values() if colon and (member.home or "").startswith(site)}
+        groups = camp or {"town"}
     if len(groups) != 1:
         raise ValueError(f"the owner {owner!r} is a home of several groups")
     return groups.pop()

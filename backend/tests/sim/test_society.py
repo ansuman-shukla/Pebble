@@ -280,6 +280,12 @@ def test_a_theft_from_a_household_nobody_lives_in_wrongs_the_town(new_sim: Calla
     assert ("kaz", "town", -10, -25, "theft") in _changes(sim.drain())  # seen by the farmers beside him
 
 
+def test_a_theft_from_an_empty_lean_to_wrongs_its_camp_s_band(new_sim: Callable[..., Simulation]) -> None:
+    sim = _town(new_sim)  # band A lives in shelter-n; nobody in shelter-w
+    seq = _steal(sim, "kaz", owner="band_a_camp:shelter-w")
+    assert SOCIETY.of(sim.state).deeds[seq].group == "band_a"
+
+
 def test_a_home_of_two_groups_can_t_own_a_theft(new_sim: Callable[..., Simulation]) -> None:
     sim = _scene(new_sim, {"citizen_id": "kaz", "region": "band_b"}, {"citizen_id": "genzo"})  # both of main-w-3
     with pytest.raises(ValueError, match="a home of several groups"):
