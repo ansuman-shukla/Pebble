@@ -35,7 +35,7 @@ import {
  * model's `tick` loop moves, and the named hooks living props drive (swinging door leaves, a fire's `flame` and
  * `fuel`, the forge's `fire`, dressing like a stall's `crates` or a chest's `lid`). Their vertices carry a
  * `partIndex` and their moves come from a PartMoves texture (prop-motion.ts). Plants sway and banners wave in
- * the wind (wind.ts).
+ * the wind (wind.ts). Stage pieces (`fruit-N`, ...) carry a `stagePiece` for nodes' staged material.
  */
 
 /** Named nodes living props drive (with every mesh under them). */
@@ -50,6 +50,9 @@ const LIVE_NODES = new Set([
 ]);
 /** Polyfork names each model's loop `tick`. */
 const LOOP_CLIP = 'tick';
+/** Parts that collapse one by one as a node's stock falls (10 §5.2, §5.5): `fruit-N`, `yield-N`, `sheaf-row-N`,
+ * and the taro root patch's `leaf-N`. */
+const PIECE = /^(?:fruit|yield|sheaf-row|leaf)-(\d+)$/;
 
 /** A sub-mesh that moves inside a merged part (its vertices' `partIndex` is its place in the list + 1). */
 export interface MovingPart {
@@ -67,8 +70,6 @@ interface KindPart {
   material: Material;
   /** The still shadow pass's material when the part sways (else the default). */
   depthMaterial?: Material;
-  /** The part's transform inside the model: identity, as the geometry is baked at rest. */
-  inModel: Matrix4;
   /** The sub-meshes inside it that move (empty for a part that never moves). */
   moving: MovingPart[];
   /** The GLB's own material and the model's wind, to build moving looks from. */
@@ -78,6 +79,11 @@ interface KindPart {
 
 export interface KindModel {
   parts: KindPart[];
+  /**
+   * How many stage pieces the model has (0: none). Each piece's vertices carry a `stagePiece` of its rank in N
+   * order + 1 (every other vertex 0), so the staged material can collapse the pieces past a node's stock.
+   */
+  pieces: number;
   /** The model's baked `tick` loop, when it was given and moves some part. */
   clip: ClipTrack | null;
   /** The swinging door leaves, when the model has some. */
@@ -152,6 +158,47 @@ function windOf(
   return profile;
 }
 
+/** The stage piece number of the node at or above `object` (`fruit-3` → 3), else null. */
+function pieceAbove(object: Object3D, root: Object3D) {
+  for (
+    let node: Object3D | null = object;
+    node && node !== root;
+    node = node.parent
+  ) {
+    const match = PIECE.exec(node.name);
+    if (match) return Number(match[1]);
+  }
+  return null;
+}
+
+/** Adds `stagePiece` to every geometry of a model with stage pieces; returns how many pieces it has. */
+function markPieces(
+  meshes: Mesh[],
+  geometries: Map<Mesh, BufferGeometry>,
+  source: Object3D,
+) {
+  const numbers = new Map(
+    meshes.map((mesh) => [mesh, pieceAbove(mesh, source)]),
+  );
+  const order = [
+    ...new Set([...numbers.values()].filter((n) => n !== null)),
+  ].sort((a, b) => a - b);
+  if (order.length === 0) return 0;
+  for (const mesh of meshes) {
+    const geometry = geometries.get(mesh)!;
+    const number = numbers.get(mesh)!;
+    const rank = number === null ? 0 : order.indexOf(number) + 1;
+    geometry.setAttribute(
+      'stagePiece',
+      new Float32BufferAttribute(
+        new Float32Array(geometry.attributes.position.count).fill(rank),
+        1,
+      ),
+    );
+  }
+  return order.length;
+}
+
 function buildModel(
   scene: Object3D,
   id: string,
@@ -182,6 +229,7 @@ function buildModel(
     meshes.map((mesh) => [mesh, bakeAtRest(mesh, toModel)]),
   );
   const wind = windOf(id, meshes, geometries, source);
+  const pieces = markPieces(meshes, geometries, source);
 
   const looping: Mesh[] = [];
   const groups = new Map<
@@ -232,7 +280,6 @@ function buildModel(
     return {
       geometry,
       ...stillLooks(material, wind),
-      inModel: new Matrix4(),
       moving,
       base: material,
       wind,
@@ -241,7 +288,7 @@ function buildModel(
 
   const clip =
     loop && looping.length > 0 ? bakeClip(source, loop, looping) : null;
-  return { parts, clip, doorway };
+  return { parts, clip, doorway, pieces };
 }
 
 /** A part's colour and shadow materials that apply `moves` to its moving sub-meshes (dispose them with it). */

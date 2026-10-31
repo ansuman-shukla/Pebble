@@ -6,6 +6,7 @@ import { Vector3 } from 'three';
 import manifest from '../../src/lib/world/asset-manifest.json' with { type: 'json' };
 import type { Site, TownView, WorldView } from '../../src/lib/client/types.gen';
 import { BIOME_PROPS } from '../../src/lib/world/biome-props';
+import type { FloraTable } from '../../src/lib/world/flora';
 import {
   colliderIdsOf,
   type ColliderFile,
@@ -37,7 +38,7 @@ import {
 } from '../../src/lib/world/walk-charts';
 
 /*
- * The globe walker outside the browser, on the real world from the backend: the same charts, scattered props
+ * The globe walker outside the browser, on the real world from the backend: the same charts, decor, flora nodes
  * and colliders files the page builds (town surfaces are flat here: no bridge raycasts).
  */
 
@@ -84,7 +85,11 @@ export interface Explore {
   site: (id: string) => Site;
 }
 
-export function explore(view: WorldView, town: TownView): Explore {
+export function explore(
+  view: WorldView,
+  town: TownView,
+  flora: FloraTable,
+): Explore {
   const terrain = buildTerrain(decodeWorld(view));
   const R = view.radius_m;
   const scatter = createScatter({
@@ -98,6 +103,8 @@ export function explore(view: WorldView, town: TownView): Explore {
       radius: site.kind === 'town' ? TOWN_CLEARING : SITE_CLEARING,
     })),
     rivers: view.rivers.map((river) => river.cells),
+    flora,
+    places: view.places,
   });
   const colliders = loadColliders([
     ...colliderIdsOf(town.placements),

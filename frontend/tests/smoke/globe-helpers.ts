@@ -8,6 +8,8 @@ import {
   tangentFrame,
   WATER_BIOMES,
 } from '../../src/lib/world/globe';
+import type { WorldView } from '../../src/lib/client/types.gen';
+import { decodeFlora, type FloraTable } from '../../src/lib/world/flora';
 
 /*
  * Shared by the globe browser tests: open the page, read the player off the world element's data attributes,
@@ -28,6 +30,21 @@ export interface Sample {
 
 /** The backend the tests read the world from directly (PLAYWRIGHT_API_URL points them at a worktree's own). */
 export const WORLD_URL = `${process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:8100'}/api/v1/world`;
+
+/** The flora table from the same backend. */
+export const FLORA_URL = `${process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:8100'}/api/v1/world/flora`;
+
+/** The world's flora table from its packed bytes. */
+export function floraOf(view: WorldView, body: Buffer): FloraTable {
+  return decodeFlora(
+    body.buffer.slice(
+      body.byteOffset,
+      body.byteOffset + body.byteLength,
+    ) as ArrayBuffer,
+    view.places.flora_kinds,
+    view.places.flora_nodes,
+  );
+}
 
 export const DRAW_CALL_BUDGET = 300;
 /** The town's plateau and its blend (metres from the anchor): beyond it is the wild. */

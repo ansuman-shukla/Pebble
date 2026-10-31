@@ -261,3 +261,37 @@ test('models are built once per scene and shared', async () => {
     await model(PROPS.cherry_tree),
   );
 });
+
+test("stage pieces carry their rank: the berry bush's 9 fruit, the taro's 11 leaves, none on an oak", async () => {
+  const ranksOf = async (kind: keyof typeof PROPS) => {
+    const { scene } = await load(PROPS[kind]);
+    const built = kindModel(scene, PROPS[kind]);
+    const ranks = new Set<number>();
+    let unranked = 0;
+    for (const part of built.parts) {
+      const attribute = part.geometry.getAttribute('stagePiece');
+      if (!attribute) continue;
+      for (let i = 0; i < attribute.count; i++) {
+        const rank = attribute.getX(i);
+        if (rank === 0) unranked += 1;
+        else ranks.add(rank);
+      }
+    }
+    return {
+      pieces: built.pieces,
+      ranks: [...ranks].sort((a, b) => a - b),
+      unranked,
+    };
+  };
+  const bush = await ranksOf('berry_bush');
+  expect(bush.pieces).toBe(9);
+  expect(bush.ranks).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  // the bush itself is no piece
+  expect(bush.unranked).toBeGreaterThan(100);
+  const taro = await ranksOf('root_patch');
+  expect(taro.pieces).toBe(11);
+  expect(taro.ranks).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  expect(taro.unranked).toBeGreaterThan(0);
+  const oak = await ranksOf('oak_tree');
+  expect(oak).toEqual({ pieces: 0, ranks: [], unranked: 0 });
+});
