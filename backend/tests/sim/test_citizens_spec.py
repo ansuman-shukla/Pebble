@@ -11,6 +11,7 @@ import yaml
 from pydantic import ValidationError
 
 from app.core.config import REPO_ROOT
+from app.observability.events import CitizenSpawned
 from app.sim.citizens import AMBITION_ARGS, CITIZENS, KIN_INVERSE, CitizenSpec, CitizensSpec, load_citizens
 from app.sim.simulation import Simulation
 from app.sim.state import age_group
@@ -310,3 +311,15 @@ def test_everyone_spawns_at_home_ground_and_knows_their_way_home(new_sim: Callab
         assert sim.world.distance_m(citizen.position, home.door) < 140, spec.id
     assert {c.inventory.get("dried meat", 0) > 0 for c in sim.state.citizens.values() if c.region != "town"} == {True}
     assert NEW <= set(sim.state.citizens)
+
+
+def test_a_citizen_s_spawn_tells_their_rank_titles_kin_and_bonds(new_sim: Callable[..., Simulation]) -> None:
+    sim = new_sim()
+    sim.add_cast(load_citizens(CITIZENS))
+    spawned = {e.payload.id: e.payload for e in sim.drain() if isinstance(e.payload, CitizenSpawned)}
+    ama = spawned["ama"]
+    assert (ama.rank, ama.titles, ama.family, ama.bonds) == (4, ["leader"], {"bo": "mate", "lia": "child"}, {"oru": 50})
+    assert (spawned["hana"].rank, spawned["hana"].titles) == (1, [])
+    for spec in load_citizens(CITIZENS).citizens:
+        told = spawned[spec.id]
+        assert (told.rank, told.titles, told.family, told.bonds) == (spec.rank, spec.titles, spec.family, spec.bonds)
