@@ -5,9 +5,9 @@ doesn't end the trip, a refusal does; a forager badly bitten runs from a wolf in
 from collections.abc import Callable
 
 from app.brains.brain import UtilityBrain
+from app.brains.grounds import DEN_CLEAR_M, GROUND_FOOD, GROUNDS_M, STOP_CLEAR_M, WAYS, forage_grounds
 from app.brains.profile import BrainProfile, Ground
 from app.brains.routines import TRIP_LEGS, TRIP_TIMES
-from app.engine import DEN_CLEAR_M, GROUND_FOOD, GROUNDS_M, STOP_CLEAR_M, forage_grounds
 from app.sim import nodes
 from app.sim.destinations import COMPASS_BEARING, ROUGH_DISTANCE_M
 from app.sim.simulation import Simulation
@@ -18,7 +18,6 @@ from tests.sim_helpers import add_animal, make_spec, nearest_node, skip_to, stan
 
 HOME_A = "band_a_camp:shelter-n"
 CAMP = "band_a_camp"
-WAYS: tuple[Compass, ...] = ("north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west")
 
 
 def _brain(sim: Simulation, citizen_id: str, ways: tuple[Compass, ...], legs: int = TRIP_LEGS) -> UtilityBrain:
@@ -60,16 +59,15 @@ def _walked_towards(sim: Simulation, citizen_id: str) -> str:
 
 def test_the_grounds_are_the_ways_with_most_food_beyond_the_home_ring(new_sim: Callable[..., Simulation]) -> None:
     sim = new_sim()
-    grounds = forage_grounds(sim.world, "band_a")
+    kept = forage_grounds(sim.world, CAMP)
     camp = sim.world.places[CAMP].centre
     dens = _dens(sim)
     totals = sim.world.nodes.food_by_bearing(
         sim.world.grid, camp, *GROUNDS_M, GROUND_FOOD, avoid=dens, clear_m=DEN_CLEAR_M
     )
-    assert len(grounds) == 3 and len({ground.way for ground in grounds}) == 3
-    picked = [totals[WAYS.index(ground.way)] for ground in grounds]
+    assert len(kept) == 3 and len({ground.way for ground in kept}) == 3
+    picked = [totals[WAYS.index(ground.way)] for ground in kept]
     assert picked == sorted(picked, reverse=True) and picked[0] == max(totals)  # most food first
-    assert forage_grounds(sim.world, "town") == ()
 
 
 def _dens(sim: Simulation) -> list[Vec3]:
@@ -93,14 +91,14 @@ def test_forage_trips_stop_short_of_the_dens(new_sim: Callable[..., Simulation])
         return all(sim.world.distance_m(_stop(sim, region, way, leg), den) >= STOP_CLEAR_M for den in dens)
 
     for region in ("band_a", "band_b"):
-        for ground in forage_grounds(sim.world, region):
+        for ground in forage_grounds(sim.world, f"{region}_camp"):
             assert all(clear(region, ground.way, leg) for leg in range(ground.legs + 1))
             assert ground.legs == TRIP_LEGS or not clear(region, ground.way, ground.legs + 1)
     camp = sim.world.places["band_b_camp"].centre
     near_dens = sim.world.nodes.food_by_bearing(sim.world.grid, camp, *GROUNDS_M, GROUND_FOOD)
     richest = [WAYS[sector] for sector in sorted(range(len(WAYS)), key=lambda sector: -near_dens[sector])[:3]]
     by_dens = [way for way in richest if not all(clear("band_b", way, leg) for leg in range(TRIP_LEGS + 1))]
-    kept = {ground.way: ground.legs for ground in forage_grounds(sim.world, "band_b")}
+    kept = {ground.way: ground.legs for ground in forage_grounds(sim.world, "band_b_camp")}
     assert by_dens  # the wolves' and the bears' dens lie on band B's richest ways
     assert all(kept.get(way, -1) < TRIP_LEGS for way in by_dens)  # dropped, or walked on only so far
     away = sim.world.nodes.food_by_bearing(

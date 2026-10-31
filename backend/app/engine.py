@@ -20,15 +20,14 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from types import FrameType
-from typing import get_args
 
 import psycopg
 from sqlalchemy import Engine as DbEngine
 from sqlalchemy.exc import DBAPIError
 from sqlmodel import Session
 
-from app.brains.profile import BrainProfile, Ground, known_titles
-from app.brains.routines import TRIP_LEGS
+from app.brains.grounds import forage_grounds
+from app.brains.profile import BrainProfile, known_titles
 from app.brains.runner import CitizenBrains
 from app.core.db import create_db_engine
 from app.db.models import Run
@@ -37,19 +36,16 @@ from app.lib.ulid import UlidFactory
 from app.observability.store import EventStore, create_run, discard_after, latest_run, latest_snapshot, pending_commands
 from app.sim.citizens import CITIZENS, load_citizens
 from app.sim.clock import SECONDS_PER_TICK, TICKS_PER_HOUR
-from app.sim.destinations import COMPASS_BEARING, ROUGH_DISTANCE_M
 from app.sim.navigation import Planner
 from app.sim.ownership import fed_by_granary
 from app.sim.simulation import Simulation
 from app.sim.snapshot import SimSnapshot, restore, take_snapshot
 from app.sim.snapshot import resumable as snapshot_resumable
-from app.sim.vec import Vec3, step_towards
 from app.sim.world import SimWorld, load_sim_world
 from app.world.generate import GENERATOR
 from app.world.spec import load_site_kinds, load_world_spec
 from app.world.store import WorldKey, world_key
 from app.world_api.facade import WorldApi
-from app.world_api.models import Compass
 
 POLL_S = 0.25  # how often a waiting engine looks for commands
 HEARTBEAT_S = 1.0  # a waiting engine (paused, or between real-time ticks) stamps the run this often
@@ -62,47 +58,6 @@ log = logging.getLogger("pebble.engine")
 
 Brain = Callable[[Simulation], None]  # called before every tick
 HOME_AREAS = {"town": "town", "band_a": "band_a_camp", "band_b": "band_b_camp"}  # region -> its home place id
-GROUNDS_M = (450.0, 1000.0)  # a band's food grounds: past the thin home ring, the middle ring (10 §1.2)
-GROUND_FOOD = frozenset({"berries", "roots", "nuts"})
-GROUNDS_KEPT = 3
-GROUND_LEAST = 100  # food (pieces when full) a way must hold to be worth the walk
-DEN_CLEAR_M = 150.0  # forage trips keep this far from the dens (a bold hunter walked into a wolf's den on one)
-GATHER_SPREAD_M = 150.0  # how far from where a walk ends foragers go for the food they see ("some way off")
-STOP_CLEAR_M = DEN_CLEAR_M + GATHER_SPREAD_M  # so a trip's stops keep this far from the dens
-
-
-def forage_grounds(world: SimWorld, region: str) -> tuple[Ground, ...]:
-    """The ways from a band's camp its food lies beyond the home ring (10 §1.2), most first: the land a band knows,
-    given to its scripted brains (a mind learns it by walking it). The band knows its dens too: food by a den doesn't
-    count, and a trip's stops (the long walk out, then each short walk on) keep STOP_CLEAR_M from every den (the food a
-    forager walks to from there then lies DEN_CLEAR_M clear), so a way whose first stop is too near one isn't taken
-    and the walks on stop short of one."""
-    if region == "town":
-        return ()
-    camp = world.places[HOME_AREAS[region]].centre
-    dens = [feature.position for feature in world.features if feature.kind == "den"]
-    totals = world.nodes.food_by_bearing(world.grid, camp, *GROUNDS_M, GROUND_FOOD, avoid=dens, clear_m=DEN_CLEAR_M)
-    ways: tuple[Compass, ...] = get_args(Compass)  # north first, clockwise: the sectors' order
-    ranked = sorted(range(len(totals)), key=lambda sector: (-totals[sector], sector))
-    grounds: list[Ground] = []
-    for sector in ranked:
-        if totals[sector] < GROUND_LEAST or len(grounds) == GROUNDS_KEPT:
-            break
-        legs = _clear_legs(world, camp, ways[sector], dens)
-        if legs >= 0:
-            grounds.append(Ground(ways[sector], legs))
-    return tuple(grounds)
-
-
-def _clear_legs(world: SimWorld, camp: Vec3, way: Compass, dens: Sequence[Vec3]) -> int:
-    """How many short walks on past the long walk out keep every stop STOP_CLEAR_M from the dens (-1: not even the
-    long walk's end)."""
-    for leg in range(TRIP_LEGS + 1):
-        metres = ROUGH_DISTANCE_M["a long walk"] + leg * ROUGH_DISTANCE_M["a short walk"]
-        stop = step_towards(camp, COMPASS_BEARING[way], metres, world.radius_m)
-        if any(world.distance_m(stop, den) < STOP_CLEAR_M for den in dens):
-            return leg - 1
-    return TRIP_LEGS
 
 
 def citizen_brains(sim: Simulation, seed: int) -> CitizenBrains:
@@ -110,7 +65,9 @@ def citizen_brains(sim: Simulation, seed: int) -> CitizenBrains:
     places = sim.world.places
     cast = sim.state.citizens
     traits = {spec.id: spec.traits for spec in load_citizens(CITIZENS).citizens if spec.traits is not None}
-    grounds = {region: forage_grounds(sim.world, region) for region in HOME_AREAS}
+    grounds = {
+        region: forage_grounds(sim.world, camp) if region != "town" else () for region, camp in HOME_AREAS.items()
+    }
     return CitizenBrains(
         (
             (
@@ -127,7 +84,7 @@ def citizen_brains(sim: Simulation, seed: int) -> CitizenBrains:
                     ),
                     granary=citizen.region == "town" and fed_by_granary(citizen),
                     honesty=traits[citizen.id].honesty if citizen.id in traits else 0.5,
-                    grounds=grounds[citizen.region],
+                    grounds=grounds.get(citizen.region, ()),
                 ),
             )
             for citizen in sim.core.citizens()
