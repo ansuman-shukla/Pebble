@@ -141,14 +141,14 @@ def start(core: SimCore, citizen: Citizen, action: Action) -> int:
     current = citizen.action
     if current is not None and current.collapsed and citizen.body.energy < COLLAPSE_WAKE_ENERGY:
         return settled(core, citizen, action.action, "failed", "You are too exhausted to move.")
+    starter = STARTS.get(action.action)
+    if starter is None:  # in the contract, not in the world yet: what you are doing goes on
+        return settled(core, citizen, action.action, "failed", NOT_YET)
     if current is not None:
         text = "You get up." if current.kind == "sleep" else f"You stop {VERB[current.kind]} to do something else."
         _interrupt(core, citizen, current, text, None)
         if not citizen.body.alive:  # what they had eaten so far killed them
             return settled(core, citizen, action.action, "failed", "Everything goes dark.")
-    starter = STARTS.get(action.action)
-    if starter is None:
-        return settled(core, citizen, action.action, "failed", NOT_YET)
     return starter(core, citizen, action)
 
 

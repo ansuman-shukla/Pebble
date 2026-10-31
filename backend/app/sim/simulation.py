@@ -31,8 +31,8 @@ from app.sim.state import Animal, Citizen, GroundStack, PlaceKnowledge, WorldSta
 from app.sim.vec import Vec3, step_towards
 from app.sim.world import SimWorld, site_unit
 from app.world_api.models import (
+    FREE_ACTIONS,
     INSTANT_ACTIONS,
-    NOT_YET_ACTIONS,
     Action,
     ActionResult,
     CheckSelf,
@@ -254,15 +254,15 @@ class Simulation:
         return view
 
     def instant(self, citizen_id: str, action: Action) -> ActionResult:
-        """Run an instant action (say, pick_up, drop, give; the not-yet ones answer in-world)."""
-        if action.action not in INSTANT_ACTIONS and action.action not in NOT_YET_ACTIONS:
+        """Run an instant action (say, pick_up, ...; one the world can't do yet answers in-world and wakes nobody)."""
+        if action.action not in INSTANT_ACTIONS:
             raise ValueError(f"{action.action} is durative; use start()")
         if isinstance(action, LookAround | CheckSelf):
             raise ValueError("look_around and check_self return perceptions; use perceive() / check_self()")
         citizen = self._actor(citizen_id)
-        if action.action in NOT_YET_ACTIONS:
+        if action.action not in actions.INSTANTS:
             return actions.not_yet(self.core, citizen, action.action)
-        if citizen.body.asleep:
+        if citizen.body.asleep and action.action not in FREE_ACTIONS:
             sleep = citizen.action
             if sleep is not None and sleep.collapsed and citizen.body.energy < COLLAPSE_WAKE_ENERGY:
                 return refuse(self.core, citizen, action.action, "You are too exhausted.")

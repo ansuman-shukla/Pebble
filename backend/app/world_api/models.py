@@ -4,7 +4,7 @@ One source for the Python facade used by scripted brains, the MCP tool schemas o
 OpenAPI types of the spectator UI. Everything a mind reads is in-world words: no numbers it wouldn't know, no ids.
 """
 
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -18,7 +18,23 @@ Nearness = Literal["right beside you", "a few paces", "close by", "some way off"
 # what a thing in view is (fresh water, the sea, food, your home, a shelter, a fire pit, wood or reeds, an item on the
 # ground, any other building)
 ThingKind = Literal["water", "sea", "food", "home", "shelter", "fire", "material", "item", "building"]
-ResourceName = Literal["berries", "roots", "nuts", "reeds", "wood"]  # wild plants, as `gather` names them
+# what `gather` takes from the wild: plants, the paddies' rice and the minerals of seams, fields, bars and pools
+ResourceName = Literal["berries", "roots", "nuts", "reeds", "wood", "rice", "flint", "obsidian", "iron sand", "gold"]
+# the tasks `work` does, as it names them
+WorkTask = Literal["farm", "store food", "guard", "trade", "weave", "govern", "ring bell", "pray"]
+# what `craft` makes, each at its station: spears and the stone axe at a fire pit, iron at the forge, cloth and packs
+# at a loom, dried meat at a drying rack
+RecipeName = Literal[
+    "flint spear",
+    "obsidian spear",
+    "iron spear",
+    "stone axe",
+    "iron axe",
+    "sickle",
+    "cloth",
+    "pack",
+    "dried meat",
+]
 # the local sun, coarsely; `Perception.time` says the same in a sentence
 TimeOfDay = Literal[
     "pre-dawn",
@@ -55,6 +71,17 @@ ActionName = Literal[
     "flee",
     "wait",
     "recall",
+    # contract v1 (draft)
+    "buy",
+    "sell",
+    "stash",
+    "craft",
+    "accuse",
+    "seize",
+    "judge",
+    "tend",
+    "gesture",
+    "set_goal",
 ]
 Outcome = Literal["done", "interrupted", "failed"]
 Pace = Literal["walk", "run"]  # how walk_to and follow go; running tires you and turns to a jog when you are spent
@@ -63,8 +90,12 @@ Driver = Literal["hunger", "thirst", "rest", "danger", "duty", "ambition", "soci
 PriceWord = Literal["dear", "fair", "cheap"]  # a stall's price for a good against what the good is worth
 Sentence = Literal["fine", "confine"]  # what a judge hands down
 
-INSTANT_ACTIONS: frozenset[ActionName] = frozenset({"look_around", "check_self", "say", "pick_up", "drop", "give"})
-NOT_YET_ACTIONS: frozenset[ActionName] = frozenset({"recall"})  # typed now, answered in phase B (05-memory)
+CONTRACT_VERSION = "v1-draft"  # D96: C1 owns the draft through wave 3; Q1 freezes it as contract_v1.json
+INSTANT_ACTIONS: frozenset[ActionName] = frozenset(
+    ("look_around", "check_self", "say", "pick_up", "drop", "give", "recall")
+    + ("buy", "sell", "stash", "accuse", "gesture", "set_goal")
+)
+FREE_ACTIONS: frozenset[ActionName] = frozenset({"set_goal"})  # take no time and leave the body be: sleepers sleep on
 
 
 class _Model(BaseModel):
@@ -124,16 +155,18 @@ class Say(_Model):
 class WalkTo(_Model):
     action: Literal["walk_to"] = "walk_to"
     target: Target
+    pace: Pace = "walk"
 
 
 class Follow(_Model):
     action: Literal["follow"] = "follow"
     person: str = Field(min_length=1, max_length=120)
+    pace: Pace = "walk"
 
 
 class Gather(_Model):
     action: Literal["gather"] = "gather"
-    resource: str = Field(min_length=1, max_length=60)
+    resource: str = Field(min_length=1, max_length=60, examples=list(get_args(ResourceName)))
 
 
 class Fish(_Model):
@@ -189,7 +222,7 @@ class Sleep(_Model):
 
 class Work(_Model):
     action: Literal["work"] = "work"
-    task: str = Field(min_length=1, max_length=60)
+    task: str = Field(min_length=1, max_length=60, examples=list(get_args(WorkTask)))
 
 
 class Attack(_Model):
@@ -209,6 +242,103 @@ class Wait(_Model):
 class Recall(_Model):
     action: Literal["recall"] = "recall"
     about: str = Field(min_length=1, max_length=200)
+
+
+# --- contract v1 (draft): until its stream lands, an action answers "You can't do that yet." ---
+
+
+class Buy(_Model):  # the market stall (E2)
+    """Buy a good at an open market stall, paying in coins; goods are sold in lots."""
+
+    action: Literal["buy"] = "buy"
+    item: str = Field(min_length=1, max_length=60)
+    amount: int = Field(ge=1, le=999)
+
+
+class Sell(_Model):  # the market stall (E2)
+    """Sell a good you carry to an open market stall, which buys only what it sells and only with coins it holds."""
+
+    action: Literal["sell"] = "sell"
+    item: str = Field(min_length=1, max_length=60)
+    amount: int = Field(ge=1, le=999)
+
+
+class Stash(_Model):  # ownership (E3)
+    """Put things you carry into your own chest within reach (the merchant: into the stall)."""
+
+    action: Literal["stash"] = "stash"
+    item: str = Field(min_length=1, max_length=60)
+    amount: int = Field(ge=1, le=999)
+
+
+class Craft(_Model):  # crafting (E2)
+    """Make a tool or good from what you carry, at its station within reach, if you have the skill."""
+
+    action: Literal["craft"] = "craft"
+    recipe: str = Field(min_length=1, max_length=60, examples=list(get_args(RecipeName)))
+
+
+class Accuse(_Model):  # justice (J1)
+    """Tell someone awake within speaking range every deed you know of a person."""
+
+    action: Literal["accuse"] = "accuse"
+    person: str = Field(min_length=1, max_length=120)
+    to: str = Field(min_length=1, max_length=120)
+
+
+class Seize(_Model):  # justice (J1)
+    """Try to take hold of a person within reach; held, they can only look, speak and wait, and go where you lead."""
+
+    action: Literal["seize"] = "seize"
+    person: str = Field(min_length=1, max_length=120)
+
+
+class Fine(_Model):
+    """A fine in coins: from the purse, then the household's chest, then goods; the victim is paid first."""
+
+    kind: Literal["fine"] = "fine"
+    mon: int = Field(ge=1, le=200)
+
+
+class Confinement(_Model):
+    """Hours confined: in the gaol in town, tied at the fire in a band."""
+
+    kind: Literal["confine"] = "confine"
+    hours: int = Field(ge=1, le=12)
+
+
+Verdict = Annotated[Fine | Confinement, Field(discriminator="kind")]
+
+
+class Judge(_Model):  # justice (J1)
+    """Sentence a held or confined person within reach for a deed of theirs you know of (or their arrears)."""
+
+    action: Literal["judge"] = "judge"
+    person: str = Field(min_length=1, max_length=120)
+    sentence: Verdict
+
+
+class Tend(_Model):  # justice and tending (J2)
+    """Tend a hurt person within reach for half an hour; it takes the healing skill."""
+
+    action: Literal["tend"] = "tend"
+    person: str = Field(min_length=1, max_length=120)
+
+
+class Gesture(_Model):
+    """A gesture everyone who can see you sees and nobody hears, made to a person in view or to nobody in particular."""
+
+    action: Literal["gesture"] = "gesture"
+    kind: GestureKind
+    to: str | None = Field(default=None, min_length=1, max_length=120)
+
+
+class SetGoal(_Model):
+    """Say to yourself what you are after now and why. It takes no time, and nobody in the world perceives it."""
+
+    action: Literal["set_goal"] = "set_goal"
+    text: str = Field(min_length=1, max_length=80)
+    driver: Driver
 
 
 Action = Annotated[
@@ -233,7 +363,17 @@ Action = Annotated[
     | Attack
     | Flee
     | Wait
-    | Recall,
+    | Recall
+    | Buy
+    | Sell
+    | Stash
+    | Craft
+    | Accuse
+    | Seize
+    | Judge
+    | Tend
+    | Gesture
+    | SetGoal,
     Field(discriminator="action"),
 ]
 

@@ -1,0 +1,1510 @@
+{
+  "action_schema": {
+    "$defs": {
+      "Accuse": {
+        "additionalProperties": false,
+        "description": "Tell someone awake within speaking range every deed you know of a person.",
+        "properties": {
+          "action": {
+            "const": "accuse",
+            "default": "accuse",
+            "title": "Action",
+            "type": "string"
+          },
+          "person": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Person",
+            "type": "string"
+          },
+          "to": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "person",
+          "to"
+        ],
+        "title": "Accuse",
+        "type": "object"
+      },
+      "Attack": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "attack",
+            "default": "attack",
+            "title": "Action",
+            "type": "string"
+          },
+          "target": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "title": "Attack",
+        "type": "object"
+      },
+      "Buy": {
+        "additionalProperties": false,
+        "description": "Buy a good at an open market stall, paying in coins; goods are sold in lots.",
+        "properties": {
+          "action": {
+            "const": "buy",
+            "default": "buy",
+            "title": "Action",
+            "type": "string"
+          },
+          "amount": {
+            "maximum": 999,
+            "minimum": 1,
+            "title": "Amount",
+            "type": "integer"
+          },
+          "item": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Item",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "amount"
+        ],
+        "title": "Buy",
+        "type": "object"
+      },
+      "CheckSelf": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "check_self",
+            "default": "check_self",
+            "title": "Action",
+            "type": "string"
+          }
+        },
+        "title": "CheckSelf",
+        "type": "object"
+      },
+      "Confinement": {
+        "additionalProperties": false,
+        "description": "Hours confined: in the gaol in town, tied at the fire in a band.",
+        "properties": {
+          "hours": {
+            "maximum": 12,
+            "minimum": 1,
+            "title": "Hours",
+            "type": "integer"
+          },
+          "kind": {
+            "const": "confine",
+            "default": "confine",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hours"
+        ],
+        "title": "Confinement",
+        "type": "object"
+      },
+      "Craft": {
+        "additionalProperties": false,
+        "description": "Make a tool or good from what you carry, at its station within reach, if you have the skill.",
+        "properties": {
+          "action": {
+            "const": "craft",
+            "default": "craft",
+            "title": "Action",
+            "type": "string"
+          },
+          "recipe": {
+            "examples": [
+              "flint spear",
+              "obsidian spear",
+              "iron spear",
+              "stone axe",
+              "iron axe",
+              "sickle",
+              "cloth",
+              "pack",
+              "dried meat"
+            ],
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Recipe",
+            "type": "string"
+          }
+        },
+        "required": [
+          "recipe"
+        ],
+        "title": "Craft",
+        "type": "object"
+      },
+      "DirectionTarget": {
+        "additionalProperties": false,
+        "properties": {
+          "direction": {
+            "enum": [
+              "north",
+              "north-east",
+              "east",
+              "south-east",
+              "south",
+              "south-west",
+              "west",
+              "north-west"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "distance": {
+            "enum": [
+              "a few steps",
+              "a short walk",
+              "a long walk",
+              "very far"
+            ],
+            "title": "Distance",
+            "type": "string"
+          },
+          "kind": {
+            "const": "direction",
+            "default": "direction",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "direction",
+          "distance"
+        ],
+        "title": "DirectionTarget",
+        "type": "object"
+      },
+      "Drink": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "drink",
+            "default": "drink",
+            "title": "Action",
+            "type": "string"
+          }
+        },
+        "title": "Drink",
+        "type": "object"
+      },
+      "Drop": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "drop",
+            "default": "drop",
+            "title": "Action",
+            "type": "string"
+          },
+          "item": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Item",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item"
+        ],
+        "title": "Drop",
+        "type": "object"
+      },
+      "Eat": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "eat",
+            "default": "eat",
+            "title": "Action",
+            "type": "string"
+          },
+          "item": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Item",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item"
+        ],
+        "title": "Eat",
+        "type": "object"
+      },
+      "FeedFire": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "feed_fire",
+            "default": "feed_fire",
+            "title": "Action",
+            "type": "string"
+          }
+        },
+        "title": "FeedFire",
+        "type": "object"
+      },
+      "Fine": {
+        "additionalProperties": false,
+        "description": "A fine in coins: from the purse, then the household's chest, then goods; the victim is paid first.",
+        "properties": {
+          "kind": {
+            "const": "fine",
+            "default": "fine",
+            "title": "Kind",
+            "type": "string"
+          },
+          "mon": {
+            "maximum": 200,
+            "minimum": 1,
+            "title": "Mon",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "mon"
+        ],
+        "title": "Fine",
+        "type": "object"
+      },
+      "Fish": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "fish",
+            "default": "fish",
+            "title": "Action",
+            "type": "string"
+          }
+        },
+        "title": "Fish",
+        "type": "object"
+      },
+      "Flee": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "flee",
+            "default": "flee",
+            "title": "Action",
+            "type": "string"
+          }
+        },
+        "title": "Flee",
+        "type": "object"
+      },
+      "Follow": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "follow",
+            "default": "follow",
+            "title": "Action",
+            "type": "string"
+          },
+          "pace": {
+            "default": "walk",
+            "enum": [
+              "walk",
+              "run"
+            ],
+            "title": "Pace",
+            "type": "string"
+          },
+          "person": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Person",
+            "type": "string"
+          }
+        },
+        "required": [
+          "person"
+        ],
+        "title": "Follow",
+        "type": "object"
+      },
+      "Gather": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "gather",
+            "default": "gather",
+            "title": "Action",
+            "type": "string"
+          },
+          "resource": {
+            "examples": [
+              "berries",
+              "roots",
+              "nuts",
+              "reeds",
+              "wood",
+              "rice",
+              "flint",
+              "obsidian",
+              "iron sand",
+              "gold"
+            ],
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Resource",
+            "type": "string"
+          }
+        },
+        "required": [
+          "resource"
+        ],
+        "title": "Gather",
+        "type": "object"
+      },
+      "Gesture": {
+        "additionalProperties": false,
+        "description": "A gesture everyone who can see you sees and nobody hears, made to a person in view or to nobody in particular.",
+        "properties": {
+          "action": {
+            "const": "gesture",
+            "default": "gesture",
+            "title": "Action",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "wave",
+              "bow",
+              "nod",
+              "shake_head",
+              "point",
+              "laugh",
+              "jump"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "to": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "To"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "Gesture",
+        "type": "object"
+      },
+      "Give": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "give",
+            "default": "give",
+            "title": "Action",
+            "type": "string"
+          },
+          "item": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Item",
+            "type": "string"
+          },
+          "person": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Person",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "person"
+        ],
+        "title": "Give",
+        "type": "object"
+      },
+      "Hunt": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "hunt",
+            "default": "hunt",
+            "title": "Action",
+            "type": "string"
+          },
+          "animal": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Animal",
+            "type": "string"
+          }
+        },
+        "required": [
+          "animal"
+        ],
+        "title": "Hunt",
+        "type": "object"
+      },
+      "Judge": {
+        "additionalProperties": false,
+        "description": "Sentence a held or confined person within reach for a deed of theirs you know of (or their arrears).",
+        "properties": {
+          "action": {
+            "const": "judge",
+            "default": "judge",
+            "title": "Action",
+            "type": "string"
+          },
+          "person": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Person",
+            "type": "string"
+          },
+          "sentence": {
+            "discriminator": {
+              "mapping": {
+                "confine": "#/$defs/Confinement",
+                "fine": "#/$defs/Fine"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Fine"
+              },
+              {
+                "$ref": "#/$defs/Confinement"
+              }
+            ],
+            "title": "Sentence"
+          }
+        },
+        "required": [
+          "person",
+          "sentence"
+        ],
+        "title": "Judge",
+        "type": "object"
+      },
+      "LookAround": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "look_around",
+            "default": "look_around",
+            "title": "Action",
+            "type": "string"
+          }
+        },
+        "title": "LookAround",
+        "type": "object"
+      },
+      "MakeFire": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "make_fire",
+            "default": "make_fire",
+            "title": "Action",
+            "type": "string"
+          }
+        },
+        "title": "MakeFire",
+        "type": "object"
+      },
+      "PersonTarget": {
+        "additionalProperties": false,
+        "description": "A person in view: by name if known, else as they look (\"a man in a fur cloak\").",
+        "properties": {
+          "kind": {
+            "const": "person",
+            "default": "person",
+            "title": "Kind",
+            "type": "string"
+          },
+          "who": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Who",
+            "type": "string"
+          }
+        },
+        "required": [
+          "who"
+        ],
+        "title": "PersonTarget",
+        "type": "object"
+      },
+      "PickUp": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "pick_up",
+            "default": "pick_up",
+            "title": "Action",
+            "type": "string"
+          },
+          "item": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Item",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item"
+        ],
+        "title": "PickUp",
+        "type": "object"
+      },
+      "PlaceTarget": {
+        "additionalProperties": false,
+        "description": "A place the citizen knows, by the name they know it by (\"the well\", \"home\").",
+        "properties": {
+          "kind": {
+            "const": "place",
+            "default": "place",
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "PlaceTarget",
+        "type": "object"
+      },
+      "Recall": {
+        "additionalProperties": false,
+        "properties": {
+          "about": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "About",
+            "type": "string"
+          },
+          "action": {
+            "const": "recall",
+            "default": "recall",
+            "title": "Action",
+            "type": "string"
+          }
+        },
+        "required": [
+          "about"
+        ],
+        "title": "Recall",
+        "type": "object"
+      },
+      "Rest": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "rest",
+            "default": "rest",
+            "title": "Action",
+            "type": "string"
+          },
+          "minutes": {
+            "maximum": 720,
+            "minimum": 1,
+            "title": "Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "minutes"
+        ],
+        "title": "Rest",
+        "type": "object"
+      },
+      "Say": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "say",
+            "default": "say",
+            "title": "Action",
+            "type": "string"
+          },
+          "volume": {
+            "default": "normal",
+            "enum": [
+              "whisper",
+              "normal",
+              "shout"
+            ],
+            "title": "Volume",
+            "type": "string"
+          },
+          "words": {
+            "maxLength": 600,
+            "minLength": 1,
+            "title": "Words",
+            "type": "string"
+          }
+        },
+        "required": [
+          "words"
+        ],
+        "title": "Say",
+        "type": "object"
+      },
+      "Seize": {
+        "additionalProperties": false,
+        "description": "Try to take hold of a person within reach; held, they can only look, speak and wait, and go where you lead.",
+        "properties": {
+          "action": {
+            "const": "seize",
+            "default": "seize",
+            "title": "Action",
+            "type": "string"
+          },
+          "person": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Person",
+            "type": "string"
+          }
+        },
+        "required": [
+          "person"
+        ],
+        "title": "Seize",
+        "type": "object"
+      },
+      "Sell": {
+        "additionalProperties": false,
+        "description": "Sell a good you carry to an open market stall, which buys only what it sells and only with coins it holds.",
+        "properties": {
+          "action": {
+            "const": "sell",
+            "default": "sell",
+            "title": "Action",
+            "type": "string"
+          },
+          "amount": {
+            "maximum": 999,
+            "minimum": 1,
+            "title": "Amount",
+            "type": "integer"
+          },
+          "item": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Item",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "amount"
+        ],
+        "title": "Sell",
+        "type": "object"
+      },
+      "SetGoal": {
+        "additionalProperties": false,
+        "description": "Say to yourself what you are after now and why. It takes no time, and nobody in the world perceives it.",
+        "properties": {
+          "action": {
+            "const": "set_goal",
+            "default": "set_goal",
+            "title": "Action",
+            "type": "string"
+          },
+          "driver": {
+            "enum": [
+              "hunger",
+              "thirst",
+              "rest",
+              "danger",
+              "duty",
+              "ambition",
+              "social",
+              "night"
+            ],
+            "title": "Driver",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "driver"
+        ],
+        "title": "SetGoal",
+        "type": "object"
+      },
+      "Sleep": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "sleep",
+            "default": "sleep",
+            "title": "Action",
+            "type": "string"
+          }
+        },
+        "title": "Sleep",
+        "type": "object"
+      },
+      "Stash": {
+        "additionalProperties": false,
+        "description": "Put things you carry into your own chest within reach (the merchant: into the stall).",
+        "properties": {
+          "action": {
+            "const": "stash",
+            "default": "stash",
+            "title": "Action",
+            "type": "string"
+          },
+          "amount": {
+            "maximum": 999,
+            "minimum": 1,
+            "title": "Amount",
+            "type": "integer"
+          },
+          "item": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Item",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "amount"
+        ],
+        "title": "Stash",
+        "type": "object"
+      },
+      "Tend": {
+        "additionalProperties": false,
+        "description": "Tend a hurt person within reach for half an hour; it takes the healing skill.",
+        "properties": {
+          "action": {
+            "const": "tend",
+            "default": "tend",
+            "title": "Action",
+            "type": "string"
+          },
+          "person": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Person",
+            "type": "string"
+          }
+        },
+        "required": [
+          "person"
+        ],
+        "title": "Tend",
+        "type": "object"
+      },
+      "ThingTarget": {
+        "additionalProperties": false,
+        "description": "A thing in view: food, water, an item or a structure (\"berries\", \"the river\", \"the well\").",
+        "properties": {
+          "kind": {
+            "const": "thing",
+            "default": "thing",
+            "title": "Kind",
+            "type": "string"
+          },
+          "what": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "What",
+            "type": "string"
+          }
+        },
+        "required": [
+          "what"
+        ],
+        "title": "ThingTarget",
+        "type": "object"
+      },
+      "Wait": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "wait",
+            "default": "wait",
+            "title": "Action",
+            "type": "string"
+          },
+          "minutes": {
+            "maximum": 720,
+            "minimum": 1,
+            "title": "Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "minutes"
+        ],
+        "title": "Wait",
+        "type": "object"
+      },
+      "WalkTo": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "walk_to",
+            "default": "walk_to",
+            "title": "Action",
+            "type": "string"
+          },
+          "pace": {
+            "default": "walk",
+            "enum": [
+              "walk",
+              "run"
+            ],
+            "title": "Pace",
+            "type": "string"
+          },
+          "target": {
+            "discriminator": {
+              "mapping": {
+                "direction": "#/$defs/DirectionTarget",
+                "person": "#/$defs/PersonTarget",
+                "place": "#/$defs/PlaceTarget",
+                "thing": "#/$defs/ThingTarget"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/PlaceTarget"
+              },
+              {
+                "$ref": "#/$defs/PersonTarget"
+              },
+              {
+                "$ref": "#/$defs/ThingTarget"
+              },
+              {
+                "$ref": "#/$defs/DirectionTarget"
+              }
+            ],
+            "title": "Target"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "title": "WalkTo",
+        "type": "object"
+      },
+      "Work": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "work",
+            "default": "work",
+            "title": "Action",
+            "type": "string"
+          },
+          "task": {
+            "examples": [
+              "farm",
+              "store food",
+              "guard",
+              "trade",
+              "weave",
+              "govern",
+              "ring bell",
+              "pray"
+            ],
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task"
+        ],
+        "title": "Work",
+        "type": "object"
+      }
+    },
+    "discriminator": {
+      "mapping": {
+        "accuse": "#/$defs/Accuse",
+        "attack": "#/$defs/Attack",
+        "buy": "#/$defs/Buy",
+        "check_self": "#/$defs/CheckSelf",
+        "craft": "#/$defs/Craft",
+        "drink": "#/$defs/Drink",
+        "drop": "#/$defs/Drop",
+        "eat": "#/$defs/Eat",
+        "feed_fire": "#/$defs/FeedFire",
+        "fish": "#/$defs/Fish",
+        "flee": "#/$defs/Flee",
+        "follow": "#/$defs/Follow",
+        "gather": "#/$defs/Gather",
+        "gesture": "#/$defs/Gesture",
+        "give": "#/$defs/Give",
+        "hunt": "#/$defs/Hunt",
+        "judge": "#/$defs/Judge",
+        "look_around": "#/$defs/LookAround",
+        "make_fire": "#/$defs/MakeFire",
+        "pick_up": "#/$defs/PickUp",
+        "recall": "#/$defs/Recall",
+        "rest": "#/$defs/Rest",
+        "say": "#/$defs/Say",
+        "seize": "#/$defs/Seize",
+        "sell": "#/$defs/Sell",
+        "set_goal": "#/$defs/SetGoal",
+        "sleep": "#/$defs/Sleep",
+        "stash": "#/$defs/Stash",
+        "tend": "#/$defs/Tend",
+        "wait": "#/$defs/Wait",
+        "walk_to": "#/$defs/WalkTo",
+        "work": "#/$defs/Work"
+      },
+      "propertyName": "action"
+    },
+    "oneOf": [
+      {
+        "$ref": "#/$defs/LookAround"
+      },
+      {
+        "$ref": "#/$defs/CheckSelf"
+      },
+      {
+        "$ref": "#/$defs/Say"
+      },
+      {
+        "$ref": "#/$defs/WalkTo"
+      },
+      {
+        "$ref": "#/$defs/Follow"
+      },
+      {
+        "$ref": "#/$defs/Gather"
+      },
+      {
+        "$ref": "#/$defs/Fish"
+      },
+      {
+        "$ref": "#/$defs/Hunt"
+      },
+      {
+        "$ref": "#/$defs/Eat"
+      },
+      {
+        "$ref": "#/$defs/Drink"
+      },
+      {
+        "$ref": "#/$defs/PickUp"
+      },
+      {
+        "$ref": "#/$defs/Drop"
+      },
+      {
+        "$ref": "#/$defs/Give"
+      },
+      {
+        "$ref": "#/$defs/MakeFire"
+      },
+      {
+        "$ref": "#/$defs/FeedFire"
+      },
+      {
+        "$ref": "#/$defs/Rest"
+      },
+      {
+        "$ref": "#/$defs/Sleep"
+      },
+      {
+        "$ref": "#/$defs/Work"
+      },
+      {
+        "$ref": "#/$defs/Attack"
+      },
+      {
+        "$ref": "#/$defs/Flee"
+      },
+      {
+        "$ref": "#/$defs/Wait"
+      },
+      {
+        "$ref": "#/$defs/Recall"
+      },
+      {
+        "$ref": "#/$defs/Buy"
+      },
+      {
+        "$ref": "#/$defs/Sell"
+      },
+      {
+        "$ref": "#/$defs/Stash"
+      },
+      {
+        "$ref": "#/$defs/Craft"
+      },
+      {
+        "$ref": "#/$defs/Accuse"
+      },
+      {
+        "$ref": "#/$defs/Seize"
+      },
+      {
+        "$ref": "#/$defs/Judge"
+      },
+      {
+        "$ref": "#/$defs/Tend"
+      },
+      {
+        "$ref": "#/$defs/Gesture"
+      },
+      {
+        "$ref": "#/$defs/SetGoal"
+      }
+    ]
+  },
+  "actions": [
+    "look_around",
+    "check_self",
+    "say",
+    "walk_to",
+    "follow",
+    "gather",
+    "fish",
+    "hunt",
+    "eat",
+    "drink",
+    "pick_up",
+    "drop",
+    "give",
+    "make_fire",
+    "feed_fire",
+    "rest",
+    "sleep",
+    "work",
+    "attack",
+    "flee",
+    "wait",
+    "recall",
+    "buy",
+    "sell",
+    "stash",
+    "craft",
+    "accuse",
+    "seize",
+    "judge",
+    "tend",
+    "gesture",
+    "set_goal"
+  ],
+  "changelog": [
+    {
+      "change": "draft v1: the ten new actions (buy, sell, stash, craft, accuse, seize, judge, tend, gesture, set_goal), pace on walk_to and follow, gather's minerals and rice, and the words for work tasks and recipes",
+      "contract": "c6851f1c2ec24857"
+    }
+  ],
+  "perception_schema": {
+    "$defs": {
+      "HeardWords": {
+        "additionalProperties": false,
+        "properties": {
+          "volume": {
+            "enum": [
+              "whisper",
+              "normal",
+              "shout"
+            ],
+            "title": "Volume",
+            "type": "string"
+          },
+          "who": {
+            "title": "Who",
+            "type": "string"
+          },
+          "words": {
+            "title": "Words",
+            "type": "string"
+          }
+        },
+        "required": [
+          "who",
+          "words",
+          "volume"
+        ],
+        "title": "HeardWords",
+        "type": "object"
+      },
+      "Seen": {
+        "additionalProperties": false,
+        "description": "One person, animal or (group of) thing(s) in view. A group's `where` is its nearest member's, said as \"the\nnearest \u2026\" when the others are elsewhere.",
+        "properties": {
+          "doing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Doing"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "water",
+                  "sea",
+                  "food",
+                  "home",
+                  "shelter",
+                  "fire",
+                  "material",
+                  "item",
+                  "building"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Kind"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "nearness": {
+            "enum": [
+              "right beside you",
+              "a few paces",
+              "close by",
+              "some way off",
+              "in the distance",
+              "far away"
+            ],
+            "title": "Nearness",
+            "type": "string"
+          },
+          "resource": {
+            "anyOf": [
+              {
+                "enum": [
+                  "berries",
+                  "roots",
+                  "nuts",
+                  "reeds",
+                  "wood",
+                  "rice",
+                  "flint",
+                  "obsidian",
+                  "iron sand",
+                  "gold"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Resource"
+          },
+          "where": {
+            "title": "Where",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "where",
+          "nearness"
+        ],
+        "title": "Seen",
+        "type": "object"
+      },
+      "SelfView": {
+        "additionalProperties": false,
+        "properties": {
+          "carrying": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Carrying",
+            "type": "array"
+          },
+          "doing": {
+            "title": "Doing",
+            "type": "string"
+          },
+          "feeling": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Feeling",
+            "type": "array"
+          }
+        },
+        "required": [
+          "feeling",
+          "carrying",
+          "doing"
+        ],
+        "title": "SelfView",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "description": "What a look around tells. People and animals are always all there; things are grouped and chosen by importance\n(water, food, shelter, fire, then the rest, nearest first) so everything seen fits a short paragraph.",
+    "properties": {
+      "animals": {
+        "items": {
+          "$ref": "#/$defs/Seen"
+        },
+        "title": "Animals",
+        "type": "array"
+      },
+      "heard": {
+        "items": {
+          "$ref": "#/$defs/HeardWords"
+        },
+        "title": "Heard",
+        "type": "array"
+      },
+      "people": {
+        "items": {
+          "$ref": "#/$defs/Seen"
+        },
+        "title": "People",
+        "type": "array"
+      },
+      "place": {
+        "title": "Place",
+        "type": "string"
+      },
+      "things": {
+        "items": {
+          "$ref": "#/$defs/Seen"
+        },
+        "title": "Things",
+        "type": "array"
+      },
+      "time": {
+        "title": "Time",
+        "type": "string"
+      },
+      "time_of_day": {
+        "enum": [
+          "pre-dawn",
+          "dawn",
+          "early morning",
+          "mid-morning",
+          "midday",
+          "early afternoon",
+          "late afternoon",
+          "sunset",
+          "dusk",
+          "night"
+        ],
+        "title": "Time Of Day",
+        "type": "string"
+      },
+      "you": {
+        "$ref": "#/$defs/SelfView"
+      }
+    },
+    "required": [
+      "you",
+      "place",
+      "time",
+      "time_of_day",
+      "people",
+      "animals",
+      "things",
+      "heard"
+    ],
+    "title": "Perception",
+    "type": "object"
+  },
+  "result_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "action": {
+        "enum": [
+          "look_around",
+          "check_self",
+          "say",
+          "walk_to",
+          "follow",
+          "gather",
+          "fish",
+          "hunt",
+          "eat",
+          "drink",
+          "pick_up",
+          "drop",
+          "give",
+          "make_fire",
+          "feed_fire",
+          "rest",
+          "sleep",
+          "work",
+          "attack",
+          "flee",
+          "wait",
+          "recall",
+          "buy",
+          "sell",
+          "stash",
+          "craft",
+          "accuse",
+          "seize",
+          "judge",
+          "tend",
+          "gesture",
+          "set_goal"
+        ],
+        "title": "Action",
+        "type": "string"
+      },
+      "outcome": {
+        "enum": [
+          "done",
+          "interrupted",
+          "failed"
+        ],
+        "title": "Outcome",
+        "type": "string"
+      },
+      "text": {
+        "title": "Text",
+        "type": "string"
+      }
+    },
+    "required": [
+      "action",
+      "outcome",
+      "text"
+    ],
+    "title": "ActionResult",
+    "type": "object"
+  },
+  "self_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "carrying": {
+        "items": {
+          "type": "string"
+        },
+        "title": "Carrying",
+        "type": "array"
+      },
+      "doing": {
+        "title": "Doing",
+        "type": "string"
+      },
+      "feeling": {
+        "items": {
+          "type": "string"
+        },
+        "title": "Feeling",
+        "type": "array"
+      }
+    },
+    "required": [
+      "feeling",
+      "carrying",
+      "doing"
+    ],
+    "title": "SelfView",
+    "type": "object"
+  },
+  "version": "v1-draft",
+  "world_api": [
+    "accuse(self, person: str, to: str) -> app.world_api.models.ActionResult",
+    "attack(self, target: str) -> app.world_api.facade.ActionHandle",
+    "buy(self, item: str, amount: int) -> app.world_api.models.ActionResult",
+    "check_self(self) -> app.world_api.models.SelfView",
+    "craft(self, recipe: str) -> app.world_api.facade.ActionHandle",
+    "do(self, action: Annotated[app.world_api.models.LookAround | app.world_api.models.CheckSelf | app.world_api.models.Say | app.world_api.models.WalkTo | app.world_api.models.Follow | app.world_api.models.Gather | app.world_api.models.Fish | app.world_api.models.Hunt | app.world_api.models.Eat | app.world_api.models.Drink | app.world_api.models.PickUp | app.world_api.models.Drop | app.world_api.models.Give | app.world_api.models.MakeFire | app.world_api.models.FeedFire | app.world_api.models.Rest | app.world_api.models.Sleep | app.world_api.models.Work | app.world_api.models.Attack | app.world_api.models.Flee | app.world_api.models.Wait | app.world_api.models.Recall | app.world_api.models.Buy | app.world_api.models.Sell | app.world_api.models.Stash | app.world_api.models.Craft | app.world_api.models.Accuse | app.world_api.models.Seize | app.world_api.models.Judge | app.world_api.models.Tend | app.world_api.models.Gesture | app.world_api.models.SetGoal, FieldInfo(annotation=NoneType, required=True, discriminator='action')]) -> app.world_api.models.Perception | app.world_api.models.SelfView | app.world_api.models.ActionResult | app.world_api.facade.ActionHandle",
+    "drink(self) -> app.world_api.facade.ActionHandle",
+    "drop(self, item: str) -> app.world_api.models.ActionResult",
+    "eat(self, item: str) -> app.world_api.facade.ActionHandle",
+    "feed_fire(self) -> app.world_api.facade.ActionHandle",
+    "fish(self) -> app.world_api.facade.ActionHandle",
+    "flee(self) -> app.world_api.facade.ActionHandle",
+    "follow(self, person: str, pace: Literal['walk', 'run'] = 'walk') -> app.world_api.facade.ActionHandle",
+    "gather(self, resource: str) -> app.world_api.facade.ActionHandle",
+    "gesture(self, kind: Literal['wave', 'bow', 'nod', 'shake_head', 'point', 'laugh', 'jump'], to: str | None = None) -> app.world_api.models.ActionResult",
+    "give(self, item: str, person: str) -> app.world_api.models.ActionResult",
+    "handle(self, number: int) -> app.world_api.facade.ActionHandle",
+    "hunt(self, animal: str) -> app.world_api.facade.ActionHandle",
+    "judge(self, person: str, sentence: Annotated[app.world_api.models.Fine | app.world_api.models.Confinement, FieldInfo(annotation=NoneType, required=True, discriminator='kind')]) -> app.world_api.facade.ActionHandle",
+    "look_around(self) -> app.world_api.models.Perception",
+    "make_fire(self) -> app.world_api.facade.ActionHandle",
+    "pick_up(self, item: str) -> app.world_api.models.ActionResult",
+    "recall(self, about: str) -> app.world_api.models.ActionResult",
+    "rest(self, minutes: int) -> app.world_api.facade.ActionHandle",
+    "say(self, words: str, volume: Literal['whisper', 'normal', 'shout'] = 'normal') -> app.world_api.models.ActionResult",
+    "seize(self, person: str) -> app.world_api.facade.ActionHandle",
+    "sell(self, item: str, amount: int) -> app.world_api.models.ActionResult",
+    "set_goal(self, text: str, driver: Literal['hunger', 'thirst', 'rest', 'danger', 'duty', 'ambition', 'social', 'night']) -> app.world_api.models.ActionResult",
+    "sleep(self) -> app.world_api.facade.ActionHandle",
+    "stash(self, item: str, amount: int) -> app.world_api.models.ActionResult",
+    "tend(self, person: str) -> app.world_api.facade.ActionHandle",
+    "wait(self, minutes: int) -> app.world_api.facade.ActionHandle",
+    "walk_to(self, target: Annotated[app.world_api.models.PlaceTarget | app.world_api.models.PersonTarget | app.world_api.models.ThingTarget | app.world_api.models.DirectionTarget, FieldInfo(annotation=NoneType, required=True, discriminator='kind')], pace: Literal['walk', 'run'] = 'walk') -> app.world_api.facade.ActionHandle",
+    "walk_to_person(self, who: str, pace: Literal['walk', 'run'] = 'walk') -> app.world_api.facade.ActionHandle",
+    "walk_to_place(self, name: str, pace: Literal['walk', 'run'] = 'walk') -> app.world_api.facade.ActionHandle",
+    "walk_to_thing(self, what: str, pace: Literal['walk', 'run'] = 'walk') -> app.world_api.facade.ActionHandle",
+    "walk_towards(self, direction: Literal['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'], distance: Literal['a few steps', 'a short walk', 'a long walk', 'very far'], pace: Literal['walk', 'run'] = 'walk') -> app.world_api.facade.ActionHandle",
+    "work(self, task: str) -> app.world_api.facade.ActionHandle"
+  ]
+}

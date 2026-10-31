@@ -687,8 +687,8 @@ def fit_to_budget(people: list[Seen], animals: list[Seen], found: list[Sight]) -
     return [sight.seen for index, sight in enumerate(ranked) if index in chosen]
 
 
-if set(RESOURCE_NAMES) != set(GATHERED):
-    raise ValueError("the contract's resource names must be the simulation's resources")
+if not GATHERED <= set(RESOURCE_NAMES):
+    raise ValueError("every resource the simulation gathers needs its name in the contract")
 _LABELS = {**STRUCTURE_LABELS, **CAMP_STRUCTURE_LABELS}
 _UNGROUPED = {kind for kind, label in _LABELS.items() if label.startswith("a ")} - set(GROUP_NOUNS)
 if _UNGROUPED:
