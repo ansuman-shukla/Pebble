@@ -15,7 +15,7 @@ from app.sim.simulation import Simulation
 from app.sim.slots import SLOTS
 from app.sim.snapshot import SNAPSHOT_VERSION, canonical_json, restore, resumable, state_hash, take_snapshot
 from app.sim.state import Citizen, System
-from app.sim.systems import LocalTest, Registry
+from app.sim.systems import REGISTRY, LocalTest, Registry
 from app.sim.vec import lat_lon_deg
 from app.sim.world import SimWorld
 from app.world_api.facade import WorldApi
@@ -203,7 +203,8 @@ def test_every_event_hook_hears_every_event_once_in_emission_order(sim_world: Si
     def second(_core: SimCore, event: EventDraft) -> None:
         heard["second"].append(event.seq)
 
-    sim = Simulation.new(sim_world, seed=SEED, planner=planner, registry=Registry(on_event=(first, second)))
+    registry = Registry(systems=REGISTRY.systems, on_event=(first, second))  # the real systems: animals live too
+    sim = Simulation.new(sim_world, seed=SEED, planner=planner, registry=registry)
     sim.add_citizen(make_spec(at=GATE))
     sim.stock_store("store-2", "rice", 3)
     sim.step()
