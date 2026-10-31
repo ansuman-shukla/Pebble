@@ -388,7 +388,10 @@ def _injured(core: SimCore, society: Society, event: EventDraft) -> None:
     if injured.cause != VIOLENCE or attacker is None or attacker not in society.members:
         return
     _bond(society, attacker, victim, load_laws().bonds.struck)
-    seen = {*witnesses(core, attacker), victim} if core.state.citizens[victim].body.alive else witnesses(core, attacker)
+    # a killing blow's `injured` comes before its `died`: a victim left with no health tells nobody
+    seen = set(witnesses(core, attacker)) - {victim}
+    if core.state.citizens[victim].body.health > 0:
+        seen.add(victim)
     _log(core, society, event, "assault", attacker, society.members[victim].group, sorted(seen), victim=victim)
 
 

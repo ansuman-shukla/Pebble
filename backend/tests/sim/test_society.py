@@ -222,7 +222,22 @@ def test_a_killing_costs_sixty_with_its_killing_blow(new_sim: Callable[..., Simu
     events = sim.drain()
     assert _changes(events) == [("kaz", "town", -10, -35, "assault"), ("kaz", "town", -35, -70, "killing")]
     assert [deed.kind for deed in society.deeds_by(core, "kaz")] == ["assault", "killing"]
-    assert society.known_deeds(core, "genzo")[0].kind == "assault"  # the dead knew only of the blow
+    assert society.known_deeds(core, "genzo") == []  # the dead tell nobody; Aiko and Tek saw it all
+    assert [d.kind for d in society.known_deeds(core, "aiko")] == ["assault", "killing"]
+
+
+def test_an_unwitnessed_killing_moves_no_standing(new_sim: Callable[..., Simulation]) -> None:
+    """Regression: the killing blow's `injured` is emitted before the `died`, so the victim must not count as knowing
+    the assault (they never tell anyone)."""
+    sim = _scene(
+        new_sim,
+        {"citizen_id": "kaz", "region": "band_b", "age": 19, **CAMP_B, "site": "town", "at": GATE},
+        {"citizen_id": "genzo", "home": "farmhouse-1"},
+    )
+    sim.core.injure(sim.citizen("genzo"), 100, "violence", "Kaz strikes you", attacker="kaz")
+    assert _changes(sim.drain()) == []
+    assert [deed.kind for deed in society.deeds_by(sim.core, "kaz")] == ["assault", "killing"]
+    assert all(society.known_deeds(sim.core, who) == [] for who in sim.state.citizens)
 
 
 def test_an_animal_s_bite_is_no_deed(new_sim: Callable[..., Simulation]) -> None:
