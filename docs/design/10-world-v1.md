@@ -529,7 +529,7 @@ The feed carries `motion` + `posture` per citizen; the client never parses label
 | pan | gold | Crouch | pan |
 | farm | tend paddy | Planting | hoe |
 | fish | fish | Holding torch pose + Pick up per catch | rod (town), spear (bands) |
-| craft | forge / knap / weave / dry | Chopping wood ×1.2 at the anvil / Crouch / Sitting (loom) / Interact | hammer / stone / loom |
+| craft | forge / knap / weave / dry | Chopping wood ×1.2 at the anvil / Crouch / Sitting (loom) / Interact | hammer / stone / weave layer on a seat (hands pass the shuttle) |
 | eat / drink | eat, drink | Eating / Drinking | food, cup |
 | talk | say | Talking (seated: Sitting talking) | faces the listener |
 | trade | buy, sell, give, work trade | Interact; merchant Talking ↔ Agree | item hand to hand |
