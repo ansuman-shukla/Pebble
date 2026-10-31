@@ -63,8 +63,8 @@ def test_farmers_go_to_the_paddy_that_needs_them_most(new_sim: Callable[..., Sim
     for citizen_id, slot in held.items():
         assert slot is not None
         assert sim.world.distance_m(sim.citizen(citizen_id).position, slot.position) < 0.01  # stepped into the paddy
-        assert sim.citizen(citizen_id).action is not None
-        assert sim.citizen(citizen_id).action.args["where"] == "in the paddies"  # type: ignore[union-attr]
+        action = sim.citizen(citizen_id).action
+        assert action is not None and action.args["where"] == "in the paddies"
 
 
 def test_tending_grows_a_paddy_once_a_day_until_it_ripens(new_sim: Callable[..., Simulation]) -> None:
@@ -106,7 +106,8 @@ def test_a_paddy_runs_a_three_day_cycle_of_sixty_rice(new_sim: Callable[..., Sim
         for _ in range(12):  # a farmer's day here, session by session: harvest it while ripe, else tend it
             stand_at_node(sim, farmer.id, paddy)
             slots.claim(sim.core, farmer, slots.node_slots(sim.core, paddy)[0], farmer.position)
-            text = paddies.farm(sim.core, farmer, farmer.action)  # type: ignore[arg-type]  # the finisher alone
+            # the finisher alone, with no farm action running (None): `farm` doesn't read its action
+            text = paddies.farm(sim.core, farmer, farmer.action)  # type: ignore[arg-type]  # action is None here
             if farmer.inventory.get("rice"):
                 harvests[day] = harvests.get(day, 0) + farmer.inventory.pop("rice")
             if "nothing more today" in text:
