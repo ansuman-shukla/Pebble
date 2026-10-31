@@ -44,14 +44,16 @@ def test_walk_to_a_forest_gather_and_eat_berries(new_sim: Callable[..., Simulati
     forest = nearest_cell_of(sim.world, FORESTS, citizen.position)
     direction = compass_towards(citizen.position, sim.world.unit(forest))
 
-    for _ in range(8):  # head that way until nut trees (only forests have them) come into view
-        if any("nut trees" in thing.label for thing in api.look_around().things):
+    for _ in range(8):  # head that way until a berry bush comes into view
+        if any(thing.resource == "berries" for thing in api.look_around().things):
             break
         assert run_until_done(sim, api.walk_towards(direction, "a short walk"), max_ticks=60).outcome == "done"
-    reached = run_until_done(sim, api.walk_to_thing("nut trees"), max_ticks=60)
+    reached = run_until_done(sim, api.walk_to_thing("berries"), max_ticks=60)
     assert reached.outcome == "done", reached.text
-    assert sim.world.biome(citizen.cell) in FORESTS
-    assert any("berr" in thing.label and thing.where == "right beside you" for thing in api.look_around().things)
+    assert any(
+        thing.label == "a berry bush heavy with fruit" and thing.where == "right beside you"
+        for thing in api.look_around().things
+    )
 
     gathered = run_until_done(sim, api.gather("berries"), max_ticks=30)
     assert gathered.outcome == "done", gathered.text

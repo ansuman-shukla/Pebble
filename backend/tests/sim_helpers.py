@@ -4,6 +4,7 @@ from typing import Any, get_args
 import numpy as np
 
 from app.observability.events import RoutePoint
+from app.sim import nodes
 from app.sim.citizens import CitizenSpec
 from app.sim.clock import local_minute, sun_altitude_deg, sun_direction
 from app.sim.fauna import terrain
@@ -14,6 +15,7 @@ from app.sim.world import SimWorld, sim_world_from_view
 from app.world.biomes import BIOME_IDS
 from app.world.generate import GENERATOR
 from app.world.spec import load_site_kinds, load_world_spec
+from app.world.view import Site
 from app.world_api.models import Compass
 
 GATE = (0.0, 104.0)  # just outside the main gate
@@ -138,3 +140,43 @@ def compass_towards(origin: Vec3, target: Vec3) -> Compass:
 def local_hour(sim: Simulation, citizen_id: str) -> float:
     _, lon = lat_lon_deg(sim.citizen(citizen_id).position)
     return local_minute(sim.tick, sim.world.town_lon_deg, lon) / 60
+
+
+def nearest_node(sim: Simulation, kind: str, origin: Vec3, stocked: bool = True) -> int:
+    """The node of the kind (berry_bush, deadwood, fishing_spot, ...) nearest the point (with some left: `stocked`)."""
+    table = sim.world.nodes
+    candidates = [node for node, name in enumerate(table.kinds) if name == kind]
+    if stocked:
+        candidates = [node for node in candidates if nodes.stock(sim.core, node) > 0]
+    if not candidates:
+        raise LookupError(f"no {kind} node")
+    return max(candidates, key=lambda node: float(table.units[node] @ np.array(origin)))
+
+
+def wild_node(sim: Simulation, kind: str, clear_m: float = 1000.0) -> int:
+    """A node of the kind at least `clear_m` from every place (nobody lives there) with a walkable cell."""
+    table, world = sim.world.nodes, sim.world
+    for node, name in enumerate(table.kinds):
+        if name != kind or not sim.core.planner.outer.allowed[int(table.cells[node])]:
+            continue
+        unit = table.unit(node)
+        if all(world.distance_m(unit, place.centre) >= clear_m for place in world.places.values()):
+            return node
+    raise LookupError(f"no {kind} node {clear_m} m from every place")
+
+
+def stand_at_node(sim: Simulation, citizen_id: str, node: int, spot: int = 0) -> Citizen:
+    """Put the citizen on one of the node's work spots, facing it."""
+    citizen = sim.citizen(citizen_id)
+    at = sim.world.nodes.spots(node)[spot]
+    sim.core.place_at(citizen, at.position)
+    citizen.heading_deg = at.heading_deg
+    return citizen
+
+
+def site_point(world: SimWorld, site: Site, unit: Vec3) -> tuple[float, float]:
+    """A point as a site's local metres (x east, z south of its anchor, on its plateau): `site_unit` backwards."""
+    anchor = site.anchor
+    up, east, north = np.array(anchor.position), np.array(anchor.east), np.array(anchor.north)
+    scale = (world.radius_m + anchor.height_m) / float(np.array(unit) @ up)
+    return (scale * float(np.array(unit) @ east), -scale * float(np.array(unit) @ north))

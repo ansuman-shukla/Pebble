@@ -6,7 +6,6 @@ import pytest
 
 from app.observability.events import EventDraft
 from app.sim import doing
-from app.sim.items import RESOURCE_INDEX
 from app.sim.simulation import Simulation
 from app.sim.vec import step_towards
 from app.world_api.models import (
@@ -21,7 +20,7 @@ from app.world_api.models import (
     Wait,
     WalkTo,
 )
-from tests.sim_helpers import add_animal, make_spec, put_in_the_wild, skip_to, wild_cell, without_animals
+from tests.sim_helpers import add_animal, make_spec, skip_to, stand_at_node, wild_node, without_animals
 
 ENDED = ("action_finished", "action_interrupted")
 DARK = "Everything goes dark."
@@ -42,10 +41,9 @@ def _scene(new_sim: Callable[..., Simulation]) -> tuple[Simulation, str]:
     sim = without_animals(new_sim())
     brute = sim.add_citizen(make_spec("brute", home=None))  # added first, so each tick they move before the camper
     camper = sim.add_citizen(make_spec("camper", home=None, skills=["fire"], inventory={"meat": 5, "wood": 3}))
-    put_in_the_wild(sim, camper.id, wild_cell(sim))
+    stand_at_node(sim, camper.id, wild_node(sim, "berry_bush"))
     sim.core.place_at(brute, step_towards(camper.position, 0.0, 500.0, sim.world.radius_m))
     skip_to(sim, camper.position, night=True)
-    sim.state.resources[camper.cell, RESOURCE_INDEX["berries"]] = 50
     camper.body.hunger = 60.0
     return sim, camper.id
 

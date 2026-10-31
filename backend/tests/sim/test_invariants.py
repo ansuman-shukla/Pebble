@@ -4,31 +4,31 @@ from collections import Counter
 from collections.abc import Callable
 from typing import Any
 
-import numpy as np
 import pytest
 
-from app.observability.events import EventDraft, ResourceChanged
+from app.observability.events import EventDraft, NodeChanged
 from app.observability.replay import ReplayEvent, from_snapshot, replay
-from app.sim.items import RESOURCE_INDEX
+from app.sim import nodes
 from app.sim.navigation import Planner
 from app.sim.simulation import Simulation
 from app.sim.snapshot import canonical_json, restore, state_hash, take_snapshot
 from app.world_api.facade import WorldApi
-from tests.sim_helpers import GATE, WELL, make_spec, without_animals
+from tests.sim_helpers import GATE, make_spec, site_point, without_animals
 
 Plan = dict[int, list[tuple[str, Callable[[WorldApi], Any]]]]
 
 PLAN: Plan = {
     0: [
         ("ann", lambda api: api.walk_to_place("the well")),
-        ("ben", lambda api: api.walk_towards("west", "a long walk")),
+        ("ben", lambda api: api.gather("berries")),  # he starts at a berry bush outside the main gate
         ("cid", lambda api: api.wait(30)),
     ],
     3: [("cid", lambda api: api.say("Hello! I am Cid. The market is busy today.", "shout"))],
     6: [("ann", lambda api: api.drink()), ("cid", lambda api: api.walk_to_person("a person in a ann cloak"))],
-    12: [("ben", lambda api: api.gather("berries"))],
     20: [("cid", lambda api: api.look_around())],
-    40: [("ben", lambda api: api.gather("roots")), ("ann", lambda api: api.walk_to_place("home"))],
+    25: [("ben", lambda api: api.walk_to_thing("roots"))],  # a root patch a few paces off
+    32: [("ben", lambda api: api.gather("roots"))],  # half an hour of digging
+    40: [("ann", lambda api: api.walk_to_place("home"))],
     65: [("ben", lambda api: api.eat("berries")), ("cid", lambda api: api.walk_to_place("the market"))],
     75: [("ben", lambda api: api.drop("roots"))],
     76: [("ben", lambda api: api.pick_up("roots"))],
@@ -39,9 +39,27 @@ PLAN: Plan = {
 }
 
 
+def _bush_by_roots(sim: Simulation) -> tuple[float, float]:
+    """Where Ben starts: a spot of the berry bush nearest band A's camp with a root patch within 15 m (camp metres)."""
+    table = sim.world.nodes
+    camp = next(site for site in sim.world.sites if site.id == "band_a_camp")
+    centre = sim.world.places["band_a_camp"].centre
+
+    def near_roots(bush: int) -> bool:
+        return any(table.kinds[node] == "root_patch" for _, node in table.near(sim.world.grid, table.unit(bush), 15.0))
+
+    bushes = sorted(
+        (sim.world.distance_m(centre, table.unit(node)), node)
+        for node, kind in enumerate(table.kinds)
+        if kind == "berry_bush"
+    )
+    bush = next(node for _, node in bushes if near_roots(node))
+    return site_point(sim.world, camp, table.spots(bush)[0].position)
+
+
 def _spawn(sim: Simulation) -> None:
     sim.add_citizen(make_spec("ann", name="Ann", at=GATE))
-    sim.add_citizen(make_spec("ben", name="Ben", at=WELL, age=15))
+    sim.add_citizen(make_spec("ben", name="Ben", site="band_a_camp", at=_bush_by_roots(sim), age=15))
     sim.add_citizen(make_spec("cid", name="Cid", at=(20.0, 56.0), age=60, knows_places=["town", "market", "well"]))
 
 
@@ -87,7 +105,7 @@ def test_the_hash_sees_every_part_of_the_state(new_sim: Callable[..., Simulation
         lambda s: setattr(s.citizen("ann").body, "hunger", s.citizen("ann").body.hunger + 1e-9),
         lambda s: s.citizen("ben").inventory.__setitem__("nuts", 1),
         lambda s: s.citizen("cid").people.add("ben"),
-        lambda s: s.state.resources.__setitem__((5, 0), 1),
+        lambda s: nodes.node_state(s.core).tended.__setitem__("paddy-1", 99),
         lambda s: setattr(next(iter(s.state.rngs.values())), "state", 7),
         lambda s: setattr(s.state, "next_seq", s.state.next_seq + 1),
     ]
@@ -101,7 +119,6 @@ def test_the_hash_sees_every_part_of_the_state(new_sim: Callable[..., Simulation
 def test_needs_resources_and_items_stay_in_range(new_sim: Callable[..., Simulation]) -> None:
     sim = new_sim(seed=3)
     _spawn(sim)
-    caps = sim.world.resource_caps
     plan: Plan = {t: [("ben", lambda api: api.gather("berries"))] for t in range(100, 2 * 24 * 60, 40)}
     plan |= {t: [("ann", lambda api: api.wait(200))] for t in range(0, 2 * 24 * 60, 210)}
     for tick in range(2 * 24 * 60):
@@ -110,15 +127,19 @@ def test_needs_resources_and_items_stay_in_range(new_sim: Callable[..., Simulati
             body = citizen.body
             assert all(0.0 <= value <= 100.0 for value in (body.hunger, body.thirst, body.energy, body.health))
             assert all(count > 0 for count in citizen.inventory.values())
-        assert (sim.state.resources <= caps).all()
+        assert all(0 <= entry.stock < entry.cap or entry.kind == "rice_paddy" for entry in _entries(sim))
     assert all(stack.count > 0 for stack in sim.state.ground.values())
     assert not sim.citizen("ann").body.alive or sim.citizen("ann").body.thirst > 0
+
+
+def _entries(sim: Simulation) -> list[nodes.NodeEntry]:
+    return list(nodes.node_state(sim.core).entries.values())
 
 
 def test_every_state_change_is_exactly_one_event(new_sim: Callable[..., Simulation]) -> None:
     sim = without_animals(new_sim(seed=5))  # game coming into view would stop Ben's walk into the wild
     start = take_snapshot(sim.state)  # before anyone exists
-    initial = sim.state.resources.copy()
+    table = sim.world.nodes
     events: list[EventDraft] = []
     _spawn(sim)
     for checkpoint in (1, 7, 30, 77, 120, 181):
@@ -130,7 +151,7 @@ def test_every_state_change_is_exactly_one_event(new_sim: Callable[..., Simulati
     assert summaries == list(range(1, 182))
     assert [e.seq for e in events] == list(range(1, len(events) + 1))
     types = {e.type for e in events}
-    assert {"item_moved", "resource_changed", "action_started", "action_finished", "said"} <= types
+    assert {"item_moved", "node_changed", "action_started", "action_finished", "said"} <= types
 
     final = from_snapshot(take_snapshot(sim.state))
 
@@ -140,27 +161,26 @@ def test_every_state_change_is_exactly_one_event(new_sim: Callable[..., Simulati
         except (KeyError, ValueError):  # the stream refers to someone or something that never appeared
             return False
 
-    def change(event: EventDraft) -> ResourceChanged | None:
-        return event.payload if isinstance(event.payload, ResourceChanged) else None
+    def change(event: EventDraft) -> NodeChanged | None:
+        return event.payload if isinstance(event.payload, NodeChanged) else None
 
-    def overwritten(index: int, stock: ResourceChanged) -> bool:
+    def overwritten(index: int, stock: NodeChanged) -> bool:
         later = (change(event) for event in events[index + 1 :])
-        return any(c is not None and (c.cell, c.resource) == (stock.cell, stock.resource) for c in later)
+        return any(c is not None and c.node == stock.node for c in later)
 
-    stocks: dict[tuple[int, str], int] = {}
-    changes: Counter[tuple[int, str]] = Counter()
+    stocks: dict[str, int] = {}
+    changes: Counter[str] = Counter()
     for index, event in enumerate(events):
         stock = change(event)
-        if stock is not None:  # it carries the absolute stock, so it leads on from the one before
-            key = (stock.cell, stock.resource)
-            assert stock.before == stocks.get(key, int(initial[stock.cell, RESOURCE_INDEX[stock.resource]])), event.seq
-            stocks[key] = stock.after
-            changes[key] += 1
+        if stock is not None:  # it carries the absolute stock, so it leads on from the one before (nodes start full)
+            assert stock.before == stocks.get(stock.node, int(table.caps[table.index[stock.node]])), event.seq
+            stocks[stock.node] = stock.after
+            changes[stock.node] += 1
         if event.type in ("citizen_spawned", "item_moved") or (stock is not None and not overwritten(index, stock)):
             assert not reaches_final(events[:index] + events[index + 1 :]), f"{event.type} #{event.seq} is redundant"
-        if event.type == "item_moved":  # a delta (resource_changed carries absolute values)
+        if event.type == "item_moved":  # a delta (node_changed carries absolute values)
             assert not reaches_final(events[: index + 1] + events[index:]), f"{event.type} #{event.seq} counted twice"
-    assert max(changes.values()) >= 2  # the bush Ben picked grows a berry back
+    assert sum(changes.values()) >= 2  # Ben picked the bush and the root patch (regrowth: tests/sim/test_nodes.py)
 
 
 def test_a_snapshot_resumes_into_the_same_future(new_sim: Callable[..., Simulation], planner: Planner) -> None:
@@ -189,6 +209,6 @@ def test_snapshots_survive_json_round_trips(new_sim: Callable[..., Simulation]) 
     assert canonical_json(again) == canonical_json(snapshot)
     restored = restore(again)
     assert state_hash(restored) == state_hash(sim.state)
-    assert np.array_equal(restored.resources, sim.state.resources)
+    assert nodes.NODES.of(restored) == nodes.NODES.of(sim.state)
     with pytest.raises(ValueError):
         restore(snapshot.model_copy(update={"version": 99}))

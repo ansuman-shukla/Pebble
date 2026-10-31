@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 from app.observability.events import EventDraft, ItemMoved, Ledger, TaxChange
-from app.sim import tax
+from app.sim import paddies, slots, tax
 from app.sim.clock import DAY_MINUTES, START_MINUTE, local_minute
 from app.sim.simulation import Simulation
 from app.sim.snapshot import restore, take_snapshot
@@ -15,9 +15,8 @@ from app.sim.state import ActionState
 from app.sim.systems import midnight_at
 from app.sim.tax import TAX, Account
 from app.sim.vec import lat_lon_deg
-from app.sim.work import farm
 from app.world_api.facade import WorldApi, run_until_done
-from tests.sim_helpers import make_spec, without_animals
+from tests.sim_helpers import make_spec, stand_at_node, without_animals
 
 COURT_ENDS = 7 * DAY_MINUTES - START_MINUTE  # the tick local midnight ends week day 7 (court day) in town
 TOWN = ["town", "well", "main-gate", "storehouses", "rice-fields", "castle"]
@@ -61,17 +60,20 @@ def test_each_harvest_owes_forty_percent_rounded_up(
     assert len(_tax(sim.drain())) == (2 if owed else 0)
 
 
-def test_a_farm_hour_assesses_its_harvest_on_the_farmer_s_household(new_sim: Callable[..., Simulation]) -> None:
+def test_a_harvest_session_assesses_its_rice_on_the_farmer_s_household(new_sim: Callable[..., Simulation]) -> None:
     sim = _scene(new_sim, ("aiko", "farmhouse-1", "farmhouse-1"))
     aiko = sim.citizen("aiko")
-    farm(sim.core, aiko, ActionState(1, "work", 0, 0, {}))
+    ripe = sim.world.nodes.index["paddy-6"]  # a ripe paddy: the session harvests (N1, paddies.harvest)
+    stand_at_node(sim, aiko.id, ripe)
+    slots.claim(sim.core, aiko, slots.node_slots(sim.core, ripe)[0], aiko.position)
+    paddies.farm(sim.core, aiko, ActionState(1, "work", 0, 0, {}))
     events = sim.drain()
     harvested = next(
         e for e in events if isinstance(e.payload, ItemMoved) and e.payload.destination.kind == "inventory"
     )
     assessed = [e for e in events if e.type == "tax_assessed"]
     assert len(assessed) == 1 and assessed[0].cause_seq == harvested.seq and assessed[0].actor_id == "aiko"
-    assert assessed[0].payload == TaxChange(household="farmhouse-1", rice=5, owed_rice=5)  # ⌈0.4 × 12⌉
+    assert assessed[0].payload == TaxChange(household="farmhouse-1", rice=4, owed_rice=4)  # ⌈0.4 × 10⌉
 
 
 def test_a_band_s_harvest_owes_the_town_nothing(new_sim: Callable[..., Simulation]) -> None:

@@ -9,6 +9,7 @@ from dataclasses import replace
 import pytest
 
 from app.observability.events import JsonScalar, TickSummary
+from app.sim import paddies
 from app.sim.core import Stride
 from app.sim.doing import water_within_reach
 from app.sim.ground_speed import ground_mps
@@ -46,7 +47,7 @@ from app.world_api.facade import WorldApi, run_until_done
 from tests.sim_helpers import GATE, make_spec, skip_to, without_animals
 
 FUTURE_TASKS = {"forge", "dry", "ring bell", "confined"}  # slots laid out for tasks their streams bring later
-SLOTTED_TASKS = {"farm", "weave", "trade", "guard", "govern", "pray"}  # every v0 task done at a thing
+SLOTTED_TASKS = {"weave", "trade", "guard", "govern", "pray"}  # every v0 task done at a thing (farm: at node spots)
 WELL_STAND_M = 2.3
 WELL_QUEUE_M = 3.5
 
@@ -212,9 +213,9 @@ def test_farmers_tend_separate_rows_inside_the_paddies(new_sim: Callable[..., Si
     works = [WorldApi(sim, f.id).work("farm") for f in farmers]
     sim.step()
     assert all(w.result is None for w in works)
-    for farmer in farmers:
-        x, z = sim.world.town_point(farmer.position) or (0.0, 0.0)
-        assert -126 < x < -114 and 46 < z < 66, (x, z)  # in paddy-5, not on the grass beside (audit F4)
+    for farmer in farmers:  # in a ripe paddy (5 or 6, the nearest spots first), not on the grass beside (audit F4)
+        paddy = paddies.paddy_at(sim.core, farmer.position)
+        assert paddy is not None and sim.world.nodes.ids[paddy] in ("paddy-5", "paddy-6"), farmer.position
     assert _apart(sim, farmers) >= 4.0  # a row of tiles apart
 
 
