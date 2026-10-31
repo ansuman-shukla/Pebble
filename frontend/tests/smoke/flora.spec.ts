@@ -20,6 +20,7 @@ import {
   type Globe,
   tangentFrame,
 } from '../../src/lib/world/globe';
+import backend from './fixtures/flora-points.json' with { type: 'json' };
 import { FLORA_URL, floraOf, WORLD_URL } from './globe-helpers';
 
 /*
@@ -162,6 +163,24 @@ test.describe('on the real world', () => {
     }
     return count;
   }
+
+  test("every item lies where the backend's own flora puts it", () => {
+    // written by `backend/scripts/flora_points.py` from this world: regenerate it when the world changes
+    expect(
+      [view.seed, view.generator_version, flora.count],
+      'stale fixtures/flora-points.json',
+    ).toEqual([backend.seed, backend.generator_version, backend.count]);
+    const at = new Vector3();
+    const faults: string[] = [];
+    const points = Object.entries(backend.points);
+    expect(points.length).toBeGreaterThan(500);
+    for (const [id, unit] of points) {
+      floraDirection(globe, flora, Number(id), at);
+      const off = at.angleTo(new Vector3(...unit)) * globe.radius;
+      if (off > 0.05) faults.push(`${id} ${off.toFixed(3)} m off`);
+    }
+    expect(faults).toEqual([]);
+  });
 
   test('the Elder grove holds exactly its 25 berry bushes and 10 nut trees', () => {
     const grove = view.places.hotspots.find((h) => h.id === 'elder_grove')!;

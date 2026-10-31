@@ -6,6 +6,7 @@ import { BIOME_PROPS } from '../../src/lib/world/biome-props';
 import type { FloraTable } from '../../src/lib/world/flora';
 import { buildTerrain, decodeWorld } from '../../src/lib/world/globe';
 import { createScatter, type Scatter } from '../../src/lib/world/scatter';
+import backend from './fixtures/flora-points.json' with { type: 'json' };
 import {
   DRAW_CALL_BUDGET,
   FLORA_URL,
@@ -109,6 +110,23 @@ test('every node within reach of the focus is drawn once, at its place, as its l
         .angleTo(node.position.clone().normalize()) * view.radius_m;
     if (off > 0.05) faults.push(`${node.id} drawn ${off.toFixed(3)} m off`);
   }
+  // and where the backend's own flora puts them (fixtures/flora-points.json, written by the backend)
+  expect(view.generator_version).toBe(backend.generator_version);
+  const points = new Map(Object.entries(backend.points));
+  let matched = 0;
+  for (const shown of drawn.nodes) {
+    const unit = points.get(shown.id.replace('flora:', ''));
+    if (!shown.id.startsWith('flora:') || !unit) continue;
+    matched += 1;
+    const off =
+      new Vector3(...shown.position).normalize().angleTo(new Vector3(...unit)) *
+      view.radius_m;
+    if (off > 0.05)
+      faults.push(
+        `${shown.id} drawn ${off.toFixed(3)} m off the backend's point`,
+      );
+  }
+  expect(matched).toBeGreaterThan(200);
   expect(faults).toEqual([]);
   // nothing else is drawn
   expect(drawn.nodes.length).toBe(expected.length);
