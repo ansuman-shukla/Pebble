@@ -58,6 +58,8 @@ BELL = 88.0  # the bell can't wait: above hungry (85) and thirsty (80), below st
 BELLS: dict[TimeOfDay, str] = {"dawn": "dawn bell", "midday": "noon bell", "sunset": "dusk bell", "dusk": "dusk bell"}
 HUNT = "Hunt game for the band"
 LYING_FOOD = ("meat on the ground", "fish on the ground")
+# a forager with enough food (or no room) rests, looks about camp and heads back: one aim, so goals don't flip
+AT_EASE: tuple[str, Driver] = ("Take it easy about camp", "rest")
 SCAVENGE = WORK + 6  # over a hunt: the meat is there already
 KEEP_FIRE = "Keep the camp fire going"
 
@@ -360,7 +362,7 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
             _set(ctx, "returning", False)
             _set(ctx, "outing", 0)
 
-        return [Option(WORK, "rest at camp", _then(back, lambda: api.rest(style.rests)), "Rest at camp", "rest")]
+        return [Option(WORK, "rest at camp", _then(back, lambda: api.rest(style.rests)), *AT_EASE)]
     scavenging = _scavenge(ctx)
     if scavenging:
         return scavenging
@@ -383,10 +385,10 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
         if near(p, home_area) and (rested or ctx.chance(0.6)):
             direction = COMPASS[ctx.pick(len(COMPASS))]
             stroll = lambda: api.walk_towards(direction, "a short walk")  # noqa: E731  # a tiny closure reads best inline
-            return [Option(score, "stroll", stroll, "Look about camp", "social")]
+            return [Option(score, "stroll", stroll, *AT_EASE)]
         if not (at_home(p) or at(p, home_area)):
-            return [Option(score, "go home", lambda: api.walk_to_place("home", ctx.pace), "Head back to camp")]
-        return [Option(score, "rest at camp", lambda: api.rest(style.rests), "Rest at camp", "rest")]
+            return [Option(score, "go home", lambda: api.walk_to_place("home", ctx.pace), *AT_EASE)]
+        return [Option(score, "rest at camp", lambda: api.rest(style.rests), *AT_EASE)]
     seen = resources_in_view(p)
     here = [r for r in seen if r.distance == "here" and r.kind in wanted]
     if here:

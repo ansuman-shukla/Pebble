@@ -7,10 +7,11 @@ from types import SimpleNamespace
 from typing import cast
 
 import pytest
+from pydantic import JsonValue
 
 from app.brains.brain import UtilityBrain
 from app.brains.profile import BrainProfile, known_titles
-from app.brains.routines import Context
+from app.brains.routines import ROUTINES, Context
 from app.brains.senses import Needs
 from app.observability.events import Gestured, GoalSet, Said
 from app.sim import fire as fires
@@ -19,7 +20,7 @@ from app.sim.slots import OCCUPY_M, held_slot
 from app.sim.state import Fire
 from app.sim.vec import step_towards
 from app.world_api.facade import ActionHandle, WorldApi
-from app.world_api.models import ActionResult, Perception
+from app.world_api.models import ActionResult, Perception, Seen, SelfView
 from tests.sim_helpers import (
     add_animal,
     make_spec,
@@ -185,6 +186,41 @@ def test_a_predator_prowling_in_view_hurries_you_unless_walls_or_a_fire_keep_it_
     seen = town.api.look_around()
     assert [(a.label, a.doing) for a in seen.animals] == [("a wolf", "on the move")]
     assert town.pace(seen, calm) == "walk"  # the walls keep it out
+
+
+def _forager_ctx(look: Perception, chance: bool, notes: dict[str, JsonValue]) -> Context:
+    api = cast(WorldApi, SimpleNamespace(notes=notes))
+    profile = BrainProfile("suna", "Suna", "gatherer", "band_a", "Band A camp")
+    return Context(api, profile, look, Needs(0, 0, 0), "day", lambda _p: chance, lambda _n: 0)
+
+
+def _camp_look(place: str, *things: Seen) -> Perception:
+    you = SelfView(feeling=[], carrying=["plenty of roots"], doing="You are standing about.")
+    return Perception(
+        you=you, place=place, time="It is midday.", time_of_day="midday", people=[], animals=[], things=list(things),
+        heard=[],
+    )  # fmt: skip
+
+
+def test_a_forager_at_ease_keeps_one_goal_while_it_rests_looks_about_and_heads_back() -> None:
+    """Review of #102: resting, strolling and heading back each told a goal of their own, 80-103 set_goal a day for
+    each band member; they are one aim."""
+    full: dict[str, JsonValue] = {"full": ["plenty of roots"]}  # told it can carry no more
+    at_home = _camp_look("at your home, at Band A camp")
+    out = _camp_look("not far from Band A camp")
+    picked = {
+        name: (option.name, option.aim, option.driver)
+        for name, ctx in (
+            ("rest", _forager_ctx(at_home, chance=False, notes=dict(full))),
+            ("stroll", _forager_ctx(at_home, chance=True, notes=dict(full))),
+            ("back", _forager_ctx(out, chance=False, notes=dict(full))),
+        )
+        for option in ROUTINES["gatherer"](ctx)
+    }
+    assert {name: step for name, (step, _, _) in picked.items()} == {
+        "rest": "rest at camp", "stroll": "stroll", "back": "go home",
+    }  # fmt: skip
+    assert {(aim, driver) for _, aim, driver in picked.values()} == {("Take it easy about camp", "rest")}
 
 
 def _near_camp(sim: Simulation) -> int:
