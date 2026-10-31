@@ -131,8 +131,6 @@ interface Ribbon {
   /** Unit directions every STEP metres along its middle line (a closed one ends where it starts). */
   points: Vector3[];
   closed: boolean;
-  /** Sample index ranges [from, to] left undrawn (under a bridge). */
-  gaps: [number, number][];
 }
 
 interface Patch {
@@ -320,10 +318,10 @@ function riverIndex(rivers: RiverLayout, radius: number) {
 
 /**
  * Where bridges carry the ribbons over the drawn rivers: each stretch of a ribbon whose middle line runs onto drawn
- * water is left undrawn and spanned from bank to bank along the road (with BRIDGE_MARGIN to spare). The world's bridges stand on the river
- * cells its routes cross, but the drawn river runs smoothed beside those cells' centres and a ribbon curving between
- * two cells can meet it elsewhere, so the drawn crossings are found from the drawn ribbons and rivers (the town's
- * own water stops its ribbons through the ground instead).
+ * water (no mark lies on it: see globeMarkGround) is spanned from bank to bank along the road, with BRIDGE_MARGIN to
+ * spare. The world's bridges stand on the river cells its routes cross, but the drawn river runs smoothed beside
+ * those cells' centres and a ribbon curving between two cells can meet it elsewhere, so the drawn crossings are found
+ * from the drawn ribbons and rivers.
  */
 function bridgeSpans(
   ribbons: Ribbon[],
@@ -341,7 +339,6 @@ function bridgeSpans(
       // a ribbon only grazing the water keeps to the bank
       if (Math.min(...near.slice(from, to + 1)) < 0) {
         const middle = Math.round((from + to) / 2);
-        ribbon.gaps.push([from, to]);
         spans.push({
           centre: ribbon.points[middle],
           along: alongAt(ribbon.points, middle, new Vector3()),
@@ -374,7 +371,7 @@ export function planetMarks({
     kind: RouteKind,
     points: Vector3[],
     { width = ROUTE_WIDTH[kind], closed = false } = {},
-  ): Ribbon => ({ kind, width, points, closed, gaps: [] });
+  ): Ribbon => ({ kind, width, points, closed });
   const ribbons: Ribbon[] = chains.map((chain) =>
     ribbon(
       chain.kind,
@@ -563,10 +560,7 @@ function drapeRibbon(mesh: MarkMesh, ribbon: Ribbon, ground: MarkGround) {
   const lift = LIFT[ribbon.kind];
   const along = new Vector3();
   const at = new Vector3();
-  const hidden = (i: number) =>
-    ribbon.gaps.some(([from, to]) => i >= from && i <= to);
   const samples = ribbon.points.map((point, i) => {
-    if (hidden(i)) return null;
     alongAt(ribbon.points, i, along);
     const side = new Vector3().crossVectors(along, point).normalize();
     // a border over water (a ribbon grazing a river or the town's stream) lies level with the middle

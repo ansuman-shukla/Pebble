@@ -563,7 +563,9 @@ test.describe('ground marks on screen', () => {
           Math.max(...(heights as number[])) -
             Math.min(...(heights as number[])) >
             1.5 ||
-          ribbon.gaps.some(([from, to]) => i > from - 20 && i < to + 20) ||
+          marks.bridges.some(
+            (bridge) => bridge.centre.angleTo(centre) * radius < 30,
+          ) ||
           near.some((point) => point.angleTo(centre) * radius < 15) ||
           marks.patches.some(
             (patch) =>
