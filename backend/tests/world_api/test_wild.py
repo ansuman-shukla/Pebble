@@ -426,3 +426,24 @@ def test_no_spear_no_breakage(new_sim: Callable[..., Simulation], monkeypatch: p
     _spears_always_break(monkeypatch)
     run_until_done(sim, api.attack("the wolf"), 5)
     assert _broke(sim.drain()) == []
+
+
+def test_a_hunter_never_stalks_out_onto_the_water(new_sim: Callable[..., Simulation]) -> None:
+    """Regression: a planned stalk to a duck out on the lake led the hunter onto the water."""
+    sim, api = _hunter(new_sim)
+    world, allowed = sim.world, sim.core.planner.outer.allowed
+    lake = next(
+        cell for cell in range(world.cell_count)
+        if world.biome(cell) == "lake" and any(allowed[n] for n in world.neighbours[cell])
+        and all(not allowed[n] for n in world.neighbours[cell] if world.biome(n) == "lake")
+    )  # fmt: skip
+    shore = next(n for n in world.neighbours[lake] if allowed[n])
+    hunter = sim.citizen("hunter")
+    sim.core.place_at(hunter, world.unit(shore))
+    skip_to(sim, hunter.position, night=False)
+    add_animal(sim, "duck", world.unit(lake), activity="floating", until=10**9)
+    handle = api.hunt("duck")
+    for _ in range(5):
+        sim.step()
+        assert allowed[hunter.cell], "the hunter walked onto the water"
+    assert handle.result is not None and handle.result.text == "You can't get any closer to a duck."

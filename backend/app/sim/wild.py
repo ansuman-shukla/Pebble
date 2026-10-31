@@ -130,13 +130,13 @@ def advance_stalk(core: SimCore, citizen: Citizen, action: ActionState) -> None:
 
 def _stalk_route(core: SimCore, citizen: Citizen, quarry: Vec3, strike_m: float) -> Route | None:
     """A route to the spot STRIKE_SHARE of striking distance from the quarry on the stalker's side (None: no way
-    there, or it lies within the town's walls, where animals never are)."""
+    there, or it lies within the town's walls, where animals never are, or on water: a duck out on the lake)."""
     if core.world.town_point(citizen.position) is not None:
         return None
     gap = core.distance_m(citizen.position, quarry)
     stand = step_towards(quarry, bearing_deg(quarry, citizen.position), min(gap, strike_m * STRIKE_SHARE),
                          core.world.radius_m)  # fmt: skip
-    if core.world.town_point(stand) is not None:
+    if core.world.town_point(stand) is not None or not core.planner.outer.allowed[core.world.nearest_cell(stand)]:
         return None
     return core.planner.plan(citizen.position, stand, citizen.cell)
 
