@@ -10,7 +10,7 @@ from app.observability.events import EventDraft, TickSummary
 from app.observability.replay import ReplayEvent, from_snapshot, replay
 from app.sim import animals as animal_life
 from app.sim.clock import DAY_MINUTES
-from app.sim.fauna import DANGEROUS, HERBIVORES, LIVING_SITES, PREDATORS, SPECIES, can_stand, in_town_walls
+from app.sim.fauna import DANGEROUS, HERBIVORES, LIVING_SITES, PREDATORS, SPECIES, can_stand, den_of, in_town_walls
 from app.sim.fire import add_fuel
 from app.sim.navigation import Planner
 from app.sim.simulation import Simulation
@@ -53,7 +53,8 @@ def test_every_kind_lives_in_its_habitat_and_some_near_the_people(new_sim: Calla
     for group in sim.state.groups.values():
         assert len(group.members) == group.size
         assert SPECIES[group.kind].group_size[0] <= group.size <= SPECIES[group.kind].group_size[1]
-        assert world.biome(group.home) in SPECIES[group.kind].habitat
+        # a den pins its kind wherever it lies (D124); every other home is on the kind's habitat
+        assert den_of(world, group) is not None or world.biome(group.home) in SPECIES[group.kind].habitat
     for animal in animals:
         assert can_stand(world, SPECIES[animal.kind], animal.cell)
         assert not in_town_walls(world, animal.cell, animal.position)
