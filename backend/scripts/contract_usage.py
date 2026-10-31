@@ -3,8 +3,8 @@
     uv run python -m scripts.contract_usage [days] [seed]
 
 Counts every action the brains call (by name, `walk_to` by what it aims at, with their outcomes) and
-every part of the perceptions they receive (non-empty fields, thing kinds, plants, nearness words, times of day and
-heard volumes). Actions or parts that are never used are listed at the end.
+every part of the perceptions they receive (non-empty fields, thing kinds, plants, nearness words, times of day,
+heard volumes and the contract v1 fields). Actions or parts that are never used are listed at the end.
 """
 
 import sys
@@ -16,11 +16,13 @@ from app.sim.citizens import CITIZENS, load_citizens
 from app.sim.clock import DAY_MINUTES
 from app.sim.simulation import Simulation
 from app.world_api.models import (
+    INSTANT_ACTIONS,
     Action,
     ActionName,
     ActionResult,
     Nearness,
     Perception,
+    Safety,
     SelfView,
     ThingKind,
     TimeOfDay,
@@ -29,7 +31,9 @@ from app.world_api.models import (
 )
 from tests.sim_helpers import real_world
 
-INSTANT = ("say", "pick_up", "drop", "give", "recall")
+INSTANT = INSTANT_ACTIONS - {"look_around", "check_self"}
+V1_SELF = ("purse", "load", "titles", "standing", "wanted", "held", "confined")
+V1_LOOK = ("day_of_week", "ground", "safety", "market", "chest")
 actions = Counter[str]()
 parts = Counter[str]()
 
@@ -47,10 +51,18 @@ def count_perception(p: Perception) -> None:
             parts[name] += 1
     parts["you.feeling"] += bool(p.you.feeling)
     parts["you.carrying"] += bool(p.you.carrying)
+    for name in V1_SELF:
+        parts[f"you.{name}"] += bool(getattr(p.you, name))
+    for name in V1_LOOK:
+        parts[name] += getattr(p, name) is not None
+    if p.safety is not None:
+        parts[f"safety:{p.safety}"] += 1
     parts[f"time_of_day:{p.time_of_day}"] += 1
     for seen in p.people + p.animals + p.things:
         parts[f"nearness:{seen.nearness}"] += 1
         parts["seen.doing"] += seen.doing is not None
+        parts["seen.relation"] += seen.relation is not None
+        parts["seen.regard"] += seen.regard is not None
     for seen in p.things:
         parts[f"thing:{seen.kind}"] += 1
         if seen.resource is not None:
@@ -112,7 +124,10 @@ def main(days: int = 10, seed: int = 20261028) -> None:
     print("\nperception parts:")
     expected = (
         ["place", "time", "time_of_day", "people", "animals", "things", "heard", "you.feeling", "you.carrying"]
-        + ["seen.doing"]
+        + ["seen.doing", "seen.relation", "seen.regard"]
+        + [f"you.{name}" for name in V1_SELF]
+        + list(V1_LOOK)
+        + [f"safety:{s}" for s in get_args(Safety)]
         + [f"time_of_day:{t}" for t in get_args(TimeOfDay)]
         + [f"nearness:{n}" for n in get_args(Nearness)]
         + [f"thing:{k}" for k in get_args(ThingKind)]
