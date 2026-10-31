@@ -538,8 +538,9 @@ def test_a_wolf_gives_up_once_its_quarry_has_company(new_sim: Callable[..., Simu
     assert wolf.target == victim  # still far off: coming at them
     mate = sim.citizen(_person(sim, "mate", step_towards(sim.citizen(victim).position, 0.0, 5.0, R)))
     assert mate.body.alive
-    _run(sim, 1)
+    events = _run(sim, 1)
     assert wolf.target is None
+    assert not [e for e in events if isinstance(e.payload, Injured)]  # it turned away, it didn't bite and leave
 
 
 # --- herds, dens and waterholes ---
