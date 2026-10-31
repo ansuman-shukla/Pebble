@@ -3,7 +3,11 @@ grounds beyond it, a different way each trip, early enough in the day to be back
 doesn't end the trip, a refusal does; a forager badly bitten runs from a wolf instead of fighting it again."""
 
 from collections.abc import Callable
+from dataclasses import replace
 
+import pytest
+
+from app.brains import grounds
 from app.brains.brain import UtilityBrain
 from app.brains.grounds import DEN_CLEAR_M, GROUND_FOOD, GROUNDS_M, STOP_CLEAR_M, WAYS, forage_grounds
 from app.brains.profile import BrainProfile, Ground
@@ -11,7 +15,8 @@ from app.brains.routines import TRIP_LEGS, TRIP_TIMES
 from app.sim import nodes
 from app.sim.destinations import COMPASS_BEARING, ROUGH_DISTANCE_M
 from app.sim.simulation import Simulation
-from app.sim.vec import Vec3, step_towards
+from app.sim.vec import Vec3, bearing_deg, step_towards
+from app.world.view import Feature
 from app.world_api.facade import WorldApi
 from app.world_api.models import Compass
 from tests.sim_helpers import add_animal, make_spec, nearest_node, skip_to, stand_at_node, without_animals
@@ -68,6 +73,34 @@ def test_the_grounds_are_the_ways_with_most_food_beyond_the_home_ring(new_sim: C
     assert len(kept) == 3 and len({ground.way for ground in kept}) == 3
     picked = [totals[WAYS.index(ground.way)] for ground in kept]
     assert picked == sorted(picked, reverse=True) and picked[0] == max(totals)  # most food first
+
+
+def test_a_way_rich_only_in_food_by_dens_is_no_ground(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A den by every berry bush, root patch and oak of band A's richest way: its food is all by dens, so it drops
+    out and the other ways move up (every walk on allowed, so only the food filter decides)."""
+    sim = new_sim()
+    world, table = sim.world, sim.world.nodes
+    camp = world.places[CAMP].centre
+    monkeypatch.setattr(grounds, "clear_legs", lambda *_: TRIP_LEGS)
+    before = [ground.way for ground in forage_grounds(world, CAMP)]
+    sector = WAYS.index(before[0])
+    food = [
+        node
+        for metres, node in table.near(world.grid, camp, GROUNDS_M[1])
+        if metres >= GROUNDS_M[0]
+        and table.kind(node).item in GROUND_FOOD
+        and int(((bearing_deg(camp, table.unit(node)) + 22.5) % 360.0) // 45.0) == sector
+    ]
+    dens = tuple(
+        Feature(id=f"test:den-{node}", kind="den", position=table.unit(node), cell=int(table.cells[node]))
+        for node in food
+    )
+    by_dens = replace(world, features=(*world.features, *dens))
+    after = [ground.way for ground in forage_grounds(by_dens, CAMP)]
+    assert before[0] not in after and len(after) == 3
+    assert after[:2] == before[1:]  # re-ranked: the next ways move up
 
 
 def _dens(sim: Simulation) -> list[Vec3]:
