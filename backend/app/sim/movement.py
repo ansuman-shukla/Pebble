@@ -48,7 +48,7 @@ def start_walk(core: SimCore, citizen: Citizen, action: WalkTo) -> int:
         citizen,
         "walk_to",
         resolved.shown,
-        {"target": target.kind, "arrive": resolved.arrive, "pace": "walk"},  # C1's contract v1 adds `pace`
+        {"target": target.kind, "arrive": resolved.arrive, "pace": action.pace},
         destination=resolved.words,
     )
     walk.route, walk.goal, walk.target_id = route, resolved.goal, resolved.person_id
@@ -65,7 +65,7 @@ def start_follow(core: SimCore, citizen: Citizen, action: Follow) -> int:
         citizen,
         "follow",
         person.name,
-        {"target": "person", "pace": "walk"},  # C1's contract v1 adds `pace`
+        {"target": "person", "pace": action.pace},
         destination=person_label(citizen, person),
     )
     follow.target_id = person.id

@@ -15,6 +15,7 @@ from app.sim.snapshot import restore, take_snapshot
 from app.sim.state import AgeGroup, Citizen, Fire
 from app.sim.vec import bearing_deg, step_towards
 from app.world_api.facade import WorldApi
+from app.world_api.models import Pace
 from tests.sim_helpers import add_animal, make_spec, put_in_the_wild, skip_to, wild_cell, without_animals
 
 CAPS_M = {"walk": 84.0, "jog": 150.0, "run": 210.0, "stalk": 48.0}
@@ -31,14 +32,13 @@ def _walker(
     return sim, citizen
 
 
-def _walk(sim: Simulation, citizen: Citizen, pace: str = "walk") -> None:
+def _walk(sim: Simulation, citizen: Citizen, pace: Pace = "walk") -> None:
     """A long walk north over flat open ground (one leg costing 1 a metre) at the pace."""
-    WorldApi(sim, citizen.id).walk_towards("north", "a long walk")
+    WorldApi(sim, citizen.id).walk_towards("north", "a long walk", pace)
     walk = citizen.action
     assert walk is not None
     far = step_towards(citizen.position, 0.0, 2000.0, sim.world.radius_m)
     walk.route, walk.leg, walk.along_m = Route(points=(citizen.position, far), costs=(1.0,)), 0, 0.0
-    walk.args["pace"] = pace  # C1's contract v1 adds `pace` to walk_to
 
 
 def _flee(sim: Simulation, citizen: Citizen) -> None:
@@ -142,6 +142,24 @@ def test_the_feed_draws_each_move_at_the_gait_it_was_made(new_sim: Callable[...,
         assert isinstance(summary, TickSummary)
         gaits.append(summary.moved[citizen.id].gait)
     assert gaits == ["run", "run", "run", "jog"]
+
+
+@pytest.mark.parametrize("pace", ["walk", "run"])
+def test_a_follower_goes_at_the_pace_asked_for(pace: Pace, new_sim: Callable[..., Simulation]) -> None:
+    """walk_to's pace is the `_walk` tests' (through the facade); a follower 30 m behind a walker keeps to theirs."""
+    sim, citizen = _walker(new_sim)
+    leader = sim.add_citizen(make_spec("ama", name="Ama", home=None))
+    sim.core.place_at(leader, step_towards(citizen.position, 0.0, 30.0, sim.world.radius_m))
+    citizen.people.add(leader.id)
+    leader.people.add(citizen.id)
+    WorldApi(sim, leader.id).walk_towards("north", "a long walk")
+    WorldApi(sim, citizen.id).follow("Ama", pace)
+    sim.drain()
+    sim.step()
+    (summary,) = [event.payload for event in sim.drain() if event.type == "tick_summary"]
+    assert isinstance(summary, TickSummary)
+    assert (summary.moved[leader.id].gait, summary.moved[citizen.id].gait) == ("walk", pace)
+    assert citizen.action is not None and citizen.action.args["pace"] == pace
 
 
 def test_a_fleeing_adult_runs_until_the_endurance_is_spent_then_jogs(new_sim: Callable[..., Simulation]) -> None:
