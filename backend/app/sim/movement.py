@@ -17,12 +17,12 @@ from app.sim.core import WALK_AHEAD_TICKS, SimCore, Stride, TimedPoint
 from app.sim.destinations import beside, resolve
 from app.sim.fauna import SPECIES
 from app.sim.ground_speed import ground_mps, load_share
-from app.sim.locomotion import Gait, Pace, gait_for, load_bodies, top_gait
+from app.sim.locomotion import Gait, gait_for, load_bodies, top_gait
 from app.sim.navigation import WalkProgress, walk_along
 from app.sim.perception import match_person, nearest_danger, person_label
 from app.sim.state import ActionState, Citizen, System
 from app.sim.vec import Vec3, bearing_deg, step_towards
-from app.world_api.models import Flee, Follow, WalkTo
+from app.world_api.models import Flee, Follow, Pace, WalkTo
 
 ARRIVE_M = 2.0  # close enough to a person
 SAME_SPOT_M = 0.001  # spots on a streamed route closer than this are one spot
@@ -48,7 +48,7 @@ def start_walk(core: SimCore, citizen: Citizen, action: WalkTo) -> int:
         citizen,
         "walk_to",
         resolved.shown,
-        {"target": target.kind, "arrive": resolved.arrive, "pace": "walk"},  # C1's contract v1 adds `pace`
+        {"target": target.kind, "arrive": resolved.arrive, "pace": action.pace},
         destination=resolved.words,
     )
     walk.route, walk.goal, walk.target_id = route, resolved.goal, resolved.person_id
@@ -65,7 +65,7 @@ def start_follow(core: SimCore, citizen: Citizen, action: Follow) -> int:
         citizen,
         "follow",
         person.name,
-        {"target": "person", "pace": "walk"},  # C1's contract v1 adds `pace`
+        {"target": "person", "pace": action.pace},
         destination=person_label(citizen, person),
     )
     follow.target_id = person.id

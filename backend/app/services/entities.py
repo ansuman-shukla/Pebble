@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlmodel import Session
 
 from app.db.models import Run
-from app.observability.events import AnimalGait, Driver, RoutePoint, Target
+from app.observability.events import AnimalGait, RoutePoint, Target
 from app.observability.replay import ReplayAnimal, ReplayCitizen, ReplayEvent, ReplayFire, ReplayState, replay
 from app.observability.store import events_after, latest_snapshot
 from app.services.clock import run_or_latest
@@ -20,6 +20,7 @@ from app.sim.motion import Motion, Posture, body_motion, load_share
 from app.sim.snapshot import SimSnapshot
 from app.sim.state import AnimalActivity, Body, FireKind, Region, age_group
 from app.sim.vec import Vec3, lat_lon_deg
+from app.world_api.models import Driver
 
 Activity = Literal[
     "idle",

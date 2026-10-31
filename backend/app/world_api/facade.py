@@ -10,13 +10,18 @@ from pydantic import JsonValue
 
 from app.sim.simulation import Simulation
 from app.world_api.models import (
+    INSTANT_ACTIONS,
+    Accuse,
     Action,
     ActionResult,
     Attack,
+    Buy,
     CheckSelf,
     Compass,
+    Craft,
     DirectionTarget,
     Drink,
+    Driver,
     Drop,
     Eat,
     FeedFire,
@@ -24,10 +29,14 @@ from app.world_api.models import (
     Flee,
     Follow,
     Gather,
+    Gesture,
+    GestureKind,
     Give,
     Hunt,
+    Judge,
     LookAround,
     MakeFire,
+    Pace,
     Perception,
     PersonTarget,
     PickUp,
@@ -36,10 +45,16 @@ from app.world_api.models import (
     Rest,
     RoughDistance,
     Say,
+    Seize,
     SelfView,
+    Sell,
+    SetGoal,
     Sleep,
+    Stash,
     Target,
+    Tend,
     ThingTarget,
+    Verdict,
     Volume,
     Wait,
     WalkTo,
@@ -75,7 +90,7 @@ class WorldApi:
             return self.sim.perceive(self.citizen_id)
         if isinstance(action, CheckSelf):
             return self.sim.check_self(self.citizen_id)
-        if isinstance(action, Say | PickUp | Drop | Give | Recall):
+        if action.action in INSTANT_ACTIONS:
             return self.sim.instant(self.citizen_id, action)
         return ActionHandle(self.sim, self.citizen_id, self.sim.start(self.citizen_id, action))
 
@@ -124,22 +139,41 @@ class WorldApi:
     def recall(self, about: str) -> ActionResult:
         return self.sim.instant(self.citizen_id, Recall(about=about))
 
+    def buy(self, item: str, amount: int) -> ActionResult:
+        return self.sim.instant(self.citizen_id, Buy(item=item, amount=amount))
+
+    def sell(self, item: str, amount: int) -> ActionResult:
+        return self.sim.instant(self.citizen_id, Sell(item=item, amount=amount))
+
+    def stash(self, item: str, amount: int) -> ActionResult:
+        return self.sim.instant(self.citizen_id, Stash(item=item, amount=amount))
+
+    def accuse(self, person: str, to: str) -> ActionResult:
+        return self.sim.instant(self.citizen_id, Accuse(person=person, to=to))
+
+    def gesture(self, kind: GestureKind, to: str | None = None) -> ActionResult:
+        return self.sim.instant(self.citizen_id, Gesture(kind=kind, to=to))
+
+    def set_goal(self, text: str, driver: Driver) -> ActionResult:
+        """What this citizen is after now and why: spectators see it, nobody in the world does; it takes no time."""
+        return self.sim.instant(self.citizen_id, SetGoal(text=text, driver=driver))
+
     # --- durative ---
 
-    def walk_to(self, target: Target) -> ActionHandle:
-        return self._start(WalkTo(target=target))
+    def walk_to(self, target: Target, pace: Pace = "walk") -> ActionHandle:
+        return self._start(WalkTo(target=target, pace=pace))
 
-    def walk_to_place(self, name: str) -> ActionHandle:
-        return self.walk_to(PlaceTarget(name=name))
+    def walk_to_place(self, name: str, pace: Pace = "walk") -> ActionHandle:
+        return self.walk_to(PlaceTarget(name=name), pace)
 
-    def walk_to_person(self, who: str) -> ActionHandle:
-        return self.walk_to(PersonTarget(who=who))
+    def walk_to_person(self, who: str, pace: Pace = "walk") -> ActionHandle:
+        return self.walk_to(PersonTarget(who=who), pace)
 
-    def walk_to_thing(self, what: str) -> ActionHandle:
-        return self.walk_to(ThingTarget(what=what))
+    def walk_to_thing(self, what: str, pace: Pace = "walk") -> ActionHandle:
+        return self.walk_to(ThingTarget(what=what), pace)
 
-    def walk_towards(self, direction: Compass, distance: RoughDistance) -> ActionHandle:
-        return self.walk_to(DirectionTarget(direction=direction, distance=distance))
+    def walk_towards(self, direction: Compass, distance: RoughDistance, pace: Pace = "walk") -> ActionHandle:
+        return self.walk_to(DirectionTarget(direction=direction, distance=distance), pace)
 
     def gather(self, resource: str) -> ActionHandle:
         return self._start(Gather(resource=resource))
@@ -163,11 +197,11 @@ class WorldApi:
         return self._start(Flee())
 
     def work(self, task: str) -> ActionHandle:
-        """A role task: farm, store food, guard, trade, weave, govern."""
+        """A role task: farm, store food, guard, trade, weave, govern, pray, ring bell."""
         return self._start(Work(task=task))
 
-    def follow(self, person: str) -> ActionHandle:
-        return self._start(Follow(person=person))
+    def follow(self, person: str, pace: Pace = "walk") -> ActionHandle:
+        return self._start(Follow(person=person, pace=pace))
 
     def fish(self) -> ActionHandle:
         return self._start(Fish())
@@ -183,6 +217,18 @@ class WorldApi:
 
     def attack(self, target: str) -> ActionHandle:
         return self._start(Attack(target=target))
+
+    def craft(self, recipe: str) -> ActionHandle:
+        return self._start(Craft(recipe=recipe))
+
+    def seize(self, person: str) -> ActionHandle:
+        return self._start(Seize(person=person))
+
+    def judge(self, person: str, sentence: Verdict) -> ActionHandle:
+        return self._start(Judge(person=person, sentence=sentence))
+
+    def tend(self, person: str) -> ActionHandle:
+        return self._start(Tend(person=person))
 
 
 def run_until_done(sim: Simulation, handle: ActionHandle, max_ticks: int) -> ActionResult:

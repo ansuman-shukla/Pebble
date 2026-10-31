@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict
 from app.sim.locomotion import Gait
 from app.sim.state import AnimalActivity, FireKind
 from app.sim.vec import Vec3
-from app.world_api.models import ActionName, Outcome, Volume
+from app.world_api.models import ActionName, Driver, GestureKind, Outcome, PriceWord, Sentence, Volume
 
 EventType = Literal[
     "tick_summary",
@@ -68,11 +68,7 @@ Visibility = Literal["public", "private"]
 BodyValues = tuple[float, float, float, float]  # hunger, thirst, energy, health
 JsonScalar = str | int | float | bool | None
 AnimalGait = Literal["walk", "trot", "run", "stalk", "swim"]  # trot: an animal's sustained speed (10 §4.6)
-GestureKind = Literal["wave", "bow", "nod", "shake_head", "point", "laugh", "jump"]
-Driver = Literal["hunger", "thirst", "rest", "danger", "duty", "ambition", "social", "night"]
 TargetKind = Literal["person", "animal", "node", "store", "structure", "fire", "stack", "place", "direction"]
-PriceWord = Literal["dear", "fair", "cheap"]
-Sentence = Literal["fine", "confine"]
 
 
 class Payload(BaseModel):

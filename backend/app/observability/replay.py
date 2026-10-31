@@ -19,7 +19,6 @@ from app.observability.events import (
     BodyValues,
     CitizenSpawned,
     Died,
-    Driver,
     FireChanged,
     GoalSet,
     ItemLocation,
@@ -38,6 +37,7 @@ from app.sim.locomotion import Gait
 from app.sim.snapshot import SimSnapshot
 from app.sim.state import AnimalActivity, FireKind, Region
 from app.sim.vec import Vec3
+from app.world_api.models import Driver
 
 
 @dataclass

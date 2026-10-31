@@ -23,7 +23,6 @@ from app.sim.state import ActionState, Animal, Citizen
 from app.sim.vec import Vec3, bearing_deg, lat_lon_deg
 from app.sim.world import CAMP_STRUCTURE_LABELS, HOME_KINDS, STRUCTURE_LABELS, WATER_BIOMES
 from app.world_api.models import (
-    NEAREST,
     HeardWords,
     Nearness,
     Perception,
@@ -31,8 +30,8 @@ from app.world_api.models import (
     Seen,
     SelfView,
     ThingKind,
-    phrase,
 )
+from app.world_api.phrases import NEAREST, phrase
 
 COMPASS = ("north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west")
 MAX_ANIMALS = 8
@@ -659,7 +658,7 @@ def sights(core: SimCore, citizen: Citizen, things: list[Thing]) -> list[Sight]:
 
 
 def words(seen: Seen) -> int:
-    return len(phrase(seen).split())
+    return len(phrase(seen.label, seen.where, seen.doing).split())
 
 
 def fit_to_budget(people: list[Seen], animals: list[Seen], found: list[Sight]) -> list[Seen]:
@@ -688,8 +687,8 @@ def fit_to_budget(people: list[Seen], animals: list[Seen], found: list[Sight]) -
     return [sight.seen for index, sight in enumerate(ranked) if index in chosen]
 
 
-if set(RESOURCE_NAMES) != set(GATHERED):
-    raise ValueError("the contract's resource names must be the simulation's resources")
+if not GATHERED <= set(RESOURCE_NAMES):
+    raise ValueError("every resource the simulation gathers needs its name in the contract")
 _LABELS = {**STRUCTURE_LABELS, **CAMP_STRUCTURE_LABELS}
 _UNGROUPED = {kind for kind, label in _LABELS.items() if label.startswith("a ")} - set(GROUP_NOUNS)
 if _UNGROUPED:
