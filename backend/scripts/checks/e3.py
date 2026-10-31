@@ -7,6 +7,7 @@ until then they report how far off the run is.
 
 from collections import Counter
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import get_args, override
 
 from app.observability.events import Crafted, EventDraft
@@ -23,6 +24,7 @@ MIN_RICE_PEAK = 1.2  # the factor a shock lifts rice to (the rice-shock scenario
 MAX_DEAR_DAYS = 3.0  # and fair again within this
 MIN_FAIR_SHARE = 0.8  # of days 4-14 on which rice is mostly fair
 FAIR_FROM_DAY = 4
+RECIPES = get_args(RecipeName)
 
 
 class Sales(Check):
@@ -92,6 +94,11 @@ class RicePrice(Check):
         return Outcome(self.peak, ok, words)
 
 
+@dataclass(frozen=True)
+class RecipesMade(Outcome):
+    missing: frozenset[str] = frozenset()  # the recipes this seed never made
+
+
 class Recipes(Check):
     """Recipes crafted (each counted once); over all seeds every recipe must have been made."""
 
@@ -106,24 +113,25 @@ class Recipes(Check):
         self.made.update(event.payload.recipe for event in events if isinstance(event.payload, Crafted))
 
     @override
-    def outcome(self, sim: Simulation) -> Outcome:
-        missing = missing_words(sorted(set(get_args(RecipeName)) - set(self.made)))
-        return Outcome(len(self.made), not missing, f"{len(self.made)}/{len(get_args(RecipeName))} recipes{missing}")
+    def outcome(self, sim: Simulation) -> RecipesMade:
+        missing = frozenset(RECIPES) - set(self.made)
+        words = f"{len(self.made)}/{len(RECIPES)} recipes{missing_words(missing)}"
+        return RecipesMade(len(self.made), not missing, words, missing)
 
     @classmethod
     @override
     def overall(cls, outcomes: Mapping[int, Outcome]) -> Outcome:
-        never = set(get_args(RecipeName))
+        never = frozenset(RECIPES)
         for outcome in outcomes.values():
-            never &= set(outcome.words.partition(" (not ")[2].rstrip(")").split(", ")) - {""}
-        made = len(get_args(RecipeName)) - len(never)
-        return Outcome(
-            made, not never, f"{made}/{len(get_args(RecipeName))} recipes over all seeds{missing_words(sorted(never))}"
-        )
+            if not isinstance(outcome, RecipesMade):
+                raise TypeError(f"e3.recipes judges its own outcomes, not {outcome!r}")
+            never &= outcome.missing
+        made = len(RECIPES) - len(never)
+        return Outcome(made, not never, f"{made}/{len(RECIPES)} recipes over all seeds{missing_words(never)}")
 
 
-def missing_words(recipes: list[str]) -> str:
-    return f" (not {', '.join(recipes)})" if recipes else ""
+def missing_words(recipes: frozenset[str]) -> str:
+    return f" (not {', '.join(sorted(recipes))})" if recipes else ""
 
 
 CHECKS: tuple[type[Check], ...] = (Sales, RicePrice, Recipes)

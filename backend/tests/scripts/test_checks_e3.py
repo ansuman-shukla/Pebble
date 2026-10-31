@@ -80,9 +80,8 @@ def test_every_recipe_must_be_made_on_some_seed(new_sim: Callable[..., Simulatio
     for recipe in ("flint spear", "obsidian spear", "iron spear", "stone axe", "iron axe", "sickle", "cloth", "cloth"):
         check.after_step(sim, [_event(sim, "crafted", Crafted(recipe=recipe, item=recipe, count=1))])
     first = check.outcome(sim)
-    assert first == Outcome(7, False, "7/9 recipes (not dried meat, pack)")
-    other = Outcome(8, False, "8/9 recipes (not pack)")
+    assert first == e3.RecipesMade(7, False, "7/9 recipes (not dried meat, pack)", frozenset({"dried meat", "pack"}))
+    other = e3.RecipesMade(8, False, "8/9 recipes (not pack)", frozenset({"pack"}))
     assert e3.Recipes.overall({1: first, 2: other}) == Outcome(8, False, "8/9 recipes over all seeds (not pack)")
-    assert e3.Recipes.overall({1: first, 2: Outcome(9, True, "9/9 recipes")}) == Outcome(
-        9, True, "9/9 recipes over all seeds"
-    )
+    every = e3.RecipesMade(9, True, "9/9 recipes")
+    assert e3.Recipes.overall({1: first, 2: every}) == Outcome(9, True, "9/9 recipes over all seeds")
