@@ -515,3 +515,20 @@ def test_a_hunters_kill_is_replaced_on_time(new_sim: Callable[..., Simulation]) 
     animal_life.kill(sim.core, rabbits[0], "hunted", attacker="tek", remains=True)  # bones at once
     sim.run(round(SPECIES["rabbit"].respawn_days * DAY_MINUTES))
     assert rabbits[0].id not in sim.state.animals
+
+
+def test_a_hungry_pack_heads_for_the_game_in_its_range(new_sim: Callable[..., Simulation]) -> None:
+    """Regression (#109): a den's group only wandered at random, so the game a few hundred metres off (band B's herds,
+    the B wood bear's boar) was rarely within scent and band B's camp saw almost no kills."""
+    sim, centre = _open_ground(new_sim, night=True)
+    herd = _herd(sim, "deer", [step_towards(centre, 90.0, 600.0 + 6 * n, R) for n in range(3)], activity="sleeping",
+                 until=10**9)  # fmt: skip
+    (wolf,) = _hungry(sim, "wolf", centre)
+    group = sim.state.groups[wolf.group]
+    group.next_move = 0
+    sim.step()
+    assert group.goal is not None
+    assert min(sim.world.distance_m(group.goal, deer.position) for deer in herd) <= animal_life.SPREAD_M + 1e-6
+    wolf.hunger, group.next_move = 0.0, 0  # fed: it just wanders its range
+    sim.step()
+    assert min(sim.world.distance_m(group.goal, deer.position) for deer in herd) > animal_life.SPREAD_M

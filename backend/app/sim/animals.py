@@ -40,6 +40,7 @@ from app.sim.fauna import (
     jitter,
     new_animal,
     range_cells,
+    range_m,
     standable,
     terrain,
     waterhole_of,
@@ -273,12 +274,23 @@ def _group(core: SimCore, group: AnimalGroup, life: Wildlife) -> None:
         return  # predators stay put by day: asleep at their den, or where the night left them
     rng = core.state.rng("animals.wander")
     group.next_move = tick + rng.randint(*WANDER_TICKS)
+    if species.predator and _hungry_pack(core, group):  # it goes where the game is in its range, not just about
+        game = _game(core, species, core.world.unit(group.home), spot, range_m(core.world, group))
+        if game is not None:
+            group.goal = jitter(core.world, game.position, SPREAD_M, rng)
+            return
     cells = range_cells(core.world, group)
     cell = int(cells[rng.randint(0, cells.size - 1)])
     goal = jitter(core.world, core.world.unit(cell), 10.0, rng)
     if near_lit_fire(core, goal, FEAR_M * 2):
         return  # keep the old goal: animals stay away from fires
     group.goal = goal
+
+
+def _hungry_pack(core: SimCore, group: AnimalGroup) -> bool:
+    """Its leader (the first living member) is hungry."""
+    leader = next((core.state.animals[m] for m in group.members if core.state.animals[m].alive), None)
+    return leader is not None and leader.hunger >= HUNGRY
 
 
 def _dawn_or_dusk(core: SimCore, unit: Vec3) -> bool:
