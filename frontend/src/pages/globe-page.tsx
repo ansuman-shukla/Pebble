@@ -462,6 +462,10 @@ const GlobeScene = memo(function GlobeScene({
           groundRadius={TOWN_GROUND_RADIUS}
           grass={planet.town.grass}
           furniture={furniture}
+          terrain={terrain}
+          sites={view.sites}
+          places={view.places}
+          rivers={planet.rivers}
           onPlacementsReady={onPlacementsReady}
         />
         <GlobeSites

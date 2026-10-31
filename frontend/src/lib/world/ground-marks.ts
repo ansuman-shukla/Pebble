@@ -17,6 +17,7 @@ import {
   Color,
   CustomBlending,
   Float32BufferAttribute,
+  Matrix4,
   MeshStandardMaterial,
   OneFactor,
   type PerspectiveCamera,
@@ -26,7 +27,14 @@ import {
   ZeroFactor,
 } from 'three';
 
-import type { Road, Site, TownArea, WorldPlaces } from '../client/types.gen';
+import type {
+  Feature,
+  Road,
+  Site,
+  TownArea,
+  TownPlacement,
+  WorldPlaces,
+} from '../client/types.gen';
 import {
   buildWalkWorld,
   isWater,
@@ -131,8 +139,6 @@ interface Ribbon {
   /** Unit directions every STEP metres along its middle line (a closed one ends where it starts). */
   points: Vector3[];
   closed: boolean;
-  /** Sample index ranges [from, to] left undrawn (under a bridge). */
-  gaps: [number, number][];
 }
 
 interface Patch {
@@ -143,7 +149,7 @@ interface Patch {
 }
 
 /** Where a bridge carries a road or path over a river. */
-interface BridgeSpan {
+export interface BridgeSpan {
   /** Unit direction of its middle. */
   centre: Vector3;
   /** Unit tangent along the road. */
@@ -287,11 +293,19 @@ function riverIndex(rivers: RiverLayout, radius: number) {
       else buckets.set(key(x, y, z), [[points[j - 1], points[j]]]);
     }
   const point = new Vector3();
-  const [a, b, on] = [new Vector3(), new Vector3(), new Vector3()];
-  /** Metres from a unit direction to the nearest drawn water (< 0 on it), up to a bucket away. */
+  const [a, b, on, bank] = [
+    new Vector3(),
+    new Vector3(),
+    new Vector3(),
+    new Vector3(),
+  ];
+  /**
+   * The nearest drawn water to a unit direction, up to a bucket away: metres from it (`gap`, < 0 on it) and which
+   * bank of it the direction lies on (`side`: +1 or −1 of its flow).
+   */
   return (at: Vector3) => {
     point.copy(at).multiplyScalar(radius);
-    let best = Infinity;
+    const nearest = { gap: Infinity, side: 0 };
     for (let dx = -1; dx <= 1; dx++)
       for (let dy = -1; dy <= 1; dy++)
         for (let dz = -1; dz <= 1; dz++)
@@ -309,49 +323,91 @@ function riverIndex(rivers: RiverLayout, radius: number) {
               Math.max(0, on.subVectors(point, a).dot(b) / b.lengthSq()),
             );
             on.copy(a).addScaledVector(b, t);
-            best = Math.min(
-              best,
-              on.distanceTo(point) - (p.width + (q.width - p.width) * t) / 2,
-            );
+            const gap =
+              on.distanceTo(point) - (p.width + (q.width - p.width) * t) / 2;
+            if (gap < nearest.gap) {
+              nearest.gap = gap;
+              nearest.side = Math.sign(
+                bank.crossVectors(b, at).dot(on.subVectors(point, on)),
+              );
+            }
           }
-    return best;
+    return nearest;
   };
 }
 
 /**
  * Where bridges carry the ribbons over the drawn rivers: each stretch of a ribbon whose middle line runs onto drawn
- * water is left undrawn and spanned from bank to bank along the road (with BRIDGE_MARGIN to spare). The world's bridges stand on the river
- * cells its routes cross, but the drawn river runs smoothed beside those cells' centres and a ribbon curving between
- * two cells can meet it elsewhere, so the drawn crossings are found from the drawn ribbons and rivers (the town's
- * own water stops its ribbons through the ground instead).
+ * water (no mark lies on it: see globeMarkGround) and comes out on the other bank is spanned from bank to bank along
+ * the road, with BRIDGE_MARGIN to spare. The world's bridges stand on the river cells its routes cross, but the drawn river runs smoothed beside
+ * those cells' centres and a ribbon curving between two cells can meet it elsewhere, so the drawn crossings are found
+ * from the drawn ribbons and rivers.
  */
-function bridgeSpans(
+export function bridgeSpans(
   ribbons: Ribbon[],
   rivers: RiverLayout,
   radius: number,
+  keepOut: (direction: Vector3) => boolean = () => false,
 ): BridgeSpan[] {
-  const fromWater = riverIndex(rivers, radius);
+  const water = riverIndex(rivers, radius);
   const spans: BridgeSpan[] = [];
+  const span = (from: Vector3, to: Vector3, width: number) => {
+    const centre = from.clone().add(to).normalize();
+    if (keepOut(centre)) return;
+    const along = tangent(new Vector3().subVectors(to, from), from);
+    spans.push({
+      centre,
+      along,
+      length: from.angleTo(to) * radius + 2 * BRIDGE_BANK,
+      width,
+    });
+  };
+  // ribbons that run into the water at a junction on it: the dry sample before it and the bank it lies on
+  const halves: { node: Vector3; dry: Vector3; side: number; width: number }[] =
+    [];
   for (const ribbon of ribbons) {
-    const near = ribbon.points.map(fromWater);
+    const near = ribbon.points.map((point) => water(point));
     for (let from = 0; from < near.length; from++) {
-      if (near[from] >= BRIDGE_MARGIN) continue;
+      if (near[from].gap >= BRIDGE_MARGIN) continue;
       let to = from;
-      while (to + 1 < near.length && near[to + 1] < BRIDGE_MARGIN) to += 1;
-      // a ribbon only grazing the water keeps to the bank
-      if (Math.min(...near.slice(from, to + 1)) < 0) {
-        const middle = Math.round((from + to) / 2);
-        ribbon.gaps.push([from, to]);
-        spans.push({
-          centre: ribbon.points[middle],
-          along: alongAt(ribbon.points, middle, new Vector3()),
-          length: (to - from) * STEP + 2 * BRIDGE_BANK,
+      while (to + 1 < near.length && near[to + 1].gap < BRIDGE_MARGIN) to += 1;
+      const wet =
+        Math.min(...near.slice(from, to + 1).map(({ gap }) => gap)) < 0;
+      const [before, after] = [from - 1, to + 1];
+      const points = ribbon.points;
+      // only a ribbon crossing to the other bank gets a bridge: one grazing the water or dipping into it along a
+      // bank keeps to the bank (its rows on the water stay bare)
+      if (wet && before >= 0 && after < near.length) {
+        if (near[before].side * near[after].side < 0)
+          span(points[before], points[after], ribbon.width);
+      } else if (wet && (before >= 0 || after < near.length)) {
+        const [node, dry] =
+          before < 0 ? [points[0], after] : [points[points.length - 1], before];
+        halves.push({
+          node,
+          dry: points[dry],
+          side: near[dry].side,
           width: ribbon.width,
         });
       }
       from = to;
     }
   }
+  // two ribbons meeting at a junction on the water, from opposite banks, cross it on one bridge
+  const paired = new Set<number>();
+  halves.forEach((half, i) => {
+    if (paired.has(i)) return;
+    const j = halves.findIndex(
+      (other, k) =>
+        k > i &&
+        !paired.has(k) &&
+        other.node.angleTo(half.node) * radius < 0.5 &&
+        other.side * half.side < 0,
+    );
+    if (j < 0) return;
+    paired.add(i).add(j);
+    span(half.dry, halves[j].dry, Math.max(half.width, halves[j].width));
+  });
   return spans;
 }
 
@@ -361,20 +417,45 @@ export function planetMarks({
   places,
   sites,
   rivers,
+  town,
 }: {
   globe: Globe;
   places: Pick<WorldPlaces, 'roads' | 'features'>;
   sites: Site[];
   rivers: RiverLayout;
+  /**
+   * The town's placements and water (local metres): its walkable surfaces over the water are its own bridges, and
+   * a crossing they already carry (the mill stream's channel is a drawn river too) gets no planet bridge.
+   */
+  town: {
+    placements: Pick<TownPlacement, 'x' | 'z' | 'footprint' | 'walk'>[];
+    water: WalkWater[];
+  };
 }): PlanetMarks {
   const { radius } = globe;
+  const townSite = sites.find((site) => site.kind === 'town');
+  const townMapping = townSite && anchorMapping(townSite.anchor, radius);
+  const wet = buildWalkWorld([], town.water, new Map());
+  const townBridges = town.placements.filter(
+    ({ walk, x, z }) => walk === 'surface' && isWater(wet, [x, z]),
+  );
+  const local = new Vector3();
+  const bridgedByTown = (direction: Vector3) => {
+    if (!townMapping) return false;
+    townMapping.toLocal(local.copy(direction).multiplyScalar(radius), local);
+    return townBridges.some(
+      ({ x, z, footprint }) =>
+        Math.abs(local.x - x) < footprint.x / 2 + 2 * BRIDGE_BANK &&
+        Math.abs(local.z - z) < footprint.z / 2 + 2 * BRIDGE_BANK,
+    );
+  };
   const cell = (index: number) => cellDirection(globe, index, new Vector3());
   const { chains, ends } = routeChains(places.roads);
   const ribbon = (
     kind: RouteKind,
     points: Vector3[],
     { width = ROUTE_WIDTH[kind], closed = false } = {},
-  ): Ribbon => ({ kind, width, points, closed, gaps: [] });
+  ): Ribbon => ({ kind, width, points, closed });
   const ribbons: Ribbon[] = chains.map((chain) =>
     ribbon(
       chain.kind,
@@ -435,13 +516,14 @@ export function planetMarks({
   return {
     ribbons,
     patches,
-    bridges: bridgeSpans(ribbons, rivers, radius),
+    bridges: bridgeSpans(ribbons, rivers, radius, bridgedByTown),
   };
 }
 
 /**
- * The drawn ground on the globe: no marks on the drawn rivers, nor on the town's moat and stream; the town's disc
- * at its plateau height (local metres), else the terrain.
+ * The drawn ground on the globe: no marks on the drawn rivers, on the town's moat and stream, nor over the town's
+ * areas (they are marks already: a road arriving at a gate ends where its street begins); the town's disc at its
+ * plateau height (local metres), else the terrain.
  */
 export function globeMarkGround({
   terrain,
@@ -455,20 +537,26 @@ export function globeMarkGround({
     groundRadius: number;
     height: number;
     water: WalkWater[];
+    areas: TownArea[];
   };
 }): MarkGround {
   const radius = terrain.globe.radius;
-  const fromWater = riverIndex(rivers, radius);
-  const wet = buildWalkWorld([], town.water, new Map());
+  const water = riverIndex(rivers, radius);
+  // the collision world's water test is a point-in-polygons test: one for the water, one for the areas
+  const [wet, marked] = [
+    town.water,
+    town.areas.map(({ polygon }) => ({ polygon })),
+  ].map((polygons) => buildWalkWorld([], polygons, new Map()));
   const local = new Vector3();
   return {
     radius,
     heightAt(direction) {
-      if (fromWater(direction) < 0) return null;
+      if (water(direction).gap < 0) return null;
       town.mapping.toLocal(local.copy(direction).multiplyScalar(radius), local);
-      if (Math.hypot(local.x, local.z) < town.groundRadius)
-        return isWater(wet, [local.x, local.z]) ? null : town.height;
-      return terrain.heightAt(direction);
+      if (Math.hypot(local.x, local.z) >= town.groundRadius)
+        return terrain.heightAt(direction);
+      const point: Point = [local.x, local.z];
+      return isWater(wet, point) || isWater(marked, point) ? null : town.height;
     },
   };
 }
@@ -556,10 +644,7 @@ function drapeRibbon(mesh: MarkMesh, ribbon: Ribbon, ground: MarkGround) {
   const lift = LIFT[ribbon.kind];
   const along = new Vector3();
   const at = new Vector3();
-  const hidden = (i: number) =>
-    ribbon.gaps.some(([from, to]) => i >= from && i <= to);
   const samples = ribbon.points.map((point, i) => {
-    if (hidden(i)) return null;
     alongAt(ribbon.points, i, along);
     const side = new Vector3().crossVectors(along, point).normalize();
     // a border over water (a ribbon grazing a river or the town's stream) lies level with the middle
@@ -797,11 +882,97 @@ export function buildMarks({
   return mesh.geometry();
 }
 
+// --- road furniture ---
+
+/** The log bridge model's span and deck width (metres; it lies along its x axis). */
+export const BRIDGE_MODEL = { length: 4, width: 1.72 };
+/** A bridge's deck is never narrower than this (metres), however narrow the path it carries. */
+const BRIDGE_MIN_WIDTH = 1.6;
+
+/** A model's frame at a unit direction: x along `along`, y up, standing `height` above sea level. */
+function standing(
+  direction: Vector3,
+  along: Vector3,
+  height: number,
+  radius: number,
+  scale: Vector3,
+) {
+  const x = tangent(along.clone(), direction);
+  const z = new Vector3().crossVectors(x, direction);
+  return new Matrix4()
+    .makeBasis(x, direction, z)
+    .scale(scale)
+    .setPosition(direction.clone().multiplyScalar(radius + height));
+}
+
+/**
+ * The log bridge models of each span: as many 4 m modules as its length needs, laid end to end along the road
+ * (each squeezed a little to fit), their decks level with the higher bank.
+ */
+export function bridgeMatrices(bridges: BridgeSpan[], ground: MarkGround) {
+  const at = (centre: Vector3, along: Vector3, metres: number) =>
+    centre
+      .clone()
+      .multiplyScalar(ground.radius)
+      .addScaledVector(along, metres)
+      .normalize();
+  return bridges.flatMap(({ centre, along, length, width }) => {
+    const deck = Math.max(
+      ...[-1, 1].map(
+        (side) => ground.heightAt(at(centre, along, (side * length) / 2)) ?? 0,
+      ),
+    );
+    const count = Math.ceil(length / BRIDGE_MODEL.length);
+    const module = length / count;
+    return Array.from({ length: count }, (_, k) =>
+      standing(
+        at(centre, along, -length / 2 + (k + 0.5) * module),
+        along,
+        deck,
+        ground.radius,
+        new Vector3(
+          module / BRIDGE_MODEL.length,
+          1,
+          Math.max(width, BRIDGE_MIN_WIDTH) / BRIDGE_MODEL.width,
+        ),
+      ),
+    );
+  });
+}
+
+/** Each signpost on the ground beside its road, its front (+z) facing the nearest point of a road or path. */
+export function signpostMatrices(
+  signposts: Pick<Feature, 'position'>[],
+  marks: PlanetMarks,
+  ground: MarkGround,
+) {
+  return signposts.map((signpost) => {
+    const at = new Vector3(...signpost.position);
+    let nearest: Vector3 | null = null;
+    for (const ribbon of marks.ribbons)
+      for (const point of ribbon.points)
+        if (!nearest || point.angleTo(at) < nearest.angleTo(at))
+          nearest = point;
+    const facing = new Vector3().subVectors(nearest ?? at, at);
+    // x across the road, so +z (= x × up) faces it
+    const across = new Vector3().crossVectors(at, facing);
+    return standing(
+      at,
+      across,
+      ground.heightAt(at) ?? 0,
+      ground.radius,
+      new Vector3(1, 1, 1),
+    );
+  });
+}
+
 // --- the material ---
 
 /** View distances (metres) where the patterns end, and where the marks narrow away to nothing. */
 const PATTERN_END = { full: 300, low: 150 };
 const FADE: [number, number] = [2000, 2600];
+/** How fast (a metre) a mark's coverage rises from its ragged border inwards. */
+const COVERAGE_SLOPE = 16;
 /** The low-poly facets the ground shows (ground-shader.ts FACETS), so marks shade like the ground under them. */
 const FACETS = 0.35;
 const FACETS_FADE: [number, number] = [250, 1200];
@@ -866,7 +1037,8 @@ uniform vec2 markFacetsFade;
 
 /*
  * The mark's colour, roughness and relief from its pattern, and its coverage: 0.5 where the noisy ragged border
- * cuts the mark, rising a unit a metre inwards (three's alpha to coverage turns that into a pixel-wide fade).
+ * cuts the mark, rising COVERAGE_SLOPE a metre inwards (three's alpha to coverage turns that into a pixel-wide fade)
+ * and whole from 1 / COVERAGE_SLOPE metres in.
  */
 const FRAGMENT_COLOR = /* glsl */ `
 float markRoughness;
@@ -879,29 +1051,32 @@ float markRelief = 0.0;
   float dist = length(vViewPosition);
   float facing = max(abs(dot(normalize(vNormal), vViewPosition)) / dist, 0.05);
   float fw = dist * markPixel * sqrt(1.0 + 1.0 / (facing * facing));
-  float extra;
-  vec4 g = groundNoises(p, fw, extra);
   // far away a mark narrows away to nothing instead of thinning into a shimmering line
   float edge = vMark.y * halfWidth - halfWidth * smoothstep(${glslFloat(FADE[0])}, ${glslFloat(FADE[1])}, dist);
-  // the ragged border eats up to the kind's rag into the mark (at most most of a narrow one), along noise at 4 m, 1 m
-  // and 0.4 m
-  float ragNoise = clamp(extra * 0.45 + g.z * 0.35 + gFine(p + 23.0, 2.7, fw) * 0.2, 0.0, 1.0);
-  float rag = min(MARK_RAG[kind], 0.8 * halfWidth) * (0.15 + 0.85 * ragNoise);
+  // the ragged border eats up to the kind's rag into the mark (at most most of a narrow one) along noise at 2.3 m,
+  // 0.9 m and 0.4 m; deeper in the mark is whole, so the noise is only paid near its border
+  float ragMax = min(MARK_RAG[kind], 0.8 * halfWidth);
+  float rag = 0.0;
+  if (edge < ragMax + ${glslFloat(1 / COVERAGE_SLOPE)}) {
+    float ragNoise = gFine(p + 53.0, 0.43, fw) * 0.45 + gFine(p + 31.0, 1.13, fw) * 0.35 + gFine(p + 23.0, 2.7, fw) * 0.2;
+    rag = ragMax * (0.15 + 0.85 * clamp(ragNoise, 0.0, 1.0));
+  }
   vec3 color = MARK_BASE[kind];
   markRoughness = MARK_ROUGHNESS[kind];
 #ifndef MARK_FLAT
   if (dist < MARK_PATTERN_END) {
+    float extra;
+    vec4 g = groundNoises(p, fw, extra);
     float roughness = markRoughness;
     vec4 look = markLook(kind, p, across, edge, vMarkPerp, fw, g, roughness);
     float far = smoothstep(MARK_PATTERN_END * 0.8, MARK_PATTERN_END, dist);
-    color = mix(look.rgb, color, far);
+    color = mix(look.rgb, color, far) * (0.92 + 0.16 * g.x);
     markRoughness = mix(roughness, markRoughness, far);
     markRelief = (look.a - 0.5) * MARK_DEPTH[kind] * (1.0 - smoothstep(0.015, 0.05, fw)) * (1.0 - smoothstep(30.0, 40.0, dist));
   }
-  color *= 0.92 + 0.16 * g.x;
 #endif
   diffuseColor.rgb = color;
-  diffuseColor.a = 0.5 + edge - rag;
+  diffuseColor.a = clamp(0.5 + (edge - rag) * ${glslFloat(COVERAGE_SLOPE)}, 0.0, 1.0);
 }
 `;
 
