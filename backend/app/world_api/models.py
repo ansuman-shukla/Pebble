@@ -266,7 +266,8 @@ class Recall(_Model):
 
 
 class Buy(_Model):  # the market stall (E2)
-    """Buy a good at an open market stall, paying in coins; goods are sold in lots."""
+    """Buy a good at an open market stall, paying in coins; goods are sold in lots. The amount counts units as you
+    count them (measures of rice, strips of dried meat, pieces of wood), as your goods and the prices are said."""
 
     action: Literal["buy"] = "buy"
     item: str = Field(min_length=1, max_length=60)
@@ -274,7 +275,8 @@ class Buy(_Model):  # the market stall (E2)
 
 
 class Sell(_Model):  # the market stall (E2)
-    """Sell a good you carry to an open market stall, which buys only what it sells and only with coins it holds."""
+    """Sell a good you carry to an open market stall, which buys only what it sells and only with coins it holds. The
+    amount counts units as you count them (measures, strips, pieces), as your goods and the prices are said."""
 
     action: Literal["sell"] = "sell"
     item: str = Field(min_length=1, max_length=60)
@@ -282,7 +284,8 @@ class Sell(_Model):  # the market stall (E2)
 
 
 class Stash(_Model):  # ownership (E3)
-    """Put things you carry into your own chest within reach (the merchant: into the stall)."""
+    """Put things you carry into your own chest within reach (the merchant: into the stall). The amount counts units
+    as you count them (measures, strips, pieces), as your carried goods are said."""
 
     action: Literal["stash"] = "stash"
     item: str = Field(min_length=1, max_length=60)

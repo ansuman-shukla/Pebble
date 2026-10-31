@@ -55,7 +55,7 @@
       },
       "Buy": {
         "additionalProperties": false,
-        "description": "Buy a good at an open market stall, paying in coins; goods are sold in lots.",
+        "description": "Buy a good at an open market stall, paying in coins; goods are sold in lots. The amount counts units as you\ncount them (measures of rice, strips of dried meat, pieces of wood), as your goods and the prices are said.",
         "properties": {
           "action": {
             "const": "buy",
@@ -710,7 +710,7 @@
       },
       "Sell": {
         "additionalProperties": false,
-        "description": "Sell a good you carry to an open market stall, which buys only what it sells and only with coins it holds.",
+        "description": "Sell a good you carry to an open market stall, which buys only what it sells and only with coins it holds. The\namount counts units as you count them (measures, strips, pieces), as your goods and the prices are said.",
         "properties": {
           "action": {
             "const": "sell",
@@ -791,7 +791,7 @@
       },
       "Stash": {
         "additionalProperties": false,
-        "description": "Put things you carry into your own chest within reach (the merchant: into the stall).",
+        "description": "Put things you carry into your own chest within reach (the merchant: into the stall). The amount counts units\nas you count them (measures, strips, pieces), as your carried goods are said.",
         "properties": {
           "action": {
             "const": "stash",
@@ -1149,6 +1149,10 @@
     {
       "change": "draft v1 perception: purse, load, titles, standing, wanted, held and confined on the self; day of the week, ground, safety, market and chest on a look; relation and regard on people; node, store, market and remains things",
       "contract": "460ceef0548f2e0d"
+    },
+    {
+      "change": "buy, sell and stash say that amount counts units as the mind counts them (measures, strips, pieces), not lots",
+      "contract": "ad51b181b6d1d3a8"
     }
   ],
   "perception_schema": {
