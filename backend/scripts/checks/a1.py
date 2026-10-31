@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from typing import ClassVar, override
 
 from app.observability.events import Died, EventDraft, Injured, TickSummary
-from app.sim.animals import ALARM_M, CHARGE_M, DEN_CHARGE_M, DUSK_ALTITUDE_DEG, GROUP_M, WILDLIFE
+from app.sim.animals import ALARM_M, DEN_CHASE_M, DUSK_ALTITUDE_DEG, GROUP_M, WILDLIFE
 from app.sim.clock import DAY_MINUTES, SECONDS_PER_TICK
 from app.sim.courses import metres
 from app.sim.fauna import LIVING_SITES, SPECIES, den_of, near_people
@@ -316,7 +316,7 @@ class DenCharges(_Counted):
 
 class SafeBites(Check):
     """Bites on people where the rules forbid them (0 passes): inside the walls, within 15 m of a lit fire, with two
-    others within 10 m, or a hunting bite by day (a den charge is allowed by day within reach of its den)."""
+    others within 10 m, or a hunting bite by day (a den charge is allowed by day within DEN_CHASE_M of its den)."""
 
     name = "a1.safe_bites"
 
@@ -348,7 +348,7 @@ class SafeBites(Check):
         if company >= 3:
             return f"in a group of {company}"
         den = den_of(sim.world, sim.state.groups[group_id])
-        by_den = den is not None and sim.world.distance_m(victim.position, den) <= DEN_CHARGE_M + CHARGE_M
+        by_den = den is not None and sim.world.distance_m(victim.position, den) <= DEN_CHASE_M + 1e-6
         if sim.core.altitude(at) >= DUSK_ALTITUDE_DEG and not by_den:
             return "by day, away from its den"
         return ""
