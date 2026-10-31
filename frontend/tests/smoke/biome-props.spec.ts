@@ -12,6 +12,7 @@ import {
   BLOCKING_KINDS,
   LANDMARK_KINDS,
   NODE_LOOK_KINDS,
+  nodeFootprint,
 } from '../../src/lib/world/biome-props';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
@@ -105,6 +106,14 @@ test('no decor kind is usable or looks like a node', () => {
       .flat()
       .map((entry) => entry.kind),
   ).not.toContain('reeds');
+});
+
+test("a node's footprint is a standing tree's trunk, else its model's half width", () => {
+  expect(nodeFootprint('tree', 'oak_tree', 1.2)).toBeCloseTo(0.6, 9);
+  expect(nodeFootprint('nut_tree', 'nut_tree', 1)).toBeCloseTo(0.5, 9);
+  // a dead tree is deadwood: its whole model (3.19 m wide)
+  expect(nodeFootprint('deadwood', 'dead_tree', 1)).toBeCloseTo(1.595, 9);
+  expect(nodeFootprint('berry_bush', 'berry_bush', 2)).toBeCloseTo(0.73, 9);
 });
 
 test('every node look is a vendored kind and blocks walking unless it is a soft plant', () => {
