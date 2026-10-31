@@ -1145,10 +1145,32 @@
     {
       "change": "draft v1: the ten new actions (buy, sell, stash, craft, accuse, seize, judge, tend, gesture, set_goal), pace on walk_to and follow, gather's minerals and rice, and the words for work tasks and recipes",
       "contract": "c6851f1c2ec24857"
+    },
+    {
+      "change": "draft v1 perception: purse, load, titles, standing, wanted, held and confined on the self; day of the week, ground, safety, market and chest on a look; relation and regard on people; node, store, market and remains things",
+      "contract": "460ceef0548f2e0d"
     }
   ],
   "perception_schema": {
     "$defs": {
+      "ChestView": {
+        "additionalProperties": false,
+        "description": "What your own chest within reach holds.",
+        "properties": {
+          "holds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Holds",
+            "type": "array"
+          }
+        },
+        "required": [
+          "holds"
+        ],
+        "title": "ChestView",
+        "type": "object"
+      },
       "HeardWords": {
         "additionalProperties": false,
         "properties": {
@@ -1176,6 +1198,54 @@
           "volume"
         ],
         "title": "HeardWords",
+        "type": "object"
+      },
+      "MarketView": {
+        "additionalProperties": false,
+        "description": "What an open market stall you stand at sells.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/PriceSeen"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "MarketView",
+        "type": "object"
+      },
+      "PriceSeen": {
+        "additionalProperties": false,
+        "description": "A good on sale at the stall: its price in words, and whether that is dear, fair or cheap.",
+        "properties": {
+          "item": {
+            "title": "Item",
+            "type": "string"
+          },
+          "price": {
+            "title": "Price",
+            "type": "string"
+          },
+          "word": {
+            "enum": [
+              "dear",
+              "fair",
+              "cheap"
+            ],
+            "title": "Word",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "price",
+          "word"
+        ],
+        "title": "PriceSeen",
         "type": "object"
       },
       "Seen": {
@@ -1206,7 +1276,11 @@
                   "fire",
                   "material",
                   "item",
-                  "building"
+                  "building",
+                  "node",
+                  "store",
+                  "market",
+                  "remains"
                 ],
                 "type": "string"
               },
@@ -1232,6 +1306,30 @@
             ],
             "title": "Nearness",
             "type": "string"
+          },
+          "regard": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Regard"
+          },
+          "relation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Relation"
           },
           "resource": {
             "anyOf": [
@@ -1280,6 +1378,18 @@
             "title": "Carrying",
             "type": "array"
           },
+          "confined": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Confined"
+          },
           "doing": {
             "title": "Doing",
             "type": "string"
@@ -1290,6 +1400,74 @@
             },
             "title": "Feeling",
             "type": "array"
+          },
+          "held": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Held"
+          },
+          "load": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Load"
+          },
+          "purse": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Purse"
+          },
+          "standing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Standing"
+          },
+          "titles": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Titles",
+            "type": "array"
+          },
+          "wanted": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Wanted"
           }
         },
         "required": [
@@ -1311,12 +1489,58 @@
         "title": "Animals",
         "type": "array"
       },
+      "chest": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ChestView"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "day_of_week": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Day Of Week"
+      },
+      "ground": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Ground"
+      },
       "heard": {
         "items": {
           "$ref": "#/$defs/HeardWords"
         },
         "title": "Heard",
         "type": "array"
+      },
+      "market": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/MarketView"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
       },
       "people": {
         "items": {
@@ -1328,6 +1552,25 @@
       "place": {
         "title": "Place",
         "type": "string"
+      },
+      "safety": {
+        "anyOf": [
+          {
+            "enum": [
+              "inside the walls",
+              "by the fire",
+              "in company",
+              "on home ground",
+              "exposed"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Safety"
       },
       "things": {
         "items": {
@@ -1446,6 +1689,18 @@
         "title": "Carrying",
         "type": "array"
       },
+      "confined": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Confined"
+      },
       "doing": {
         "title": "Doing",
         "type": "string"
@@ -1456,6 +1711,74 @@
         },
         "title": "Feeling",
         "type": "array"
+      },
+      "held": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Held"
+      },
+      "load": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Load"
+      },
+      "purse": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Purse"
+      },
+      "standing": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Standing"
+      },
+      "titles": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "title": "Titles",
+        "type": "array"
+      },
+      "wanted": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Wanted"
       }
     },
     "required": [

@@ -143,3 +143,72 @@ def test_gathering_a_mineral_where_there_is_none_fails_in_world(new_sim: Callabl
     for mineral in ("flint", "iron sand", "gold"):
         result = run_until_done(sim, me.gather(mineral), 1)
         assert result == ActionResult(action="gather", outcome="failed", text=f"You can't gather {mineral} here.")
+
+
+def _look(you: dict[str, object] | None = None, **v1: object) -> Perception:
+    body = {"feeling": ["a little hungry"], "carrying": ["two fish"], "doing": "You are resting."}
+    seen = {
+        "you": body | (you or {}),
+        "place": "at the well",
+        "time": "It is midday.",
+        "time_of_day": "midday",
+        "people": [{"label": "Genzo", "where": "a few paces to the north", "nearness": "a few paces"}],
+        "animals": [],
+        "things": [],
+        "heard": [],
+    }
+    return Perception.model_validate(seen | v1)
+
+
+def test_a_look_without_the_v1_fields_reads_as_in_v0() -> None:
+    assert _look().text() == (
+        "You are at the well. It is midday.\n"
+        "You feel a little hungry. You carry two fish. You are resting.\n"
+        "You see Genzo a few paces to the north."
+    )
+
+
+def test_the_v1_fields_are_told_in_words_when_set() -> None:
+    look = _look(
+        you={
+            "purse": "seven coins",
+            "load": "carrying a heavy load",
+            "titles": ["the lord"],
+            "standing": "People here regard you well.",
+            "wanted": "You are wanted in the castle town for theft.",
+            "held": "Kenji holds you fast.",
+            "confined": "You are confined in the gaol.",
+        },
+        day_of_week="the seventh day of the week; court day",
+        ground="the Lord's woods",
+        safety="exposed",
+        people=[
+            {
+                "label": "Genzo",
+                "where": "a few paces to the north",
+                "nearness": "a few paces",
+                "doing": "farming",
+                "relation": "your father",
+                "regard": "well regarded",
+            }
+        ],
+        market={"items": [{"item": "rice", "price": "four coins for two measures", "word": "fair"}]},
+        chest={"holds": ["twenty measures of rice", "a sickle"]},
+    )
+    assert look.text() == (
+        "You are at the well. It is midday. It is the seventh day of the week; court day.\n"
+        "You feel a little hungry. You carry two fish. You are resting. You have seven coins. You are carrying a heavy"
+        " load. You are the lord. People here regard you well. You are wanted in the castle town for theft. Kenji holds"
+        " you fast. You are confined in the gaol.\n"
+        "This is the Lord's woods. You are exposed.\n"
+        "You see Genzo, your father, well regarded, a few paces to the north (farming).\n"
+        "At the stall: rice at four coins for two measures (fair).\n"
+        "Your chest holds twenty measures of rice and a sickle."
+    )
+    assert (
+        _look(chest={"holds": []}, market={"items": []})
+        .text()
+        .endswith("At the stall: nothing for sale.\nYour chest is empty.")
+    )
+    with pytest.raises(ValueError):
+        _look(safety="safe enough")

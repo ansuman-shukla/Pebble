@@ -16,8 +16,26 @@ RoughDistance = Literal["a few steps", "a short walk", "a long walk", "very far"
 # how far off something seen is, in the words `Seen.where` starts with
 Nearness = Literal["right beside you", "a few paces", "close by", "some way off", "in the distance", "far away"]
 # what a thing in view is (fresh water, the sea, food, your home, a shelter, a fire pit, wood or reeds, an item on the
-# ground, any other building)
-ThingKind = Literal["water", "sea", "food", "home", "shelter", "fire", "material", "item", "building"]
+# ground, any other building; contract v1: a gatherable node such as a bush, a tree or a seam, a store such as a
+# chest or the racks, the market stall, an animal's remains)
+ThingKind = Literal[
+    "water",
+    "sea",
+    "food",
+    "home",
+    "shelter",
+    "fire",
+    "material",
+    "item",
+    "building",
+    "node",
+    "store",
+    "market",
+    "remains",
+]
+# how safe where you stand is: inside the town, close to a lit fire, with others close by, on your own group's
+# ground, or none of these
+Safety = Literal["inside the walls", "by the fire", "in company", "on home ground", "exposed"]
 # what `gather` takes from the wild: plants, the paddies' rice and the minerals of seams, fields, bars and pools
 ResourceName = Literal["berries", "roots", "nuts", "reeds", "wood", "rice", "flint", "obsidian", "iron sand", "gold"]
 # the tasks `work` does, as it names them
@@ -391,11 +409,24 @@ class SelfView(_Model):
     feeling: list[str]  # coarse body words; empty = "you feel fine"
     carrying: list[str]
     doing: str
+    # contract v1 (draft): unset until the systems behind them land
+    purse: str | None = None  # the coins you carry, in words ("seven coins", "a short string of coins")
+    load: str | None = None  # how laden you are ("carrying a heavy load")
+    titles: list[str] = []  # ("the lord", "leader of band A")
+    standing: str | None = None  # how people here regard you, a sentence ("People here regard you well.")
+    wanted: str | None = None  # a sentence ("You are wanted in the castle town for theft.")
+    held: str | None = None  # who holds you, a sentence ("Kenji holds you fast.")
+    confined: str | None = None  # where you are confined, a sentence ("You are confined in the gaol.")
 
     def text(self) -> str:
         feeling = "You feel " + join(self.feeling) + "." if self.feeling else "You feel fine."
         carrying = "You carry " + join(self.carrying) + "." if self.carrying else "You carry nothing."
-        return f"{feeling} {carrying} {self.doing}"
+        parts = [feeling, carrying, self.doing]
+        parts += [f"You have {self.purse}."] if self.purse else []
+        parts += [f"You are {self.load}."] if self.load else []
+        parts += [f"You are {join(self.titles)}."] if self.titles else []
+        parts += [sentence for sentence in (self.standing, self.wanted, self.held, self.confined) if sentence]
+        return " ".join(parts)
 
 
 class Seen(_Model):
@@ -407,7 +438,30 @@ class Seen(_Model):
     nearness: Nearness  # how far, as `where` says it
     doing: str | None = None
     kind: ThingKind | None = None  # things only
-    resource: ResourceName | None = None  # a wild plant you could gather
+    resource: ResourceName | None = None  # what you could gather there
+    # contract v1 (draft), people only: unset until the systems behind them land
+    relation: str | None = None  # who they are to you ("your father", "your lord", "someone who struck you")
+    regard: str | None = None  # how they stand and what you know of them ("well regarded", "who stole rice")
+
+
+class PriceSeen(_Model):
+    """A good on sale at the stall: its price in words, and whether that is dear, fair or cheap."""
+
+    item: str
+    price: str  # ("four coins for two measures")
+    word: PriceWord
+
+
+class MarketView(_Model):
+    """What an open market stall you stand at sells."""
+
+    items: list[PriceSeen]
+
+
+class ChestView(_Model):
+    """What your own chest within reach holds."""
+
+    holds: list[str]  # item words ("twenty measures of rice"); empty: the chest is empty
 
 
 class HeardWords(_Model):
@@ -428,19 +482,42 @@ class Perception(_Model):
     animals: list[Seen]
     things: list[Seen]
     heard: list[HeardWords]
+    # contract v1 (draft): unset until the systems behind them land
+    day_of_week: str | None = None  # ("the seventh day of the week; court day")
+    ground: str | None = None  # whose ground or which way this is ("Band A's ground", "the road to the Elder grove")
+    safety: Safety | None = None
+    market: MarketView | None = None  # at an open stall
+    chest: ChestView | None = None  # at your own chest
 
     def text(self) -> str:
-        lines = [f"You are {self.place}. {self.time}", self.you.text()]
+        day = f" It is {self.day_of_week}." if self.day_of_week else ""
+        lines = [f"You are {self.place}. {self.time}{day}", self.you.text()]
+        whereabouts = [f"This is {self.ground}."] if self.ground else []
+        whereabouts += [f"You are {self.safety}."] if self.safety else []
+        if whereabouts:
+            lines.append(" ".join(whereabouts))
         if self.people:
             lines.append("You see " + "; ".join(_said(self.people)) + ".")
         if self.animals:
             lines.append("Animals: " + "; ".join(_said(self.animals)) + ".")
         if self.things:
             lines.append("Around you: " + "; ".join(_said(self.things)) + ".")
+        if self.market is not None:
+            prices = [f"{price.item} at {price.price} ({price.word})" for price in self.market.items]
+            lines.append("At the stall: " + ("; ".join(prices) if prices else "nothing for sale") + ".")
+        if self.chest is not None:
+            holds = self.chest.holds
+            lines.append("Your chest holds " + join(holds) + "." if holds else "Your chest is empty.")
         verbs = {"whisper": "whispers", "normal": "says", "shout": "shouts"}
         lines += [f'{heard.who} {verbs[heard.volume]}: "{heard.words}"' for heard in self.heard]
         return "\n".join(lines)
 
 
 def _said(seen: list[Seen]) -> list[str]:
-    return phrases((entry.label, entry.where, entry.doing) for entry in seen)
+    return phrases((_known_as(entry), entry.where, entry.doing) for entry in seen)
+
+
+def _known_as(seen: Seen) -> str:
+    """A person with what you know of them ("Genzo, your father,"); anyone else as they are seen."""
+    known = [words for words in (seen.relation, seen.regard) if words]
+    return ", ".join([seen.label, *known]) + "," if known else seen.label
