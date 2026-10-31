@@ -8,6 +8,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.world_api.phrases import join, phrases
+
 Volume = Literal["whisper", "normal", "shout"]
 Compass = Literal["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"]
 RoughDistance = Literal["a few steps", "a short walk", "a long walk", "very far"]
@@ -246,8 +248,8 @@ class SelfView(_Model):
     doing: str
 
     def text(self) -> str:
-        feeling = "You feel " + _join(self.feeling) + "." if self.feeling else "You feel fine."
-        carrying = "You carry " + _join(self.carrying) + "." if self.carrying else "You carry nothing."
+        feeling = "You feel " + join(self.feeling) + "." if self.feeling else "You feel fine."
+        carrying = "You carry " + join(self.carrying) + "." if self.carrying else "You carry nothing."
         return f"{feeling} {carrying} {self.doing}"
 
 
@@ -285,43 +287,15 @@ class Perception(_Model):
     def text(self) -> str:
         lines = [f"You are {self.place}. {self.time}", self.you.text()]
         if self.people:
-            lines.append("You see " + "; ".join(_phrases(self.people)) + ".")
+            lines.append("You see " + "; ".join(_said(self.people)) + ".")
         if self.animals:
-            lines.append("Animals: " + "; ".join(_phrases(self.animals)) + ".")
+            lines.append("Animals: " + "; ".join(_said(self.animals)) + ".")
         if self.things:
-            lines.append("Around you: " + "; ".join(_phrases(self.things)) + ".")
+            lines.append("Around you: " + "; ".join(_said(self.things)) + ".")
         verbs = {"whisper": "whispers", "normal": "says", "shout": "shouts"}
         lines += [f'{heard.who} {verbs[heard.volume]}: "{heard.words}"' for heard in self.heard]
         return "\n".join(lines)
 
 
-NEAREST = "the nearest "  # starts the `where` of a group whose members are at different places
-
-
-def phrase(seen: Seen) -> str:
-    """One entry in words ("Oru a few paces to the south (resting)", "three lean-tos, the nearest close by …")."""
-    return _phrase(seen.label, seen.where, seen.doing)
-
-
-def _phrase(label: str, where: str, doing: str | None) -> str:
-    joint = ", " if where.startswith(NEAREST) else " "
-    return f"{label}{joint}{where}" + (f" ({doing})" if doing else "")
-
-
-def _phrases(seen: list[Seen]) -> list[str]:
-    """Entries at the same place doing the same share one phrase ("Suna and Tek a few paces to the east (resting)")."""
-    groups: list[tuple[str, str | None, list[str]]] = []
-    for entry in seen:
-        shared = not entry.where.startswith(NEAREST)
-        same = next((g for g in groups if shared and (g[0], g[1]) == (entry.where, entry.doing)), None)
-        if same is None:
-            groups.append((entry.where, entry.doing, [entry.label]))
-        else:
-            same[2].append(entry.label)
-    return [_phrase(_join(labels), where, doing) for where, doing, labels in groups]
-
-
-def _join(parts: list[str]) -> str:
-    if len(parts) <= 1:
-        return "".join(parts)
-    return ", ".join(parts[:-1]) + " and " + parts[-1]
+def _said(seen: list[Seen]) -> list[str]:
+    return phrases((entry.label, entry.where, entry.doing) for entry in seen)

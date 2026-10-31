@@ -23,7 +23,6 @@ from app.sim.state import ActionState, Animal, Citizen
 from app.sim.vec import Vec3, bearing_deg, lat_lon_deg
 from app.sim.world import CAMP_STRUCTURE_LABELS, HOME_KINDS, STRUCTURE_LABELS, WATER_BIOMES
 from app.world_api.models import (
-    NEAREST,
     HeardWords,
     Nearness,
     Perception,
@@ -31,8 +30,8 @@ from app.world_api.models import (
     Seen,
     SelfView,
     ThingKind,
-    phrase,
 )
+from app.world_api.phrases import NEAREST, phrase
 
 COMPASS = ("north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west")
 MAX_ANIMALS = 8
@@ -659,7 +658,7 @@ def sights(core: SimCore, citizen: Citizen, things: list[Thing]) -> list[Sight]:
 
 
 def words(seen: Seen) -> int:
-    return len(phrase(seen).split())
+    return len(phrase(seen.label, seen.where, seen.doing).split())
 
 
 def fit_to_budget(people: list[Seen], animals: list[Seen], found: list[Sight]) -> list[Seen]:
