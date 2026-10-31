@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 import pytest
 from pydantic import JsonValue
 
+from app.observability.events import EventDraft, Spoiled
 from app.sim.clock import local_minute
 from app.sim.core import SimCore
 from app.sim.navigation import Planner
@@ -184,3 +185,21 @@ def test_a_snapshot_resumes_only_with_the_same_versions_and_systems(sim_world: S
 def test_two_systems_cannot_share_a_name() -> None:
     with pytest.raises(ValueError):
         Registry(systems=(TALLY, System[Tally]("tally", 3, new=TALLY.new, dump=TALLY.dump, load=TALLY.load)))
+
+
+def test_event_hooks_hear_every_event_as_it_is_emitted_even_their_own(sim_world: SimWorld, planner: Planner) -> None:
+    heard: list[tuple[int, str, int]] = []
+
+    def listen(core: SimCore, event: EventDraft) -> None:
+        heard.append((event.seq, event.type, len(core.outbox)))  # told inside the emitting call, once it's out
+        if event.type == "item_moved":
+            core.emit("spoiled", Spoiled(holder="tester", holder_kind="inventory", items={"meat": 1}))
+
+    sim = Simulation.new(sim_world, seed=SEED, planner=planner, registry=Registry(on_event=(listen,)))
+    sim.add_citizen(make_spec(at=GATE))
+    sim.stock_store("store-2", "rice", 3)
+    sim.step()
+    events = sim.drain()
+    assert [(seq, kind) for seq, kind, _ in heard] == [(event.seq, event.type) for event in events]
+    assert all(outbox == seq for seq, _, outbox in heard)  # the outbox holds exactly the events up to this one
+    assert [event.type for event in events][-3:] == ["item_moved", "spoiled", "tick_summary"]
