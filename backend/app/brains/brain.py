@@ -18,6 +18,7 @@ from functools import partial
 
 from pydantic import JsonValue
 
+from app.brains import justice
 from app.brains.profile import BrainProfile
 from app.brains.routines import ROUTINES, Context, Option
 from app.brains.senses import (
@@ -192,6 +193,7 @@ class UtilityBrain:
                 options.append(Option(200, "fight off", partial(self.api.attack, threat.label), aim, "danger"))
             else:
                 options.append(Option(200, "flee", self.api.flee, f"Get away from {threat.label}", "danger"))
+        options += justice.options(ctx)
         thirst = self.thirst_option(p, needs, now)
         if thirst is not None:
             options.append(thirst)
