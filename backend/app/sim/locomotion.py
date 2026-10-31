@@ -22,9 +22,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.core.config import WORLD_DATA_DIR
 from app.sim.clock import SECONDS_PER_TICK
 from app.sim.state import AgeGroup, Citizen
+from app.world_api.models import Pace
 
 Gait = Literal["walk", "jog", "run", "stalk"]
-Pace = Literal["walk", "run"]
 BODIES_PATH = WORLD_DATA_DIR / "bodies.yaml"
 
 

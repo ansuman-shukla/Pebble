@@ -57,6 +57,11 @@ ActionName = Literal[
     "recall",
 ]
 Outcome = Literal["done", "interrupted", "failed"]
+Pace = Literal["walk", "run"]  # how walk_to and follow go; running tires you and turns to a jog when you are spent
+GestureKind = Literal["wave", "bow", "nod", "shake_head", "point", "laugh", "jump"]  # seen, never heard
+Driver = Literal["hunger", "thirst", "rest", "danger", "duty", "ambition", "social", "night"]  # why a goal is set
+PriceWord = Literal["dear", "fair", "cheap"]  # a stall's price for a good against what the good is worth
+Sentence = Literal["fine", "confine"]  # what a judge hands down
 
 INSTANT_ACTIONS: frozenset[ActionName] = frozenset({"look_around", "check_self", "say", "pick_up", "drop", "give"})
 NOT_YET_ACTIONS: frozenset[ActionName] = frozenset({"recall"})  # typed now, answered in phase B (05-memory)

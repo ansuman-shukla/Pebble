@@ -17,12 +17,12 @@ from app.sim.core import WALK_AHEAD_TICKS, SimCore, Stride, TimedPoint
 from app.sim.destinations import beside, resolve
 from app.sim.fauna import SPECIES
 from app.sim.fire import near_lit_fire
-from app.sim.locomotion import Gait, Pace, body_factor, gait_for, gait_mps, load_bodies, night_factor, top_gait
+from app.sim.locomotion import Gait, body_factor, gait_for, gait_mps, load_bodies, night_factor, top_gait
 from app.sim.navigation import WalkProgress, walk_along
 from app.sim.perception import match_person, nearest_danger, person_label
 from app.sim.state import ActionState, Citizen, System
 from app.sim.vec import Vec3, bearing_deg, step_towards
-from app.world_api.models import Flee, Follow, WalkTo
+from app.world_api.models import Flee, Follow, Pace, WalkTo
 
 ARRIVE_M = 2.0  # close enough to a person
 SAME_SPOT_M = 0.001  # spots on a streamed route closer than this are one spot
