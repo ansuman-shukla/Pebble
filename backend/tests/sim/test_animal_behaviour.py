@@ -181,7 +181,7 @@ def test_a_noticed_wolf_races_a_boar_down_and_feeds_then_leaves_meat_and_bones(
     assert flight.route[-1].t_s == pytest.approx(caught_s, abs=1e-3)
     assert chase.route[-1].t_s == pytest.approx(caught_s, abs=1e-3)
     assert sim.world.distance_m(wolf.position, boar.position) < 0.5
-    assert flight.goal == f"fleeing {SPECIES['wolf'].one}" or boar.activity == "dead"
+    assert chase.goal == "feeding on a boar" and chase.target is not None and chase.target.id == boar.id
     sim.step()
     assert str(wolf.activity) == "feeding" and wolf.hunger < 1.0
     sim.run(wolf.until - sim.tick)
@@ -431,3 +431,50 @@ def test_every_den_in_the_world_view_has_its_group(new_sim: Callable[..., Simula
         groups = [g for g in sim.state.groups.values() if den_of(sim.world, g) == den.position]
         assert len(groups) == 1, den.id
         assert groups[0].kind == den.animal and groups[0].size == SPECIES[str(den.animal)].group_size[1]
+
+
+# --- kinds ---
+
+
+def test_a_bear_goes_for_boar_before_deer_and_for_a_carcass_before_either(new_sim: Callable[..., Simulation]) -> None:
+    sim, centre = _open_ground(new_sim, night=True)
+    deer = _herd(sim, "deer", [step_towards(centre, 90.0, 80.0 + 6 * n, R) for n in range(5)], activity="sleeping",
+                 until=10**9)  # fmt: skip
+    (boar,) = _herd(sim, "boar", [step_towards(centre, 180.0, 200.0, R)], activity="sleeping", until=10**9)
+    (bear,) = _hungry(sim, "bear", centre)
+    sim.step()
+    assert bear.target == boar.id  # a bear can't run down deer (G* 0): it lives off boar
+    animal_life.kill(sim.core, deer[0], "killed by a wolf")
+    bear.target, bear.until = None, 0
+    WILDLIFE.of(sim.state).courses.pop(bear.id, None)
+    WILDLIFE.of(sim.state).catches.pop(bear.id, None)
+    sim.step()
+    assert bear.target == deer[0].id and bear.hunger < 1.0  # and off carcasses first
+
+
+def test_sharks_and_fish_are_only_drawn_swimming_or_attacking(new_sim: Callable[..., Simulation]) -> None:
+    sim = new_sim(seed=3)
+    words: set[str] = set()
+    for _ in range(300):
+        summary = _summary(_step(sim))
+        words |= {pose.activity for aid, pose in summary.animals.items() if aid.split(":")[0] in ("shark", "fish")}
+        words |= {a.activity for a in sim.state.animals.values() if a.kind in ("shark", "fish") and a.alive}
+    assert words <= {"swimming", "attacking"} and "swimming" in words
+
+
+def test_a_prowler_after_an_animal_is_said_to_stalk_it(new_sim: Callable[..., Simulation]) -> None:
+    sim, centre = _open_ground(new_sim, night=True)
+    _herd(sim, "deer", [step_towards(centre, 90.0, 200.0, R)], activity="sleeping", until=10**9)
+    (wolf,) = _hungry(sim, "wolf", centre)
+    pose = _summary(_step(sim)).animals[wolf.id]
+    assert pose.activity == "prowling" and pose.goal == "stalking a deer"
+
+
+def test_a_kill_lies_as_bones_before_its_group_replaces_it(new_sim: Callable[..., Simulation]) -> None:
+    sim, centre = _open_ground(new_sim, night=False)
+    rabbits = _herd(sim, "rabbit", [centre, step_towards(centre, 90.0, 5.0, R)], activity="grazing", until=10**9)
+    animal_life.kill(sim.core, rabbits[0], "killed by a fox")
+    sim.run(round(SPECIES["rabbit"].respawn_days * DAY_MINUTES))  # its respawn time: one day, the day it lies dead
+    assert sim.state.animals[rabbits[0].id].activity == "remains"
+    sim.run(animal_life.REMAINS_SHOWN_TICKS)
+    assert rabbits[0].id not in sim.state.animals

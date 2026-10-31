@@ -60,6 +60,8 @@ class Species:
     resists: float = 1.0  # as prey: the predator's strike chance × this (it fights back)
     bite: tuple[float, float] = (0.0, 0.0)  # injury to a person per bite; (0, 0) = never attacks people
     prey: frozenset[str] = frozenset()
+    prefers: frozenset[str] = frozenset()  # prey it goes for first when any is about (a bear: boar, not deer)
+    scavenges: bool = False  # eats from a carcass it finds before it hunts
     meat: int = 0  # pieces a hunter gets (a predator's kill leaves half of them on the ground)
     hide: int = 0
     catch: float = 0.0  # a skilled adult hunter's base chance (03 hunt: skill, tool, strength, group adjust it)
@@ -123,7 +125,7 @@ SPECIES: dict[str, Species] = {
                 meat=3, hide=1, catch=0.2, fights_back=0.5, hurts=(10, 25)),
         Species("bear", "a bear", "bears", _FOREST | frozenset({"taiga"}), (1, 1), 4, 1.0, 4.0, 11.0, 10.0, 700, 5.0,
                 predator=True, stalk_m=40, pounce_m=15, strike=0.5, bite=(25, 40),
-                prey=frozenset({"deer", "boar", "elk", "rabbit"}),
+                prey=frozenset({"deer", "boar", "elk", "rabbit"}), prefers=frozenset({"boar"}), scavenges=True,
                 meat=10, hide=2, catch=0.1, fights_back=0.7, hurts=(20, 40)),
         Species("lion", "a lion", "lions", frozenset({"savanna"}), (2, 3), 3, 1.0, 3.0, 12.0, 15.0, 800, 5.0,
                 predator=True, stalk_m=60, pounce_m=25, strike=0.6, bite=(20, 35),
@@ -131,6 +133,7 @@ SPECIES: dict[str, Species] = {
                 meat=6, hide=1, catch=0.1, fights_back=0.6, hurts=(20, 35)),
         Species("polar_bear", "a white bear", "white bears", _COLD, (1, 1), 2, 1.0, 4.0, 10.0, 10.0, 900, 6.0,
                 predator=True, stalk_m=40, pounce_m=15, strike=0.5, bite=(30, 45), prey=frozenset({"hare"}),
+                scavenges=True,
                 meat=12, hide=2, catch=0.1, fights_back=0.7, hurts=(20, 40)),
         Species("shark", "a shark", "sharks", frozenset({"deep_ocean"}), (1, 1), 4, 1.0, 5.0, 5.0, 60.0, 900, 5.0,
                 predator=True, bite=(30, 50), swims=True),

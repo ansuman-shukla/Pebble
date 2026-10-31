@@ -93,6 +93,7 @@ LEAVE_M = 100.0
 DEN_KEEP_M = 40.0  # within this of its den a predator defends it by day (10 §1.6)
 DEN_CHARGE_M = 25.0  # against anyone this close to the den
 REMAINS_TICKS = DAY_MINUTES  # a predator's kill turns to bones a game day after it died
+REMAINS_SHOWN_TICKS = 120  # and lies as bones at least this long before its group replaces it
 ESCORT_M = 5.0  # pack mates keep this far to the side of their leader (and 3 m back) per place in the line
 POUNCE_S = 0.5
 SWIMMING_KINDS = frozenset({"fish", "shark"})
@@ -540,6 +541,12 @@ def _predator(core: SimCore, animal: Animal, life: Wildlife, start: float) -> No
         if person is not None:
             _go_for(core, animal, person, "hunt", life, start)
             return
+        carcass = _carcass(core, animal) if species.scavenges else None
+        if carcass is not None:  # bears live off carcasses before they hunt (10 §4.6)
+            animal.target, animal.hunger = carcass.id, 0.0
+            animal.until = tick + core.state.rng("animals.scavenge").randint(*FEED_TICKS)
+            _feed(core, animal, carcass, life, start)
+            return
         quarry = _quarry(core, animal) if life.tries.get(group.id, 0) < hunt.HUNTS_A_NIGHT else None
         if quarry is not None:
             _stalk(core, animal, quarry, life, start)
@@ -669,7 +676,7 @@ def _press(core: SimCore, animal: Animal, person: Citizen, life: Wildlife, start
     if arrive_s > SECONDS_PER_TICK:
         midway = _short_of(core, animal.position, person.position, distance - run.metres(SECONDS_PER_TICK))
         _set(core, animal, start, [(midway, start + SECONDS_PER_TICK)], "run", "chasing", "chasing")
-        animal.activity = "chasing"
+        animal.activity = _shown(animal, "chasing")
         return
     if reach > 1e-6:
         _set(core, animal, start, [(beside, start + arrive_s)], "run", "chasing", "attacking")
@@ -721,9 +728,25 @@ def _quarry(core: SimCore, animal: Animal) -> Animal | None:
                 herds.setdefault(other.group, []).append((distance, other.id, other))
     if not herds:
         return None
+    preferred = {group: members for group, members in herds.items() if members[0][2].kind in species.prefers}
+    herds = preferred or herds
     sizes = {group: sum(core.state.animals[m].alive for m in core.state.groups[group].members) for group in herds}
     chosen = min(herds, key=lambda group: (-sizes[group], min(herds[group])[0], group))
     return min(herds[chosen])[2]
+
+
+def _carcass(core: SimCore, animal: Animal) -> Animal | None:
+    """The nearest kill still lying fresh (not yet bones) within PREY_SCENT_M that no other group feeds on."""
+    eaten = {a.target for a in core.state.animals.values() if a.alive and a.target and a.group != animal.group}
+    options = [
+        (distance, body.id, body)
+        for body in core.state.animals.values()
+        if body.activity == "dead"
+        and body.id not in eaten
+        and can_stand(core.world, SPECIES[animal.kind], body.cell)
+        and (distance := core.distance_m(animal.position, body.position)) <= PREY_SCENT_M
+    ]
+    return min(options)[2] if options else None
 
 
 def _stalk(core: SimCore, animal: Animal, quarry: Animal, life: Wildlife, start: float) -> None:
@@ -868,7 +891,7 @@ def _rest(core: SimCore, animal: Animal) -> None:
     animal.target = None
     animal.until = core.state.tick + MISS_REST_TICKS
     if animal.activity not in ("pouncing",):
-        animal.activity = "idle"
+        animal.activity = _shown(animal, "idle")
 
 
 def _feed(core: SimCore, animal: Animal, carcass: Animal, life: Wildlife, start: float) -> None:
@@ -877,7 +900,7 @@ def _feed(core: SimCore, animal: Animal, carcass: Animal, life: Wildlife, start:
     tick = core.state.tick
     if carcass.id not in core.state.animals or tick >= animal.until:
         _leave_carcass(core, animal, carcass)
-        animal.activity, animal.until = "idle", tick + IDLE_TICKS[0]
+        animal.activity, animal.until = _shown(animal, "idle"), tick + IDLE_TICKS[0]
         return
     person = _nearest_person(core, carcass.position, CARCASS_THREAT_M)
     feeders = [
@@ -937,7 +960,7 @@ def _give_up(core: SimCore, animal: Animal, retreat_from: Vec3 | None) -> None:
     animal.until = core.state.tick + REST_AFTER_TICKS // 2
     start = now_s(core)
     if animal.activity != "attacking":
-        animal.activity = "idle"
+        animal.activity = _shown(animal, "idle")
     life.catches.pop(animal.id, None)
     if retreat_from is not None:
         den = den_of(core.world, core.state.groups[animal.group])
@@ -1129,6 +1152,7 @@ def _set(
     life = WILDLIFE.of(core.state)
     if not points:
         return
+    moving, arrive = _shown(animal, moving), _shown(animal, arrive) if arrive is not None else None
     course = redirect(life.courses.get(animal.id), animal.position, seconds, points, gait, moving, arrive)
     life.courses[animal.id] = course
     animal.goal, animal.activity = course.points[-1][0], moving
@@ -1143,6 +1167,13 @@ def _halt(animal: Animal, life: Wildlife, seconds: float) -> None:
     if course is not None and course.end_s > seconds:
         life.courses[animal.id] = redirect(course, animal.position, seconds, [], course.gait, course.moving, None)
         animal.goal = None
+
+
+def _shown(animal: Animal, activity: AnimalActivity) -> AnimalActivity:
+    """What it is drawn doing: fish and sharks only swim (fast at gait run) or, sharks, attack (10 §4.6)."""
+    if animal.kind in SWIMMING_KINDS and activity not in ("swimming", "attacking", "dead", "remains"):
+        return "swimming"
+    return activity
 
 
 def _heading(origin: Vec3, target: Vec3, current: float) -> float:
@@ -1255,7 +1286,7 @@ def _arrive(core: SimCore, animal: Animal, activity: AnimalActivity) -> None:
         return
     if activity in ("grazing", "floating") and not SPECIES[animal.kind].predator:
         activity = _resting(core, animal)
-    animal.activity = activity
+    animal.activity = _shown(animal, activity)
     if activity in ARRIVE_TICKS:
         animal.until = tick + core.state.rng("animals.arrive").randint(*ARRIVE_TICKS[activity])
 
@@ -1287,7 +1318,8 @@ def _respawn(core: SimCore) -> None:
         days = SPECIES[group.kind].respawn_days
         for slot, member_id in enumerate(group.members):
             dead = state.animals[member_id]
-            if dead.alive or dead.died_tick is None or tick < dead.died_tick + round(days * DAY_MINUTES):
+            due = max(round(days * DAY_MINUTES), REMAINS_TICKS + REMAINS_SHOWN_TICKS)  # its bones show a while first
+            if dead.alive or dead.died_tick is None or tick < dead.died_tick + due:
                 continue
             living = [state.animals[m] for m in group.members if state.animals[m].alive]
             cell = living[0].cell if living else group.home
@@ -1332,6 +1364,8 @@ def aim(core: SimCore, animal: Animal) -> tuple[str, Target | None]:
         if quarry is not None and not quarry.alive:
             return f"feeding on {target.name}", target
         verb = {"stalking": "stalking", "chasing": "chasing", "pouncing": "pouncing on", "attacking": "attacking"}
+        if target.kind == "animal":  # a quarry is stalked, prowled up to or chased; only people are "come at"
+            verb |= {"prowling": "stalking", "swimming": "stalking"}
         return f"{verb.get(activity, 'coming at')} {target.name}", target
     if group is not None and group.id in life.drinks and group.goal is not None:
         place = Target(kind="place", name="the waterhole", position=group.goal)
