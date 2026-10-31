@@ -238,6 +238,7 @@ class Society:
     moved: dict[str, int] = field(default_factory=dict)  # "<deed seq>:<group>" -> the standing change it made
     accusations: list[Accusation] = field(default_factory=list)
     judgements: dict[int, Region] = field(default_factory=dict)  # `judged` seq -> the judge's group
+    credited: dict[str, list[int]] = field(default_factory=dict)  # accuser -> deeds their accusations proved (sorted)
     day: int = 0  # the town day the gift caps count
     gift_standing: dict[str, int] = field(default_factory=dict)  # giver -> standing their gifts raised today
     gift_bonds: dict[str, int] = field(default_factory=dict)  # pair -> bond their gifts raised today
@@ -431,16 +432,15 @@ def _judged(core: SimCore, society: Society, event: EventDraft) -> None:
     judged, judge = cast(Judged, event.payload), str(event.actor_id)
     group = society.members[judge].group
     society.judgements[event.seq] = group
-    proven = set(judged.deeds)
-    accusers = sorted(
-        {
-            accusation.accuser
-            for accusation in society.accusations
-            if accusation.person == judged.person and accusation.to == judge and proven & set(accusation.deeds)
-        }
-    )
-    for accuser in accusers:
-        _change(core, society, accuser, group, load_laws().merits.accusation, "accusation", event.seq)
+    proved: dict[str, set[int]] = {}  # accuser -> the judged deeds they had told this judge of
+    for accusation in society.accusations:
+        if accusation.person == judged.person and accusation.to == judge:
+            proved.setdefault(accusation.accuser, set()).update(set(judged.deeds) & set(accusation.deeds))
+    for accuser, deeds in sorted(proved.items()):
+        credited = society.credited.setdefault(accuser, [])
+        if deeds - set(credited):  # once per set of deeds: judging the same deeds again credits nobody twice
+            credited[:] = sorted(set(credited) | deeds)
+            _change(core, society, accuser, group, load_laws().merits.accusation, "accusation", event.seq)
 
 
 def _served(core: SimCore, society: Society, event: EventDraft) -> None:

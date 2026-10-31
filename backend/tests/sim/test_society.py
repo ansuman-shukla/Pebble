@@ -319,6 +319,13 @@ def test_gifts_raise_standing_and_bonds_up_to_their_daily_caps(new_sim: Callable
     assert _changes(sim.drain()) == [("tek", "band_a", 50, 53, "shared food")]
 
 
+def test_food_given_within_the_town_is_a_gift_not_band_sharing(new_sim: Callable[..., Simulation]) -> None:
+    sim = _town(new_sim)
+    source, destination = ItemLocation(kind="inventory", id="genzo"), ItemLocation(kind="inventory", id="aiko")
+    sim.core.item_moved(sim.citizen("genzo"), "rice", 2, source, destination)
+    assert _changes(sim.drain()) == [("genzo", "town", 50, 52, "gift")]
+
+
 def test_judgement_rewards_true_accusers_and_serving_the_sentence(new_sim: Callable[..., Simulation]) -> None:
     sim = _scene(
         new_sim,
@@ -340,6 +347,14 @@ def test_judgement_rewards_true_accusers_and_serving_the_sentence(new_sim: Calla
     core.emit("sentence_served", SentenceServed(sentence="fine", judgement=judgement), actor=sim.citizen("kaz"))
     core.emit("sentence_served", SentenceServed(sentence="fine"), actor=sim.citizen("kaz"))  # no judgement: no group
     assert _changes(sim.drain()) == [("goro", "town", 50, 53, "accusation"), ("kaz", "town", -25, -20, "served")]
+
+    core.emit("judged", judged, actor=sim.citizen("masanori"))  # judged again for the same deed: no new credit
+    assert _changes(sim.drain()) == []
+    again = _steal(sim, "kaz")
+    core.emit("accused", Accused(person="kaz", to="masanori", deeds=[again]), actor=sim.citizen("goro"))
+    sim.drain()
+    core.emit("judged", judged.model_copy(update={"deeds": [seq, again]}), actor=sim.citizen("masanori"))
+    assert _changes(sim.drain()) == [("goro", "town", 53, 56, "accusation")]  # a new deed proven: credit once more
 
 
 def test_tending_raises_the_healer_with_the_tended_s_group(new_sim: Callable[..., Simulation]) -> None:
