@@ -15,6 +15,7 @@ import { applyMessage, EMPTY_LIVE } from '../../src/lib/live/live-state';
 import {
   type Bearer,
   BAKED_HIP,
+  type BodyPose,
   type FedPosture,
   CAPTURED_SPEED,
   fallbackMotion,
@@ -78,7 +79,23 @@ const FARMER: Bearer = {
 
 test.describe('the motion table', () => {
   test('every motion plays a Polyfork clip', async () => {
-    const clips = [...new Set(MOTIONS.flatMap(motionClips))];
+    // resting the table's way or drawn in any pose the feed's posture lays (seated work keeps at it)
+    const poses: (BodyPose | undefined)[] = [
+      undefined,
+      'standing',
+      'seated',
+      'sitting',
+      'kneeling',
+      'sleeping',
+      'inside',
+    ];
+    const clips = [
+      ...new Set(
+        MOTIONS.flatMap((motion) =>
+          poses.flatMap((pose) => motionClips(motion, pose)),
+        ),
+      ),
+    ];
     expect(clips.length).toBeGreaterThan(15);
     const character = createCharacter(lookOf('town-farmer').config);
     // each clip is fetched from Polyfork's CDN (a name it doesn't have fails the load)
@@ -216,27 +233,65 @@ test.describe('the motion table', () => {
       more: { dead?: boolean; seat?: number } = {},
       bearer: Partial<Bearer> = {},
     ) => motionLook(motion, { ...FARMER, ...bearer }, { posture, ...more });
-    // the weaver at the loom sits on its stool (the slot's height), with the chair clip
+    // the weaver at the loom sits on its stool (the slot's height), the chair clip with the hands weaving
     expect(
       look('craft', 'sitting', { seat: 0.3 }, { look: 'town-weaver' }),
-    ).toMatchObject({ pose: 'seated', clip: 'Sitting', seat: 0.3, pace: 1 });
-    // a seat whose height the feed doesn't say is a bench's
-    expect(look('talk', 'sitting')).toMatchObject({
+    ).toMatchObject({
       pose: 'seated',
       clip: 'Sitting',
+      layer: 'weave',
+      seat: 0.3,
+      pace: 1,
+    });
+    // the lord holding court talks from his seat; a seat whose height the feed doesn't say is a bench's
+    expect(look('talk', 'sitting')).toMatchObject({
+      pose: 'seated',
+      clip: 'Sitting talking',
+      layer: null,
       seat: SEAT_HEIGHT,
     });
-    expect(look('sit', 'sitting', { seat: 0.4 }).seat).toBe(0.4);
-    // the smith hammering seated sits still (no hammer pace on the chair clip)
+    expect(look('sit', 'sitting', { seat: 0.4 })).toMatchObject({
+      clip: 'Sitting',
+      layer: null,
+      seat: 0.4,
+    });
+    // the smith or a toolmaker crafting seated works with the hands too (no hammer pace or crouch on the chair clip)
     expect(look('craft', 'sitting', {}, { look: 'town-smith' })).toMatchObject({
       clip: 'Sitting',
+      layer: 'weave',
       pace: 1,
+    });
+    expect(
+      look(
+        'craft',
+        'sitting',
+        {},
+        { look: 'band-a-toolmaker', region: 'band_a' },
+      ),
+    ).toMatchObject({ clip: 'Sitting', layer: 'weave' });
+    // other motions seated rest with the plain chair clip; seated work keeps at it only on a seat
+    expect(look('eat', 'sitting')).toMatchObject({
+      clip: 'Sitting',
+      layer: null,
+    });
+    expect(look('craft', 'sitting_ground')).toMatchObject({
+      pose: 'sitting',
+      clip: 'Sitting',
+      layer: null,
     });
     expect(look('talk', 'sitting_ground')).toMatchObject({
       pose: 'sitting',
       clip: 'Sitting',
       seat: null,
     });
+    // the clips a drawn body may play go by the pose it is drawn in
+    expect(motionClips('craft', 'seated')).toEqual(['Sitting']);
+    expect(motionClips('talk', 'seated')).toEqual(['Sitting talking']);
+    expect(motionClips('talk', 'sitting')).toEqual(['Sitting']);
+    expect(motionClips('talk', 'standing')).toEqual(['Talking']);
+    expect(motionClips('pray', 'kneeling')).toEqual(['Idle']);
+    expect(motionClips('sit', 'seated')).toEqual(['Sitting']);
+    expect(motionClips('craft')).not.toContain('Sitting');
     expect(look('idle', 'lying')).toMatchObject({
       pose: 'sleeping',
       still: true,
@@ -627,6 +682,34 @@ test.describe('layers', () => {
     expect(at(rig.arms.right.hand).y).toBeLessThan(high.y - 0.4);
   });
 
+  test('weaving seated reaches both hands ahead and carries them across the warp and back', async () => {
+    const { rig, at, pose } = await posedRig('town-weaver', 'Sitting');
+    pose(null, 0);
+    const chest = at(rig.chest);
+    const resting = [at(rig.arms.left.hand), at(rig.arms.right.hand)];
+    const middle = (t: number) => {
+      pose('weave', t);
+      const [left, right] = [at(rig.arms.left.hand), at(rig.arms.right.hand)];
+      // both hands ahead of the chest, over the loom, and well apart from the start (an arm's reach, not a clap)
+      for (const [k, hand] of [left, right].entries()) {
+        expect(hand.z - chest.z, `t ${t}: hand ${k} ahead`).toBeGreaterThan(
+          0.3,
+        );
+        expect(hand.z, `t ${t}: hand ${k} reaches out`).toBeGreaterThan(
+          resting[k].z + 0.1,
+        );
+      }
+      return (left.x + right.x) / 2;
+    };
+    // a quarter of the pass the hands are over to their left, three quarters to their right
+    const leftward = middle(0.6);
+    const rightward = middle(1.8);
+    expect(leftward - rightward, 'the shuttle goes across').toBeGreaterThan(
+      0.2,
+    );
+    expect(Math.abs(middle(0) - (leftward + rightward) / 2)).toBeLessThan(0.05);
+  });
+
   test('a reach puts the right hand out to the ground ahead', async () => {
     const { rig, at, pose } = await posedRig('town-smith', 'Crouch');
     pose(null, 0.85);
@@ -914,7 +997,7 @@ test.describe('on the globe', () => {
         { activity: 'working', motion: 'pray' },
         { clip: 'Idle', posture: 'kneeling', layer: 'pray', prop: '' },
       ],
-      // the feed's posture: crafting seated at the loom (hands at rest, the hammer put away)
+      // the feed's posture: crafting seated at the loom (the hands weaving, the hammer put away), holding court
       [
         {
           activity: 'working',
@@ -922,7 +1005,16 @@ test.describe('on the globe', () => {
           posture: 'sitting',
           slot_height_m: 0.3,
         },
-        { clip: 'Sitting', posture: 'seated', prop: '' },
+        { clip: 'Sitting', posture: 'seated', layer: 'weave', prop: '' },
+      ],
+      [
+        {
+          activity: 'working',
+          motion: 'talk',
+          posture: 'sitting',
+          slot_height_m: 0.45,
+        },
+        { clip: 'Sitting talking', posture: 'seated', layer: '' },
       ],
       [
         { activity: 'resting', motion: 'sit_ground' },
