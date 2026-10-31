@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from app.engine import citizen_brains
-from app.observability.events import JsonScalar, TickSummary
+from app.observability.events import JsonScalar, Moved, TickSummary
 from app.observability.replay import ReplayEvent, apply_event, from_snapshot
 from app.services.entities import TALKING_TICKS, citizen_entity
 from app.sim.citizens import CITIZENS, load_citizens
@@ -16,6 +16,7 @@ from app.sim.locomotion import Gait
 from app.sim.motion import BodyMotion, body_motion, load_share
 from app.sim.simulation import Simulation
 from app.sim.snapshot import take_snapshot
+from tests.sim_helpers import make_spec
 
 
 def _motion(
@@ -175,3 +176,17 @@ def test_replay_tells_the_motion_the_sim_had_at_every_tick(new_sim: Callable[...
         "sit",
     }
     assert exercised | {"trade", "eat", "drink", "tend", "pick_up"} <= set(seen), seen  # the run really used the table
+
+
+def test_a_move_drawn_standing_replays_as_standing(new_sim: Callable[..., Simulation]) -> None:
+    """A move of less than a millimetre (the last hair of a walk that arrives) streams no route: it is drawn standing,
+    so the replay must not show its gait (the sim's motion has none: test_replay_tells_the_motion... at tick 526)."""
+    sim = new_sim()
+    citizen = sim.add_citizen(make_spec())
+    sim.drain()
+    replayed = from_snapshot(take_snapshot(sim.state))
+    nudged = Moved(position=citizen.position, height_m=citizen.height_m, cell=citizen.cell, route=[], gait="walk")
+    summary = TickSummary(moved={citizen.id: nudged}, bodies={})
+    apply_event(replayed, ReplayEvent(sim.tick + 1, "tick_summary", None, summary.model_dump()))
+    assert replayed.citizens[citizen.id].gait is None
+    assert citizen_entity(replayed.citizens[citizen.id], sim.tick + 1).motion != "walk"
