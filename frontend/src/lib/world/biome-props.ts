@@ -182,8 +182,20 @@ export const FEATURE_LOOKS: Readonly<Partial<Record<string, PropKind>>> = {
 };
 
 /** What a felled tree leaves: its stump (and its logs, drawn as a fallen log along the fall). */
-const STUMP_LOOK: PropKind = 'tree_stump';
-const LOGS_LOOK: PropKind = 'fallen_log';
+export const STUMP_LOOK: PropKind = 'tree_stump';
+export const LOGS_LOOK: PropKind = 'fallen_log';
+
+/** Looks drawn by stage through the staged material (pieces, level, growth, tint; staged-material.ts). */
+export const STAGED_LOOKS: ReadonlySet<PropKind> = new Set<PropKind>([
+  'berry_bush',
+  'root_patch',
+  'reed_bed',
+  'fallen_log',
+  'driftwood',
+  'dead_tree',
+  'flint_seam',
+  'obsidian_field',
+]);
 
 /** Every kind a node is drawn as, in any stage. */
 export const NODE_LOOK_KINDS: readonly PropKind[] = [
@@ -198,7 +210,7 @@ export const NODE_LOOK_KINDS: readonly PropKind[] = [
 /** A standing tree's trunk: what decor keeps clear of under a crown. */
 const TRUNK_RADIUS_M = 0.5;
 /** Node kinds that stand as a tree (`flora_nodes`). */
-const TREE_NODES: ReadonlySet<string> = new Set(['tree', 'nut_tree']);
+export const TREE_NODES: ReadonlySet<string> = new Set(['tree', 'nut_tree']);
 
 /**
  * Radius (metres) of the ground a node stands on at its drawn scale: a standing tree's trunk, else the model's

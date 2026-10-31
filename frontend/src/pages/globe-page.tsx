@@ -95,6 +95,7 @@ import { feedMinutes } from '@/lib/live/live-state';
 import { ShownDoings } from '@/lib/live/shown-doings';
 import { BIOME_PROPS } from '@/lib/world/biome-props';
 import type { FloraTable } from '@/lib/world/flora';
+import { NodeStages } from '@/lib/world/node-stages';
 import {
   FAST_RATE,
   formatTime,
@@ -348,6 +349,7 @@ type GlobeSceneProps = {
   npcViews: NpcViews;
   animalViews: AnimalViews;
   fireViews: FireViews;
+  nodeStages: NodeStages;
   followId: string | null;
   /** Selected and followed: their chips stay whole. */
   pinned: readonly string[];
@@ -384,6 +386,7 @@ const GlobeScene = memo(function GlobeScene({
   npcViews,
   animalViews,
   fireViews,
+  nodeStages,
   followId,
   pinned,
   pickRef,
@@ -464,6 +467,7 @@ const GlobeScene = memo(function GlobeScene({
         />
         <GlobeNodes
           scatter={planet.scatter}
+          stages={nodeStages}
           focusRef={focusRef}
           radius={terrain.globe.radius}
         />
@@ -714,6 +718,23 @@ function GlobeWorld({
   const [doings] = useState(() => new ShownDoings());
   const [animalViews] = useState<AnimalViews>(() => new Map());
   const [fireViews] = useState<FireViews>(() => new Map());
+  // node stocks and felled trees follow the feed (fixed features may have caps of their own)
+  const [nodeStages] = useState(
+    () =>
+      new NodeStages(
+        new Map(
+          view.places.features.flatMap((feature) =>
+            feature.cap == null ? [] : [[feature.id, feature.cap] as const],
+          ),
+        ),
+      ),
+  );
+  const { listen } = feed;
+  useEffect(
+    () =>
+      listen((message) => nodeStages.apply(message, performance.now() / 1000)),
+    [listen, nodeStages],
+  );
   const subjectRef = useRef<GlobePlayerState>({
     position: new Vector3(),
     facing: new Vector3(),
@@ -1008,6 +1029,7 @@ function GlobeWorld({
         npcViews={npcViews}
         animalViews={animalViews}
         fireViews={fireViews}
+        nodeStages={nodeStages}
         followId={followId}
         pinned={pinned}
         pickRef={pickRef}

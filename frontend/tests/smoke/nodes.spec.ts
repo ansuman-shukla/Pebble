@@ -136,3 +136,110 @@ test('every node within reach of the focus is drawn once, at its place, as its l
   );
   expect(errors).toEqual([]);
 });
+
+/** JavaScript's own rounding (halves up), as the stage rule uses it. */
+const round = (value: number) => Math.floor(value + 0.5);
+
+/** Berry-red pixels on the scene canvas (browser code as a string: the test TypeScript has no DOM types). */
+const BERRY_PIXELS = `(() => {
+  const scene = document.querySelector('canvas[data-engine]');
+  const copy = document.createElement('canvas');
+  copy.width = scene.width;
+  copy.height = scene.height;
+  const context = copy.getContext('2d');
+  context.drawImage(scene, 0, 0);
+  const { data } = context.getImageData(0, 0, copy.width, copy.height);
+  let red = 0;
+  for (let i = 0; i < data.length; i += 4)
+    if (data[i] > 70 && data[i] > 2.1 * data[i + 1] && data[i] > 2.5 * data[i + 2]) red += 1;
+  return red;
+})()`;
+
+/** Beside one of the Elder grove's bushes (flora:3941), an oak (flora:3935) 3 m east, on the mock feed. */
+const BY_THE_BUSH = '?mockLive=1&at=11.53,6.215,0';
+
+type Sender = {
+  __pebbleMockLive: {
+    sendNow: (
+      type: string,
+      actor: string,
+      payload: Record<string, unknown>,
+    ) => void;
+  };
+};
+
+test('a picked bush loses its fruit on screen, a felled tree is a stump within 3 s', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  await openGlobe(page, errors, BY_THE_BUSH);
+  const drawnOf = (id: string) =>
+    page.evaluate(
+      (node) =>
+        (globalThis as NodesWindow).__pebbleNodes
+          ?.drawn()
+          ?.nodes.filter((n) => n.id === node) ?? [],
+      id,
+    );
+  const send = (type: string, payload: Record<string, unknown>) =>
+    page.evaluate(
+      ([t, p]) =>
+        (globalThis as unknown as Sender).__pebbleMockLive.sendNow(
+          t as string,
+          'kenji',
+          p as Record<string, unknown>,
+        ),
+      [type, payload] as const,
+    );
+  await expect
+    .poll(async () => (await drawnOf('flora:3941')).length, { timeout: 30_000 })
+    .toBe(1);
+  await page.waitForTimeout(1000);
+  const full = await page.evaluate<number>(BERRY_PIXELS);
+  expect(full).toBeGreaterThan(30);
+
+  /** The bush at `after` of 12 berries, once drawn: its fruit pieces and the berry-red pixels on screen. */
+  const picked = async (after: number) => {
+    await send('node_changed', {
+      node: 'flora:3941',
+      kind: 'berry_bush',
+      item: 'berries',
+      before: 12,
+      after,
+      stage: 'picked',
+    });
+    const pieces = round((9 * Math.round((8 * after) / 12)) / 8);
+    await expect
+      .poll(
+        async () =>
+          (
+            (await drawnOf('flora:3941'))[0] as unknown as {
+              stage: { pieces: number };
+            }
+          ).stage.pieces,
+      )
+      .toBe(pieces);
+    await page.waitForTimeout(300);
+    return page.evaluate<number>(BERRY_PIXELS);
+  };
+  // half the berries: 5 of the 9 fruit pieces show (measured 0.47 of the red), 7 berries 6 pieces (0.63); one
+  // piece more or less falls outside these bands
+  const half = await picked(6);
+  const more = await picked(7);
+  expect(half / full).toBeGreaterThan(0.4);
+  expect(half / full).toBeLessThan(0.55);
+  expect(more / full).toBeGreaterThan(0.56);
+  expect(more / full).toBeLessThan(0.72);
+  expect(await picked(0)).toBeLessThan(full / 3);
+
+  await send('tree_felled', { node: 'flora:3935', yaw_deg: 90, logs: 10 });
+  const felled = Date.now();
+  await expect
+    .poll(async () => (await drawnOf('flora:3935')).map((n) => n.look).sort(), {
+      intervals: [100],
+      timeout: 5000,
+    })
+    .toEqual(['fallen_log', 'tree_stump']);
+  expect(Date.now() - felled).toBeLessThanOrEqual(3000);
+  expect(errors).toEqual([]);
+});
