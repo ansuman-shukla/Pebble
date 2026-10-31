@@ -1,8 +1,7 @@
-import { useGLTF } from '@react-three/drei';
-import { Suspense, useEffect, useMemo } from 'react';
-import { type BufferGeometry, InstancedMesh, Matrix4 } from 'three';
+import { Suspense, useMemo } from 'react';
+import type { BufferGeometry, Matrix4 } from 'three';
 
-import { kindParts } from '@/components/world/kind-parts';
+import { useFixedInstances } from '@/components/world/globe/fixed-instances';
 import { TownGround } from '@/components/world/town/town-ground';
 import {
   type Placed,
@@ -14,7 +13,7 @@ import type {
   TownView,
   WorldPlaces,
 } from '@/lib/client/types.gen';
-import { assetUrl, PROPS } from '@/lib/world/assets';
+import { PROPS } from '@/lib/world/assets';
 import type { PlacementLift, WalkWater } from '@/lib/world/collision';
 import { furniturePlacements } from '@/lib/world/furniture';
 import {
@@ -62,25 +61,6 @@ interface WorldMarks {
  * by ~10 s.
  */
 const worldMarks = new WeakMap<GlobeTerrain, WorldMarks>();
-
-/** One instanced mesh per part of a kind's model, placed at fixed matrices. */
-function useFixedInstances(id: string, matrices: Matrix4[]) {
-  const { scene } = useGLTF(assetUrl(id));
-  const meshes = useMemo(() => {
-    // the parts are baked into model space, so each instance's matrix is the model's
-    return kindParts(scene, id).map(({ geometry, material }) => {
-      const mesh = new InstancedMesh(geometry, material, matrices.length);
-      matrices.forEach((matrix, i) => mesh.setMatrixAt(i, matrix));
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.computeBoundingSphere();
-      return mesh;
-    });
-  }, [scene, id, matrices]);
-  // the geometry and material belong to the shared model (kind-parts); only the instance buffers are ours
-  useEffect(() => () => meshes.forEach((mesh) => mesh.dispose()), [meshes]);
-  return meshes;
-}
 
 function RoadFurniture({
   bridges,
