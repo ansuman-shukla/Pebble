@@ -378,6 +378,35 @@ def test_wood_comes_from_fallen_wood_and_trees_only_fall_to_an_axe(
     assert [(g.before, g.after, g.stage) for g in grown] == [(0, 0, "sapling"), (0, 10, "standing")]
 
 
+def test_an_axe_takes_fallen_wood_first_when_a_tree_is_in_reach_too(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sim, api = _wild(new_sim)
+    tess = sim.citizen(api.citizen_id)
+    tess.inventory["stone axe"] = 1
+    table = sim.world.nodes
+    tree, wood = next(
+        (tree, at.node)
+        for tree, name in enumerate(table.kinds)
+        if name == "tree"
+        and any(table.kinds[o] == "deadwood" for _, o in table.near(sim.world.grid, table.unit(tree), 4.0))
+        and stand_at_node(sim, tess.id, tree)
+        and not isinstance(at := reach.at_node(sim.core, tess, "wood", {"deadwood"}), str)
+    )  # standing at a tree's spot with fallen wood within reach too
+    assert not isinstance(reach.at_node(sim.core, tess, "wood", {"tree"}), str)
+    used: list[str] = []
+    monkeypatch.setattr(wear, "use_tool", _recorder(used))
+    sim.drain()
+    result = run_until_done(sim, api.gather("wood"), 21)  # the fallen wood's 20 minutes, not the axe's 90
+    assert result.outcome == "done" and not result.text.startswith("The tree falls")
+    events = sim.drain()
+    assert not [e for e in events if isinstance(e.payload, TreeFelled)] and used == []
+    assert nodes.stock(sim.core, tree) == int(table.caps[tree]) and nodes.stage(sim.core, tree) == "standing"
+    assert nodes.stock(sim.core, wood) < int(table.caps[wood])
+    (changed,) = [e.payload for e in events if isinstance(e.payload, NodeChanged)]
+    assert changed.node == table.ids[wood]
+
+
 def test_minerals_are_mined_and_gold_panned_at_their_spots(new_sim: Callable[..., Simulation]) -> None:
     sim, api = _wild(new_sim)
     tess = sim.citizen(api.citizen_id)
