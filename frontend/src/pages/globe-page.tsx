@@ -85,9 +85,10 @@ import {
   useReplayCitizens,
 } from '@/hooks/use-replay-citizens';
 import { useFlora } from '@/hooks/use-flora';
+import { useFurniture } from '@/hooks/use-furniture';
 import { useTown } from '@/hooks/use-town';
 import { useWorld } from '@/hooks/use-world';
-import type { TownView, WorldView } from '@/lib/client/types.gen';
+import type { Furniture, TownView, WorldView } from '@/lib/client/types.gen';
 import { CLOCK_SPEEDS } from '@/lib/live/clock-speeds';
 import { type FeedEntry, flightTarget } from '@/lib/live/event-feed';
 import type { LiveCitizen } from '@/lib/live/live-contract';
@@ -376,6 +377,8 @@ type GlobeSceneProps = {
 
 type ModeStats = RenderStats & { mode: CameraMode };
 
+const NO_FURNITURE: Furniture[] = [];
+
 const GlobeScene = memo(function GlobeScene({
   planet,
   town,
@@ -410,6 +413,7 @@ const GlobeScene = memo(function GlobeScene({
   onWaterfalls,
 }: GlobeSceneProps) {
   const { view, terrain } = planet;
+  const furniture = useFurniture().data ?? NO_FURNITURE;
   const sampleStats = useCallback(
     (sample: RenderStats) => onStats({ ...sample, mode: cameraMode }),
     [onStats, cameraMode],
@@ -457,9 +461,14 @@ const GlobeScene = memo(function GlobeScene({
           mapping={planet.town.mapping}
           groundRadius={TOWN_GROUND_RADIUS}
           grass={planet.town.grass}
+          furniture={furniture}
           onPlacementsReady={onPlacementsReady}
         />
-        <GlobeSites sites={view.sites} terrain={terrain} />
+        <GlobeSites
+          sites={view.sites}
+          terrain={terrain}
+          furniture={furniture}
+        />
         <BiomeScatter
           scatter={planet.scatter}
           focusRef={focusRef}

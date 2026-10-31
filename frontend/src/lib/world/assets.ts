@@ -122,7 +122,11 @@ export type PropKind =
   | 'camp_drying_rack'
   | 'sleeping_mat'
   | 'field_barricade'
-  | 'loom';
+  | 'loom'
+  // furniture under slots (served by GET /world/furniture, D198)
+  | 'log_seat'
+  | 'stool'
+  | 'lord_seat';
 
 export const PROPS: Record<PropKind, string> = {
   castle_keep: 'tenshu-keep-2ff636',
@@ -233,6 +237,9 @@ export const PROPS: Record<PropKind, string> = {
   field_barricade: 'field-barricade-a646b9',
   // no loom in the catalogue: drawn from code (procedural-props.ts, D131)
   loom: 'procedural-loom',
+  log_seat: 'procedural-log-seat',
+  stool: 'procedural-stool',
+  lord_seat: 'procedural-lord-seat',
 };
 
 export type HandPropKind =
