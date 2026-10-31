@@ -44,6 +44,7 @@ from app.world.view import Site
 SLOTS_FILE = WORLD_DATA_DIR / "slots.yaml"
 SlotKind = Literal["seat", "mat", "inside", "stand", "queue", "work"]
 SlotPosture = Literal["standing", "sitting", "sitting_ground", "lying", "inside"]
+FurnitureKind = Literal["log_seat", "sleeping_mat", "stool", "lord_seat"]
 
 PERSONAL_M = 0.8  # no two bodies end an action closer than this (D117)
 LEGS_M = 0.7  # the legs of someone sitting or lying reach this far before them (kept clear like a body)
@@ -83,6 +84,7 @@ class SlotSpec(_Spec):
     posture: SlotPosture | None = None
     height_m: float = Field(default=0.0, ge=0)
     words: str | None = None
+    furniture: FurnitureKind | None = None  # what is drawn under a body on it (sim/furniture.py)
 
     @model_validator(mode="after")
     def _one_position(self) -> "SlotSpec":

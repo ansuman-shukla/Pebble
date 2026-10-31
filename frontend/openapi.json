@@ -1177,6 +1177,32 @@
         }
       }
     },
+    "/api/v1/world/furniture": {
+      "get": {
+        "tags": [
+          "world"
+        ],
+        "summary": "Read Furniture",
+        "description": "The log seats, stools and mats people sit and lie on, where their slots are, in each site's local metres.",
+        "operationId": "world-read_furniture",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Furniture"
+                  },
+                  "type": "array",
+                  "title": "Response World-Read Furniture"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/world/flora": {
       "get": {
         "tags": [
@@ -2824,6 +2850,61 @@
         ],
         "title": "Footprint",
         "description": "Axis-aligned size after rotation."
+      },
+      "Furniture": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "site": {
+            "type": "string",
+            "title": "Site"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "log_seat",
+              "sleeping_mat",
+              "stool",
+              "lord_seat"
+            ],
+            "title": "Kind"
+          },
+          "x": {
+            "type": "number",
+            "title": "X"
+          },
+          "z": {
+            "type": "number",
+            "title": "Z"
+          },
+          "heading_deg": {
+            "type": "number",
+            "title": "Heading Deg"
+          },
+          "seat_m": {
+            "type": "number",
+            "title": "Seat M"
+          },
+          "span_m": {
+            "type": "number",
+            "title": "Span M",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "site",
+          "kind",
+          "x",
+          "z",
+          "heading_deg",
+          "seat_m"
+        ],
+        "title": "Furniture",
+        "description": "A piece of furniture as the client draws it (`GET /api/v1/world/furniture`)."
       },
       "Ground": {
         "properties": {
