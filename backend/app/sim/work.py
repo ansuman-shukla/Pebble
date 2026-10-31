@@ -46,7 +46,7 @@ def farm(core: SimCore, citizen: Citizen, _action: ActionState) -> str:
         ItemLocation(kind="inventory", id=citizen.id),
         cause_seq=grown,
     )
-    tax.assess_harvest(core, citizen, taken, harvested)  # E2's rice tax on each harvest (N1: from gather("rice"))
+    tax.assess_harvest(core, citizen, taken, harvested)  # the rice tax's one seam (N1: call it from paddies.harvest)
     left = " The rest stays in the field." if field.get("rice", 0) else ""
     return f"You tend the rice paddies and harvest {amount_words(taken, ITEMS['rice'])}.{left}"
 
