@@ -669,6 +669,9 @@ test.describe('ground at street level', () => {
       // the patterns add fine texture over the flat look (by a margin: the flat gate view's walls and road have
       // texture of their own, so a ratio to it sat on the edge)
       expect(detailed.texture - plain.texture).toBeGreaterThan(0.4);
+      // grassland outside the walls is nearly all ground: its patterns alone must carry the texture
+      if (query === OUTSIDE_THE_WALLS)
+        expect(detailed.texture).toBeGreaterThan(1.5);
       expect(errors).toEqual([]);
     });
 
