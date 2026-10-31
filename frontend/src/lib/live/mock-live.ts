@@ -92,9 +92,9 @@ function fireSeat(bearing: number): [Spot, Seat] {
     { heading: (360 - bearing) % 360, height: 0.4 },
   ];
 }
-/** fire_pit seat-4 and seat-7, seat-8. */
+/** fire_pit seat-4, seat-6 and seat-8 (on three logs: band B's Vesa and Sela walk home at once). */
 const [EAST_LOG, EAST_SEAT] = fireSeat(121);
-const [WEST_LOG, WEST_SEAT] = fireSeat(289);
+const [SOUTH_LOG, SOUTH_SEAT] = fireSeat(171);
 const [NORTH_WEST_LOG, NORTH_WEST_SEAT] = fireSeat(311);
 /** The lord's seat in the castle court (castle_keep lord-seat, the keep at (0, -6)). */
 const LORD_SEAT_AT: Spot = [0, 3.5];
@@ -585,17 +585,17 @@ const PEOPLE: MockPerson[] = [
     appearance: 'a white-haired old woman in a fur mantle',
     site: 'band_b_camp',
     pace: 0.6,
-    home: WEST_LOG,
+    home: SOUTH_LOG,
     plan: [
       {
         activity: 'resting',
         label: 'the fire pit',
         ticks: 10,
-        seat: WEST_SEAT,
+        seat: SOUTH_SEAT,
       },
       { walk: [-20, 16], to: 'the root patch' },
       { activity: 'gathering', label: 'roots', ticks: 8 },
-      { walk: WEST_LOG, to: 'camp' },
+      { walk: SOUTH_LOG, to: 'camp' },
     ],
   },
 ];
