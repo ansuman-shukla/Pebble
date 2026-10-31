@@ -792,28 +792,41 @@ test.describe('ground marks on screen', () => {
     await page.waitForTimeout(1000);
     const at = (point: Vector3) =>
       point.clone().multiplyScalar(radius + ground.heightAt(point)! + 0.05);
-    const [road, grass] = await Promise.all([
-      pixelAt(page, at(centre)),
-      pixelAt(page, at(off)),
-    ]);
-    expect(road).not.toBeNull();
-    expect(grass).not.toBeNull();
-    expect(deltaE(road!, grass!)).toBeGreaterThan(10);
-    // a ragged border, not a ruled line: 0.2 m inside it the grass shows through in places and the road reaches
-    // its border in others (each pixel's share of the way from the grass's colour to the road's)
-    const edge = await Promise.all(
-      border.map((point) => pixelAt(page, at(point))),
-    );
-    const span = road!.map((value, k) => value - grass![k]);
-    const shares = edge.map(
-      (pixel) =>
-        pixel!.reduce(
-          (sum, value, k) => sum + (value - grass![k]) * span[k],
+    const probe = () =>
+      Promise.all(
+        [centre, off, ...border].map((point) => pixelAt(page, at(point))),
+      );
+    const shown = await probe();
+    // the same points with the marks mesh hidden: what the ground alone draws there
+    await page.evaluate(`(() => {
+      for (const scene of window.__scenes)
+        scene.traverse((object) => {
+          if (object.isMesh && object.geometry.getAttribute('mark')) object.visible = false;
+        });
+    })()`);
+    await page.waitForTimeout(500);
+    const bare = await probe();
+    expect([...shown, ...bare].every((pixel) => pixel !== null)).toBe(true);
+    const [road, grass, ...edge] = shown as number[][];
+    const [ground0, grass0, ...edge0] = bare as number[][];
+    // the road is the mark's doing (the ground under it alone looks unlike it), 5 m off nothing changes, and the
+    // road differs from the grass there
+    expect(deltaE(road, ground0)).toBeGreaterThan(10);
+    expect(deltaE(grass, grass0)).toBeLessThan(3);
+    expect(deltaE(road, grass)).toBeGreaterThan(10);
+    // a ragged border, not a ruled line: 0.2 m inside it the ground shows through in places and the road reaches its
+    // border in others (each pixel's share of the way from the bare ground there to the road's colour)
+    const shares = edge.map((pixel, i) => {
+      const span = road.map((value, k) => value - edge0[i][k]);
+      return (
+        pixel.reduce(
+          (sum, value, k) => sum + (value - edge0[i][k]) * span[k],
           0,
-        ) / span.reduce((sum, value) => sum + value * value, 0),
-    );
-    expect(Math.min(...shares)).toBeLessThan(0.65);
-    expect(Math.max(...shares)).toBeGreaterThan(0.8);
+        ) / span.reduce((sum, value) => sum + value * value, 0)
+      );
+    });
+    expect(Math.min(...shares)).toBeLessThan(0.6);
+    expect(Math.max(...shares)).toBeGreaterThan(0.7);
     expect(errors).toEqual([]);
   });
 
