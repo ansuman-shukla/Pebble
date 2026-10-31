@@ -114,7 +114,7 @@ export class LivingKind {
     private readonly key: string,
     private readonly kind: string,
     private readonly model: KindModel,
-    private readonly placements: TownPlacement[],
+    private readonly placements: readonly Pick<TownPlacement, 'id'>[],
     placed: Matrix4[],
   ) {
     const count = placed.length;

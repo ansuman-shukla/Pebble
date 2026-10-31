@@ -37,7 +37,7 @@ export function terrainLift(
   height: number,
 ): PlacementLift {
   const at = new Vector3();
-  return (placement: WalkPlacement) =>
+  return (placement) =>
     terrain.heightAt(mapping.toWorld(placement.x, 0, placement.z, at)) - height;
 }
 

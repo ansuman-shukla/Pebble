@@ -19,14 +19,23 @@ import { advanceProps } from '@/lib/world/prop-motion';
  * world (flat on the town page, wrapped onto the planet on the globe). Their moving parts live (living-kind.ts).
  */
 
+/** What is drawn: a kind at local metres, turned by any yaw (placements turn by quarters, furniture any way). */
+export interface Placed extends Pick<TownPlacement, 'id' | 'kind' | 'x' | 'z'> {
+  rotation_deg: number;
+  /** Stretch along the model's own axes (furniture fitted to its slots), on top of the kind's scale. */
+  scale?: readonly [number, number, number];
+}
+
 type PlacementsProps = {
-  placements: TownPlacement[];
+  placements: readonly Placed[];
   mapping: LocalMapping;
   /** Extra local height per placement (e.g. to stand it on uneven terrain). */
-  lift?: (placement: TownPlacement) => number;
+  lift?: (placement: Placed) => number;
 };
 
 type KindProps = PlacementsProps & { kind: string; id: string };
+
+const UNSTRETCHED = [1, 1, 1] as const;
 
 function ModelInstances(props: KindProps) {
   const { scene, animations } = useGLTF(assetUrl(props.id));
@@ -65,7 +74,11 @@ function KindInstances({
           (placement.rotation_deg * Math.PI) / 180,
           new Matrix4(),
         )
-        .scale(new Vector3(scale, scale, scale)),
+        .scale(
+          new Vector3(...(placement.scale ?? UNSTRETCHED)).multiplyScalar(
+            scale,
+          ),
+        ),
     );
     return new LivingKind(key, kind, model, placements, placed);
   }, [key, model, id, kind, placements, mapping, lift]);
@@ -98,7 +111,7 @@ export function TownPlacements({
   onReady?: () => void;
 }) {
   const byKind = useMemo(() => {
-    const groups = new Map<string, TownPlacement[]>();
+    const groups = new Map<string, Placed[]>();
     for (const placement of placements) {
       const group = groups.get(placement.kind);
       if (group) group.push(placement);
