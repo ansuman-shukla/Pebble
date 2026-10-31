@@ -226,10 +226,23 @@ def _hunter(new_sim: Callable[..., Simulation], deer_m: float, age: int = 25) ->
     citizen = sim.add_citizen(spec)
     put_in_the_wild(sim, citizen.id, wild_cell(sim, flat_m=5.0))
     skip_to(sim, citizen.position, night=False)
-    deer = step_towards(citizen.position, 90.0, deer_m, sim.world.radius_m)
+    deer = step_towards(citizen.position, _dry_bearing(sim, citizen.position, deer_m), deer_m, sim.world.radius_m)
     add_animal(sim, "deer", deer, activity="grazing", until=10**9)
     sim.drain()
     return sim, WorldApi(sim, citizen.id), deer
+
+
+def _dry_bearing(sim: Simulation, origin: Vec3, metres: float) -> float:
+    """A bearing with walkable ground all the way out to `metres` (no deer standing in the sea)."""
+    allowed = sim.core.planner.outer.allowed
+    return next(
+        bearing
+        for bearing in (90.0, 0.0, 180.0, 270.0, 45.0, 135.0, 225.0, 315.0)
+        if all(
+            allowed[sim.world.nearest_cell(step_towards(origin, bearing, m, sim.world.radius_m))]
+            for m in range(0, round(metres) + 1, 2)
+        )
+    )
 
 
 def _on_route(sim: Simulation, unit: Vec3, route: Route) -> bool:
@@ -258,7 +271,8 @@ def test_a_hunter_creeping_up_is_streamed_at_the_stalking_pace_along_a_planned_r
     # along the planned route (10 §4.1: no straight creeping), at the stalking pace over each leg's cost (never faster)
     route = hunter.action.route
     assert all(_on_route(sim, point.unit, route) for point in moved.route)
-    assert all(0.8 * stalk_mps <= speed <= stalk_mps * 1.001 for speed in _speeds(sim, moved.route))
+    slowest = stalk_mps / max(route.costs)  # the dearest leg (rough ground, a slope) slows the creep most
+    assert all(slowest * 0.999 <= speed <= stalk_mps * 1.001 for speed in _speeds(sim, moved.route))
     walked = next(point for point in moved.route if point.unit == hunter.position)
     assert walked.t_s == pytest.approx(SECONDS_PER_TICK)
     # the route ends just inside striking distance of the deer, on the hunter's side
