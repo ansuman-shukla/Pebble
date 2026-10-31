@@ -2,6 +2,7 @@ import { Suspense, useMemo } from 'react';
 import type { BufferGeometry, Matrix4 } from 'three';
 
 import { useFixedInstances } from '@/components/world/globe/fixed-instances';
+import { GlobeWildMarks } from '@/components/world/globe/wild-marks';
 import { TownGround } from '@/components/world/town/town-ground';
 import {
   type Placed,
@@ -29,6 +30,7 @@ import {
   signpostMatrices,
 } from '@/lib/world/ground-marks';
 import { discOutline } from '@/lib/world/ground-shape';
+import { type WildMarks, wildMarks } from '@/lib/world/wild-marks';
 import type { LocalMapping } from '@/lib/world/local-mapping';
 import type { RiverLayout } from '@/lib/world/river-courses';
 import { terrainLift } from '@/lib/world/walk-charts';
@@ -38,7 +40,8 @@ import { terrainLift } from '@/lib/world/walk-charts';
  * it) and renders its full placement set, ground areas and water through the site mapping (its people are the
  * live citizens, drawn by globe-npcs). Its ground carries the world's ground marks too, in the same merged mesh:
  * every road and path of the network, camp ground and work spots, draped on the town disc or the terrain; and the
- * roads' log bridges over the rivers and signposts at their junctions stand with them. Camps and landmarks have no
+ * roads' log bridges over the rivers and signposts at their junctions stand with them, as do the dens and the
+ * claimed hotspots' markers on the roadside (wild-marks.ts). Camps and landmarks have no
  * ground of their own: each placement stands on the rendered terrain under it. The furniture people sit and lie on
  * (log seats, mats, the loom's stool, the lord's seat) comes later, drawn when it arrives.
  */
@@ -53,6 +56,8 @@ interface WorldMarks {
   /** Where the bridges and signposts stand. */
   bridges: Matrix4[];
   signposts: Matrix4[];
+  /** The dens and claim markers (wild-marks.ts), markers on the roadside of the drawn routes. */
+  wild: WildMarks;
 }
 
 /*
@@ -157,6 +162,13 @@ export function GlobeTown({
       geometry: buildMarks({ planet: { marks, ground } }),
       bridges: bridgeMatrices(marks.bridges, ground),
       signposts: signpostMatrices(signposts, marks, ground),
+      wild: wildMarks(
+        places,
+        marks.ribbons,
+        (direction) =>
+          ground.heightAt(direction) ?? terrain.heightAt(direction),
+        terrain.globe.radius,
+      ),
     };
     worldMarks.set(terrain, world);
   }
@@ -178,6 +190,7 @@ export function GlobeTown({
       />
       <SiteFurniture furniture={furniture} site="town" mapping={mapping} />
       <RoadFurniture bridges={world.bridges} signposts={world.signposts} />
+      <GlobeWildMarks marks={world.wild} />
     </>
   );
 }
