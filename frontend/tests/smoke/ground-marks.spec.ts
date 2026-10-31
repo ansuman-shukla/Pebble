@@ -4,7 +4,7 @@ import {
   type PlaywrightWorkerArgs,
   test,
 } from '@playwright/test';
-import { type BufferGeometry, Vector3 } from 'three';
+import { type BufferGeometry, Quaternion, Vector3 } from 'three';
 
 import type { TownView, WorldView } from '../../src/lib/client/types.gen';
 import {
@@ -21,6 +21,9 @@ import {
   tangentFrame,
 } from '../../src/lib/world/globe';
 import {
+  BRIDGE_MODEL,
+  bridgeMatrices,
+  bridgeSpans,
   buildMarks,
   globeMarkGround,
   CAMP_WORN_RADIUS,
@@ -32,6 +35,7 @@ import {
   ROUTE_WIDTH,
   routeChains,
   SCORCH_RADIUS,
+  signpostMatrices,
 } from '../../src/lib/world/ground-marks';
 import { clipWater, TOWN_WATER_Y } from '../../src/lib/world/ground-shape';
 import { FLAT_MAPPING } from '../../src/lib/world/local-mapping';
@@ -192,6 +196,54 @@ test.describe('route chains', () => {
   });
 });
 
+test.describe('bridges', () => {
+  const RADIUS = 2000;
+  /** A unit direction x metres east and y metres north of (0, 0, 1). */
+  const spot = (x: number, y: number) => new Vector3(x, y, RADIUS).normalize();
+  // a 6 m river flowing east along y = 0
+  const rivers: RiverLayout = {
+    falls: [],
+    runs: [
+      {
+        river: 0,
+        points: Array.from({ length: 31 }, (_, k) => ({
+          direction: spot(-60 + k * 4, 0),
+          height: 0,
+          width: 6,
+          along: k * 4,
+          speed: 1,
+          fade: 1,
+          flat: false,
+        })),
+      },
+    ],
+  };
+  const ribbon = (y: (x: number) => number, xs: number[]) => ({
+    kind: 'path' as const,
+    width: 1.5,
+    closed: false,
+    points: xs.map((x) => spot(x, y(x))),
+  });
+  const metres = Array.from({ length: 41 }, (_, k) => k - 20);
+
+  test('only a ribbon that comes out on the other bank is bridged, bank to bank', () => {
+    // straight across, north to south
+    const across = {
+      ...ribbon(() => 0, metres),
+      points: metres.map((y) => spot(0, y)),
+    };
+    // dips into the water from the south bank and turns back to it
+    const dip = ribbon((x) => -6 + 5 * Math.exp(-((x / 6) ** 2)), metres);
+    const spans = bridgeSpans([across, dip], rivers, RADIUS);
+    expect(spans).toHaveLength(1);
+    const [bridge] = spans;
+    expect(bridge.centre.angleTo(spot(0, 0)) * RADIUS).toBeLessThan(0.6);
+    expect(Math.abs(bridge.along.y)).toBeGreaterThan(0.999);
+    // from the last sample 1 m clear of the water on one bank to the first on the other, 1.2 m onto each
+    expect(bridge.length).toBeCloseTo(10 + 2.4, 1);
+  });
+});
+
 test.describe('ground marks of the real world', () => {
   let view: WorldView;
   let town: TownView;
@@ -303,33 +355,39 @@ test.describe('ground marks of the real world', () => {
     expect(missed).toEqual([]);
   });
 
-  test('no mark lies on a drawn river: roads and paths cross on bridges resting on both banks', () => {
+  /** The nearest drawn river's water to a unit direction: metres from it (< 0 on it) and the bank of its flow. */
+  function nearestWater(at: Vector3) {
     const radius = view.radius_m;
-    /** Metres from a unit direction to the nearest drawn river's water (< 0 on it). */
-    const fromWater = (at: Vector3) => {
-      const point = at.clone().multiplyScalar(radius);
-      let best = Infinity;
-      for (const { points } of rivers.runs)
-        for (let j = 1; j < points.length; j++) {
-          const a = points[j - 1].direction.clone().multiplyScalar(radius);
-          if (a.distanceTo(point) > 30) continue;
-          const b = points[j].direction.clone().multiplyScalar(radius).sub(a);
-          const t = Math.min(
-            1,
-            Math.max(0, point.clone().sub(a).dot(b) / b.lengthSq()),
-          );
-          const width =
-            points[j - 1].width + (points[j].width - points[j - 1].width) * t;
-          best = Math.min(
-            best,
-            a.addScaledVector(b, t).distanceTo(point) - width / 2,
+    const point = at.clone().multiplyScalar(radius);
+    const nearest = { gap: Infinity, side: 0 };
+    for (const { points } of rivers.runs)
+      for (let j = 1; j < points.length; j++) {
+        const a = points[j - 1].direction.clone().multiplyScalar(radius);
+        if (a.distanceTo(point) > 30) continue;
+        const b = points[j].direction.clone().multiplyScalar(radius).sub(a);
+        const t = Math.min(
+          1,
+          Math.max(0, point.clone().sub(a).dot(b) / b.lengthSq()),
+        );
+        const width =
+          points[j - 1].width + (points[j].width - points[j - 1].width) * t;
+        const on = a.addScaledVector(b, t);
+        const gap = on.distanceTo(point) - width / 2;
+        if (gap < nearest.gap) {
+          nearest.gap = gap;
+          nearest.side = Math.sign(
+            new Vector3().crossVectors(b, at).dot(point.clone().sub(on)),
           );
         }
-      return best;
-    };
+      }
+    return nearest;
+  }
+
+  test('no mark lies on a drawn river: roads and paths cross it on bridges from bank to bank', () => {
+    const radius = view.radius_m;
     // a ribbon's middle never; its border only where it grazes the water, by less than its half width
     const wet = vertices(geometry).filter((vertex) => {
-      const gap = fromWater(vertex.position.clone().normalize());
+      const { gap } = nearestWater(vertex.position.clone().normalize());
       const ribbon =
         (vertex.kind === 'road' || vertex.kind === 'path') &&
         vertex.across !== 0;
@@ -339,21 +397,18 @@ test.describe('ground marks of the real world', () => {
     expect(marks.bridges.length).toBeGreaterThanOrEqual(10);
     const end = new Vector3();
     for (const bridge of marks.bridges) {
-      expect(fromWater(bridge.centre)).toBeLessThan(0);
-      for (const side of [-1, 1]) {
-        end
-          .copy(bridge.centre)
-          .multiplyScalar(radius)
-          .addScaledVector(bridge.along, (side * bridge.length) / 2)
-          .normalize();
-        // on a bank, or where the ribbon ends at a junction on the water (the next ribbon has its own bridge)
-        const junction = marks.patches.some(
-          (patch) =>
-            (patch.kind === 'road' || patch.kind === 'path') &&
-            patch.centre.angleTo(end) * radius < 4,
-        );
-        expect(fromWater(end) > 0 || junction).toBe(true);
-      }
+      // its ends rest on dry ground on opposite banks: a ribbon running along a river gets none
+      const ends = [-1, 1].map((side) =>
+        nearestWater(
+          end
+            .copy(bridge.centre)
+            .multiplyScalar(radius)
+            .addScaledVector(bridge.along, (side * bridge.length) / 2)
+            .normalize(),
+        ),
+      );
+      expect(ends.map(({ gap }) => gap > 0)).toEqual([true, true]);
+      expect(ends[0].side * ends[1].side).toBe(-1);
     }
     // every crossing the world routes over a river cell is drawn as a bridge
     for (const bridge of view.places.bridges) {
@@ -364,6 +419,62 @@ test.describe('ground marks of the real world', () => {
       );
       expect(nearest, bridge.id).toBeLessThan(30);
     }
+  });
+
+  test('a bridge is 4 m log modules end to end, its deck level with the higher bank', () => {
+    const radius = view.radius_m;
+    const at = new Vector3();
+    for (const bridge of marks.bridges) {
+      const modules = bridgeMatrices([bridge], ground);
+      expect(modules).toHaveLength(
+        Math.ceil(bridge.length / BRIDGE_MODEL.length),
+      );
+      const banks = [-1, 1].map(
+        (side) =>
+          ground.heightAt(
+            at
+              .copy(bridge.centre)
+              .multiplyScalar(radius)
+              .addScaledVector(bridge.along, (side * bridge.length) / 2)
+              .normalize(),
+          ) ?? 0,
+      );
+      let covered = 0;
+      for (const module of modules) {
+        const position = new Vector3();
+        const scale = new Vector3();
+        module.decompose(position, new Quaternion(), scale);
+        const x = new Vector3().setFromMatrixColumn(module, 0).normalize();
+        // along the road, never stretched past the model's own span
+        expect(x.dot(bridge.along)).toBeGreaterThan(0.999);
+        expect(scale.x).toBeLessThanOrEqual(1);
+        expect(position.length() - radius).toBeCloseTo(Math.max(...banks), 3);
+        covered += scale.x * BRIDGE_MODEL.length;
+      }
+      expect(covered).toBeCloseTo(bridge.length, 3);
+    }
+  });
+
+  test('a signpost stands on the ground facing the nearest road or path', () => {
+    const radius = view.radius_m;
+    const signposts = view.places.features.filter(
+      (feature) => feature.kind === 'signpost',
+    );
+    expect(signposts.length).toBeGreaterThan(5);
+    signpostMatrices(signposts, marks, ground).forEach((matrix, i) => {
+      const at = new Vector3(...signposts[i].position);
+      const nearest = marks.ribbons
+        .flatMap((ribbon) => ribbon.points)
+        .reduce((best, point) =>
+          point.angleTo(at) < best.angleTo(at) ? point : best,
+        );
+      const front = new Vector3().setFromMatrixColumn(matrix, 2).normalize();
+      const toward = nearest.clone().sub(at);
+      toward.addScaledVector(at, -toward.dot(at)).normalize();
+      expect(front.dot(toward)).toBeGreaterThan(0.99);
+      const position = new Vector3().setFromMatrixPosition(matrix);
+      expect(position.length() - radius).toBeCloseTo(ground.heightAt(at)!, 3);
+    });
   });
 
   test('camps wear a 10 m disc round the fire, a scorch at it and a path from each shelter', () => {

@@ -1,6 +1,6 @@
 import { useGLTF } from '@react-three/drei';
 import { Suspense, useEffect, useMemo } from 'react';
-import { type BufferGeometry, InstancedMesh, Matrix4, Vector3 } from 'three';
+import { type BufferGeometry, InstancedMesh, Matrix4 } from 'three';
 
 import { kindParts } from '@/components/world/kind-parts';
 import { TownGround } from '@/components/world/town/town-ground';
@@ -9,7 +9,6 @@ import {
   TownPlacements,
 } from '@/components/world/town/town-placements';
 import type {
-  Feature,
   Furniture,
   Site,
   TownView,
@@ -22,15 +21,13 @@ import {
   anchorMapping,
   type GlobeTerrain,
   type SiteMapping,
-  tangent,
 } from '@/lib/world/globe';
 import {
-  type BridgeSpan,
+  bridgeMatrices,
   buildMarks,
   globeMarkGround,
-  type MarkGround,
-  type PlanetMarks,
   planetMarks,
+  signpostMatrices,
 } from '@/lib/world/ground-marks';
 import { discOutline } from '@/lib/world/ground-shape';
 import type { LocalMapping } from '@/lib/world/local-mapping';
@@ -51,11 +48,6 @@ import { terrainLift } from '@/lib/world/walk-charts';
 const DISC_SEGMENTS = 96;
 /** Wall hanging from the disc's edge down to the terrain. */
 const DISC_SKIRT = 4;
-/** The log bridge model's span and deck width (metres; it lies along its x axis). */
-const BRIDGE_MODEL = { length: 4, width: 1.72 };
-/** A bridge's deck is never narrower than this (metres), however narrow the path it carries. */
-const BRIDGE_MIN_WIDTH = 1.6;
-
 interface WorldMarks {
   /** The marks draped on the ground (owned here: kept for the world's lifetime). */
   geometry: BufferGeometry;
@@ -70,76 +62,6 @@ interface WorldMarks {
  * by ~10 s.
  */
 const worldMarks = new WeakMap<GlobeTerrain, WorldMarks>();
-
-/** A model's frame at a unit direction: x along `along`, y up, standing `height` above sea level. */
-function standing(
-  direction: Vector3,
-  along: Vector3,
-  height: number,
-  radius: number,
-  scale: Vector3,
-) {
-  const x = tangent(along.clone(), direction);
-  const z = new Vector3().crossVectors(x, direction);
-  return new Matrix4()
-    .makeBasis(x, direction, z)
-    .scale(scale)
-    .setPosition(direction.clone().multiplyScalar(radius + height));
-}
-
-/** Each bridge across its river, its ends on the higher bank. */
-function bridgeMatrices(bridges: BridgeSpan[], ground: MarkGround) {
-  const end = new Vector3();
-  return bridges.map(({ centre, along, length, width }) => {
-    const banks = [-1, 1].map(
-      (side) =>
-        ground.heightAt(
-          end
-            .copy(centre)
-            .multiplyScalar(ground.radius)
-            .addScaledVector(along, (side * length) / 2)
-            .normalize(),
-        ) ?? 0,
-    );
-    return standing(
-      centre,
-      along,
-      Math.max(...banks),
-      ground.radius,
-      new Vector3(
-        length / BRIDGE_MODEL.length,
-        1,
-        Math.max(width, BRIDGE_MIN_WIDTH) / BRIDGE_MODEL.width,
-      ),
-    );
-  });
-}
-
-/** Each signpost beside its road, facing the nearest point of a road or path. */
-function signpostMatrices(
-  signposts: Feature[],
-  marks: PlanetMarks,
-  ground: MarkGround,
-) {
-  return signposts.map((signpost) => {
-    const at = new Vector3(...signpost.position);
-    let nearest = at;
-    for (const ribbon of marks.ribbons)
-      for (const point of ribbon.points)
-        if (point.angleTo(at) < nearest.angleTo(at) || nearest === at)
-          nearest = point;
-    const facing = new Vector3().subVectors(nearest, at);
-    // x across the road, so the model's front (+z) faces it
-    const across = new Vector3().crossVectors(at, facing);
-    return standing(
-      at,
-      across,
-      ground.heightAt(at) ?? 0,
-      ground.radius,
-      new Vector3(1, 1, 1),
-    );
-  });
-}
 
 /** One instanced mesh per part of a kind's model, placed at fixed matrices. */
 function useFixedInstances(id: string, matrices: Matrix4[]) {
