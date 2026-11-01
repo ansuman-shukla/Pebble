@@ -31,7 +31,7 @@ from app.sim.core import SimCore
 from app.sim.economy import value_of
 from app.sim.items import ITEMS, amount_words
 from app.sim.ownership import CHEST, KEEP, is_granary, owns
-from app.sim.state import ActionState, Citizen, System
+from app.sim.state import ActionState, Citizen, Region, System
 from app.sim.vec import Vec3, lat_lon_deg
 
 LocalTest = Callable[[Vec3], bool]  # app.sim.systems' (which registers these hooks, so can't be imported here)
@@ -201,17 +201,26 @@ def ledger_at_midnight(core: SimCore, now: LocalTest) -> None:
         if not now(citizen.position):
             continue
         owed = books.accounts.get(citizen.home or "", Account())
-        coins = citizen.inventory.get("coins", 0)
-        carried = sum(value_of(item, citizen.region) * count for item, count in citizen.inventory.items())
         payload = Ledger(
-            coins=coins,
-            wealth_mon=round(carried + chests.get(citizen.home or "", 0.0)),
+            coins=citizen.inventory.get("coins", 0),
+            wealth_mon=wealth_mon(citizen.inventory, citizen.region, chests.get(citizen.home or "", 0.0)),
             income_24h=books.income.pop(citizen.id, 0),
             spent_24h=books.spent.pop(citizen.id, 0),
             owed_rice=owed.rice,
             owed_coins=owed.coins,
         )
         core.emit("ledger", payload, actor=citizen)
+
+
+def wealth_mon(inventory: Mapping[str, int], region: Region, share: float) -> int:
+    """The ledger's wealth: coins and the value of what someone carries (to their group) plus their share of the
+    household chest, in whole mon (the scoreboard's too)."""
+    return round(sum(value_of(item, region) * count for item, count in inventory.items()) + share)
+
+
+def chest_share(chest: Mapping[str, int], residents: int) -> float:
+    """Each living resident's equal share of the town value of their household chest."""
+    return sum(value_of(item, "town") * count for item, count in chest.items()) / residents
 
 
 def count_coins(core: SimCore, event: EventDraft) -> None:
@@ -235,11 +244,7 @@ def _chest_shares(core: SimCore) -> dict[str, float]:
     for citizen in core.living():
         if citizen.home is not None:
             residents[citizen.home] = residents.get(citizen.home, 0) + 1
-    return {
-        home: sum(value_of(item, "town") * count for item, count in core.state.stores.get(home + CHEST, {}).items())
-        / count
-        for home, count in residents.items()
-    }
+    return {home: chest_share(core.state.stores.get(home + CHEST, {}), count) for home, count in residents.items()}
 
 
 def _food(citizen: Citizen) -> list[str]:

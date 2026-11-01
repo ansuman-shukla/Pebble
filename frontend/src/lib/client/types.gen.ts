@@ -5,6 +5,28 @@ export type ClientOptions = {
 };
 
 /**
+ * AmbitionProgress
+ */
+export type AmbitionProgress = {
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Progress
+     */
+    progress: number;
+    /**
+     * Done
+     */
+    done: boolean;
+    /**
+     * Clauses
+     */
+    clauses: Array<ClauseProgress>;
+};
+
+/**
  * Anchor
  */
 export type Anchor = {
@@ -80,6 +102,24 @@ export type AnimalEntity = {
      */
     goal: string;
     target: Target | null;
+};
+
+/**
+ * BondView
+ */
+export type BondView = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Value
+     */
+    value: number;
 };
 
 /**
@@ -353,6 +393,97 @@ export type CitizenProfile = {
 };
 
 /**
+ * CitizenScore
+ */
+export type CitizenScore = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Role
+     */
+    role: string;
+    /**
+     * Region
+     */
+    region: 'town' | 'band_a' | 'band_b';
+    /**
+     * Alive
+     */
+    alive: boolean;
+    /**
+     * Coins
+     */
+    coins: number;
+    /**
+     * Wealth Mon
+     */
+    wealth_mon: number;
+    /**
+     * Income 24H
+     */
+    income_24h: number;
+    /**
+     * Spent 24H
+     */
+    spent_24h: number;
+    /**
+     * Health
+     */
+    health: number;
+    /**
+     * Wellbeing 24H
+     */
+    wellbeing_24h: number | null;
+    tax_owed: Owed;
+    tax_paid_7d: Owed;
+    /**
+     * Rank
+     */
+    rank: number | null;
+    /**
+     * Titles
+     */
+    titles: Array<string>;
+    /**
+     * Standing
+     */
+    standing: number | null;
+    /**
+     * Standing Word
+     */
+    standing_word: string;
+    ambition: AmbitionProgress | null;
+    /**
+     * Trade Partners 7D
+     */
+    trade_partners_7d: number;
+    /**
+     * People Known
+     */
+    people_known: number;
+    /**
+     * Places Known
+     */
+    places_known: number;
+    /**
+     * Bonds Top3
+     */
+    bonds_top3: Array<BondView>;
+    /**
+     * Skill Hours
+     */
+    skill_hours: {
+        [key: string]: number;
+    };
+};
+
+/**
  * CitizenSummary
  */
 export type CitizenSummary = {
@@ -427,6 +558,24 @@ export type CitizensView = {
      * Citizens
      */
     citizens: Array<CitizenSummary>;
+};
+
+/**
+ * ClauseProgress
+ */
+export type ClauseProgress = {
+    /**
+     * Check
+     */
+    check: 'store_holds' | 'standing_at_least' | 'deeds_judged' | 'seizures_guilty' | 'coins_at_least' | 'no_tax_owed' | 'sold' | 'knows_place' | 'knows_people' | 'gave_crafted' | 'tended_people' | 'never_starving' | 'owns' | 'is_leader' | 'hunger_below' | 'followed_hunt' | 'no_witnessed_deed';
+    /**
+     * Met
+     */
+    met: boolean;
+    /**
+     * Progress
+     */
+    progress: number;
 };
 
 /**
@@ -920,6 +1069,40 @@ export type Ground = {
 };
 
 /**
+ * GroupScore
+ */
+export type GroupScore = {
+    /**
+     * Group
+     */
+    group: 'town' | 'band_a' | 'band_b';
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Alive
+     */
+    alive: number;
+    /**
+     * Wealth Mon
+     */
+    wealth_mon: number;
+    /**
+     * Gini Wealth
+     */
+    gini_wealth: number;
+    /**
+     * Deeds 7D
+     */
+    deeds_7d: number;
+    /**
+     * Caught 7D
+     */
+    caught_7d: number;
+};
+
+/**
  * HTTPValidationError
  */
 export type HttpValidationError = {
@@ -1327,6 +1510,20 @@ export type NodeEntity = {
 };
 
 /**
+ * Owed
+ */
+export type Owed = {
+    /**
+     * Rice
+     */
+    rice: number;
+    /**
+     * Coins
+     */
+    coins: number;
+};
+
+/**
  * PersonRef
  */
 export type PersonRef = {
@@ -1497,6 +1694,48 @@ export type RoutePoint = {
 };
 
 /**
+ * ScoreboardView
+ */
+export type ScoreboardView = {
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Tick
+     */
+    tick: number;
+    /**
+     * Day
+     */
+    day: number;
+    /**
+     * Time
+     */
+    time: string;
+    /**
+     * Citizens
+     */
+    citizens: Array<CitizenScore>;
+    /**
+     * Groups
+     */
+    groups: Array<GroupScore>;
+    /**
+     * Money Supply
+     */
+    money_supply: number;
+    /**
+     * Money Supply Ok
+     */
+    money_supply_ok: boolean;
+    /**
+     * Stalls
+     */
+    stalls: Array<StallView>;
+};
+
+/**
  * Site
  */
 export type Site = {
@@ -1539,6 +1778,58 @@ export type Spawn = {
      * Heading Deg
      */
     heading_deg: number;
+};
+
+/**
+ * StallGood
+ */
+export type StallGood = {
+    /**
+     * Item
+     */
+    item: string;
+    /**
+     * Stock
+     */
+    stock: number;
+    /**
+     * Lot
+     */
+    lot: number;
+    /**
+     * Sell
+     */
+    sell: number;
+    /**
+     * Buy
+     */
+    buy: number;
+    /**
+     * Word
+     */
+    word: string;
+};
+
+/**
+ * StallView
+ */
+export type StallView = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Keeper
+     */
+    keeper: string | null;
+    /**
+     * Trading
+     */
+    trading: boolean;
+    /**
+     * Goods
+     */
+    goods: Array<StallGood>;
 };
 
 /**
@@ -2420,6 +2711,42 @@ export type LiveLiveSchemaResponses = {
 };
 
 export type LiveLiveSchemaResponse = LiveLiveSchemaResponses[keyof LiveLiveSchemaResponses];
+
+export type ScoreboardReadScoreboardData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Run Id
+         */
+        run_id?: string | null;
+        /**
+         * At
+         *
+         * replay this tick instead of now
+         */
+        at?: number | null;
+    };
+    url: '/api/v1/scoreboard';
+};
+
+export type ScoreboardReadScoreboardErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ScoreboardReadScoreboardError = ScoreboardReadScoreboardErrors[keyof ScoreboardReadScoreboardErrors];
+
+export type ScoreboardReadScoreboardResponses = {
+    /**
+     * Successful Response
+     */
+    200: ScoreboardView;
+};
+
+export type ScoreboardReadScoreboardResponse = ScoreboardReadScoreboardResponses[keyof ScoreboardReadScoreboardResponses];
 
 export type StatsReadStatsData = {
     body?: never;

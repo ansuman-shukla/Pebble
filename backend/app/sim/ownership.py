@@ -18,7 +18,7 @@ used it.
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from functools import cache
-from typing import cast
+from typing import Protocol, cast
 
 from pydantic import JsonValue, TypeAdapter
 
@@ -99,7 +99,17 @@ def owner_of(world: SimWorld, store_id: str) -> str | None:
     return PLACED_OWNERS.get(store_id)
 
 
-def owns(world: SimWorld, citizen: Citizen, store_id: str) -> bool:
+class Household(Protocol):
+    """Whoever can own a store: a home's household and a group (a live citizen, or a replayed one)."""
+
+    @property
+    def home(self) -> str | None: ...
+
+    @property
+    def region(self) -> Region: ...
+
+
+def owns(world: SimWorld, citizen: Household, store_id: str) -> bool:
     owner = owner_of(world, store_id)
     return owner is not None and owner in (citizen.home, citizen.region)
 

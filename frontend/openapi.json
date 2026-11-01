@@ -1043,6 +1043,75 @@
         }
       }
     },
+    "/api/v1/scoreboard": {
+      "get": {
+        "tags": [
+          "scoreboard"
+        ],
+        "summary": "Read Scoreboard",
+        "description": "The spectator scoreboard, now or at a past tick: every citizen's wealth, flow, health, duty, status, ambition,\nties and skills, each group's spread of wealth and deeds, the money supply check and the stall's stocks and\nprices. For spectators only: minds are never shown it.",
+        "operationId": "scoreboard-read_scoreboard",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "at",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "replay this tick instead of now",
+              "title": "At"
+            },
+            "description": "replay this tick instead of now"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreboardView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/stats": {
       "get": {
         "tags": [
@@ -1224,6 +1293,37 @@
   },
   "components": {
     "schemas": {
+      "AmbitionProgress": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "progress": {
+            "type": "integer",
+            "title": "Progress"
+          },
+          "done": {
+            "type": "boolean",
+            "title": "Done"
+          },
+          "clauses": {
+            "items": {
+              "$ref": "#/components/schemas/ClauseProgress"
+            },
+            "type": "array",
+            "title": "Clauses"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "progress",
+          "done",
+          "clauses"
+        ],
+        "title": "AmbitionProgress"
+      },
       "Anchor": {
         "properties": {
           "position": {
@@ -1408,6 +1508,29 @@
           "target"
         ],
         "title": "AnimalEntity"
+      },
+      "BondView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "value": {
+            "type": "integer",
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "value"
+        ],
+        "title": "BondView"
       },
       "Bridge": {
         "properties": {
@@ -1991,6 +2114,168 @@
         ],
         "title": "CitizenProfile"
       },
+      "CitizenScore": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "region": {
+            "type": "string",
+            "enum": [
+              "town",
+              "band_a",
+              "band_b"
+            ],
+            "title": "Region"
+          },
+          "alive": {
+            "type": "boolean",
+            "title": "Alive"
+          },
+          "coins": {
+            "type": "integer",
+            "title": "Coins"
+          },
+          "wealth_mon": {
+            "type": "integer",
+            "title": "Wealth Mon"
+          },
+          "income_24h": {
+            "type": "integer",
+            "title": "Income 24H"
+          },
+          "spent_24h": {
+            "type": "integer",
+            "title": "Spent 24H"
+          },
+          "health": {
+            "type": "number",
+            "title": "Health"
+          },
+          "wellbeing_24h": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wellbeing 24H"
+          },
+          "tax_owed": {
+            "$ref": "#/components/schemas/Owed"
+          },
+          "tax_paid_7d": {
+            "$ref": "#/components/schemas/Owed"
+          },
+          "rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank"
+          },
+          "titles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Titles"
+          },
+          "standing": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standing"
+          },
+          "standing_word": {
+            "type": "string",
+            "title": "Standing Word"
+          },
+          "ambition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AmbitionProgress"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trade_partners_7d": {
+            "type": "integer",
+            "title": "Trade Partners 7D"
+          },
+          "people_known": {
+            "type": "integer",
+            "title": "People Known"
+          },
+          "places_known": {
+            "type": "integer",
+            "title": "Places Known"
+          },
+          "bonds_top3": {
+            "items": {
+              "$ref": "#/components/schemas/BondView"
+            },
+            "type": "array",
+            "title": "Bonds Top3"
+          },
+          "skill_hours": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Skill Hours"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "role",
+          "region",
+          "alive",
+          "coins",
+          "wealth_mon",
+          "income_24h",
+          "spent_24h",
+          "health",
+          "wellbeing_24h",
+          "tax_owed",
+          "tax_paid_7d",
+          "rank",
+          "titles",
+          "standing",
+          "standing_word",
+          "ambition",
+          "trade_partners_7d",
+          "people_known",
+          "places_known",
+          "bonds_top3",
+          "skill_hours"
+        ],
+        "title": "CitizenScore"
+      },
       "CitizenSummary": {
         "properties": {
           "id": {
@@ -2131,6 +2416,48 @@
           "citizens"
         ],
         "title": "CitizensView"
+      },
+      "ClauseProgress": {
+        "properties": {
+          "check": {
+            "type": "string",
+            "enum": [
+              "store_holds",
+              "standing_at_least",
+              "deeds_judged",
+              "seizures_guilty",
+              "coins_at_least",
+              "no_tax_owed",
+              "sold",
+              "knows_place",
+              "knows_people",
+              "gave_crafted",
+              "tended_people",
+              "never_starving",
+              "owns",
+              "is_leader",
+              "hunger_below",
+              "followed_hunt",
+              "no_witnessed_deed"
+            ],
+            "title": "Check"
+          },
+          "met": {
+            "type": "boolean",
+            "title": "Met"
+          },
+          "progress": {
+            "type": "integer",
+            "title": "Progress"
+          }
+        },
+        "type": "object",
+        "required": [
+          "check",
+          "met",
+          "progress"
+        ],
+        "title": "ClauseProgress"
       },
       "ClockChange": {
         "properties": {
@@ -2961,6 +3288,54 @@
         "title": "Ground",
         "description": "A hunting ground around a settlement."
       },
+      "GroupScore": {
+        "properties": {
+          "group": {
+            "type": "string",
+            "enum": [
+              "town",
+              "band_a",
+              "band_b"
+            ],
+            "title": "Group"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "alive": {
+            "type": "integer",
+            "title": "Alive"
+          },
+          "wealth_mon": {
+            "type": "integer",
+            "title": "Wealth Mon"
+          },
+          "gini_wealth": {
+            "type": "number",
+            "title": "Gini Wealth"
+          },
+          "deeds_7d": {
+            "type": "integer",
+            "title": "Deeds 7D"
+          },
+          "caught_7d": {
+            "type": "integer",
+            "title": "Caught 7D"
+          }
+        },
+        "type": "object",
+        "required": [
+          "group",
+          "name",
+          "alive",
+          "wealth_mon",
+          "gini_wealth",
+          "deeds_7d",
+          "caught_7d"
+        ],
+        "title": "GroupScore"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3574,6 +3949,24 @@
         ],
         "title": "NodeEntity"
       },
+      "Owed": {
+        "properties": {
+          "rice": {
+            "type": "integer",
+            "title": "Rice"
+          },
+          "coins": {
+            "type": "integer",
+            "title": "Coins"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rice",
+          "coins"
+        ],
+        "title": "Owed"
+      },
       "PersonRef": {
         "properties": {
           "id": {
@@ -3842,6 +4235,68 @@
         ],
         "title": "RoutePoint"
       },
+      "ScoreboardView": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "day": {
+            "type": "integer",
+            "title": "Day"
+          },
+          "time": {
+            "type": "string",
+            "title": "Time"
+          },
+          "citizens": {
+            "items": {
+              "$ref": "#/components/schemas/CitizenScore"
+            },
+            "type": "array",
+            "title": "Citizens"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/GroupScore"
+            },
+            "type": "array",
+            "title": "Groups"
+          },
+          "money_supply": {
+            "type": "integer",
+            "title": "Money Supply"
+          },
+          "money_supply_ok": {
+            "type": "boolean",
+            "title": "Money Supply Ok"
+          },
+          "stalls": {
+            "items": {
+              "$ref": "#/components/schemas/StallView"
+            },
+            "type": "array",
+            "title": "Stalls"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "tick",
+          "day",
+          "time",
+          "citizens",
+          "groups",
+          "money_supply",
+          "money_supply_ok",
+          "stalls"
+        ],
+        "title": "ScoreboardView"
+      },
       "Site": {
         "properties": {
           "id": {
@@ -3909,6 +4364,82 @@
           "heading_deg"
         ],
         "title": "Spawn"
+      },
+      "StallGood": {
+        "properties": {
+          "item": {
+            "type": "string",
+            "title": "Item"
+          },
+          "stock": {
+            "type": "integer",
+            "title": "Stock"
+          },
+          "lot": {
+            "type": "integer",
+            "title": "Lot"
+          },
+          "sell": {
+            "type": "integer",
+            "title": "Sell"
+          },
+          "buy": {
+            "type": "integer",
+            "title": "Buy"
+          },
+          "word": {
+            "type": "string",
+            "title": "Word"
+          }
+        },
+        "type": "object",
+        "required": [
+          "item",
+          "stock",
+          "lot",
+          "sell",
+          "buy",
+          "word"
+        ],
+        "title": "StallGood"
+      },
+      "StallView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "keeper": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keeper"
+          },
+          "trading": {
+            "type": "boolean",
+            "title": "Trading"
+          },
+          "goods": {
+            "items": {
+              "$ref": "#/components/schemas/StallGood"
+            },
+            "type": "array",
+            "title": "Goods"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "keeper",
+          "trading",
+          "goods"
+        ],
+        "title": "StallView"
       },
       "StatsView": {
         "properties": {

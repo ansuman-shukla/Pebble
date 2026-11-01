@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AdminChangeClockData, AdminChangeClockErrors, AdminChangeClockResponses, CitizensReadCitizenData, CitizensReadCitizenErrors, CitizensReadCitizenNeedsData, CitizensReadCitizenNeedsErrors, CitizensReadCitizenNeedsResponses, CitizensReadCitizenResponses, CitizensReadCitizensData, CitizensReadCitizensErrors, CitizensReadCitizensResponses, CitizensReadCitizenTimelineData, CitizensReadCitizenTimelineErrors, CitizensReadCitizenTimelineResponses, ClockReadGameClockData, ClockReadGameClockErrors, ClockReadGameClockResponses, ConversationsReadConversationsData, ConversationsReadConversationsErrors, ConversationsReadConversationsResponses, EntitiesReadEntitiesData, EntitiesReadEntitiesErrors, EntitiesReadEntitiesResponses, EventsReadEventsData, EventsReadEventsErrors, EventsReadEventsResponses, HealthReadHealthData, HealthReadHealthResponses, LiveLiveSchemaData, LiveLiveSchemaErrors, LiveLiveSchemaResponses, StatsReadStatsData, StatsReadStatsErrors, StatsReadStatsResponses, TownReadTownData, TownReadTownResponses, WorldReadFloraData, WorldReadFloraResponses, WorldReadFurnitureData, WorldReadFurnitureResponses, WorldReadPlacesData, WorldReadPlacesResponses, WorldReadWorldData, WorldReadWorldResponses } from './types.gen';
+import type { AdminChangeClockData, AdminChangeClockErrors, AdminChangeClockResponses, CitizensReadCitizenData, CitizensReadCitizenErrors, CitizensReadCitizenNeedsData, CitizensReadCitizenNeedsErrors, CitizensReadCitizenNeedsResponses, CitizensReadCitizenResponses, CitizensReadCitizensData, CitizensReadCitizensErrors, CitizensReadCitizensResponses, CitizensReadCitizenTimelineData, CitizensReadCitizenTimelineErrors, CitizensReadCitizenTimelineResponses, ClockReadGameClockData, ClockReadGameClockErrors, ClockReadGameClockResponses, ConversationsReadConversationsData, ConversationsReadConversationsErrors, ConversationsReadConversationsResponses, EntitiesReadEntitiesData, EntitiesReadEntitiesErrors, EntitiesReadEntitiesResponses, EventsReadEventsData, EventsReadEventsErrors, EventsReadEventsResponses, HealthReadHealthData, HealthReadHealthResponses, LiveLiveSchemaData, LiveLiveSchemaErrors, LiveLiveSchemaResponses, ScoreboardReadScoreboardData, ScoreboardReadScoreboardErrors, ScoreboardReadScoreboardResponses, StatsReadStatsData, StatsReadStatsErrors, StatsReadStatsResponses, TownReadTownData, TownReadTownResponses, WorldReadFloraData, WorldReadFloraResponses, WorldReadFurnitureData, WorldReadFurnitureResponses, WorldReadPlacesData, WorldReadPlacesResponses, WorldReadWorldData, WorldReadWorldResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -100,6 +100,15 @@ export const healthReadHealth = <ThrowOnError extends boolean = false>(options?:
  * The live feed's message types for clients (this answers with the current `snapshot` message).
  */
 export const liveLiveSchema = <ThrowOnError extends boolean = false>(options?: Options<LiveLiveSchemaData, ThrowOnError>): RequestResult<LiveLiveSchemaResponses, LiveLiveSchemaErrors, ThrowOnError> => (options?.client ?? client).get<LiveLiveSchemaResponses, LiveLiveSchemaErrors, ThrowOnError>({ url: '/api/v1/live/schema', ...options });
+
+/**
+ * Read Scoreboard
+ *
+ * The spectator scoreboard, now or at a past tick: every citizen's wealth, flow, health, duty, status, ambition,
+ * ties and skills, each group's spread of wealth and deeds, the money supply check and the stall's stocks and
+ * prices. For spectators only: minds are never shown it.
+ */
+export const scoreboardReadScoreboard = <ThrowOnError extends boolean = false>(options?: Options<ScoreboardReadScoreboardData, ThrowOnError>): RequestResult<ScoreboardReadScoreboardResponses, ScoreboardReadScoreboardErrors, ThrowOnError> => (options?.client ?? client).get<ScoreboardReadScoreboardResponses, ScoreboardReadScoreboardErrors, ThrowOnError>({ url: '/api/v1/scoreboard', ...options });
 
 /**
  * Read Stats
