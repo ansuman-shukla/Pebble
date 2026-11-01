@@ -262,9 +262,14 @@ def test_someone_walking_east_across_their_midnight_still_gets_the_day_s_ledger(
 ) -> None:
     sim = _scene(new_sim, ("genzo", "farmhouse-1", "farmhouse-1"))
     sim.drain()
-    tax.ledger_at_midnight(sim.core, lambda _unit: True)
+    _, lon = lat_lon_deg(sim.citizen("genzo").position)
+    sim.state.tick = round(DAY_MINUTES - 1 - local_minute(0, sim.world.town_lon_deg, lon)) % DAY_MINUTES
+    tax.ledger_at_midnight(sim.core, lambda _unit: True)  # told a minute before midnight where they stand
     assert [e.actor_id for e in sim.drain() if isinstance(e.payload, Ledger)] == ["genzo"]
-    sim.state.tick += DAY_MINUTES + 5  # walking east, their next midnight fell on no tick of theirs
+    sim.state.tick += tax.LEDGER_GAP + 60
+    tax.ledger_at_midnight(sim.core, lambda _unit: False)  # that midnight is the one just told
+    assert not [e for e in sim.drain() if isinstance(e.payload, Ledger)]
+    sim.state.tick += DAY_MINUTES - tax.LEDGER_GAP - 55  # walking east, their next midnight fell on no tick of theirs
     tax.ledger_at_midnight(sim.core, lambda _unit: False)
     assert [e.actor_id for e in sim.drain() if isinstance(e.payload, Ledger)] == ["genzo"]
     sim.state.tick += 60

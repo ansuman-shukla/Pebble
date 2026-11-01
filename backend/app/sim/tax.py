@@ -206,7 +206,7 @@ def ledger_at_midnight(core: SimCore, now: LocalTest) -> None:
     """Midnight hook: every living citizen whose local midnight it is gets their `ledger` for the day, once: someone
     walking west across their midnight (a few minutes a hundred metres) meets it again, and someone walking east
     across it steps past the tick it falls on, so after the first a ledger is due once a midnight has passed where
-    they stand since the last."""
+    they stand at least `LEDGER_GAP` after the last."""
     books = TAX.of(core.state)
     chests = _chest_shares(core)
     for citizen in core.living():
@@ -214,7 +214,7 @@ def ledger_at_midnight(core: SimCore, now: LocalTest) -> None:
         if last is None:
             due = now(citizen.position)
         else:
-            due = core.state.tick - last >= LEDGER_GAP and _midnight_since(core, citizen.position, last)
+            due = core.state.tick - last >= LEDGER_GAP and _midnight_since(core, citizen.position, last + LEDGER_GAP)
         if not due:
             continue
         books.ledgered[citizen.id] = core.state.tick
