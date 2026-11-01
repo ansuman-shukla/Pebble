@@ -17,7 +17,7 @@ import {
   Utensils,
   Wind,
 } from 'lucide-react';
-import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { memo, useEffect, useRef, useSyncExternalStore } from 'react';
 import { type Camera, type Group, Vector3 } from 'three';
 
 import {
@@ -369,8 +369,52 @@ function Chip({ content }: { content: LabelContent }) {
   );
 }
 
+// memo: a label that didn't change keeps its content object (`CitizenLabels`), so it isn't drawn again
+const LabelElement = memo(function LabelElement({
+  content,
+  store,
+  onPick,
+}: {
+  content: LabelContent;
+  store: LabelStore;
+  onPick: (subject: string) => void;
+}) {
+  return (
+    <div
+      data-label={content.id}
+      data-label-kind={content.kind}
+      data-view="full"
+      style={{ display: 'none' }}
+      onClick={
+        content.kind === 'speech' ? undefined : () => onPick(content.subject)
+      }
+      ref={(element) => {
+        if (!element) return;
+        store.elements.set(content.id, element);
+        return () => {
+          store.elements.delete(content.id);
+        };
+      }}
+      className={
+        content.kind === 'speech'
+          ? 'absolute top-0 left-0 z-10 w-max max-w-56 rounded-lg bg-white/95 px-2 py-1 text-xs text-black shadow'
+          : 'group pointer-events-auto absolute top-0 left-0 flex h-6 cursor-pointer items-center gap-1 rounded-full bg-black/60 p-0.5 pr-2 text-[11px] whitespace-nowrap text-white data-[view=icon]:pr-0.5'
+      }
+    >
+      {content.kind === 'speech' ? (
+        <>
+          <span data-speaker className="font-semibold" />
+          {content.text}
+        </>
+      ) : (
+        <Chip content={content} />
+      )}
+    </div>
+  );
+});
+
 /** Outside the Canvas, layered over it: the chips and speech bubbles (ChipProjector places them); a click on a chip picks its subject. */
-export function ChipOverlay({
+export const ChipOverlay = memo(function ChipOverlay({
   store,
   onPick,
 }: {
@@ -381,40 +425,13 @@ export function ChipOverlay({
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
       {entries.map((content) => (
-        <div
+        <LabelElement
           key={content.id}
-          data-label={content.id}
-          data-label-kind={content.kind}
-          data-view="full"
-          style={{ display: 'none' }}
-          onClick={
-            content.kind === 'speech'
-              ? undefined
-              : () => onPick(content.subject)
-          }
-          ref={(element) => {
-            if (!element) return;
-            store.elements.set(content.id, element);
-            return () => {
-              store.elements.delete(content.id);
-            };
-          }}
-          className={
-            content.kind === 'speech'
-              ? 'absolute top-0 left-0 z-10 w-max max-w-56 rounded-lg bg-white/95 px-2 py-1 text-xs text-black shadow'
-              : 'group pointer-events-auto absolute top-0 left-0 flex h-6 cursor-pointer items-center gap-1 rounded-full bg-black/60 p-0.5 pr-2 text-[11px] whitespace-nowrap text-white data-[view=icon]:pr-0.5'
-          }
-        >
-          {content.kind === 'speech' ? (
-            <>
-              <span data-speaker className="font-semibold" />
-              {content.text}
-            </>
-          ) : (
-            <Chip content={content} />
-          )}
-        </div>
+          content={content}
+          store={store}
+          onPick={onPick}
+        />
       ))}
     </div>
   );
-}
+});

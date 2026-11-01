@@ -3,6 +3,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   useSyncExternalStore,
 } from 'react';
 import type { Vector3 } from 'three';
@@ -12,7 +13,12 @@ import { Button } from '@/components/ui/button';
 import type { ClockChange, LiveStatus } from '@/hooks/use-live-citizens';
 import { CLOCK_SPEEDS } from '@/lib/live/clock-speeds';
 import type { LiveCitizen } from '@/lib/live/live-contract';
-import { type LiveState, type Speech, speedWords } from '@/lib/live/live-state';
+import {
+  keepUnchanged,
+  type LiveState,
+  type Speech,
+  speedWords,
+} from '@/lib/live/live-state';
 import { activityWords } from '@/lib/live/npc-activity';
 import type { ShownDoings } from '@/lib/live/shown-doings';
 import type { Region } from '@/lib/world/citizen-looks';
@@ -215,10 +221,18 @@ export function CitizenLabels({
   speech: Speech[];
 }) {
   const shown = useSyncExternalStore(doings.subscribe, doings.getSnapshot);
-  const contents = useMemo(
+  const labels = useMemo(
     () => citizenLabels(citizens, shown, speech),
     [citizens, shown, speech],
   );
+  // every tick brings new citizens (their needs move), but their labels seldom change: unchanged labels stay the
+  // same objects, so only the chips that changed are drawn again
+  const [described, setDescribed] = useState(labels);
+  const [contents, setContents] = useState(labels);
+  if (labels !== described) {
+    setDescribed(labels);
+    setContents(keepUnchanged(contents, labels));
+  }
   useEffect(() => store.describe('citizens', contents), [store, contents]);
   return null;
 }

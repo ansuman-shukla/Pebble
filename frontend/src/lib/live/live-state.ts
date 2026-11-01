@@ -205,7 +205,7 @@ function sameJson(a: unknown, b: unknown): boolean {
  * `next`, each item equal to the one with its id in `before` kept as that object (and `before` itself when nothing
  * changed), so only what a tick changed is drawn anew: most animals stand still from tick to tick.
  */
-function keepUnchanged<T extends { id: string }>(
+export function keepUnchanged<T extends { id: string }>(
   before: readonly T[],
   next: T[],
 ): T[] {

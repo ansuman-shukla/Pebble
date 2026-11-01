@@ -959,6 +959,10 @@ function GlobeWorld({
     },
     [settle],
   );
+  const select = useCallback((id: string) => {
+    setSelectedId(id);
+    setInspectorOpen(true);
+  }, []);
   const goToCitizen = useCallback(
     (id: string) => {
       const view = npcViews.get(id);
@@ -1203,13 +1207,7 @@ function GlobeWorld({
         onStats={setStats}
         onWaterfalls={markWaterfalls}
       />
-      <ChipOverlay
-        store={labels}
-        onPick={(id) => {
-          setSelectedId(id);
-          setInspectorOpen(true);
-        }}
-      />
+      <ChipOverlay store={labels} onPick={select} />
       <CitizenLabels
         store={labels}
         citizens={live.citizens}
@@ -1326,10 +1324,7 @@ function GlobeWorld({
             citizens={live.citizens}
             followId={followId}
             selectedId={selectedId}
-            onSelect={(id) => {
-              setSelectedId(id);
-              setInspectorOpen(true);
-            }}
+            onSelect={select}
             onFollow={follow}
             onGoTo={goToCitizen}
           />
@@ -1389,10 +1384,7 @@ function GlobeWorld({
         <Scoreboard
           at={replayTick}
           selectedId={selectedId}
-          onSelect={(id) => {
-            setSelectedId(id);
-            setInspectorOpen(true);
-          }}
+          onSelect={select}
           onClose={() => setScoreboardOpen(false)}
         />
       )}
