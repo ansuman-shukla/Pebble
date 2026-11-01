@@ -12,13 +12,13 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel
 
-from app.sim import crafting, doing, exchange, expression, justice, market, movement, resting, wild, work
+from app.sim import crafting, doing, exchange, expression, justice, market, movement, resting, society, wild, work
 from app.sim.acting import VERB, refuse, settled
 from app.sim.bodies import COLLAPSE_WAKE_ENERGY, Crossing
 from app.sim.clock import NIGHT_ALTITUDE_DEG, sun_altitude_deg, sun_direction
 from app.sim.core import SimCore
 from app.sim.fauna import DANGEROUS, SPECIES
-from app.sim.perception import WATCHING_M, from_where, person_label, where_words
+from app.sim.perception import WATCHING_M, deed_words, from_where, person_label, where_words
 from app.sim.state import ActionState, Animal, Citizen
 from app.sim.vec import Vec3, bearing_deg
 from app.world_api.models import (
@@ -221,8 +221,9 @@ def interrupt(
 ) -> None:
     """End the running durative action early when something happens (03, "Interrupts").
 
-    Being hurt wakes even sleepers (not the collapsed); a predator coming at you, a stranger or an animal group
-    coming into view, or someone known walking up to you interrupt the awake; known people merely walking by don't.
+    Being hurt wakes even sleepers (not the collapsed); a predator coming at you, a wrong done before your eyes, a
+    stranger or an animal group coming into view, or someone known walking up to you interrupt the awake; known people
+    merely walking by don't.
     """
     action = citizen.action
     if action is None:
@@ -252,6 +253,14 @@ def interrupt(
     for animal, distance in news.threats:
         where = from_where(core, citizen, distance, bearing_deg(citizen.position, animal.position))
         _interrupt(core, citizen, action, f"{stop}: {SPECIES[animal.kind].one} is coming at you {where}.", None)
+        return
+    for deed in reversed(society.known_deeds(core, citizen.id)):  # a wrong seen (or told) just now: newest first
+        if deed.tick < core.state.tick - 1:
+            break
+        if deed.doer in (citizen.id, action.target_id):
+            continue
+        doer = person_label(citizen, core.state.citizens[deed.doer])
+        _interrupt(core, citizen, action, f"{stop}: {doer} {deed_words(core, citizen, deed)}!", deed.seq)
         return
     for person_id in strangers_seen:
         if person_id == action.target_id:

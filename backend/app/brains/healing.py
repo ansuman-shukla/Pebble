@@ -8,7 +8,7 @@ from app.brains.senses import DISTANCE, is_name
 
 TEND = WORK + 20  # the hurt are tended before the day's work (the monk's prayers)
 TEND_TRIES = 6  # tends of one person a day before leaving them be
-HURT_LOOKS = ("looking hurt", "looking near death")
+HURT_LOOKS = ("looking a little hurt", "looking hurt", "looking near death")
 
 
 def tend_the_hurt(ctx: Context, strangers: bool = True) -> list[Option]:

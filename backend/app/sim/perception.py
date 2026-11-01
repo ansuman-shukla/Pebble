@@ -59,6 +59,7 @@ COUNT_WORDS = {2: "two", 3: "three", 4: "four", 5: "five"}  # then "several", an
 RICE_RACK = STRUCTURE_LABELS["drying_rack"]  # a farm household's hasa rack by the paddies (10 §2.6)
 YOUR_RICE_RACK = "your rice rack"
 LADEN = "hung with rice"  # a rice rack with rice drying on it, told as what it is doing
+LITTLE_HURT = 90.0  # below this health a body looks a little hurt (as its owner feels "a little weak")
 GROUP_NOUNS: dict[str, str] = {  # structure kinds seen in numbers
     "storehouse": "storehouses",
     "townhouse": "houses",
@@ -816,37 +817,46 @@ def perceive(core: SimCore, citizen: Citizen, market: MarketView | None = None) 
 
 def person_doing(core: SimCore, observer: Citizen, other: Citizen) -> str | None:
     """What someone is seen doing by the observer ("running", "carrying a load", "farming", "held by Kenji", "confined
-    in the gaol") and how they look if it shows ("looking hurt")."""
-    if other.body.asleep:
-        return "asleep"
-    action, doing = other.action, None
+    in the gaol") and how they look if it shows ("looking hurt"); someone asleep in custody is told as held or confined
+    first ("confined in the gaol, asleep"), so a judge sees whom he may judge."""
+    doing = None
     custody = custody_of(core, other.id)
     if custody is not None and custody.keeper is not None:
         doing = f"held by {person_label(observer, core.state.citizens[custody.keeper])}"
     elif custody is not None:
         doing = "confined in the gaol" if custody.place == "gaol" else "tied at the fire"
-    elif action is not None and action.kind in ("walk_to", "follow", "flee"):
+    if other.body.asleep:
+        return f"{doing}, asleep" if doing else "asleep"
+    looks = looks_words(other.body)
+    return ", ".join(words for words in (doing or _action_doing(core, other), looks) if words) or None
+
+
+def _action_doing(core: SimCore, other: Citizen) -> str | None:
+    """What someone free and awake is seen doing by their action."""
+    action = other.action
+    if action is None:
+        return None
+    if action.kind in ("walk_to", "follow", "flee"):
         stride = core.strides.get(other.id)
         if action.kind == "flee" or (stride is not None and stride.gait in RUNNING_GAITS):
-            doing = "running"
-        else:
-            doing = "carrying a load" if load_words(core, other) else "walking"
-    elif action is not None and action.kind == "work":
-        doing = WORK_SEEN.get(cast(WorkTask, action.args.get("task")), DOING["work"])
-    elif action is not None:
-        doing = action_words(action)
-    looks = looks_words(other.body)
-    return ", ".join(words for words in (doing, looks) if words) or None
+            return "running"
+        return "carrying a load" if load_words(core, other) else "walking"
+    if action.kind == "work":
+        return WORK_SEEN.get(cast(WorkTask, action.args.get("task")), DOING["work"])
+    return action_words(action)
 
 
 def looks_words(body: Body) -> str | None:
-    """What anyone sees of a body's plight: badly hurt, else starving."""
+    """What anyone sees of a body's plight: badly hurt, else starving, else a lesser hurt (a bite, a gash: what they
+    feel as "a little weak") a healer can tend."""
     if body.health <= THRESHOLDS["health"][1]:
         return "looking near death"
     if body.health <= THRESHOLDS["health"][0]:
         return "looking hurt"
     if body.hunger >= THRESHOLDS["hunger"][1]:
         return "looking starved"
+    if body.health < LITTLE_HURT:
+        return "looking a little hurt"
     return None
 
 

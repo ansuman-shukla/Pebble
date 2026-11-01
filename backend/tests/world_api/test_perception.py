@@ -14,6 +14,7 @@ from app.observability.events import BellRang, Judged, Spoiled, Stole, Took, Too
 from app.sim import market, nodes, ownership, perception, senses, society, territory, wear, wild
 from app.sim.clock import TIMES
 from app.sim.core import Stride
+from app.sim.custody import CUSTODY, Custody
 from app.sim.perception import (
     SIGHT_WORDS,
     TIERS,
@@ -644,12 +645,23 @@ def test_others_are_seen_working_running_sitting_and_hurt(new_sim: Callable[...,
     assert perception.person_doing(sim.core, genzo, aiko) == "carrying a load"
     aiko.body.health = 40.0
     assert perception.person_doing(sim.core, genzo, aiko) == "carrying a load, looking hurt"
+    aiko.body.health = 70.0  # a bite: a healer sees it (Q1)
+    assert perception.person_doing(sim.core, genzo, aiko) == "carrying a load, looking a little hurt"
+    aiko.body.health = 90.0
+    assert perception.person_doing(sim.core, genzo, aiko) == "carrying a load"
     aiko.action, aiko.body.health, aiko.body.hunger = None, 100.0, 95.0
     assert perception.person_doing(sim.core, genzo, aiko) == "looking starved"
+    aiko.body.health = 80.0
+    assert perception.person_doing(sim.core, genzo, aiko) == "looking starved"  # the worse plight first
     aiko.body.health = 10.0
     assert _look(sim, "genzo").people[0].doing == "looking near death"
     aiko.body.asleep = True
     assert perception.person_doing(sim.core, genzo, aiko) == "asleep"
+    CUSTODY.of(sim.state)[aiko.id] = Custody(since=sim.tick, keeper=None, place="gaol")
+    assert perception.person_doing(sim.core, genzo, aiko) == "confined in the gaol, asleep"  # a judge sees whom (Q1)
+    CUSTODY.of(sim.state)[aiko.id] = Custody(since=sim.tick, keeper=genzo.id)
+    held = perception.person_doing(sim.core, genzo, aiko) or ""
+    assert held.startswith("held by ") and held.endswith(", asleep")
 
 
 def test_predators_are_seen_after_their_quarry_and_at_their_kills(new_sim: Callable[..., Simulation]) -> None:
