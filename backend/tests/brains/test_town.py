@@ -602,3 +602,36 @@ def test_the_lord_s_spending_follows_his_treasury_against_where_it_started() -> 
             )[0]
         )
         assert notes.get("fetch rice", 0) == fetch
+
+
+# --- the field racks ---
+
+FIELDS_AT = "at the rice fields, in The castle town"
+OWN_RACK = Seen(label="your rice rack", where="a few paces to the west", nearness="a few paces", kind="building")
+NEXT_RACK = Seen(
+    label="a rice rack", where="right beside you to the north", nearness="right beside you", kind="building"
+)
+
+
+def _at_racks(when: TimeOfDay, carrying: tuple[str, ...], *racks: Seen) -> Perception:
+    return _look(place=FIELDS_AT, when=when, carrying=carrying).model_copy(update={"things": list(racks)})
+
+
+def test_a_farmer_leaving_the_paddies_in_the_afternoon_hangs_half_the_rice_on_the_household_s_own_rack() -> None:
+    load = ("a great deal of rice",)  # 50 or more: off to the granary
+    ctx, api = _ctx(_at_racks("early afternoon", load, NEXT_RACK, OWN_RACK), GENZO)
+    [go] = town.farmer(ctx)
+    go.start()
+    assert go.name == "go to your rice rack" and ("walk_to_thing", "your rice rack") in api.calls  # not the nearest
+    beside = OWN_RACK.model_copy(update={"nearness": "right beside you"})
+    ctx, api = _ctx(_at_racks("early afternoon", load, NEXT_RACK, beside), GENZO, Recorder(ctx.notes))
+    [rack] = town.farmer(ctx)
+    rack.start()
+    assert rack.name == "rack rice" and ("stash", "rice", 25) in api.calls and ctx.notes["on the rack"] is True
+    again, _ = _ctx(_at_racks("late afternoon", ("plenty of rice",), beside), GENZO, Recorder(ctx.notes))
+    assert [o.name for o in town.farmer(again)] != ["rack rice"]  # once a day
+    morning, _ = _ctx(_at_racks("mid-morning", load, beside), GENZO)
+    assert [o.name for o in town.farmer(morning)] != ["rack rice"]  # a morning harvest goes in whole
+    late, api = _ctx(_at_racks("late afternoon", ("plenty of rice",), beside), GENZO)  # the day's last trip
+    town.farmer(late)[0].start()
+    assert ("stash", "rice", 12) in api.calls
