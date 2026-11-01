@@ -1,5 +1,5 @@
 """Rice paddies (10-world-v1 §1.4): six drawn paddies, each a node, worked only from their spots inside the rects;
-a day's tending (three 20-minute sessions) +65, ripe at 100 with 78 rice (the bible's 50 and 60 + 30 %, D152),
+a day's tending (three 20-minute sessions) +50, ripe at 100 with 60 rice (the bible's 50 and 60, D180),
 harvest 10 a session (15 with a sickle), stubble replanted by tending, a ripe paddy left standing loses 2 a night: a
 three-day cycle per paddy."""
 
@@ -17,7 +17,7 @@ from app.world_api.facade import WorldApi, run_until_done
 from tests.sim_helpers import make_spec, stand_at_node, without_animals
 
 FIELDS = (-112.0, 58.0)
-CAP = load_node_kinds()["rice_paddy"].cap  # 78
+CAP = load_node_kinds()["rice_paddy"].cap  # 60
 TOWN_PLACES = ["town", "well", "rice-fields", "storehouses"]
 
 

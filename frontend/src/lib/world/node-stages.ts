@@ -23,7 +23,7 @@ const NODE_CAPS: Record<string, number> = {
   obsidian_field: 40,
   iron_sand_bar: 60,
   gold_pool: 40,
-  rice_paddy: 78, // the bible's 60 tuned up 30 % while the granary feeds D156's rations (D152)
+  rice_paddy: 60, // the bible's (D180)
 };
 
 export interface NodeState {
