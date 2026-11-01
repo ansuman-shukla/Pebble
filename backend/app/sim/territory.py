@@ -30,7 +30,7 @@ from typing import Literal, cast
 from pydantic import JsonValue, TypeAdapter
 
 from app.observability.events import EventDraft, Injured, ItemMoved, Took, Trespassed
-from app.sim import society
+from app.sim import custody, society
 from app.sim.animals import GROUP_M, GROUP_SAFE, WILDLIFE
 from app.sim.citizens import Title
 from app.sim.core import SimCore
@@ -174,7 +174,8 @@ def safety(core: SimCore, citizen: Citizen) -> Safety:
 
 def keep_the_law(core: SimCore) -> None:
     """Every-tick hook (after the night law is set): one `trespassed` for each entry into the walls or the castle
-    while the law holds."""
+    while the law holds. Someone held or confined (`custody`) makes no entry of their own: where they are led or kept
+    counts as told, so walking free inside after their release is no new entry either (D174)."""
     territory = TERRITORY.of(core.state)
     if not society.night_law(core):
         territory.inside.clear()
@@ -182,7 +183,7 @@ def keep_the_law(core: SimCore) -> None:
     inside: dict[str, list[NightKind]] = {}
     for citizen in core.living():
         kinds = _breaking(core, citizen)
-        told = territory.inside.get(citizen.id, [])
+        told = kinds if custody.in_custody(core, citizen.id) else territory.inside.get(citizen.id, [])
         for kind in kinds:
             if kind not in told:
                 _trespassed(core, citizen, kind, "town", CASTLE_WORDS if kind == "castle" else TOWN_WORDS)

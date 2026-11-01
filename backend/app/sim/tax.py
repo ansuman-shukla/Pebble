@@ -140,6 +140,20 @@ def paid_dues(core: SimCore, giver: Citizen, receiver: Citizen, item: str, count
     return core.emit("tax_paid", _change(giver.home, owed, coins=coins), actor=giver)
 
 
+def pay_by_fine(core: SimCore, payer: Citizen, household: str, mon: int, cause_seq: int) -> int | None:
+    """A fine for overdue tax (justice, §3.4) settles what the household owes: its mon pay the dues in arrears first,
+    then the rice owed at rice's town value (`tax_paid` by the one fined, caused by the judgement; its seq). None if
+    it pays nothing."""
+    owed = account(core, household)
+    coins = min(mon, owed.arrears)
+    rice = min(owed.rice, math.floor((mon - coins) / value_of("rice", "town")))
+    if coins <= 0 and rice <= 0:
+        return None
+    owed.coins, owed.arrears, owed.rice = owed.coins - coins, owed.arrears - coins, owed.rice - rice
+    _clear_if_paid(owed)
+    return core.emit("tax_paid", _change(household, owed, rice=rice, coins=coins), actor=payer, cause_seq=cause_seq)
+
+
 def households(core: SimCore) -> dict[str, Vec3]:
     """Every town household with a living resident -> where its local midnight is told (its home's door)."""
     homes: dict[str, Vec3] = {}

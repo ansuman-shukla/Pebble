@@ -390,9 +390,9 @@ class Seized(Payload):
 
 
 class Released(Payload):
-    """The actor (held or confined) is free again."""
+    """The actor's custody (held or confined) is over: free again, or dead."""
 
-    cause: Literal["judged", "timeout", "seizer_down"]
+    cause: Literal["judged", "timeout", "seizer_down", "died"]  # died: the custody ends with their death
     by: str | None = None  # the seizer or judge
 
 

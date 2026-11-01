@@ -26,6 +26,7 @@ from app.sim.citizens import Kin, Title, store_ids
 from app.sim.clock import local_minute, time_of_day
 from app.sim.coins import coin_words
 from app.sim.core import FOREST_BIOMES, SimCore
+from app.sim.custody import custody_of
 from app.sim.fauna import DANGEROUS, SPECIES
 from app.sim.ground_speed import load_share
 from app.sim.items import ITEMS, amount_words, tool_in
@@ -697,7 +698,26 @@ def self_view(core: SimCore, citizen: Citizen) -> SelfView:
         titles=[title_words(title, citizen.region, yours=False) for title in society.titles(core, citizen.id)],
         standing=standing_words(core, citizen),
         wanted=wanted_words(core, citizen),
+        held=held_words(core, citizen),
+        confined=confined_words(core, citizen),
     )
+
+
+def held_words(core: SimCore, citizen: Citizen) -> str | None:
+    """ "Goro holds you fast." while someone holds them (`custody`)."""
+    custody = custody_of(core, citizen.id)
+    if custody is None or custody.keeper is None:
+        return None
+    keeper = person_label(citizen, core.state.citizens[custody.keeper])
+    return f"{keeper[:1].upper()}{keeper[1:]} holds you fast."
+
+
+def confined_words(core: SimCore, citizen: Citizen) -> str | None:
+    """ "You are confined in the gaol." / "You are tied at the fire." once confined (`custody`)."""
+    custody = custody_of(core, citizen.id)
+    if custody is None or custody.keeper is not None:
+        return None
+    return "You are confined in the gaol." if custody.place == "gaol" else "You are tied at the fire."
 
 
 def day_words(tick: int) -> str:
@@ -744,7 +764,7 @@ def perceive(core: SimCore, citizen: Citizen, market: MarketView | None = None) 
             else f"the still body of {person_label(citizen, other)}",
             where=where_words(distance, bearing_deg(citizen.position, other.position)),
             nearness=nearness(distance),
-            doing=person_doing(core, other) if other.body.alive else None,
+            doing=person_doing(core, citizen, other) if other.body.alive else None,
             relation=relation_words(core, citizen, other),
             regard=regard_words(core, citizen, other) if other.body.alive else None,
         )
@@ -776,13 +796,18 @@ def perceive(core: SimCore, citizen: Citizen, market: MarketView | None = None) 
     )
 
 
-def person_doing(core: SimCore, other: Citizen) -> str | None:
-    """What someone is seen doing ("running", "carrying a load", "farming") and how they look if it shows ("looking
-    hurt")."""
+def person_doing(core: SimCore, observer: Citizen, other: Citizen) -> str | None:
+    """What someone is seen doing by the observer ("running", "carrying a load", "farming", "held by Kenji", "confined
+    in the gaol") and how they look if it shows ("looking hurt")."""
     if other.body.asleep:
         return "asleep"
     action, doing = other.action, None
-    if action is not None and action.kind in ("walk_to", "follow", "flee"):
+    custody = custody_of(core, other.id)
+    if custody is not None and custody.keeper is not None:
+        doing = f"held by {person_label(observer, core.state.citizens[custody.keeper])}"
+    elif custody is not None:
+        doing = "confined in the gaol" if custody.place == "gaol" else "tied at the fire"
+    elif action is not None and action.kind in ("walk_to", "follow", "flee"):
         stride = core.strides.get(other.id)
         if action.kind == "flee" or (stride is not None and stride.gait in RUNNING_GAITS):
             doing = "running"

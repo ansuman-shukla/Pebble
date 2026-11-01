@@ -16,10 +16,12 @@ from app.sim.exchange import store_in_reach
 from app.sim.items import ITEMS, amount_words, tool_in
 from app.sim.node_table import GATHERED, PADDY_KIND
 from app.sim.state import ActionState, Citizen
+from app.world.town import load_town
 from app.world_api.models import Drink, Eat, Gather
 
 MINED = frozenset({"flint", "obsidian", "iron sand"})
 DRINK_MINUTES = 3
+BUCKET = "bucket"  # a town placement kind that holds water
 COOKED = 1.5  # raw meat or fish eaten beside a fire is roasted: this much more filling
 RAW_SICK_CHANCE = 0.3
 RAW_SICKNESS = (6.0, 14.0)
@@ -92,7 +94,7 @@ def water_within_reach(core: SimCore, citizen: Citizen) -> tuple[str, str] | Non
         if structure.kind == "well" and core.distance_m(citizen.position, structure.centre) <= REACH_M + 1.5:
             return "fresh", "the well"
     if world.town_point(citizen.position) is not None:
-        return None
+        return ("fresh", "the bucket") if _bucket_within_reach(core, citizen) else None
     if world.river[citizen.cell]:
         return "fresh", "the river"
     around = [world.biome(other) for other in world.neighbours[citizen.cell]]
@@ -101,6 +103,16 @@ def water_within_reach(core: SimCore, citizen: Citizen) -> tuple[str, str] | Non
     if "shallow_ocean" in around or "deep_ocean" in around:
         return "salt", "the sea"
     return None
+
+
+def _bucket_within_reach(core: SimCore, citizen: Citizen) -> bool:
+    """A town water bucket within reach (the gaol's: the confined drink from it, 10 §3.4)."""
+    town = core.world.town
+    return any(
+        core.distance_m(citizen.position, town.to_unit(placement.x, placement.z)) <= REACH_M
+        for placement in load_town().placements
+        if placement.kind == BUCKET
+    )
 
 
 def start_drink(core: SimCore, citizen: Citizen, action: Drink) -> int:
