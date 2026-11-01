@@ -78,8 +78,8 @@ class BrainProfile:
     honesty: float = 0.5  # 0-1 (§3.1 traits): an honest starving soul is slower to take what isn't theirs
     # bands: the ways from camp their land's food lies, beyond the thin home ring (10 §1.2), most first
     grounds: tuple[Ground, ...] = ()
-    # town households (10 §1.4, §2.7): mouths fed from its chest, paddies it farms, and the mon a day of its dues this
-    # citizen settles on court day (0: someone else of the household does, or it owes none)
+    # town households (10 §1.4, §2.7): mouths fed from its chest, paddies it farms, and this citizen's share of its
+    # dues a day, settled on court day (0: a child, or a household that owes none)
     household: int = 1
     paddies: int = 0
     dues: int = 0
