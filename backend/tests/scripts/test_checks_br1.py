@@ -41,6 +41,8 @@ def test_sales_count_the_town_s_and_add_the_seeds_up(town: Simulation) -> None:
         check.after_step(town, events)
     assert check.outcome(town) == Outcome(7.0, False, "7.0/day (7 sales)")  # nim's (band B) don't count
     assert br1.Sales.overall({1: Outcome(7.0, False, ""), 2: Outcome(8.0, True, "")}).ok
+    check.after_step(town, [_event(town, "bought", sale)])
+    assert check.outcome(town).ok  # 7.5 a day: half the two seeds' 15
     assert not br1.Sales.overall({1: Outcome(7.0, False, ""), 2: Outcome(7.9, True, "")}).ok
 
 
@@ -100,6 +102,13 @@ def test_a_steep_coin_trend_is_caught(town: Simulation) -> None:
         check.after_step(town, [])
     outcome = check.outcome(town)
     assert outcome.value == pytest.approx(11.0) and not outcome.ok and "cross-s-1" in outcome.words
+    falling = br1.CoinTrend()
+    falling.start(town)
+    for day in range(3, 9):
+        town.state.tick = day * DAY_MINUTES
+        town.citizen("goro").inventory["coins"] = 200 - 11 * day
+        falling.after_step(town, [])
+    assert not falling.outcome(town).ok  # running down counts as much as piling up
 
 
 def test_the_night_watch_counts_the_gate_and_the_racks(town: Simulation) -> None:

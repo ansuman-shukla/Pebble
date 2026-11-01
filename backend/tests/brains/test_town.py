@@ -2,6 +2,7 @@
 court day, the smith's forge, the weaver's reeds, the digger's trips and the night watch."""
 
 from collections.abc import Callable
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -58,6 +59,10 @@ class Recorder:
         self.notes: dict[str, JsonValue] = notes if notes is not None else {}
         self.calls: list[tuple[Any, ...]] = []
         self.refuse = refuse  # an action the world refuses
+
+    def handle(self, _number: int) -> Any:
+        """Every action asked about ran to its end."""
+        return SimpleNamespace(result=ActionResult(action="work", outcome="done", text=""))
 
     def __getattr__(self, name: str) -> Any:
         def call(*args: Any) -> Any:
@@ -346,3 +351,41 @@ def test_a_hotspot_is_a_place_known_by_name_only_to_those_who_know_it(new_sim: C
     sim.step()
     assert "south_marsh" not in sim.citizen("stranger").places
     assert "south_marsh" in sim.citizen("daisuke").places
+
+
+def test_every_second_tool_the_smith_makes_is_the_lord_s_order() -> None:
+    smith = _profile("Tetsu", "smith", dues=5)
+    notes: dict[str, JsonValue] = {"last": "forge", "chosen": 1}
+    town.smith(_ctx(_look(when="early afternoon"), smith, Recorder(notes))[0])
+    assert notes["forged"] == 1 and notes["order"] == "iron axe"  # the first tool made
+    notes |= {"last": "forge", "chosen": 2}
+    notes.pop("order")
+    town.smith(_ctx(_look(when="early afternoon"), smith, Recorder(notes))[0])
+    assert notes["forged"] == 2 and "order" not in notes  # the second goes to the stall
+
+
+def test_a_good_cheap_at_the_stall_is_kept_for_another_day() -> None:
+    digger = _profile("Daisuke", "iron-sand digger", dues=5)
+    sand = PriceSeen(item="iron sand", price="three coins each; it pays two coins", word="cheap")
+    ctx, _ = _ctx(_look(market=(sand,), carrying=("seven coins", "some iron sand")), digger)
+    assert town._sell(ctx, "iron sand", "Sell my iron sand") == []
+    fair = sand.model_copy(update={"word": "fair"})
+    ctx, api = _ctx(_look(market=(fair,), carrying=("seven coins", "some iron sand")), digger)
+    town._sell(ctx, "iron sand", "Sell my iron sand")[0].start()
+    assert ("sell", "iron sand", 99) in api.calls
+
+
+def test_the_weaver_fetches_reeds_on_reed_days_and_makes_a_pack_from_two_hides() -> None:
+    aiko = _profile("Aiko", "weaver, the farmer's wife", household=3, paddies=4, dues=12)
+    home = "at your home, in The castle town"
+    reed_day = _look(place=home, when="early morning", day="the fourth day of the week")
+    assert [o.name for o in town.weaver(_ctx(reed_day, aiko)[0])] == ["go to the South marsh"]
+    other_day = _look(place=home, when="early morning", day="the fifth day of the week")
+    notes: dict[str, JsonValue] = {"arrived": "go home"}
+    assert [o.name for o in town.weaver(_ctx(other_day, aiko, Recorder(notes))[0])] == ["weave"]
+    hides = _look(
+        place=home, when="early morning", day="the fifth day of the week", carrying=("a few hides", "a few reeds")
+    )
+    ctx, api = _ctx(hides, aiko, Recorder(notes))
+    town.weaver(ctx)[0].start()
+    assert ("craft", "pack") in api.calls
