@@ -264,7 +264,10 @@ test('"Go to" drops the player at every named site', async ({ page }) => {
   const town = world.site('town');
   await page.getByRole('button', { name: /go to/ }).click();
   const items = page.getByRole('menuitem');
-  await expect(items).toHaveText(world.view.sites.map((site) => site.name));
+  await expect(items).toHaveText([
+    ...world.view.sites.map((site) => site.name),
+    ...world.view.places.hotspots.map((hotspot) => hotspot.name),
+  ]);
   await page.keyboard.press('Escape');
   for (const site of [...world.view.sites.slice(1), town]) {
     await page.getByRole('button', { name: /go to/ }).click();
@@ -289,6 +292,39 @@ test('"Go to" drops the player at every named site', async ({ page }) => {
       directionFromLatLon(at[0], at[1]).angleTo(directionOf(here)) * world.R,
     ).toBeLessThan(1);
   }
+  expect(errors).toEqual([]);
+});
+
+test('"Go to" drops the player in every hotspot, in place (no reload), letting go of whoever was followed', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  const element = await openGlobe(page, errors, '?mockLive=1&follow=genzo');
+  await expect(element).toHaveAttribute('data-follow', 'genzo');
+  await page.evaluate(() => {
+    (globalThis as unknown as { kept: boolean }).kept = true;
+  });
+  for (const hotspot of world.view.places.hotspots) {
+    await page.getByRole('button', { name: /go to/ }).click();
+    await page
+      .getByRole('menuitem', { name: hotspot.name, exact: true })
+      .click();
+    await expectFlight(element);
+    await expect(element).not.toHaveAttribute('data-follow');
+    const here = await sample(element);
+    const centre = new Vector3(...hotspot.centre).normalize();
+    expect(metresTo(here, centre), hotspot.name).toBeLessThan(hotspot.radius_m);
+    // where it went is shareable; who was followed (only read on load) is let go of
+    const url = new URL(page.url());
+    expect(url.searchParams.get('at')).not.toBeNull();
+    expect(url.searchParams.has('follow')).toBe(false);
+  }
+  // the same page all along: the go-tos moved the camera, they never navigated
+  expect(
+    await page.evaluate(
+      () => (globalThis as unknown as { kept?: boolean }).kept,
+    ),
+  ).toBe(true);
   expect(errors).toEqual([]);
 });
 

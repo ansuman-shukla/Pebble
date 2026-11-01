@@ -120,6 +120,7 @@ import {
   type GlobeTerrain,
   latLonFromDirection,
   type SiteMapping,
+  siteMapping,
   tangentFrame,
 } from '@/lib/world/globe';
 import { biomeColor } from '@/lib/world/globe-mesh';
@@ -574,15 +575,28 @@ const GlobeScene = memo(function GlobeScene({
 
 const round = (value: number) => value.toFixed(2);
 
-/** The "Go to" sites: the town at its spawn by the main gate, then every camp and landmark. */
+/** The "Go to" places: the town at its spawn by the main gate, every camp and landmark, then every hotspot. */
 function goToSites(planet: Planet, town: TownView): GoToSite[] {
   const radius = planet.terrain.globe.radius;
-  return planet.view.sites.map((site) => ({
-    id: site.id,
-    name: site.name,
-    mapping: anchorMapping(site.anchor, radius),
-    spawn: site.kind === 'town' ? startFor(planet, town, null) : null,
-  }));
+  return [
+    ...planet.view.sites.map((site) => ({
+      id: site.id,
+      name: site.name,
+      mapping: anchorMapping(site.anchor, radius),
+      spawn: site.kind === 'town' ? startFor(planet, town, null) : null,
+      group: 'site' as const,
+    })),
+    ...planet.view.places.hotspots.map((hotspot) => ({
+      id: hotspot.id,
+      name: hotspot.name,
+      mapping: siteMapping(
+        tangentFrame(new Vector3(...hotspot.centre).normalize()),
+        radius,
+      ),
+      spawn: null,
+      group: 'hotspot' as const,
+    })),
+  ];
 }
 
 const DROP_MESSAGES: Record<
@@ -663,6 +677,10 @@ function GlobeWorld({
     [planet, town, townWater],
   );
   const goTo = useMemo(() => goToSites(planet, town), [planet, town]);
+  const mapSites = useMemo(
+    () => goTo.filter((site) => site.group === 'site'),
+    [goTo],
+  );
   const dropRef = useRef<DropApi | null>(null);
   const [dropping, setDropping] = useState(false);
   // the toolbar wraps onto more lines in narrow windows (and with the drop hint): panels hang below its real end
@@ -687,8 +705,11 @@ function GlobeWorld({
     return () => window.clearTimeout(timer);
   }, [message]);
 
-  /** Shows the outcome of a drop; a successful one goes into `?at=` so the spot can be shared. */
-  const settle = useCallback((result: DropResult) => {
+  /**
+   * Shows the outcome of a drop; a successful one goes into `?at=` so the spot can be shared (and, having `letGo` of
+   * whoever was followed, out of `?follow=`).
+   */
+  const settle = useCallback((result: DropResult, letGo = false) => {
     if (!result.ok) {
       setMessage(DROP_MESSAGES[result.reason]);
       return;
@@ -696,11 +717,16 @@ function GlobeWorld({
     setMessage(null);
     setDropping(false);
     setHover(null);
-    // replace the URL in place (commas kept readable); `?at=` is only read on load
+    // replace the URL in place (commas kept readable), no navigation; `?at=` and `?follow=` are only read on load
     const rest = window.location.search
       .slice(1)
       .split('&')
-      .filter((part) => part && !part.startsWith('at='))
+      .filter(
+        (part) =>
+          part &&
+          !part.startsWith('at=') &&
+          !(letGo && part.startsWith('follow=')),
+      )
       .join('&');
     const spot = [
       result.lat.toFixed(5),
@@ -837,7 +863,7 @@ function GlobeWorld({
     (id: string) => {
       const api = dropRef.current;
       setFollowId(null);
-      settle(api ? api.goTo(id) : { ok: false, reason: 'loading' });
+      settle(api ? api.goTo(id) : { ok: false, reason: 'loading' }, true);
     },
     [settle],
   );
@@ -846,7 +872,10 @@ function GlobeWorld({
     (direction: Vector3) => {
       const api = dropRef.current;
       setFollowId(null);
-      settle(api ? api.goNear(direction) : { ok: false, reason: 'loading' });
+      settle(
+        api ? api.goNear(direction) : { ok: false, reason: 'loading' },
+        true,
+      );
     },
     [settle],
   );
@@ -1228,7 +1257,7 @@ function GlobeWorld({
         <div className="pointer-events-none! mt-auto flex shrink-0 flex-col items-end gap-2 *:pointer-events-auto">
           {minimapOpen && ready && (
             <Minimap
-              sites={goTo}
+              sites={mapSites}
               terrain={planet.terrain}
               biomeNames={view.biome_names}
               town={minimapTown}
