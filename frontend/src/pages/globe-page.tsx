@@ -380,57 +380,38 @@ type ModeStats = RenderStats & { mode: CameraMode };
 
 const NO_FURNITURE: Furniture[] = [];
 
-const GlobeScene = memo(function GlobeScene({
+/*
+ * The scene in three parts so a tick (every second at ×60) renders only what it changes: the world around the
+ * bodies, the live bodies, then the walker, labels and probes. The first and last are memoised on props a tick
+ * never touches (the walker's time-lapse flag only flips with the speed); their order keeps the frame callbacks'
+ * order (the follow camera reads the followed body after it moved).
+ */
+const SceneBackdrop = memo(function SceneBackdrop({
   planet,
   town,
   walkTown,
-  live,
-  replay,
-  peopleRef,
-  npcViews,
-  animalViews,
-  fireViews,
   nodeStages,
-  followId,
-  pinned,
-  pickRef,
-  subjectRef,
-  start,
-  dropRef,
-  goTo,
-  labels,
-  doings,
   clockRef,
   focusRef,
-  cameraMode,
-  travel,
-  ready,
-  onCameraModeChange,
-  onPlayerMove,
   onTick,
-  onWalkReady,
   onPlacementsReady,
-  onStats,
   onWaterfalls,
-}: GlobeSceneProps) {
+}: Pick<
+  GlobeSceneProps,
+  | 'planet'
+  | 'town'
+  | 'walkTown'
+  | 'nodeStages'
+  | 'clockRef'
+  | 'focusRef'
+  | 'onTick'
+  | 'onPlacementsReady'
+  | 'onWaterfalls'
+>) {
   const { view, terrain } = planet;
   const furniture = useFurniture().data ?? NO_FURNITURE;
-  const sampleStats = useCallback(
-    (sample: RenderStats) => onStats({ ...sample, mode: cameraMode }),
-    [onStats, cameraMode],
-  );
   return (
-    <Canvas
-      flat
-      shadows="percentage"
-      camera={{
-        fov: 50,
-        near: 0.1,
-        far: 3000,
-        position: start.position.clone().multiplyScalar(1.01),
-      }}
-      gl={{ preserveDrawingBuffer: true }}
-    >
+    <>
       <GlobeSky
         clockRef={clockRef}
         townLon={planet.town.lon}
@@ -486,42 +467,66 @@ const GlobeScene = memo(function GlobeScene({
           radius={terrain.globe.radius}
         />
       </Suspense>
-      <GlobeNpcs
-        citizens={live.citizens}
-        cues={live.cues}
-        speed={live.speed}
-        paused={live.paused}
-        tickClock={live.tickClock}
-        replay={replay}
-        clockRef={clockRef}
-        townLon={planet.town.lon}
-        terrain={terrain}
-        town={walkTown}
-        labels={labels}
-        doings={doings}
-        peopleRef={peopleRef}
-        views={npcViews}
-        followId={followId}
-        subjectRef={subjectRef}
-      />
-      <TimeLapseTrails
-        views={npcViews}
-        rate={clockRate(live.speed, live.paused)}
-      />
-      <GlobeAnimals
-        animals={live.animals}
-        speed={live.speed}
-        paused={live.paused}
-        replay={replay}
-        terrain={terrain}
-        views={animalViews}
-      />
-      <GlobeFires
-        fires={live.fires}
-        terrain={terrain}
-        town={walkTown}
-        views={fireViews}
-      />
+    </>
+  );
+});
+
+const SceneOverlay = memo(function SceneOverlay({
+  planet,
+  walkTown,
+  peopleRef,
+  npcViews,
+  fireViews,
+  followId,
+  pinned,
+  pickRef,
+  subjectRef,
+  start,
+  dropRef,
+  goTo,
+  labels,
+  clockRef,
+  focusRef,
+  cameraMode,
+  travel,
+  timeLapse,
+  ready,
+  onCameraModeChange,
+  onPlayerMove,
+  onWalkReady,
+  onStats,
+}: Pick<
+  GlobeSceneProps,
+  | 'planet'
+  | 'walkTown'
+  | 'peopleRef'
+  | 'npcViews'
+  | 'fireViews'
+  | 'followId'
+  | 'pinned'
+  | 'pickRef'
+  | 'subjectRef'
+  | 'start'
+  | 'dropRef'
+  | 'goTo'
+  | 'labels'
+  | 'clockRef'
+  | 'focusRef'
+  | 'cameraMode'
+  | 'travel'
+  | 'ready'
+  | 'onCameraModeChange'
+  | 'onPlayerMove'
+  | 'onWalkReady'
+  | 'onStats'
+> & { timeLapse: boolean }) {
+  const { view, terrain } = planet;
+  const sampleStats = useCallback(
+    (sample: RenderStats) => onStats({ ...sample, mode: cameraMode }),
+    [onStats, cameraMode],
+  );
+  return (
+    <>
       <LivingProps
         clockRef={clockRef}
         peopleRef={peopleRef}
@@ -540,7 +545,7 @@ const GlobeScene = memo(function GlobeScene({
         cameraMode={cameraMode}
         onCameraModeChange={onCameraModeChange}
         travel={travel}
-        timeLapse={isTimeLapse(clockRate(live.speed, live.paused))}
+        timeLapse={timeLapse}
         focusRef={focusRef}
         onPlayerMove={onPlayerMove}
         onReady={onWalkReady}
@@ -551,6 +556,126 @@ const GlobeScene = memo(function GlobeScene({
         key={cameraMode}
         active={ready}
         onSample={sampleStats}
+      />
+    </>
+  );
+});
+
+const GlobeScene = memo(function GlobeScene({
+  planet,
+  town,
+  walkTown,
+  live,
+  replay,
+  peopleRef,
+  npcViews,
+  animalViews,
+  fireViews,
+  nodeStages,
+  followId,
+  pinned,
+  pickRef,
+  subjectRef,
+  start,
+  dropRef,
+  goTo,
+  labels,
+  doings,
+  clockRef,
+  focusRef,
+  cameraMode,
+  travel,
+  ready,
+  onCameraModeChange,
+  onPlayerMove,
+  onTick,
+  onWalkReady,
+  onPlacementsReady,
+  onStats,
+  onWaterfalls,
+}: GlobeSceneProps) {
+  const { terrain } = planet;
+  const rate = clockRate(live.speed, live.paused);
+  return (
+    <Canvas
+      flat
+      shadows="percentage"
+      camera={{
+        fov: 50,
+        near: 0.1,
+        far: 3000,
+        position: start.position.clone().multiplyScalar(1.01),
+      }}
+      gl={{ preserveDrawingBuffer: true }}
+    >
+      <SceneBackdrop
+        planet={planet}
+        town={town}
+        walkTown={walkTown}
+        nodeStages={nodeStages}
+        clockRef={clockRef}
+        focusRef={focusRef}
+        onTick={onTick}
+        onPlacementsReady={onPlacementsReady}
+        onWaterfalls={onWaterfalls}
+      />
+      <GlobeNpcs
+        citizens={live.citizens}
+        cues={live.cues}
+        speed={live.speed}
+        paused={live.paused}
+        tickClock={live.tickClock}
+        replay={replay}
+        clockRef={clockRef}
+        townLon={planet.town.lon}
+        terrain={terrain}
+        town={walkTown}
+        labels={labels}
+        doings={doings}
+        peopleRef={peopleRef}
+        views={npcViews}
+        followId={followId}
+        subjectRef={subjectRef}
+      />
+      <TimeLapseTrails views={npcViews} rate={rate} />
+      <GlobeAnimals
+        animals={live.animals}
+        speed={live.speed}
+        paused={live.paused}
+        replay={replay}
+        terrain={terrain}
+        views={animalViews}
+      />
+      <GlobeFires
+        fires={live.fires}
+        terrain={terrain}
+        town={walkTown}
+        views={fireViews}
+      />
+      <SceneOverlay
+        planet={planet}
+        walkTown={walkTown}
+        peopleRef={peopleRef}
+        npcViews={npcViews}
+        fireViews={fireViews}
+        followId={followId}
+        pinned={pinned}
+        pickRef={pickRef}
+        subjectRef={subjectRef}
+        start={start}
+        dropRef={dropRef}
+        goTo={goTo}
+        labels={labels}
+        clockRef={clockRef}
+        focusRef={focusRef}
+        cameraMode={cameraMode}
+        travel={travel}
+        timeLapse={isTimeLapse(rate)}
+        ready={ready}
+        onCameraModeChange={onCameraModeChange}
+        onPlayerMove={onPlayerMove}
+        onWalkReady={onWalkReady}
+        onStats={onStats}
       />
     </Canvas>
   );
