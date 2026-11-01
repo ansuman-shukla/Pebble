@@ -5,7 +5,7 @@ import { Vector3 } from 'three';
 import type { NpcViews } from './globe-npcs';
 import { Bar } from '@/components/spectator/charts';
 import { Button } from '@/components/ui/button';
-import { useCitizen } from '@/hooks/use-spectator';
+import { useCitizen, useScoreboard } from '@/hooks/use-spectator';
 import type { CitizenScore } from '@/lib/client/types.gen';
 import type { LiveCitizen } from '@/lib/live/live-contract';
 import { activityWords } from '@/lib/live/npc-activity';
@@ -14,7 +14,7 @@ import { NEED_COLORS, REGION_NAMES, titled } from '@/lib/spectator/words';
 /*
  * The inspector (10-world-v1 §5.4): who the selected citizen is, what they are doing now and why (goal and driver),
  * their purse, rank and standing, from the live feed; plus their wealth, standing word, ambition and its progress,
- * needs, what they carry, home, warmest bonds and last events from the citizen profile and its scoreboard row
+ * needs, what they carry, home, warmest bonds and last events from the citizen profile and their scoreboard row
  * (spectators only, D95). Also the scene-side picker that turns a click on a body into a selection.
  */
 
@@ -169,8 +169,8 @@ function Status({
 }
 
 /** Their ambition and how far the world says they are (the scoreboard row). */
-function Ambition({ score }: { score: CitizenScore }) {
-  const { ambition } = score;
+function Ambition({ score }: { score: CitizenScore | undefined }) {
+  const ambition = score?.ambition;
   if (!ambition) return null;
   return (
     <Section title="Ambition">
@@ -190,6 +190,9 @@ function Ambition({ score }: { score: CitizenScore }) {
 function Details({ citizen, at }: { citizen: LiveCitizen; at: number | null }) {
   const { id } = citizen;
   const { data: profile, error } = useCitizen(id, at);
+  // the row comes from the scoreboard (refreshed every few seconds), so the profile, polled every tick, stays cheap
+  const { data: board } = useScoreboard(at);
+  const score = board?.citizens.find((row) => row.id === id);
   if (error)
     return (
       <p className="text-muted-foreground text-xs">
@@ -201,11 +204,11 @@ function Details({ citizen, at }: { citizen: LiveCitizen; at: number | null }) {
   const events = profile.recent
     .filter((entry) => entry.type !== 'tick_summary')
     .slice(0, LAST_EVENTS);
-  const bonds = profile.score.bonds_top3;
+  const bonds = score?.bonds_top3 ?? [];
   return (
     <>
-      <Status citizen={citizen} score={profile.score} />
-      <Ambition score={profile.score} />
+      <Status citizen={citizen} score={score} />
+      <Ambition score={score} />
       {profile.alive && (
         <Section title="Needs">
           <div className="flex flex-col gap-1" data-testid="inspector-needs">
