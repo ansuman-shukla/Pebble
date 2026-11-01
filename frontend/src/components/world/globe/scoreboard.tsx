@@ -19,8 +19,18 @@ type Column = {
   key: string;
   label: string;
   title: string;
-  value: (row: CitizenScore) => number | string;
+  /** What the column sorts by: a number, words, or numbers compared in order (the first that differs). */
+  value: (row: CitizenScore) => number | string | number[];
   shown?: (row: CitizenScore) => string;
+  /** A longer reading of the cell, on hover. */
+  hint?: (row: CitizenScore) => string;
+};
+
+/** Groups in a narrow column. */
+const GROUP_SHORT: Record<CitizenScore['region'], string> = {
+  town: 'Town',
+  band_a: 'Band A',
+  band_b: 'Band B',
 };
 
 const COLUMNS: Column[] = [
@@ -36,7 +46,7 @@ const COLUMNS: Column[] = [
     label: 'Group',
     title: 'their group',
     value: (row) => row.region,
-    shown: (row) => REGION_NAMES[row.region],
+    shown: (row) => GROUP_SHORT[row.region],
   },
   {
     key: 'coins',
@@ -64,7 +74,7 @@ const COLUMNS: Column[] = [
   },
   {
     key: 'health',
-    label: 'Health',
+    label: 'HP',
     title: 'health now (0-100)',
     value: (row) => row.health,
     shown: (row) => (row.alive ? row.health.toFixed(0) : 'dead'),
@@ -80,8 +90,9 @@ const COLUMNS: Column[] = [
   {
     key: 'tax',
     label: 'Owes',
-    title: "the household's tax owed: rice measures / coins",
-    value: (row) => row.tax_owed.rice * 2 + row.tax_owed.coins,
+    title:
+      "the household's tax owed: rice measures / coins (sorted by coins, then rice)",
+    value: (row) => [row.tax_owed.coins, row.tax_owed.rice],
     shown: (row) =>
       row.tax_owed.rice || row.tax_owed.coins
         ? `${row.tax_owed.rice} / ${row.tax_owed.coins}`
@@ -95,15 +106,15 @@ const COLUMNS: Column[] = [
   },
   {
     key: 'standing',
-    label: 'Standing',
+    label: 'Stand.',
     title: 'standing with their own group (-100..100)',
     value: (row) => row.standing ?? -101,
-    shown: (row) =>
-      row.standing === null ? '–' : `${row.standing} ${row.standing_word}`,
+    shown: (row) => (row.standing === null ? '–' : String(row.standing)),
+    hint: (row) => row.standing_word,
   },
   {
     key: 'ambition',
-    label: 'Ambition',
+    label: 'Aim',
     title: 'how far the world says their ambition is',
     value: (row) => row.ambition?.progress ?? -1,
     shown: (row) =>
@@ -115,7 +126,7 @@ const COLUMNS: Column[] = [
   },
   {
     key: 'partners',
-    label: 'Traders',
+    label: 'Trad.',
     title: 'distinct people they traded with at a stall this week',
     value: (row) => row.trade_partners_7d,
   },
@@ -128,7 +139,7 @@ const COLUMNS: Column[] = [
   },
   {
     key: 'skill',
-    label: 'Top skill',
+    label: 'Skill',
     title: 'the skill they practised most over the run (hours)',
     value: (row) => topSkill(row)?.[1] ?? 0,
     shown: (row) => {
@@ -142,13 +153,19 @@ function topSkill(row: CitizenScore): [string, number] | undefined {
   return Object.entries(row.skill_hours).sort((a, b) => b[1] - a[1])[0];
 }
 
+function compare(
+  x: number | string | number[],
+  y: number | string | number[],
+): number {
+  if (Array.isArray(x) && Array.isArray(y))
+    return x.reduce((order, value, at) => order || value - y[at], 0);
+  if (typeof x === 'number' && typeof y === 'number') return x - y;
+  return String(x).localeCompare(String(y));
+}
+
 function sortRows(rows: CitizenScore[], column: Column, descending: boolean) {
   return [...rows].sort((a, b) => {
-    const [x, y] = [column.value(a), column.value(b)];
-    const order =
-      typeof x === 'number' && typeof y === 'number'
-        ? x - y
-        : String(x).localeCompare(String(y));
+    const order = compare(column.value(a), column.value(b));
     return (descending ? -order : order) || a.name.localeCompare(b.name);
   });
 }
@@ -229,7 +246,7 @@ export function Scoreboard({
     <aside
       role="region"
       aria-label="Scoreboard"
-      className="absolute right-60 bottom-12 left-[21.5rem] flex max-h-[55%] flex-col gap-2 overflow-auto rounded-lg bg-white/95 p-3 text-xs shadow-lg"
+      className="absolute right-60 bottom-12 left-[21.5rem] flex max-h-[55%] flex-col gap-2 overflow-auto rounded-lg bg-white/95 p-2 text-[11px] shadow-lg"
     >
       <header className="flex items-center gap-2">
         <h2 className="text-sm font-semibold">Scoreboard</h2>
@@ -283,7 +300,7 @@ export function Scoreboard({
                           : 'ascending'
                         : undefined
                     }
-                    className="border-b px-1 py-0.5 text-left font-medium whitespace-nowrap"
+                    className="border-b px-0.5 py-px text-left font-medium whitespace-nowrap"
                   >
                     <button
                       type="button"
@@ -319,7 +336,8 @@ export function Scoreboard({
                     <td
                       key={entry.key}
                       data-col={entry.key}
-                      className="px-1 py-0.5 whitespace-nowrap tabular-nums"
+                      className="px-0.5 py-px whitespace-nowrap tabular-nums"
+                      title={entry.hint?.(row)}
                     >
                       {entry.shown ? entry.shown(row) : entry.value(row)}
                     </td>

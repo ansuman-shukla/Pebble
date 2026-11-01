@@ -75,6 +75,17 @@ test("B opens the scoreboard: it sorts, a row selects, the inspector shows the c
   const ascending = await coins();
   expect(ascending).toEqual([...ascending].sort((a, b) => a - b));
 
+  // what a household owes sorts by coins, then by rice
+  await board.getByRole('button', { name: 'Owes' }).click();
+  const owed = (await rows.locator('[data-col="tax"]').allTextContents()).map(
+    (text) => {
+      const [rice, coins] =
+        text === '–' ? [0, 0] : text.split(' / ').map(Number);
+      return coins * 1e6 + rice;
+    },
+  );
+  expect(owed).toEqual([...owed].sort((a, b) => b - a));
+
   const richest = descending[0];
   const row = rows.filter({
     has: page.locator(`[data-col="coins"]:text-is("${richest}")`),
