@@ -584,8 +584,9 @@ def _eat_at_rack(ctx: Context) -> list[Option]:
     rack = _by_rack(ctx)
     if rack is None or ctx.done_today("rack bare"):
         return []
-    if ctx.profile.region == "band_a" and ctx.needs.hunger < 3:
-        return []  # band A's strips are its trading stock (10 §2.7): eaten only by the starving
+    trading_soon = _today(ctx) % TRADE_EVERY in ((TRADE_DAY - 1) % TRADE_EVERY, TRADE_DAY % TRADE_EVERY)
+    if ctx.profile.region == "band_a" and trading_soon and ctx.needs.hunger < 3:
+        return []  # band A's strips are its trading stock (10 §2.7): kept for the trip the day before and on the day
     if _refused(ctx, "eat at the rack"):
         ctx.mark_done("rack bare")
         return []

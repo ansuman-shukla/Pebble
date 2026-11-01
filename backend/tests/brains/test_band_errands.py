@@ -330,9 +330,10 @@ def test_hungry_at_camp_with_nothing_carried_eats_from_the_rack_until_it_is_bare
     assert "rack bare" in cast(list[str], api.notes["chores"])
     fed = _ctx(hungry, oru, FakeApi(_day(1)))  # not hungry: no reason to eat the band's store
     assert _choose(fed).name not in ("eat at the rack", "go to the drying rack")
-    band_a = _ctx(_camp("mid-morning", (), RACK_NEAR), _band("oru", "elder healer"), FakeApi(_day(1)))
-    band_a.needs = Needs(hunger=2, thirst=0, tiredness=0)
-    assert _choose(band_a).name != "go to the drying rack" or band_a.needs.hunger >= 3  # band A keeps its stock
+    for day, eats in ((1, False), (2, False), (3, True), (4, True), (5, False)):  # band A keeps its stock for trading
+        band_a = _ctx(_camp("mid-morning", (), RACK_NEAR), _band("oru", "elder healer"), FakeApi(_day(day)))
+        band_a.needs = Needs(hunger=2, thirst=0, tiredness=0)
+        assert (_choose(band_a).name == "go to the drying rack") is eats, day
 
 
 def test_kaz_is_tempted_with_one_minus_his_honesty_rolled_once_a_day() -> None:
