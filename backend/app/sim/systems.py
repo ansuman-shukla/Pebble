@@ -16,7 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from app.sim import animals, market, movement, nodes, ownership, paddies, slots, society, tax, territory, wear
+from app.sim import animals, market, movement, nodes, ownership, paddies, senses, slots, society, tax, territory, wear
 from app.sim.clock import local_minute, sun_altitude_deg, sun_direction
 from app.sim.core import EventListener, SimCore
 from app.sim.state import System
@@ -54,6 +54,7 @@ REGISTRY = Registry(
         animals.WILDLIFE,
         market.MARKET,
         territory.TERRITORY,
+        senses.SENSES,
     ),
     every_tick=(
         movement.catch_breath,
@@ -78,6 +79,7 @@ REGISTRY = Registry(
         society.on_event,
         tax.count_coins,
         territory.on_event,
+        senses.on_event,
     ),
 )
 

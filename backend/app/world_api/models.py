@@ -414,10 +414,10 @@ class SelfView(_Model):
     feeling: list[str]  # coarse body words; empty = "you feel fine"
     carrying: list[str]
     doing: str
-    # contract v1 (draft): unset until the systems behind them land
+    # contract v1 (draft): unset when there is nothing to say (held and confined: until justice lands)
     purse: str | None = None  # the coins you carry, in words ("seven coins", "a short string of coins")
-    load: str | None = None  # how laden you are ("carrying a heavy load")
-    titles: list[str] = []  # ("the lord", "leader of band A")
+    load: str | None = None  # how laden you are, when it slows you ("carrying a heavy load, too heavy to run")
+    titles: list[str] = []  # ("the lord of the castle town", "the leader of band A")
     standing: str | None = None  # how people here regard you, a sentence ("People here regard you well.")
     wanted: str | None = None  # a sentence ("You are wanted in the castle town for theft.")
     held: str | None = None  # who holds you, a sentence ("Kenji holds you fast.")
@@ -426,7 +426,7 @@ class SelfView(_Model):
     def text(self) -> str:
         feeling = "You feel " + join(self.feeling) + "." if self.feeling else "You feel fine."
         carrying = "You carry " + join(self.carrying) + "." if self.carrying else "You carry nothing."
-        parts = [feeling, carrying, self.doing]
+        parts = [feeling, carrying, self.doing] if self.carrying or not self.purse else [feeling, self.doing]
         parts += [f"You have {self.purse}."] if self.purse else []
         parts += [f"You are {self.load}."] if self.load else []
         parts += [f"You are {join(self.titles)}."] if self.titles else []
@@ -444,9 +444,11 @@ class Seen(_Model):
     doing: str | None = None
     kind: ThingKind | None = None  # things only
     resource: ResourceName | None = None  # what you could gather there
-    # contract v1 (draft), people only: unset until the systems behind them land
-    relation: str | None = None  # who they are to you ("your father", "your lord", "someone who struck you")
-    regard: str | None = None  # how they stand and what you know of them ("well regarded", "who stole rice")
+    # contract v1 (draft), people only: unset when you know nothing of them
+    relation: str | None = None  # who someone you know is to you: kin, then titles ("your mate", "your lord")
+    # what you know of them: their standing with your group if of note, then their deeds you know ("distrusted, who
+    # stole rice from the rack")
+    regard: str | None = None
 
 
 class PriceSeen(_Model):
@@ -487,12 +489,14 @@ class Perception(_Model):
     animals: list[Seen]
     things: list[Seen]
     heard: list[HeardWords]
-    # contract v1 (draft): unset until the systems behind them land
-    day_of_week: str | None = None  # ("the seventh day of the week; court day")
+    # contract v1 (draft): unset when there is nothing to say
+    day_of_week: str | None = None  # ("the seventh day of the week, court day")
     ground: str | None = None  # whose ground or which way this is ("Band A's ground", "the road to the Elder grove")
     safety: Safety | None = None
     market: MarketView | None = None  # at an open stall
     chest: ChestView | None = None  # at your own chest
+    # what you noticed since your last look, a sentence each ("Kenji bows to you.", "The temple bell rings.")
+    noticed: list[str] = []
 
     def text(self) -> str:
         day = f" It is {self.day_of_week}." if self.day_of_week else ""
@@ -507,12 +511,15 @@ class Perception(_Model):
             lines.append("Animals: " + "; ".join(_said(self.animals)) + ".")
         if self.things:
             lines.append("Around you: " + "; ".join(_said(self.things)) + ".")
-        if self.market is not None:
-            prices = [f"{price.item} at {price.price} ({price.word})" for price in self.market.items]
-            lines.append("At the stall: " + ("; ".join(prices) if prices else "nothing for sale") + ".")
+        if self.market is not None:  # a sentence a good: its price words may hold a semicolon of their own
+            prices = [f"{price.item}, {price.price} ({price.word})" for price in self.market.items]
+            prices = prices[:1] + [price[:1].upper() + price[1:] for price in prices[1:]]
+            lines.append("At the stall: " + (". ".join(prices) if prices else "nothing for sale") + ".")
         if self.chest is not None:
             holds = self.chest.holds
             lines.append("Your chest holds " + join(holds) + "." if holds else "Your chest is empty.")
+        if self.noticed:
+            lines.append(" ".join(self.noticed))
         verbs = {"whisper": "whispers", "normal": "says", "shout": "shouts"}
         lines += [f'{heard.who} {verbs[heard.volume]}: "{heard.words}"' for heard in self.heard]
         return "\n".join(lines)

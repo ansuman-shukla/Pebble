@@ -4,36 +4,50 @@ Sight: ~150 m by day, ~20 m at night (linear through twilight), ×0.4 in forest,
 A look around groups like things ("three lean-tos", "plenty of wood on the ground"; D64) and lists them by importance
 within a word budget (D63): everyone in view, every water, your home, the nearest food, shelter and fire (and every
 fire within a few paces), then the rest nearest first.
+
+Contract v1 (10-world-v1 §6.2, D177-D179) adds, all in words: your purse, load, titles, how people on this ground
+regard you and whether you are wanted; the day of the week, whose ground this is and how safe; your chest at hand;
+who the people you know are to you (kin, their titles) and what you know of them (their standing with your group if
+it is of note, their deeds you know); and what you noticed since your last look (`senses`). The market stall's
+prices come from `market.market_view` (passed in: the market imports this module).
 """
 
 import math
 import re
 from dataclasses import dataclass
-from typing import Literal, get_args
+from typing import Literal, cast, get_args
 
 import numpy as np
 
 from app.sim import fire as fires
-from app.sim import nodes
-from app.sim.bodies import body_words
+from app.sim import nodes, ownership, senses, society, territory
+from app.sim.bodies import THRESHOLDS, body_words
+from app.sim.citizens import Kin, Title, store_ids
 from app.sim.clock import local_minute, time_of_day
+from app.sim.coins import coin_words
 from app.sim.core import FOREST_BIOMES, SimCore
 from app.sim.fauna import DANGEROUS, SPECIES
+from app.sim.ground_speed import load_share
 from app.sim.items import ITEMS, amount_words, tool_in
+from app.sim.locomotion import load_bodies
 from app.sim.node_table import GATHERED
-from app.sim.state import ActionState, Animal, Citizen
+from app.sim.state import ActionState, Animal, Body, Citizen, Region
 from app.sim.vec import Vec3, bearing_deg, lat_lon_deg
 from app.sim.world import CAMP_STRUCTURE_LABELS, HOME_KINDS, STRUCTURE_LABELS, WATER_BIOMES
 from app.world_api.models import (
+    ChestView,
+    GestureKind,
     HeardWords,
+    MarketView,
     Nearness,
     Perception,
     ResourceName,
     Seen,
     SelfView,
     ThingKind,
+    WorkTask,
 )
-from app.world_api.phrases import NEAREST, phrase
+from app.world_api.phrases import NEAREST, join, phrase
 
 COMPASS = ("north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west")
 MAX_ANIMALS = 8
@@ -97,6 +111,10 @@ DOING: dict[str, str] = {
     "make_fire": "making a fire",
     "feed_fire": "tending a fire",
     "attack": "fighting",
+    "craft": "making something",
+    "seize": "seizing someone",
+    "judge": "passing judgement",
+    "tend": "tending someone",
 }
 ANIMAL_DOING: dict[str, str] = {
     "grazing": "grazing",
@@ -142,6 +160,54 @@ STRUCTURE_KEYWORDS: dict[str, frozenset[str]] = {
     "lean_to": frozenset({"lean-to", "shelter"}),
     "fire_pit": frozenset({"fire", "pit", "firepit"}),
 }
+DAY_WORDS = ("first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth")
+GROUP_WORDS: dict[Region, str] = {"town": "the castle town", "band_a": "band A", "band_b": "band B"}
+WANTED_BY: dict[Region, str] = {"town": "in the castle town", "band_a": "by band A", "band_b": "by band B"}
+# how the people whose ground you stand on regard you, by your standing word with them (laws.yaml); unsaid: nothing
+STANDING_SAID: dict[str, str | None] = {
+    "honoured": "People here honour you.",
+    "well regarded": "People here regard you well.",
+    "nothing said": None,
+    "distrusted": "People here distrust you.",
+    "outcast": "People here shun you as an outcast.",
+}
+# someone's standing with your group as `regard` tells it: only when it is of note (most of a group stand well with
+# it, and strangers have nothing said of them)
+REGARD_SAID: dict[str, str] = {"honoured": "honoured", "distrusted": "distrusted", "outcast": "an outcast"}
+KIN_WORDS: dict[Kin, str] = {
+    "mate": "your mate",
+    "parent": "your parent",
+    "child": "your child",
+    "sibling": "your sibling",
+    "grandparent": "your grandparent",
+    "grandchild": "your grandchild",
+    "parent's sibling": "your parent's sibling",
+    "sibling's child": "your sibling's child",
+}
+TOLD_DEEDS = 2  # the latest deeds of someone that their regard tells
+# a gesture as a seer says it: alone, and made to someone (laughing and jumping aren't aimed)
+GESTURE_SAID: dict[GestureKind, tuple[str, str]] = {
+    "wave": ("waves", "waves to"),
+    "bow": ("bows", "bows to"),
+    "nod": ("nods", "nods to"),
+    "shake_head": ("shakes their head", "shakes their head at"),
+    "point": ("points", "points at"),
+    "laugh": ("laughs", ""),
+    "jump": ("jumps", ""),
+}
+RUNNING_GAITS = frozenset({"run", "jog"})
+WORK_SEEN: dict[WorkTask, str] = {  # someone seen at work, briefly (they say it in full of themselves: "keeping watch")
+    "farm": "farming",
+    "store food": "storing food",
+    "guard": "guarding",
+    "trade": "trading",
+    "weave": "weaving",
+    "govern": "holding court",
+    "ring bell": "ringing the bell",
+    "pray": "praying",
+}
+QUARRY_DOING: dict[str, str] = {"stalking": "stalking", "chasing": "chasing"}  # said with whom they are after
+COINS = "coins"  # carried as the purse
 
 
 def normalize(text: str) -> str:
@@ -466,12 +532,22 @@ def nearest_danger(core: SimCore, citizen: Citizen) -> tuple[Animal, float] | No
     )  # fmt: skip
 
 
-def animal_doing(citizen: Citizen, animal: Animal, distance_m: float) -> str | None:
+def animal_doing(core: SimCore, citizen: Citizen, animal: Animal, distance_m: float) -> str | None:
+    """What an animal is seen doing: coming at you or watching you (a predator near), else its activity, naming its
+    quarry ("stalking a deer", "chasing Kenji", "feeding on remains")."""
     if animal.target == citizen.id:
         return "coming at you"
     if animal.kind in DANGEROUS and animal.activity not in ("sleeping", "dead") and distance_m <= WATCHING_M:
         return "watching you"
-    return ANIMAL_DOING.get(animal.activity)
+    doing = ANIMAL_DOING.get(animal.activity)
+    quarry = core.state.animals.get(animal.target or "")
+    if quarry is not None and not quarry.alive:
+        return "feeding on remains" if animal.activity == "feeding" else doing
+    prey = SPECIES[quarry.kind].one if quarry is not None else None
+    if animal.target in core.state.citizens:
+        prey = person_label(citizen, core.state.citizens[animal.target])
+    verb = QUARRY_DOING.get(animal.activity)
+    return f"{verb} {prey}" if verb is not None and prey is not None else doing
 
 
 def from_where(core: SimCore, citizen: Citizen, distance_m: float, bearing: float) -> str:
@@ -479,7 +555,7 @@ def from_where(core: SimCore, citizen: Citizen, distance_m: float, bearing: floa
     return f"from the trees, {where}" if core.world.biome(citizen.cell) in FOREST_BIOMES else where
 
 
-def seen_animals(citizen: Citizen, sightings: list[tuple[Animal, float]]) -> list[Seen]:
+def seen_animals(core: SimCore, citizen: Citizen, sightings: list[tuple[Animal, float]]) -> list[Seen]:
     """Animals in view as a person would name them: each group once (nearest member), remains one by one."""
     groups: dict[str, list[tuple[Animal, float]]] = {}
     remains: list[Seen] = []
@@ -497,7 +573,7 @@ def seen_animals(citizen: Citizen, sightings: list[tuple[Animal, float]]) -> lis
         species = SPECIES[nearest.kind]
         where = where_words(distance, bearing_deg(citizen.position, nearest.position))
         label = species.count_words(len(members))
-        doing = animal_doing(citizen, nearest, distance)
+        doing = animal_doing(core, citizen, nearest, distance)
         seen.append((distance, Seen(label=label, where=where, nearness=nearness(distance), doing=doing)))
     seen.sort(key=lambda entry: (entry[0], entry[1].label))
     return ([entry[1] for entry in seen] + remains)[:MAX_ANIMALS]
@@ -552,24 +628,114 @@ def doing_words(action: ActionState | None, asleep: bool) -> str:
         return f"You are walking to {action.destination}." if action.destination else "You are walking."
     if action.kind == "follow":
         return f"You are following {action.destination}."
-    return f"You are {DOING.get(action.kind, 'busy')}."
+    return f"You are {action_words(action)}."
 
 
-def self_view(core: SimCore, citizen: Citizen) -> SelfView:  # noqa: ARG001  # same signature as the other senses
-    carrying = [amount_words(count, ITEMS[item]) for item, count in sorted(citizen.inventory.items()) if count > 0]
+def action_words(action: ActionState) -> str:
+    """What someone is doing ("tending the rice paddies", "chopping a tree", "sitting" on a seat)."""
+    if action.kind in ("work", "craft") and action.label:  # "keeping watch", "making a flint spear"
+        return action.label
+    if action.kind == "gather":
+        return "chopping a tree" if action.args.get("node_kind") == nodes.TREE_KIND else f"gathering {action.label}"
+    if action.kind == "rest" and action.args.get("posture") == "sitting":
+        return "sitting"
+    return DOING.get(action.kind, "busy")
+
+
+def title_words(title: Title, group: Region, yours: bool) -> str:
+    """A title as said of its holder of `group`: to their own people ("your lord", "your leader") or anyone else."""
+    if title == "lord":
+        return "your lord" if yours else "the lord of the castle town"
+    if title == "leader":
+        return "your leader" if yours else f"the leader of {GROUP_WORDS[group]}"
+    rank = "samurai" if title == "samurai" else "foot soldier"
+    return f"your lord's {rank}" if yours else f"a {rank} of the castle town"
+
+
+def load_words(core: SimCore, citizen: Citizen) -> str | None:
+    """How laden someone is, by the load bands that slow them (bodies.yaml): None when they go unhindered."""
+    share = load_share(core, citizen)
+    bands = [band for band in load_bodies().load if share >= band.share]
+    if not bands:
+        return None
+    heavy = any(band.no_run for band in bands)
+    return "carrying a heavy load, too heavy to run" if heavy else "carrying a load that slows you"
+
+
+def standing_words(core: SimCore, citizen: Citizen) -> str | None:
+    """How the group whose ground the citizen stands on regards them, if anything is said of them."""
+    claim = territory.claim_at(core.world, citizen.position)
+    if claim is None:
+        return None
+    return STANDING_SAID[society.standing_word(society.standing(core, citizen.id, claim.owner))]
+
+
+def wanted_words(core: SimCore, citizen: Citizen) -> str | None:
+    """ "You are wanted in the castle town for theft." (each group that wants them, for what)."""
+    wanted: dict[Region, list[str]] = {}
+    for deed in society.wanted_for(core, citizen.id):
+        kinds = wanted.setdefault(deed.group, [])
+        if deed.kind not in kinds:
+            kinds.append(deed.kind)
+    if not wanted:
+        return None
+    return "You are wanted " + " and ".join(f"{WANTED_BY[g]} for {join(kinds)}" for g, kinds in wanted.items()) + "."
+
+
+def self_view(core: SimCore, citizen: Citizen) -> SelfView:
+    """How the citizen is: body, what they carry (coins as their purse), what they do, how laden, their titles, how
+    people here regard them and whether they are wanted."""
+    inventory = citizen.inventory
+    goods = sorted((item, count) for item, count in inventory.items() if count > 0 and item != COINS)
+    coins = inventory.get(COINS, 0)
     return SelfView(
-        feeling=body_words(citizen.body), carrying=carrying, doing=doing_words(citizen.action, citizen.body.asleep)
+        feeling=body_words(citizen.body),
+        carrying=[amount_words(count, ITEMS[item]) for item, count in goods],
+        doing=doing_words(citizen.action, citizen.body.asleep),
+        purse=coin_words(coins) if coins > 0 else None,
+        load=load_words(core, citizen),
+        titles=[title_words(title, citizen.region, yours=False) for title in society.titles(core, citizen.id)],
+        standing=standing_words(core, citizen),
+        wanted=wanted_words(core, citizen),
     )
 
 
-def perceive(core: SimCore, citizen: Citizen) -> Perception:
-    """Everything the citizen senses now; heard speech is reported once."""
+def day_words(tick: int) -> str:
+    """ "the first day of the week, market day"."""
+    week, day = society.load_laws().week, society.day_of_week(tick)
+    named = {week.market_day: "market day", week.court_day: "court day"}.get(day)
+    return f"the {DAY_WORDS[day - 1]} day of the week" + (f", {named}" if named else "")
+
+
+def chest_view(core: SimCore, citizen: Citizen) -> ChestView | None:
+    """What the household chest holds, when it is within reach of the citizen."""
+    if citizen.home is None or f"{citizen.home}{ownership.CHEST}" not in store_ids():
+        return None
+    chest = f"{citizen.home}{ownership.CHEST}"
+    if core.distance_m(citizen.position, ownership.reach_point(core, chest)) > ownership.REACH_M:
+        return None
+    stock = core.state.stores.get(chest, {})
+    return ChestView(holds=[amount_words(count, ITEMS[item]) for item, count in sorted(stock.items()) if count > 0])
+
+
+def perceive(core: SimCore, citizen: Citizen, market: MarketView | None = None) -> Perception:
+    """Everything the citizen senses now (`market`: the stall at hand's prices, `market.market_view`); heard speech
+    and what they noticed are told once."""
     you = self_view(core, citizen)
     _, lon = lat_lon_deg(citizen.position)
     when, time = time_of_day(local_minute(core.state.tick, core.world.town_lon_deg, lon))
+    day = day_words(core.state.tick)
     if citizen.body.asleep:
         return Perception(
-            you=you, place="asleep", time=time, time_of_day=when, people=[], animals=[], things=[], heard=[]
+            you=you,
+            place="asleep",
+            time=time,
+            time_of_day=when,
+            people=[],
+            animals=[],
+            things=[],
+            heard=[],
+            day_of_week=day,
         )
     people = [
         Seen(
@@ -578,14 +744,20 @@ def perceive(core: SimCore, citizen: Citizen) -> Perception:
             else f"the still body of {person_label(citizen, other)}",
             where=where_words(distance, bearing_deg(citizen.position, other.position)),
             nearness=nearness(distance),
-            doing=_doing(other) if other.body.alive else None,
+            doing=person_doing(core, other) if other.body.alive else None,
+            relation=relation_words(core, citizen, other),
+            regard=regard_words(core, citizen, other) if other.body.alive else None,
         )
         for other, distance in visible_people(core, citizen)
     ]
-    animals = seen_animals(citizen, visible_animals(core, citizen))
+    animals = seen_animals(core, citizen, visible_animals(core, citizen))
     things = fit_to_budget(people, animals, sights(core, citizen, things_in_view(core, citizen)))
     heard = [HeardWords(who=entry.who, words=entry.words, volume=entry.volume) for entry in citizen.heard]
     citizen.heard.clear()
+    chest = chest_view(core, citizen)
+    noticed = [notice_words(core, citizen, notice) for notice in senses.take(core, citizen.id)]
+    if chest is not None:
+        noticed.append(ownership.notice(core, citizen, f"{citizen.home}{ownership.CHEST}").strip())
     return Perception(
         you=you,
         place=place_words(core, citizen),
@@ -595,7 +767,108 @@ def perceive(core: SimCore, citizen: Citizen) -> Perception:
         animals=animals,
         things=things,
         heard=heard,
+        day_of_week=day,
+        ground=territory.ground_words(core, citizen),
+        safety=territory.safety(core, citizen),
+        market=market,
+        chest=chest,
+        noticed=list(dict.fromkeys(words for words in noticed if words)),
     )
+
+
+def person_doing(core: SimCore, other: Citizen) -> str | None:
+    """What someone is seen doing ("running", "carrying a load", "farming") and how they look if it shows ("looking
+    hurt")."""
+    if other.body.asleep:
+        return "asleep"
+    action, doing = other.action, None
+    if action is not None and action.kind in ("walk_to", "follow", "flee"):
+        stride = core.strides.get(other.id)
+        if action.kind == "flee" or (stride is not None and stride.gait in RUNNING_GAITS):
+            doing = "running"
+        else:
+            doing = "carrying a load" if load_words(core, other) else "walking"
+    elif action is not None and action.kind == "work":
+        doing = WORK_SEEN.get(cast(WorkTask, action.args.get("task")), DOING["work"])
+    elif action is not None:
+        doing = action_words(action)
+    looks = looks_words(other.body)
+    return ", ".join(words for words in (doing, looks) if words) or None
+
+
+def looks_words(body: Body) -> str | None:
+    """What anyone sees of a body's plight: badly hurt, else starving."""
+    if body.health <= THRESHOLDS["health"][1]:
+        return "looking near death"
+    if body.health <= THRESHOLDS["health"][0]:
+        return "looking hurt"
+    if body.hunger >= THRESHOLDS["hunger"][1]:
+        return "looking starved"
+    return None
+
+
+def relation_words(core: SimCore, observer: Citizen, other: Citizen) -> str | None:
+    """Who someone the observer knows is to them: kin ("your mate"), then titles ("your lord", "the leader of band
+    A"); None for strangers and people with neither."""
+    if other.id not in observer.people:
+        return None
+    members = society.SOCIETY.of(core.state).members
+    mine, theirs = members[observer.id], members[other.id]
+    kin = mine.family.get(other.id)
+    parts = [KIN_WORDS[kin]] if kin is not None else []
+    parts += [title_words(title, theirs.group, yours=theirs.group == mine.group) for title in theirs.titles]
+    return ", ".join(parts) or None
+
+
+def regard_words(core: SimCore, observer: Citizen, other: Citizen) -> str | None:
+    """What the observer holds of someone: their standing with the observer's group when it is of note ("honoured",
+    "distrusted"), and the latest deeds of theirs against the observer's group the observer knows ("who stole rice
+    from the rack"); a wrong done to another group is none of theirs (a band's own poaching elsewhere)."""
+    parts = []
+    if other.id in observer.people:
+        word = society.standing_word(society.standing(core, other.id, observer.region))
+        parts += [REGARD_SAID[word]] if word in REGARD_SAID else []
+    known = society.known_deeds(core, observer.id)
+    deeds = [deed_words(core, observer, d) for d in known if d.doer == other.id and d.group == observer.region]
+    told = list(dict.fromkeys(reversed(deeds)))[:TOLD_DEEDS]
+    parts += ["who " + join(told[::-1])] if told else []
+    return ", ".join(parts) or None
+
+
+def deed_words(core: SimCore, observer: Citizen, deed: society.Deed) -> str:
+    """A deed as the observer knows it ("stole rice from your chest", "took meat from the Lord's woods", "was in the
+    castle at night", "struck you"). Deeds logged before deeds kept their goods and place are said without them."""
+    goods = f"{ITEMS[deed.item].name} " if deed.item is not None else ""
+    if deed.kind == "theft":
+        store = ownership.store_words(str(deed.store))
+        if deed.owner in (observer.home, observer.region):
+            store = store.replace("the ", "your ", 1)
+        return f"stole {goods}from {store}"
+    if deed.kind == "poaching":
+        return f"took {goods or 'game '}from {deed.place or 'their ground'}"
+    if deed.kind == "trespass":
+        return f"was in {deed.place or 'the walls'} at night"
+    victim = core.state.citizens[str(deed.victim)]
+    whom = "you" if victim.id == observer.id else person_label(observer, victim)
+    return f"{'struck' if deed.kind == 'assault' else 'killed'} {whom}"
+
+
+def notice_words(core: SimCore, citizen: Citizen, notice: senses.Notice) -> str:
+    """ "Kenji bows to you.", "The temple bell rings.", "Some of your berries spoiled.", "Your pack wore out."."""
+    if notice.kind == "bell":
+        return "The temple bell rings."
+    if notice.kind == "spoiled":
+        return f"Some of your {join([ITEMS[item].name for item in notice.items])} spoiled."
+    if notice.kind == "worn":
+        return f"Your {ITEMS[notice.items[0]].name} wore out."
+    if notice.gesture is None or notice.who is None:
+        raise ValueError(f"a gesture noticed needs who made it and how: {notice}")
+    who = person_label(citizen, core.state.citizens[notice.who])
+    alone, aimed = GESTURE_SAID[notice.gesture]
+    if notice.to is None or not aimed:
+        return f"{who[0].upper()}{who[1:]} {alone}."
+    whom = "you" if notice.to == citizen.id else person_label(citizen, core.state.citizens[notice.to])
+    return f"{who[0].upper()}{who[1:]} {aimed} {whom}."
 
 
 @dataclass(frozen=True)
@@ -685,7 +958,9 @@ def sights(core: SimCore, citizen: Citizen, things: list[Thing]) -> list[Sight]:
 
 
 def words(seen: Seen) -> int:
-    return len(phrase(seen.label, seen.where, seen.doing).split())
+    """Words an entry takes, with what is known of a person ("Genzo, your mate, well regarded, ...")."""
+    known = [part for part in (seen.relation, seen.regard) if part]
+    return len(phrase(", ".join([seen.label, *known]), seen.where, seen.doing).split())
 
 
 def fit_to_budget(people: list[Seen], animals: list[Seen], found: list[Sight]) -> list[Seen]:
@@ -722,9 +997,3 @@ _LABELS = {**STRUCTURE_LABELS, **CAMP_STRUCTURE_LABELS}
 _UNGROUPED = {kind for kind, label in _LABELS.items() if label.startswith("a ")} - set(GROUP_NOUNS)
 if _UNGROUPED:
     raise ValueError(f"structure kinds seen in numbers need a plural: {sorted(_UNGROUPED)}")
-
-
-def _doing(other: Citizen) -> str | None:
-    if other.body.asleep:
-        return "asleep"
-    return DOING.get(other.action.kind) if other.action is not None else None
