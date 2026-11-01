@@ -16,6 +16,7 @@ from app.brains.bands import (
     RICE_BOUGHT,
     STALL_WAITS,
     TREK_SHARDS,
+    _raid,
 )
 from app.brains.profile import BrainProfile, Spot
 from app.brains.senses import Needs
@@ -470,25 +471,57 @@ def test_band_b_goes_along_with_what_its_leader_tells_at_the_fire() -> None:
     assert "hunger choice" not in nobody.notes
 
 
-def test_a_raider_walks_to_the_rice_fields_at_night_and_takes_rice_from_the_racks() -> None:
-    from app.brains import bands
+def _raiding() -> FakeApi:
+    """A band B raider on the night their leader told them of a raid."""
+    return FakeApi({"night": False, "days": 5, "chores": [], "hunger choice": ["raid", 5]})
 
+
+BARE = Seen(label="a rice rack", where="a few paces to the north", nearness="a few paces", kind="building")
+HUNG = BARE.model_copy(update={"doing": "hung with rice", "where": "close by to the north", "nearness": "close by"})
+
+
+def test_a_raider_takes_rice_from_a_rack_hung_with_it_and_walks_home() -> None:
     kaz = _band("kaz", "young hunter", "band_b")
-    api = FakeApi({"night": False, "days": 5, "chores": [], "hunger choice": ["raid", 5]})
-    ctx = _ctx(_look("at your home, at Band B camp", "dusk", ()), kaz, api)
+    api = _raiding()
+    ctx = _ctx(_look("at the rice fields", "night", (), things=[BARE, HUNG]), kaz, api)
     go = _choose(ctx)
-    assert go.name == "go to the rice fields" and go.score > 70.0  # over sleep
-    ctx = _ctx(_look("at the rice fields", "night", ()), kaz, api)
+    assert _start(ctx, go) == ("walk_to_thing", ("a rice rack hung with rice",))  # past the bare one
+    _ended(ctx, "done")
+    ctx = _ctx(_look("at the rice fields", "night", (), things=[BARE, HUNG]), kaz, api)
     take = _choose(ctx)
     assert take.name == "take rice from the racks"
     _start(ctx, take)
     assert api.calls[-2:] == [("pick_up", ("5 rice",)), ("walk_to_place", ("home", "walk"))]
-    assert _choose(_ctx(_look("at the rice fields", "night", ()), kaz, api)).name != "take rice from the racks"
-    hurt = FakeApi({"night": False, "days": 5, "chores": [], "hunger choice": ["raid", 5]})
+    assert (
+        _choose(_ctx(_look("at the rice fields", "night", (), things=[HUNG]), kaz, api)).name
+        != "take rice from the racks"
+    )
+    hurt = _raiding()
     look = _look("not far from Band B camp", "night", ())
     bitten = look.model_copy(update={"you": look.you.model_copy(update={"feeling": ["weak and aching"]})})  # a bite
-    assert bands._raid(_ctx(bitten, kaz, hurt)) == []
+    assert _raid(_ctx(bitten, kaz, hurt)) == []
     assert "raided" in cast(list[str], hurt.notes["chores"])  # no raid that night
+
+
+def test_a_raider_finding_the_racks_bare_looks_them_over_close_up_before_going_home() -> None:
+    kaz = _band("kaz", "young hunter", "band_b")
+    api = _raiding()
+    far = _ctx(_look("not far from Band B camp", "night", ()), kaz, api)
+    assert _choose(far).name == "go to the rice fields"
+    ctx = _ctx(_look("at the rice fields", "night", (), things=[BARE]), kaz, api)
+    look = _choose(ctx)
+    assert _start(ctx, look) == ("walk_to_thing", ("rice rack",))  # the night's sight is short: up to the racks
+    _ended(ctx, "done")
+    ctx = _ctx(_look("at the rice fields", "night", (), things=[BARE, HUNG]), kaz, api)
+    assert _choose(ctx).name == "go to a rice rack hung with rice"  # the other rack, seen from there
+    api = _raiding()
+    ctx = _ctx(_look("at the rice fields", "night", (), things=[BARE]), kaz, api)
+    _start(ctx, _choose(ctx))
+    _ended(ctx, "done")
+    ctx = _ctx(_look("at the rice fields", "night", (), things=[BARE]), kaz, api)
+    home = _choose(ctx)
+    assert home.name == "go home with nothing" and _start(ctx, home) == ("walk_to_place", ("home", "walk"))
+    assert "raided" in cast(list[str], api.notes["chores"]) and ("pick_up", ("5 rice",)) not in api.calls
 
 
 def test_a_band_healer_tends_a_hurt_bandmate_by_day_but_not_a_stranger_or_in_the_night() -> None:
@@ -499,3 +532,28 @@ def test_a_band_healer_tends_a_hurt_bandmate_by_day_but_not_a_stranger_or_in_the
     assert _choose(_ctx(_look(camp, "midday", (), people=[hurt]), vesa, _day(1))).name == "go up to Kaz"
     assert "a young man" not in _choose(_ctx(_look(camp, "midday", (), people=[stranger]), vesa, _day(1))).name
     assert _choose(_ctx(_look(camp, "night", (), people=[hurt]), vesa, _day(1))).name != "go up to Kaz"
+
+
+def test_a_raider_who_sees_no_rack_at_the_fields_looks_a_few_steps_each_way_round_then_goes_home() -> None:
+    from app.brains import bands
+
+    kaz = _band("kaz", "young hunter", "band_b")
+    api = _raiding()
+    ctx = _ctx(_look("not far from the rice fields", "night", ()), kaz, api)
+    _start(ctx, _choose(ctx))
+    ctx = _ctx(_look("at the rice fields", "night", ()), kaz, api)
+    assert _choose(ctx).name == "go to the rice fields"  # in the fields, not yet where the walk ends
+    _ended(ctx, "done")
+    ways = []
+    for _ in range(bands.RACK_SEARCHES):
+        ctx = _ctx(_look("at the rice fields", "night", ()), kaz, api)
+        ways.append(_start(ctx, _choose(ctx)))
+        _ended(ctx, "done")
+    assert ways == [("walk_towards", (way, "a few steps", "walk")) for way in ("north", "east", "south", "west")]
+    ctx = _ctx(_look("at the rice fields", "night", ()), kaz, api)
+    assert _choose(ctx).name == "go home with nothing"
+    found = _raiding()
+    found.notes["chores"] = ["rack search"]
+    assert _choose(_ctx(_look("at the rice fields", "night", (), things=[HUNG]), kaz, found)).name == (
+        "go to a rice rack hung with rice"
+    )

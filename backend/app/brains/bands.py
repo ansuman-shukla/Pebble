@@ -107,6 +107,9 @@ COUNSEL = 0.3  # Vesa counsels against raids (10 §3.1: −0.3)
 RAID = 75.0  # the night's raid: over sleep (70), under danger and real need
 FIELDS = "the rice fields"
 RICE_RACK = "a rice rack"  # the town's hasa racks by the paddies, where the day's rice dries overnight
+LADEN = "hung with rice"  # a rice rack with the day's rice drying on it
+LADEN_RACK = f"{RICE_RACK} {LADEN}"
+RACK_SEARCHES = 4  # short walks about the rice fields at night looking for the racks before going home
 NIGHT_SHARE = "take the night's strip"
 PANS = 3  # pans at the falls pool a trip (each finds a grain half the time)
 JUDGE = 60.0  # a leader's justice at the fire: over the day's work
@@ -874,8 +877,10 @@ def _instant(ctx: Context, act: Callable[[], ActionResult]) -> ActionHandle:
 
 
 def _raid(ctx: Context) -> list[Option]:
-    """The raiders go to the rice fields in band B's evening (the town's night) and take rice from the racks, then
-    home (a theft, and a night trespass inside the walls: Goro's watch may catch them)."""
+    """The raiders go to the rice fields in band B's evening (the town's night) and take rice from a rack hung with it,
+    then home (a theft, and a night trespass inside the walls: Goro's watch may catch them). With no rack in sight
+    hung with rice they walk up to the racks to look them over, or a few steps each way round the fields when no rack
+    is in sight at all (night sight is short), then go home with nothing."""
     p, api = ctx.perception, ctx.api
     if ctx.profile.citizen_id not in RAIDERS or _hungry_choice(ctx) != "raid" or ctx.done_today("raided"):
         return []
@@ -885,10 +890,9 @@ def _raid(ctx: Context) -> list[Option]:
         ctx.mark_done("raided")
         return []
     aim = "Take rice from the town's racks"
-    rack = next((t for t in p.things if "rice rack" in t.label and DISTANCE[t.nearness] != "far"), None)
-    if rack is not None and rack.nearness != "right beside you" and not ctx.finished(f"go to {RICE_RACK}"):
-        return [Option(RAID, f"go to {RICE_RACK}", partial(api.walk_to_thing, "rack"), aim, "hunger")]
-    if rack is not None or at(p, FIELDS) or ctx.finished(f"go to {FIELDS}"):
+    racks = [t for t in p.things if RICE_RACK.removeprefix("a ") in t.label and DISTANCE[t.nearness] != "far"]
+    laden = next((t for t in racks if t.doing == LADEN), None)
+    if laden is not None and (laden.nearness == "right beside you" or ctx.finished(f"go to {LADEN_RACK}")):
 
         def take() -> ActionHandle:
             ctx.mark_done("raided")
@@ -896,9 +900,20 @@ def _raid(ctx: Context) -> list[Option]:
             return api.walk_to_place("home", ctx.pace)
 
         return [Option(RAID, "take rice from the racks", take, aim, "hunger")]
-    if _refused(ctx, f"go to {FIELDS}"):
-        ctx.mark_done("raided")
-        return []
+    if laden is not None and not _refused(ctx, f"go to {LADEN_RACK}"):
+        return [Option(RAID, f"go to {LADEN_RACK}", partial(api.walk_to_thing, LADEN_RACK), aim, "hunger")]
+    looked = ctx.finished(f"go to {RICE_RACK}") or _refused(ctx, f"go to {RICE_RACK}")
+    if racks and not looked and not any(t.nearness == "right beside you" for t in racks):
+        return [Option(RAID, f"go to {RICE_RACK}", partial(api.walk_to_thing, "rice rack"), aim, "hunger")]
+    searches = _count_today(ctx, "rack search")
+    there = ctx.finished(f"go to {FIELDS}") or _refused(ctx, f"go to {FIELDS}") or searches > 0
+    if not racks and there and searches < RACK_SEARCHES:  # at the fields, the racks out of the night's sight
+        way = COMPASS[2 * searches % len(COMPASS)]  # a few steps each way round
+        search = _then(lambda: ctx.mark_done("rack search"), partial(api.walk_towards, way, "a few steps", ctx.pace))
+        return [Option(RAID, "look for the racks", search, aim, "hunger")]
+    if racks or there:
+        home = _then(lambda: ctx.mark_done("raided"), partial(api.walk_to_place, "home", ctx.pace))
+        return [Option(RAID, "go home with nothing", home, aim, "hunger")]  # nothing hangs on any rack in sight
     return [Option(RAID, f"go to {FIELDS}", _walk_to(ctx, FIELDS), aim, "hunger")]
 
 
