@@ -278,7 +278,7 @@ def test_the_farmers_rice_tax_fills_the_granary(life: Life) -> None:
     """The granary gets 40 % of each harvest and feeds the keep and the temple (10-world-v1 §2.6-2.7), and the lord
     sells it at the stall only while rice is dear or fair: it ends 10 days more than 50 above its start and is never
     drawn down more than 30. 5-seed sweep (BR1: the D156 rations gone, the bible's paddies, D180; seeds 20261028, 7,
-    1, 2, 3): +104, +125, +127, +123, +103, lowest dip −21."""
+    1, 2, 3): +106, +126, +132, +126, +121, never below the start."""
     rice = life.rice
     assert len(rice) == DAYS + 1
     assert rice[-1] > rice[0] + 50
