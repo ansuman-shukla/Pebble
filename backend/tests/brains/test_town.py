@@ -602,7 +602,7 @@ def test_the_monk_tends_whoever_looks_hurt() -> None:
     assert (tend.score, ("tend", "Lia") in api.calls) == (TEND, True)
     well = beside.model_copy(update={"doing": "walking"})
     assert [o.name for o in town.monk(_ctx(_look(people=(well,)), ENNEN)[0])] != ["tend"]
-    bitten = beside.model_copy(update={"doing": "walking, looking a little hurt"})  # a bite, D201
+    bitten = beside.model_copy(update={"doing": "walking, looking a little hurt"})  # a bite, D202
     assert [o.name for o in town.monk(_ctx(_look(people=(bitten,)), ENNEN)[0])] == ["tend"]
 
 

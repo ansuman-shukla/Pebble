@@ -9,6 +9,7 @@ import {
   type FeedFilter,
   feedEntry,
   type FeedSubjects,
+  foldDetail,
   shows,
 } from '@/lib/live/event-feed';
 
@@ -105,10 +106,20 @@ export function EventFeed({
               </span>
               <span
                 className={`min-w-0 flex-1 truncate ${IMPORTANCE_CLASS[entry.importance] ?? ''}`}
-                title={entry.line}
+                title={
+                  entry.folded.length > 0
+                    ? entry.folded.map(({ line }) => line).join('\n')
+                    : entry.line
+                }
               >
                 {entry.line}
                 {entry.count > 1 && ` ×${entry.count}`}
+                {entry.folded.length > 0 && (
+                  <span data-testid="fold-detail" className="italic">
+                    {' '}
+                    · {foldDetail(entry)}
+                  </span>
+                )}
               </span>
               {canFly(entry) && (
                 <Button

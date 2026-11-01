@@ -42,7 +42,7 @@ fire_basket: {footprint: [0.6, 0.6], walk: solid}
 banner: {footprint: [1.3, 1], walk: solid}
 notice_board: {footprint: [2, 1], walk: solid}
 sake_barrel: {footprint: [0.5, 0.5], walk: solid}
-bench: {footprint: [1.5, 0.5], walk: none} # its seats are where bodies sit: a solid bench put them on blocked cells (Q1, D203)
+bench: {footprint: [1.5, 0.5], walk: none} # its seats are where bodies sit: a solid bench put them on blocked cells (Q1, D204)
 stone_basin: {footprint: [1, 1], walk: solid}
 war_drum: {footprint: [1, 1], walk: solid}
 tether_rail: {footprint: [2, 1], walk: solid}

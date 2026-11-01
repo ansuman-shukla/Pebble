@@ -8,9 +8,10 @@ spectators' event feed and timelines.
 
 A `Line` is a `str.format` template over the event's payload fields plus `{actor}`; its variants (first match wins)
 say it better for some payloads. Fields naming a citizen, an animal, a group or a household read as their name ("Kenji",
-"a wolf", "band A", "Genzo's house" for its eldest member), lists read as "Goro and Kenji", item counts as "2 meat and
-1 berries", day and hour counts with their unit ("1 day"), `{a_kind}` is a field with its article ("an obsidian
-field"), and `words` turns a field's code words into prose ("shake_head" -> "shakes their head"). World v1 lines a
+"a wolf", "band A", "Genzo's house" for its eldest member, "their house" after `{actor}` when it is theirs), lists read
+as "Goro and Kenji", item counts as "2 meat and a berry", day and hour counts with their unit ("1 day"), `{a_kind}` is a
+field with its article ("an obsidian field"), `words` turns a field's code words into prose ("shake_head" -> "shakes
+their head") and `fields` tells a field from the whole payload ("{fire}": "band A's fire pit"). World v1 lines a
 citizen does start with `{actor}`, so their timeline tells them without the name.
 
 Seam: every stream adds its event type's row here with the payload (one row per type; a test fails without it).
@@ -22,9 +23,9 @@ from typing import Any, Literal, NamedTuple
 
 from app.observability.events import PAYLOAD_TYPES
 from app.sim.fauna import SPECIES
+from app.sim.items import ITEMS
 
 Importance = Literal[0, 1, 2, 3]
-Names = Callable[[str], str]  # an id (citizen, animal, group, store...) in words
 GROUP_NAMES = {"town": "the town", "band_a": "band A", "band_b": "band B"}
 ACTOR = "{actor} "  # how a line told from its actor starts
 
@@ -52,6 +53,7 @@ class Line:
     importance: Importance
     variants: tuple[Variant, ...] = ()
     words: Mapping[str, Mapping[str, str]] = field(default_factory=dict)  # field -> code word -> prose
+    fields: Mapping[str, Callable[[Told], str]] = field(default_factory=dict)  # fields told from the whole payload
 
 
 class Resident(NamedTuple):
@@ -60,26 +62,43 @@ class Resident(NamedTuple):
     age: int
 
 
-def namer(people: Mapping[str, Resident]) -> Names:
+@dataclass(frozen=True)
+class Names:
     """Ids in words: citizens by name, a household by its eldest member as "Genzo's house" or "Ama's shelter",
     animals as "a deer", groups as "band A", anything else as given."""
-    households: dict[str, str] = {}
-    for _, person in sorted(people.items(), key=lambda item: (-item[1].age, item[0])):
-        if person.home is not None:
-            households.setdefault(person.home, person.name)
 
-    def name(ref: str) -> str:
-        if ref in people:
-            return people[ref].name
-        if ref in households:
-            return f"{households[ref]}'s {'shelter' if ':' in ref else 'house'}"
+    people: Mapping[str, Resident]
+    heads: Mapping[str, str]  # household (home id) -> the id of its eldest member, whom it is named for
+
+    def __call__(self, ref: str) -> str:
+        if ref in self.people:
+            return self.people[ref].name
+        if ref in self.heads:
+            return f"{self.people[self.heads[ref]].name}'s {_dwelling(ref)}"
         if ref in GROUP_NAMES:
             return GROUP_NAMES[ref]
         if (kind := ref.partition(":")[0]) in SPECIES:
             return SPECIES[kind].one
         return ref.replace("_", " ")
 
-    return name
+    def of(self, ref: str, actor: str | None) -> str:
+        """`ref` in words as said of the actor: the household named for them is "their house" (not "Genzo pays tax
+        for Genzo's house")."""
+        if actor is not None and self.heads.get(ref) == actor:
+            return f"their {_dwelling(ref)}"
+        return self(ref)
+
+
+def _dwelling(home: str) -> str:
+    return "shelter" if ":" in home else "house"  # camp homes are "<camp>:<shelter>"
+
+
+def namer(people: Mapping[str, Resident]) -> Names:
+    heads: dict[str, str] = {}
+    for ref, person in sorted(people.items(), key=lambda item: (-item[1].age, item[0])):
+        if person.home is not None:
+            heads.setdefault(person.home, ref)
+    return Names(people, heads)
 
 
 NAMED_FIELDS = frozenset(
@@ -164,7 +183,6 @@ _STARTS = {
     "make_fire": "making a fire in",
     "feed_fire": "feeding",
 }
-_FIRES = {"pit": "the camp's fire pit", "basket": "a fire basket", "campfire": "a campfire"}
 _GESTURES = {
     "wave": "waves",
     "bow": "bows",
@@ -183,6 +201,36 @@ _REGARD = {  # standing words (10 §3.6) as said of the person
     "distrusted": "distrusted",
     "outcast": "cast out",
 }
+
+
+def amount(item: str, count: int) -> str:
+    """A count of an item as a spectator reads it: one of it ("a hide", "a measure of rice"), pieces counted with
+    their plural ("2 hides", "3 berries"), a mass in measures as a number ("12 rice")."""
+    kind = ITEMS.get(item)
+    if kind is None:
+        return _a(item) if count == 1 else f"{count} {item}"
+    if count == 1:
+        return kind.one
+    return f"{count} {kind.name if kind.mass else kind.plural or kind.name}"
+
+
+def _amount_of(count: str) -> Callable[[Told], str]:
+    """The payload's `item` counted by its `count` field."""
+    return lambda told: amount(str(told.payload["item"]), int(told.payload[count]))
+
+
+def _fire(told: Told) -> str:
+    """Which fire: "band A's fire pit" (a camp's pit, id "<camp>:fire-pit"), "a fire basket at the main gate" (a
+    town basket, id "<place>-fire-<side>"), "a campfire"."""
+    ref, kind = str(told.payload["id"]), told.payload["kind"]
+    if kind == "pit":
+        group = GROUP_NAMES.get(ref.partition(":")[0].removesuffix("_camp"))
+        return f"{group}'s fire pit" if group is not None else "a fire pit"
+    if kind == "basket":
+        place, fire, _ = ref.rpartition("-fire")
+        return f"a fire basket at the {place.replace('-', ' ')}" if fire else "a fire basket"
+    return "a campfire"
+
 
 LINES: dict[str, Line] = {  # by event type
     "tick_summary": Line("The world moves on a minute", 0),
@@ -206,7 +254,11 @@ LINES: dict[str, Line] = {  # by event type
         words={"action": _DOING},
     ),
     "action_interrupted": Line("{actor} stops {action}", 0, words={"action": _DOING}),
-    "said": Line("{actor}: “{words}”", 1),
+    "said": Line(
+        "{actor}: “{words}”",
+        1,
+        (Variant(_field("volume", "shout"), "{actor} shouts: “{words}”", 2),),  # a call to all, a cry of theft
+    ),
     "need_changed": Line("{actor} feels {level}", 0),
     "injured": Line(
         "{actor} is hurt ({cause})",
@@ -231,18 +283,18 @@ LINES: dict[str, Line] = {  # by event type
             Variant(_set("attacker"), "{attacker} kills {actor}", 3),
         ),
     ),
-    "item_moved": Line("{count} {item} moved", 0),
+    "item_moved": Line("{amount} moved", 0, fields={"amount": _amount_of("count")}),
     "resource_changed": Line("{resource} in cell {cell}: {before} → {after}", 0),
     "knowledge_changed": Line("{actor} learns of {ref}", 0),
     "animal_spawned": Line("{actor} joins its group", 0),
     "fire_changed": Line(
-        "{kind} burns lower",
+        "{fire} burns lower",
         0,
         (
-            Variant(_field("lit", False), "{kind} goes out", 0),
-            Variant(_field("strength", 1.0), "{kind} burns high", 1),
+            Variant(_field("lit", False), "{fire} goes out", 0),
+            Variant(_field("strength", 1.0), "{fire} burns high", 1),
         ),
-        words={"kind": _FIRES},
+        fields={"fire": _fire},
     ),
     "intervention": Line("The gods intervene: {kind}", 2),
     # world v1: told with the citizen who did it first, so a timeline can drop the name (`tell(..., own=True)`)
@@ -251,6 +303,8 @@ LINES: dict[str, Line] = {  # by event type
         0,
         (
             Variant(_both(_by("citizen"), _field("kind", "rice_paddy"), _fewer), "{actor} harvests rice", 2),
+            # a felling empties the tree; `tree_felled` tells it in the feed
+            Variant(_both(_by("citizen"), _field("kind", "tree"), _fewer), "{actor} cuts {a_kind} into logs", 0),
             Variant(_both(_by("citizen"), _field("after", 0)), "{actor} takes the last {item} from {a_kind}", 1),
             Variant(_both(_by("citizen"), _field("kind", "fishing_spot"), _fewer), "{actor} catches {item}", 0),
             Variant(_both(_by("citizen"), _field("kind", *_MINED), _fewer), "{actor} mines {item} from {a_kind}", 0),
@@ -273,13 +327,14 @@ LINES: dict[str, Line] = {  # by event type
         ),
     ),
     "stole": Line(
-        "{actor} steals {count} {item} from {owner}",
+        "{actor} steals {amount} from {owner}",
         2,
-        (Variant(_set("witnesses"), "{actor} steals {count} {item} from {owner}, seen by {witnesses}", 3),),
+        (Variant(_set("witnesses"), "{actor} steals {amount} from {owner}, seen by {witnesses}", 3),),
+        fields={"amount": _amount_of("count")},
     ),
-    "bought": Line("{actor} buys {count} {item} for {coins} mon", 2),
-    "sold": Line("{actor} sells {count} {item} for {coins} mon", 2),
-    "crafted": Line("{actor} makes {count} {item}", 1, (Variant(_field("count", 1), "{actor} makes {a_item}", 1),)),
+    "bought": Line("{actor} buys {amount} for {coins} mon", 2, fields={"amount": _amount_of("count")}),
+    "sold": Line("{actor} sells {amount} for {coins} mon", 2, fields={"amount": _amount_of("count")}),
+    "crafted": Line("{actor} makes {amount}", 1, fields={"amount": _amount_of("count")}),
     "spoiled": Line(
         "Some of the food in {holder} spoils: {items}",
         1,
@@ -308,7 +363,9 @@ LINES: dict[str, Line] = {  # by event type
         (Variant(_by("citizen"), "{actor} is {days} behind on tax for {household} ({rice} rice, {coins} mon)", 2),),
     ),
     "ledger": Line("{actor} ends the day with {coins} mon, worth {wealth_mon} mon", 0),
-    "prices_changed": Line("{item} is {word} at the stall now: {sell} mon a lot of {lot}", 1),
+    "prices_changed": Line(
+        "{item} is {word} at the stall now: {sell} mon for {lot_amount}", 1, fields={"lot_amount": _amount_of("lot")}
+    ),
     "accused": Line("{actor} accuses {person} before {to}", 2),
     "seized": Line(
         "{actor} tries to seize {person}",
@@ -374,41 +431,52 @@ def tell(told: Told, names: Names, *, own: bool = False) -> tuple[str, Importanc
     """The event's line (in words) and its importance. `own` tells it on the actor's own timeline: without the
     actor's name in front ("buys 4 rice for 8 mon"), when the line starts with it."""
     template, rank = pick(told)
+    fields = _Fields(told, names, LINES[told.type], template)
     if own and template.startswith(ACTOR):
-        return template.removeprefix(ACTOR).format_map(_Fields(told, names, LINES[told.type].words)), rank
-    told_line = template.format_map(_Fields(told, names, LINES[told.type].words)).strip()
+        return template.removeprefix(ACTOR).format_map(fields), rank
+    told_line = template.format_map(fields).strip()
     return told_line[:1].upper() + told_line[1:], rank
 
 
 class _Fields(dict[str, Any]):
-    """The template's fields in words, looked up as the template names them."""
+    """The template's fields in words, looked up as the template names them. A field after `{actor}` that names the
+    actor's own household reads "their house"."""
 
-    def __init__(self, told: Told, names: Names, words: Mapping[str, Mapping[str, str]]) -> None:
+    def __init__(self, told: Told, names: Names, line: Line, template: str) -> None:
         super().__init__()
-        self.told, self.names, self.words = told, names, words
+        self.told, self.names, self.line, self.template = told, names, line, template
 
     def __missing__(self, key: str) -> Any:
         if key == "actor":
             return self.names(self.told.actor_id) if self.told.actor_id else "someone"
         if key.startswith("a_"):  # "{a_kind}": the field with its article ("an obsidian field")
             return _a(str(self[key.removeprefix("a_")]))
+        if key in self.line.fields:
+            return self.line.fields[key](self.told)
         value = self.told.payload.get(key)
         if value is None:
             return ""
-        if key in self.words:
-            return self.words[key].get(str(value), str(value).replace("_", " "))
-        return _words(key, value, self.names)
+        if key in self.line.words:
+            return self.line.words[key].get(str(value), str(value).replace("_", " "))
+        return _words(key, value, self.name_of(key))
+
+    def name_of(self, key: str) -> Callable[[str], str]:
+        """How an id in this field reads: as said of the actor when the line has named them before it."""
+        actor_at = self.template.find("{actor}")
+        if 0 <= actor_at < self.template.find(f"{{{key}}}"):
+            return lambda ref: self.names.of(ref, self.told.actor_id)
+        return self.names
 
 
-def _words(key: str, value: Any, names: Names) -> Any:
+def _words(key: str, value: Any, names: Callable[[str], str]) -> Any:
     if key in UNITS:
         return f"{value:g} {UNITS[key]}{'' if value == 1 else 's'}"
     if isinstance(value, list):
         return _and([names(v) if key in NAMED_FIELDS else str(v) for v in value])
     if isinstance(value, dict):
         if set(value) == {"item", "count"}:
-            return f"{value['count']} {value['item']}"
-        return _and([f"{count} {item}" for item, count in value.items()])
+            return amount(value["item"], value["count"])
+        return _and([amount(item, count) for item, count in value.items()])
     if isinstance(value, str):
         return names(value) if key in NAMED_FIELDS else value.replace("_", " ")
     return value

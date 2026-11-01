@@ -1,11 +1,13 @@
 /*
  * The spectator's event feed (10-world-v1 §5.4): every live event as one line with an importance 0-3 (0 hidden),
- * newest first, repeats merged ("Tek fished ×3"), filtered to People, Danger or Economy. The line, importance and
- * position come from the backend's line registry (`observability/lines.py`).
+ * newest first, repeats merged ("Tek fished ×3"), a group's chatter folded ("Band B greet each other and chat ×12"),
+ * filtered to People, Danger or Economy. The line, importance and position come from the backend's line registry
+ * (`observability/lines.py`).
  */
 import { Vector3 } from 'three';
 
 import type { LiveAnimal, LiveEventMessage } from './live-contract';
+import type { Region } from '@/lib/spectator/words';
 import { townClock } from '@/lib/spectator/time';
 
 export type FeedFilter = 'all' | 'people' | 'danger' | 'economy';
@@ -20,6 +22,7 @@ export const FEED_FILTERS: { filter: FeedFilter; label: string }[] = [
 /** Which filters an event type shows under (besides All). */
 const KINDS: Record<Exclude<FeedFilter, 'all'>, ReadonlySet<string>> = {
   people: new Set([
+    'chatter',
     'said',
     'gestured',
     'goal_set',
@@ -75,16 +78,34 @@ export interface FeedEntry {
   position: [number, number, number] | null;
   /** How many repeats it stands for (shown as "×3"). */
   count: number;
+  /** Whose chatter it is (greetings, gestures, small talk: speech and gestures of importance 1), else null. */
+  chatter: Region | null;
+  /** A fold of chatter (type `chatter`): what its FOLD_KEEP newest events said, newest first; else empty. */
+  folded: readonly { type: string; line: string }[];
 }
 
 /** Entries kept. */
 export const FEED_KEEP = 60;
 /** A repeat merges into an entry among this many newest. */
 const MERGE_WITHIN = 6;
+/** A group's chatter folds into its chatter among this many newest entries... */
+const FOLD_WITHIN = 8;
+/** ...said at most this many ticks (game minutes) before. */
+export const FOLD_TICKS = 20;
+/** A fold keeps this many of its newest lines and ids (its count keeps them all), so all-day chatter stays cheap. */
+export const FOLD_KEEP = 20;
+/** The routine social events: a fold of them stands for the lot, so a band waking up doesn't bury the feed. */
+const CHATTER: ReadonlySet<string> = new Set(['said', 'gestured']);
+const FOLKS: Record<Region, string> = {
+  town: 'Townsfolk',
+  band_a: 'Band A',
+  band_b: 'Band B',
+};
 
-/** Who the feed knows as animals (by id). */
+/** Who the feed knows as animals, and each citizen's group (by id). */
 export interface FeedSubjects {
   animals: ReadonlyMap<string, LiveAnimal['kind']>;
+  groups: ReadonlyMap<string, Region>;
 }
 
 /** One feed entry for a live event, or null when it is hidden (importance 0). */
@@ -94,6 +115,8 @@ export function feedEntry(
 ): FeedEntry | null {
   const { event } = message;
   if (event.importance <= 0) return null;
+  const group =
+    event.actor_id === null ? undefined : subjects.groups.get(event.actor_id);
   return {
     id: event.id,
     ids: [event.id],
@@ -106,6 +129,46 @@ export function feedEntry(
     importance: event.importance,
     position: event.position?.unit ?? null,
     count: 1,
+    chatter:
+      group !== undefined && CHATTER.has(event.type) && event.importance <= 1
+        ? group
+        : null,
+    folded: [],
+  };
+}
+
+/** What a fold of chatter says: who, and whether they greet, chat or both. */
+function foldLine(group: Region, folded: readonly { type: string }[]): string {
+  const greet = folded.some(({ type }) => type === 'gestured');
+  const chat = folded.some(({ type }) => type === 'said');
+  const doing =
+    greet && chat
+      ? 'greet each other and chat'
+      : greet
+        ? 'greet each other'
+        : 'chat';
+  return `${FOLKS[group]} ${doing}`;
+}
+
+/** The newest words of a fold (speech before gestures), shown after its line. */
+export const foldDetail = (entry: FeedEntry) =>
+  (entry.folded.find(({ type }) => type === 'said') ?? entry.folded[0])?.line ??
+  null;
+
+/** `entry` (chatter of `old`'s group) folded into `old`; its line says what the newest FOLD_KEEP do. */
+function fold(old: FeedEntry, entry: FeedEntry): FeedEntry {
+  const before = old.folded.length > 0 ? old.folded : [old];
+  const folded = [{ type: entry.type, line: entry.line }, ...before].slice(
+    0,
+    FOLD_KEEP,
+  );
+  return {
+    ...entry,
+    ids: [...old.ids, entry.id].slice(-FOLD_KEEP),
+    type: 'chatter',
+    line: foldLine(entry.chatter!, folded),
+    count: old.count + 1,
+    folded: folded.map(({ type, line }) => ({ type, line })),
   };
 }
 
@@ -118,6 +181,19 @@ export function addEntry(
   entry: FeedEntry,
 ): FeedEntry[] {
   if (entries.some((old) => old.ids.includes(entry.id))) return [...entries];
+  if (entry.chatter !== null) {
+    const into = entries
+      .slice(0, FOLD_WITHIN)
+      .findIndex(
+        (old) =>
+          old.chatter === entry.chatter && entry.tick - old.tick <= FOLD_TICKS,
+      );
+    if (into === -1) return [entry, ...entries].slice(0, FEED_KEEP);
+    return [
+      fold(entries[into], entry),
+      ...entries.filter((_, index) => index !== into),
+    ];
+  }
   const at = entries
     .slice(0, MERGE_WITHIN)
     .findIndex((old) => sameStory(old, entry));
