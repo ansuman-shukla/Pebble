@@ -1,10 +1,12 @@
 """Animals living, one tick at a time (02-simulation "Ecology", 10-world-v1 §4.6).
 
 ```
- groups: wander their range │ herds: drink at the waterhole at dawn and dusk │ predators: night quarry
+ groups: wander their range (herds: ≤ WANDER_LEG_M by day, not at night) │ herds: drink at the waterhole at dawn
+         and dusk │ predators: night quarry
  every living animal (by id), moving only along its timed course (`courses.py`):
    herbivore: a person or an open predator within its flee distance ─▶ the herd bolts together (herd alarm)
-              within twice that ─▶ alert │ drinking time ─▶ waterhole │ night ─▶ sleep │ else follow the herd, graze
+              within twice that ─▶ alert │ drinking time ─▶ waterhole │ night ─▶ sleep │ else walk with the herd
+              (left behind: trot after it), graze
    predator:  feeding ─▶ eat, then leave half the meat │ day ─▶ den: sleep, defend it │
               dusk to dawn, hungry ─▶ a lone exposed person (approach, charge, bite: one animal at a time)
                                       or the herd with most members: prowl ─▶ stalk in 10 s sub-steps (`hunt.py`)
@@ -37,7 +39,9 @@ from app.sim.fauna import (
     Species,
     can_stand,
     den_of,
+    drift_cells,
     jitter,
+    nearest_range_cell,
     new_animal,
     range_cells,
     range_m,
@@ -62,6 +66,8 @@ ALERT_TICKS = (3, 6)  # it stays alert this long after a scare
 FROZEN_TICKS = (4, 10)  # a rabbit keeps still at its cover this long
 IDLE_TICKS = (4, 10)  # an awake predator looks about this long before it moves on
 WANDER_TICKS = (40, 150)  # a group picks its next goal after this long
+DRIFT_TICKS = (20, 60)  # a herd moves on as often as its members graze (predators: WANDER_TICKS)
+WANDER_LEG_M = 100.0  # by day a herd's next goal lies this close (its members walk there: under TROT_M with SPREAD_M)
 AMBUSH_TICKS = (60, 120)  # a predator group waits by the waterhole this long from dusk
 DRINK_TICKS = 30  # a herd drinks this long at its waterhole (10 §4.6)
 SPREAD_M = 15.0  # members gather this close around their group's goal
@@ -273,14 +279,20 @@ def _group(core: SimCore, group: AnimalGroup, life: Wildlife) -> None:
             return
     if tick < group.next_move or (species.predator and core.altitude(spot) >= DUSK_ALTITUDE_DEG):
         return  # predators stay put by day: asleep at their den, or where the night left them
+    near = drift_cells(core.world, group, spot, WANDER_LEG_M) if not species.predator else None
+    if near is not None and near.size and core.altitude(spot) < NIGHT_ALTITUDE_DEG and not species.swims:
+        return  # a herd in its range sleeps where the night finds it
     rng = core.state.rng("animals.wander")
-    group.next_move = tick + rng.randint(*WANDER_TICKS)
+    group.next_move = tick + rng.randint(*(WANDER_TICKS if species.predator else DRIFT_TICKS))
     if species.predator and _hungry_pack(core, group):  # it goes where the game is in its range, not just about
         game = _game(core, species, core.world.unit(group.home), spot, range_m(core.world, group))
         if game is not None:
             group.goal = jitter(core.world, game.position, SPREAD_M, rng)
             return
-    cells = range_cells(core.world, group)
+    if near is None:
+        cells = range_cells(core.world, group)
+    else:  # a herd drifts a short way at a walk, or (after a drink or a flight) walks back into its range
+        cells = near if near.size else np.array([nearest_range_cell(core.world, group, spot)])
     cell = int(cells[rng.randint(0, cells.size - 1)])
     goal = jitter(core.world, core.world.unit(cell), 10.0, rng)
     if near_lit_fire(core, goal, FEAR_M * 2):
@@ -340,17 +352,25 @@ def _herbivore(core: SimCore, animal: Animal, threat: Threat | None, life: Wildl
             animal.activity, animal.until = "drinking", life.drinks[group.id]
         return
     night = core.altitude(animal.position) < NIGHT_ALTITUDE_DEG and not species.swims
-    if group.goal is not None and core.distance_m(animal.position, group.goal) > REJOIN_M:  # back to the herd
-        far = core.distance_m(animal.position, group.goal) > TROT_M
+    if group.goal is not None and core.distance_m(animal.position, group.goal) > REJOIN_M:  # to the herd's goal
+        behind = core.distance_m(animal.position, group.goal) > TROT_M and _left_behind(core, animal, group, group.goal)
         spot = _spot(core, animal, group.goal, SPREAD_M, rng)
-        then: AnimalActivity = "sleeping" if night else _resting(core, animal)
-        _walk(core, animal, spot, species.trot_mps if far else _walk_mps(core, animal),
-              "trot" if far else _gait(core, animal), then, start)  # fmt: skip
+        then: AnimalActivity = "idle" if behind else "sleeping" if night else _resting(core, animal)
+        _walk(core, animal, spot, species.trot_mps if behind else _walk_mps(core, animal),
+              "trot" if behind else _gait(core, animal), then, start)  # fmt: skip
         return
     if night:
         animal.activity, animal.until = "sleeping", tick + rng.randint(*SLEEP_TICKS)
         return
     animal.activity, animal.until = _resting(core, animal), tick + rng.randint(*GRAZE_TICKS)
+
+
+def _left_behind(core: SimCore, animal: Animal, group: AnimalGroup, goal: Vec3) -> bool:
+    """Most of its living group mates already stand by the group's goal (it trots after them; a herd on the move
+    walks together)."""
+    mates = [core.state.animals[m] for m in group.members if m != animal.id and core.state.animals[m].alive]
+    there = sum(1 for mate in mates if core.distance_m(mate.position, goal) <= REJOIN_M)
+    return there * 2 > len(mates)
 
 
 def _resting(core: SimCore, animal: Animal) -> AnimalActivity:
@@ -1074,7 +1094,8 @@ def wound(
 def _pack(core: SimCore, group: AnimalGroup, life: Wildlife, start: float) -> None:
     """Pack mates keep by their leader: in line beside it (ESCORT_M to a side, 3 m back per place, by the way it
     faces as the tick begins) along its course, doing what it does, never faster than it went on each leg (a mate
-    that falls behind keeps its lag); asleep or still beside it."""
+    that falls behind keeps its lag); asleep or still beside it (a mate away from a still leader trots back and
+    stands, `idle`, before it lies down too: a trot never ends at rest)."""
     species = SPECIES[group.kind]
     members = [core.state.animals[m] for m in group.members if core.state.animals[m].alive]
     if not species.predator or len(members) < 2:
@@ -1089,8 +1110,8 @@ def _pack(core: SimCore, group: AnimalGroup, life: Wildlife, start: float) -> No
         if lead is None or lead.end_s <= start:
             slot = _beside(core, leader.position, leader.heading_deg, side, back)
             if core.distance_m(mate.position, slot) > SPREAD_M:
-                if mate.id not in life.courses:
-                    _walk(core, mate, slot, species.trot_mps, "trot", leader.activity, start)
+                if mate.id not in life.courses:  # it trots back to its place, then does what its leader does
+                    _walk(core, mate, slot, species.trot_mps, "trot", "idle", start)
             else:
                 life.courses.pop(mate.id, None)
                 mate.activity, mate.until = leader.activity, leader.until
@@ -1169,7 +1190,7 @@ def _walk(
     elif room < distance - 1e-6:
         goal = step_towards(origin, bearing, room, core.world.radius_m)
     walking: AnimalActivity = moving or _moving_word(gait)
-    _set(core, animal, seconds, [(goal, seconds + min(room, distance) / mps)], gait, walking, arrive)
+    _set(core, animal, seconds, [(goal, seconds + core.distance_m(origin, goal) / mps)], gait, walking, arrive)
 
 
 def _moving_word(gait: AnimalGait) -> AnimalActivity:

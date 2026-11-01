@@ -1,14 +1,15 @@
 """A1's run checks (10-world-v1 §4.6, §1.6): animals move only along streamed paths and never faster than their
-gaits; a herd bolts together; herds by the settlements stay at half their cap or more every day; predators hunt and
-kill near the camps; threats meet people (approaches, attacks with a bite, den-defence charges) and bite only where
-the rules allow. Counts marked "over the seeds" are summed over both seeds."""
+gaits; resting animals stay in place and herds walk (only stragglers trot); a herd bolts together; herds by the
+settlements stay at half their cap or more every day; predators hunt and kill near the camps; threats meet people
+(approaches, attacks with a bite, den-defence charges) and bite only where the rules allow. Counts marked "over the
+seeds" are summed over both seeds."""
 
 from abc import abstractmethod
 from collections.abc import Mapping
 from typing import ClassVar, override
 
 from app.observability.events import Died, EventDraft, Injured, TickSummary
-from app.sim.animals import ALARM_M, DEN_CHASE_M, DUSK_ALTITUDE_DEG, GROUP_M, WILDLIFE
+from app.sim.animals import ALARM_M, DEN_CHASE_M, DUSK_ALTITUDE_DEG, GROUP_M, WILDLIFE, Walk
 from app.sim.clock import DAY_MINUTES, SECONDS_PER_TICK
 from app.sim.courses import metres
 from app.sim.fauna import LIVING_SITES, SPECIES, den_of, near_people
@@ -19,6 +20,7 @@ from app.sim.vec import Vec3
 from scripts.checks.base import Check, Outcome
 
 CAMP_M = 1000.0  # "near a camp": this close to a living site
+RESTING = frozenset({"grazing", "sleeping", "drinking", "floating"})  # what an animal does in place
 
 
 EXPOSURE = "BR1/BR2 exposure schedules"  # people out where predators and herds are (10 §1.6), not there yet
@@ -35,6 +37,10 @@ def _cap_m(kind: str) -> float:
     return species.run_mps * burst + species.trot_mps * (SECONDS_PER_TICK - burst)
 
 
+def _walked_m(sim: Simulation, walk: Walk) -> float:
+    return metres(list(walk.points[: walk.walked_to + 1]), sim.world.radius_m)
+
+
 class AnimalSpeed(Check):
     """The most any animal walked in a tick as a share of run × burst + sustained × the rest (≤ 1.01 passes)."""
 
@@ -47,7 +53,7 @@ class AnimalSpeed(Check):
     @override
     def after_step(self, sim: Simulation, events: list[EventDraft]) -> None:
         for animal_id, walk in WILDLIFE.of(sim.state).walks.items():
-            share = metres(list(walk.points[: walk.walked_to + 1]), sim.world.radius_m) / _cap_m(_kind(animal_id))
+            share = _walked_m(sim, walk) / _cap_m(_kind(animal_id))
             if share > self.worst:
                 self.worst, self.who = share, animal_id
 
@@ -84,6 +90,63 @@ class AnimalStreamed(Check):
     @override
     def outcome(self, sim: Simulation) -> Outcome:
         return Outcome(self.unstreamed, self.unstreamed == 0, f"{self.unstreamed} moves without a path")
+
+
+class RestingMoves(Check):
+    """Moves farther than its walk (or swim) goes in a tick by an animal shown grazing, sleeping, drinking or
+    floating both as the tick began and as it ended (0 passes): what it does at rest it does in place."""
+
+    name = "a1.resting_moves"
+
+    @override
+    def start(self, sim: Simulation) -> None:
+        self.count, self.example = 0, "none"
+        self.before: dict[str, str] = {}
+
+    @override
+    def before_step(self, sim: Simulation) -> None:
+        self.before = {a.id: a.activity for a in sim.state.animals.values()}
+
+    @override
+    def after_step(self, sim: Simulation, events: list[EventDraft]) -> None:
+        for animal_id, walk in WILDLIFE.of(sim.state).walks.items():
+            animal = sim.state.animals[animal_id]
+            if self.before.get(animal_id) not in RESTING or animal.activity not in RESTING:
+                continue
+            species = SPECIES[animal.kind]
+            walked = _walked_m(sim, walk)
+            if walked > max(species.walk_mps, species.swim_mps) * SECONDS_PER_TICK * 1.01:
+                self.count += 1
+                self.example = f"{animal_id} {walked:.0f} m {self.before[animal_id]} to {animal.activity}"
+
+    @override
+    def outcome(self, sim: Simulation) -> Outcome:
+        return Outcome(self.count, self.count == 0, f"{self.count} moves at rest (e.g. {self.example})")
+
+
+class HerdTrots(Check):
+    """The share of the herbivores' travel (not counting flights) made at a trot (≤ 0.25 passes): herds walk their
+    range together and only a member left behind trots after them."""
+
+    name = "a1.herd_trots"
+
+    @override
+    def start(self, sim: Simulation) -> None:
+        self.trotted = self.travelled = 0.0
+
+    @override
+    def after_step(self, sim: Simulation, events: list[EventDraft]) -> None:
+        for animal_id, walk in WILDLIFE.of(sim.state).walks.items():
+            if SPECIES[_kind(animal_id)].predator or walk.gait == "run":
+                continue
+            walked = _walked_m(sim, walk)
+            self.travelled += walked
+            self.trotted += walked if walk.gait == "trot" else 0.0
+
+    @override
+    def outcome(self, sim: Simulation) -> Outcome:
+        share = self.trotted / self.travelled if self.travelled else 0.0
+        return Outcome(share, share <= 0.25, f"{share:.0%} of {self.travelled / 1000:.0f} km trotted")
 
 
 class HerdAlarm(Check):
@@ -391,6 +454,8 @@ class PeopleFlights(Check):
 CHECKS: tuple[type[Check], ...] = (
     AnimalSpeed,
     AnimalStreamed,
+    RestingMoves,
+    HerdTrots,
     HerdAlarm,
     HerdsKept,
     HuntingPressure,

@@ -262,6 +262,16 @@ def range_cells(world: SimWorld, group: AnimalGroup) -> IntArray:
     return found
 
 
+def drift_cells(world: SimWorld, group: AnimalGroup, spot: Vec3, reach_m: float) -> IntArray:
+    """The cells of a group's range within `reach_m` of `spot` (none: `spot` lies out of its range)."""
+    return _cells_between(world, range_cells(world, group), spot, 0.0, reach_m)
+
+
+def nearest_range_cell(world: SimWorld, group: AnimalGroup, spot: Vec3) -> int:
+    cells = range_cells(world, group)
+    return int(cells[int(np.argmax(world.grid.positions[cells] @ np.array(spot)))])
+
+
 def _cells_between(world: SimWorld, cells: IntArray, centre: Vec3, low_m: float, high_m: float) -> IntArray:
     if cells.size == 0:
         return cells

@@ -618,6 +618,9 @@ stalker; "cover" is how long a fleeing animal needs to reach safety (burrow, cli
   ground `meat` (scavenging is a real choice) and the body becomes `remains` (bone-scatter prop) after 1 game day until
   its slot respawns (D66). A hunter's kill becomes `remains` at once. People ≤ 15 m from a feeding predator are a
   threat to it: a pack of ≥ 2 holds, a lone wolf or fox leaves.
+- **Herds wander at a walk** (D201): by day a herd drifts to a new spot of its range ≤ 100 m off every 20-60 min;
+  by night it sleeps where it is (back into its range first, after a far drink). Only a member left behind trots
+  after the herd (then stands a moment, `idle`); nothing grazing, sleeping or drinking moves faster than a walk.
 - **Waterholes:** herbivore groups drink 30 min at dawn and dusk at their hunting ground's waterhole: the ambush spot.
 - **Dens:** predator homes pinned at the hotspot dens (cave mouth or outcrop + bone scatter).
 - **Where animals live:** two thirds of herbivore groups are pinned to the hunting grounds of table 1.2 (≤ 700 m from a

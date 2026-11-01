@@ -11,7 +11,7 @@ from app.observability.replay import ReplayEvent, from_snapshot, replay
 from app.sim import animals as animal_life
 from app.sim.clock import DAY_MINUTES
 from app.sim.fauna import DANGEROUS, HERBIVORES, LIVING_SITES, PREDATORS, SPECIES, can_stand, den_of, in_town_walls
-from app.sim.fire import add_fuel
+from app.sim.fire import FEAR_M, add_fuel
 from app.sim.navigation import Planner
 from app.sim.simulation import Simulation
 from app.sim.snapshot import restore, state_hash, take_snapshot
@@ -276,6 +276,29 @@ def test_animals_keep_away_from_a_lit_fire(new_sim: Callable[..., Simulation]) -
     group.goal = step_towards(centre, 270.0, 60.0, sim.world.radius_m)
     sim.run(6)
     assert sim.world.distance_m(deer.position, group.goal) <= animal_life.SPREAD_M  # walked past once it was out
+
+
+def test_a_blocked_animal_steps_aside_at_its_walking_pace(new_sim: Callable[..., Simulation]) -> None:
+    """Regression: a step aside (DETOUR_M) was timed by the way it couldn't take, so a deer blocked 35 m from its
+    herd's goal walked its 40 m detour at 1.14 m/s (a rabbit 40 m in a tick at 0.76, its walk is 0.5)."""
+    sim = without_animals(new_sim())
+    centre = sim.world.unit(wild_cell(sim, flat_m=15.0))
+    camp = Fire(id="fire:1", kind="campfire", position=centre, cell=sim.world.nearest_cell(centre), height_m=0.0)
+    add_fuel(camp, 600)
+    sim.state.fires[camp.id] = camp
+    start = step_towards(centre, 90.0, FEAR_M + 0.5, sim.world.radius_m)
+    deer = add_animal(sim, "deer", start, activity="grazing")
+    group = sim.state.groups[deer.group]
+    group.goal, group.next_move = step_towards(start, 270.0, 35.0, sim.world.radius_m), 10**9  # past the fire
+    skip_to(sim, centre, night=False)
+    walks = animal_life.WILDLIFE.of(sim.state).walks
+    for _ in range(20):  # a detour turned towards the fire is blocked too: it tries another way next tick
+        sim.step()
+        if deer.id in walks:
+            break
+    walk = walks[deer.id]
+    assert sim.world.distance_m(start, deer.position) > 30.0  # it stepped aside, nearly all its detour this tick
+    assert walk.speed_mps == pytest.approx(SPECIES["deer"].walk_mps, rel=1e-3)
 
 
 # --- respawning and events ---
