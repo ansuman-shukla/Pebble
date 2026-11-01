@@ -518,7 +518,7 @@ def test_at_night_catching_a_thief_is_the_watch_itself_and_whom_he_locks_up_is_t
     notes |= {"to tell": [["Kaz", "stole rice from the racks"]], "kept watch": True}
     lord_asleep = _look(place="at the castle, in The castle town", when="night")
     names = [o.name for o in town.night_watch(_ctx(lord_asleep, GORO, Recorder(notes), phase="night")[0])]
-    assert "wait for the lord" not in names and "to tell" in notes  # the lord sleeps: kept for the morning
+    assert names == ["go to the rice fields"] and "to tell" in notes  # the lord sleeps: the watch goes on
     dawn = _look(place="at the well, in The castle town", when="dawn", people=(_beside("Masanori"),))
     ctx, api = _ctx(dawn, GORO, Recorder(notes), phase="morning")
     [tell] = town.night_watch(ctx)

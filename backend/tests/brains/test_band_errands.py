@@ -165,7 +165,7 @@ def test_nim_treks_for_obsidian_every_fifth_day_and_sells_it_on_the_way_back() -
     assert _choose(_ctx(_look("at your home, at Band B camp", "dawn"), nim, _day(4))).name != out.name
     assert _choose(_ctx(_look("at your home, at Band B camp", "dawn"), nim, _day(8))).name == out.name
     _start(ctx, out)
-    on_the_way = _ctx(_look("not far from Band B camp", "mid-morning"), nim, api)  # past the setting-out hours
+    on_the_way = _ctx(_look("not far from Band B camp", "midday"), nim, api)  # past the setting-out hours
     assert _choose(on_the_way).name == out.name  # the long walk goes on (it was dropped after one step, Q1)
     shard = Seen(label="an obsidian field", where="right beside you", nearness="right beside you", kind="node",
                  resource="obsidian")  # fmt: skip
