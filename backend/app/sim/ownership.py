@@ -4,8 +4,8 @@
   (`<home>-chest`) is its home's, the treasury (`castle-keep-chest`) and the granary (every storehouse) are the lord's
   household's, the market stall the merchant's, the field racks each farm household's, a camp's stores its band's.
   A store nobody owns (the paddies' field store) is free to take from.
-- **Grants**: a household may take a few measures of rice a day from the granary without owning it (the temple's 15,
-  and the wave-2 rations of the households that will buy their food at the stall once they can, D156).
+- **Grants**: a household may take a few measures of rice a day from the granary without owning it (the temple's 15;
+  everyone else outside the keep buys their food at the stall, D156).
 - **Theft**: taking from a store you don't own (or past your grant) by `pick_up` or by eating from it **succeeds** and
   emits one `stole` with the thief as actor and the witnesses who had them in view; it causes the `item_moved`.
 - **Noticing**: the owners notice what went missing the next time one of them uses the store ("Some of your rice is
@@ -45,12 +45,7 @@ PLACED_OWNERS: Mapping[str, str] = {  # town stores that are no household's ches
     "farm-rack": "farmhouse-2",  # beside the elder farmer's house
 }
 GRANTS: Mapping[str, int] = {  # household -> measures of rice a day it may take from the granary (D156)
-    "temple-hall": 15,  # the temple's grant (§2.6)
-    # wave-2 rations until these households buy their food at the stall (BR1 drops them, D156)
-    "cross-s-1": 12,  # the night watchman
-    "main-e-2": 12,  # the merchant
-    "cross-n-8": 12,  # the digger
-    "cross-n-9": 12,  # the smith
+    "temple-hall": 15,  # the temple's grant (§2.6); everyone else outside the keep buys their food (D156, BR1)
 }
 GRANT_ITEM = "rice"
 STORE_WORDS: Mapping[str, str] = {

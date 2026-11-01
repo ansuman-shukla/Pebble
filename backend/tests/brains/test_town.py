@@ -2,9 +2,33 @@
 court day, the smith's forge, the weaver's reeds, the digger's trips and the night watch."""
 
 from collections.abc import Callable
+from typing import Any, cast
 
+import pytest
+from pydantic import JsonValue
+
+from app.brains import town
+from app.brains.profile import BrainProfile, known_titles
+from app.brains.routines import WORK, Context
+from app.brains.senses import Needs, Phase
 from app.engine import citizen_brains
+from app.sim.citizens import CITIZENS, load_citizens
+from app.sim.clock import DAY_MINUTES
+from app.sim.market import factor, price_word, stall_lot, stalls, stock_of
 from app.sim.simulation import Simulation
+from app.world_api.facade import WorldApi
+from app.world_api.models import (
+    ActionResult,
+    ChestView,
+    HeardWords,
+    MarketView,
+    Perception,
+    PriceSeen,
+    PriceWord,
+    Seen,
+    SelfView,
+    TimeOfDay,
+)
 from tests.sim_helpers import make_spec
 
 
@@ -22,3 +46,284 @@ def test_brains_know_titles_from_what_people_hold_not_from_their_role_words(
     assert profiles["aiko"].titled == (("Kenji", "samurai"),)
     assert profiles["kenji"].titles == ("samurai",) and profiles["aiko"].titles == ()
     assert profiles["aiko"].bows_to("Kenji") and not profiles["kenji"].bows_to("Aiko")
+
+
+# --- the routines on built perceptions ---
+
+
+class Recorder:
+    """A world api that notes what the brain asked of it; instant actions are done, durative ones handed back."""
+
+    def __init__(self, notes: dict[str, JsonValue] | None = None, refuse: str = "") -> None:
+        self.notes: dict[str, JsonValue] = notes if notes is not None else {}
+        self.calls: list[tuple[Any, ...]] = []
+        self.refuse = refuse  # an action the world refuses
+
+    def __getattr__(self, name: str) -> Any:
+        def call(*args: Any) -> Any:
+            self.calls.append((name, *args))
+            outcome = "failed" if name == self.refuse else "done"
+            return ActionResult(action="wait", outcome=outcome, text="")
+
+        return call
+
+
+LORD = known_titles([("Masanori", ["lord"])])
+STALL_RICE = PriceSeen(item="rice", price="four coins for two measures; it pays three coins", word="fair")
+
+
+def _look(
+    *,
+    place: str = "at the market, in The castle town",
+    when: TimeOfDay = "mid-morning",
+    carrying: tuple[str, ...] = ("seven coins",),
+    market: tuple[PriceSeen, ...] | None = None,
+    day: str = "the third day of the week",
+    people: tuple[Seen, ...] = (),
+    heard: tuple[HeardWords, ...] = (),
+) -> Perception:
+    you = SelfView(feeling=[], carrying=list(carrying), doing="You are standing still.")
+    return Perception(
+        you=you, place=place, time="It is the day.", time_of_day=when, people=list(people), animals=[], things=[],
+        heard=list(heard), day_of_week=day, market=MarketView(items=list(market)) if market is not None else None,
+    )  # fmt: skip
+
+
+def _ctx(
+    look: Perception, profile: BrainProfile, api: Recorder | None = None, hunger: int = 0, phase: Phase = "day"
+) -> tuple[Context, Recorder]:
+    recorder = api or Recorder()
+    ctx = Context(cast(WorldApi, recorder), profile, look, Needs(hunger, 0, 0), phase, lambda _p: False, lambda _n: 0)
+    return ctx, recorder
+
+
+def _profile(name: str, role: str, **fields: Any) -> BrainProfile:
+    return BrainProfile(name.lower(), name, role, "town", "The castle town", titled=LORD, **fields)
+
+
+GENZO = _profile("Genzo", "rice farmer", household=3, paddies=4, dues=12)
+TOKUJI = _profile("Tokuji", "elder rice farmer", household=1, paddies=2, dues=12)
+GORO = _profile("Goro", "ashigaru of the night watch", titles=("ashigaru",), dues=5)
+MASANORI = BrainProfile("masanori", "Masanori", "lord of the castle", "town", "The castle town", titles=("lord",))
+
+
+def _beside(name: str) -> Seen:
+    return Seen(label=name, where="right beside you to the north", nearness="right beside you")
+
+
+def test_the_words_for_coins_and_days_are_read_at_their_least() -> None:
+    assert [town.purse(_look(carrying=(words,))) for words in ("a coin", "seven coins", "twelve coins")] == [1, 7, 12]
+    words = ("a short string of coins", "a string of coins", "three strings of coins", "a little rice")
+    assert [town.purse(_look(carrying=(w,))) for w in words] == [13, 100, 300, 0]
+    assert town.purse(_look(carrying=("a little rice",))) == 0
+    assert town.weekday(_look(day="the seventh day of the week, court day")) == 7
+    assert town.court_day(_look(day="the seventh day of the week, court day"))
+    assert not town.court_day(_look(day="the first day of the week, market day"))
+    look = _look(carrying=("a few reeds", "some iron sand", "plenty of rice", "a reed basket", "a length of cloth"))
+    assert [town.carrying(look, item) for item in ("reeds", "iron sand", "rice", "cloth", "hide")] == [2, 4, 13, 1, 0]
+
+
+def test_a_farm_household_spares_what_its_paddies_give_past_the_tax_and_its_mouths() -> None:
+    """10 §1.4: Genzo's household keeps 48 a day and eats 30 (sells 18), Tokuji keeps 24 and eats 10 (sells 14)."""
+    assert town._surplus(GENZO) == pytest.approx(18 / 48)
+    assert town._surplus(TOKUJI) == pytest.approx(14 / 24)
+    assert town._surplus(GORO) == 0.0
+
+
+@pytest.mark.parametrize(("word", "sold"), [("dear", 17), ("fair", 11), ("cheap", 6)])
+def test_farmers_sell_their_spare_rice_by_the_price_rule(word: PriceWord, sold: int) -> None:
+    """Fifty harvested: 30 kept after the tax, 11 of them spare for Genzo's household; ×1.5 dear, ×0.5 cheap (with a
+    great deal of rice put by at home)."""
+    price = STALL_RICE.model_copy(update={"word": word})
+    notes: dict[str, JsonValue] = {"taxed": True, "harvested": 50, "chest rice": town.A_GREAT_DEAL}
+    ctx, api = _ctx(_look(market=(price,), carrying=("plenty of rice",)), GENZO, Recorder(notes))
+    [option] = town._farm(ctx)
+    assert option.name == "sell rice"
+    option.start()
+    assert ("sell", "rice", sold) in api.calls and notes["harvested"] == 0
+
+
+def test_a_household_with_little_rice_put_by_keeps_its_own_first() -> None:
+    """The chest seen at home: plenty in it, no more than the spare share however dear; less than plenty, none sold."""
+    dear = (STALL_RICE.model_copy(update={"word": "dear"}),)
+    home = _look(place="at your home, in The castle town", carrying=("plenty of rice",))
+    seen = home.model_copy(update={"chest": ChestView(holds=["plenty of rice"])})
+    notes: dict[str, JsonValue] = {"taxed": True, "harvested": 50}
+    town._farm(_ctx(seen, GENZO, Recorder(notes))[0])
+    assert notes["chest rice"] == town.PLENTY
+    ctx, api = _ctx(_look(market=dear, carrying=("plenty of rice",)), GENZO, Recorder(notes))
+    town._farm(ctx)[0].start()
+    assert ("sell", "rice", 11) in api.calls
+    notes |= {"harvested": 50, "chest rice": 4}
+    [option] = town._farm(_ctx(_look(market=dear, carrying=("plenty of rice",)), GENZO, Recorder(notes))[0])
+    assert option.name == "go home" and notes["harvested"] == 0
+
+
+def test_a_farmer_takes_the_rice_home_when_the_stall_is_shut_for_the_day() -> None:
+    notes: dict[str, JsonValue] = {"taxed": True, "harvested": 40}
+    ctx, _ = _ctx(_look(place="at your home", carrying=("plenty of rice",), when="sunset"), GENZO, Recorder(notes))
+    [option] = town._farm(ctx)
+    assert option.name == "stash rice" and notes["harvested"] == 0
+
+
+def test_food_buyers_buy_a_day_of_rice_when_it_runs_low_and_first_of_all_when_hungry() -> None:
+    open_stall = (STALL_RICE,)
+    ctx, api = _ctx(_look(market=open_stall, carrying=("seven coins", "a little rice")), GORO)
+    [option] = town._buy_rice(ctx)
+    assert option.name == "buy rice" and option.score == WORK + 8
+    option.start()
+    assert ("buy", "rice", town.BUY_RICE) in api.calls
+    assert town._buy_rice(_ctx(_look(market=open_stall, carrying=("seven coins", "some rice")), GORO)[0]) == []
+    late = _look(market=open_stall, carrying=("seven coins", "some rice"), when="late afternoon")
+    assert [o.name for o in town._buy_rice(_ctx(late, GORO)[0])] == ["buy rice"]  # enough for the night
+    hungry = town._buy_rice(_ctx(_look(market=open_stall), GORO, hunger=2)[0])
+    assert [(o.score, o.driver) for o in hungry] == [(86.0, "hunger")]
+    assert town._buy_rice(_ctx(_look(market=open_stall, carrying=()), GORO)[0]) == []  # no coins
+    assert town._buy_rice(_ctx(_look(market=open_stall, when="dusk"), GORO)[0]) == []  # the stall is shut
+
+
+def test_a_shut_stall_is_waited_for_a_few_times_a_day_then_given_up() -> None:
+    notes: dict[str, JsonValue] = {"arrived": "go to the market"}
+    for _ in range(town.STALL_WAITS):
+        ctx, _ = _ctx(_look(carrying=("seven coins",)), GORO, Recorder(notes))
+        [option] = town._buy_rice(ctx)
+        assert option.name == "wait for the stall"
+        option.start()
+    assert town._buy_rice(_ctx(_look(carrying=("seven coins",)), GORO, Recorder(notes))[0]) == []
+    away, _ = _ctx(_look(place="at the well, in The castle town"), GORO, Recorder({}))
+    assert [o.name for o in town._buy_rice(away)] == ["go to the market"]
+
+
+def test_dues_fall_due_each_new_day_and_are_paid_to_the_lord_on_court_day() -> None:
+    notes: dict[str, JsonValue] = {}
+    for day in ("first", "second", "second", "third"):
+        ctx, _ = _ctx(_look(day=f"the {day} day of the week"), GORO, Recorder(notes))
+        assert town._pay_dues(ctx) == []
+    assert notes["owed"] == 2 * GORO.dues  # the run's first day is free
+    court = "the seventh day of the week, court day"
+    ctx, api = _ctx(_look(day=court, people=(_beside("Masanori"),)), GORO, Recorder(notes))
+    [pay] = town._pay_dues(ctx)
+    pay.start()
+    assert ("give", "15 coins", "Masanori") in api.calls and notes["owed"] == 0  # a day more fell due on court day
+    far = Seen(label="Masanori", where="close by to the west", nearness="close by")
+    ctx, _ = _ctx(_look(day=court, people=(far,)), GORO, Recorder({"owed": 5, "day": court}))
+    assert [o.name for o in town._pay_dues(ctx)] == ["go up to Masanori"]
+    ctx, _ = _ctx(_look(day=court, place="at the well, in The castle town"), GORO, Recorder({"owed": 5, "day": court}))
+    assert [o.name for o in town._pay_dues(ctx)] == ["go to the castle"]
+
+
+def test_the_lord_pays_the_wage_and_the_order_he_is_asked_for_by_those_beside_him() -> None:
+    notes: dict[str, JsonValue] = {}
+    asked = (HeardWords(who="Goro", words="Good evening, my lord. I've come for my wage.", volume="normal"),)
+    ctx, api = _ctx(_look(people=(_beside("Goro"),), heard=asked), MASANORI, Recorder(notes), phase="dusk")
+    [pay] = town.lord(ctx)
+    pay.start()
+    assert ("give", "25 coins", "Goro") in api.calls and notes["to pay"] == []
+    order = (HeardWords(who="Tetsu", words="Your sickle, my lord, as you ordered.", volume="normal"),)
+    away = Seen(label="Tetsu", where="a few paces to the west", nearness="a few paces")
+    ctx, api = _ctx(_look(people=(away,), heard=order), MASANORI, Recorder(notes))
+    assert [o.name for o in town.lord(ctx)] == ["go up to Tetsu"]
+    ctx, api = _ctx(_look(people=(_beside("Tetsu"),)), MASANORI, Recorder(notes))
+    town.lord(ctx)[0].start()
+    assert ("give", "60 coins", "Tetsu") in api.calls
+    ctx, _ = _ctx(_look(people=(), heard=order), MASANORI, Recorder(notes))
+    assert "to pay" in notes and town._payments(ctx) == []  # gone before he paid: they'll ask again
+
+
+@pytest.mark.parametrize(
+    ("word", "day", "fetch"),
+    [("dear", "third", 40), ("fair", "fourth", 26), ("fair", "third", 0), ("cheap", "fourth", 0)],
+)
+def test_the_lord_sells_granary_rice_only_while_rice_is_dear_or_fair(word: PriceWord, day: str, fetch: int) -> None:
+    """Dear: every day; fair: every second day; cheap: the rice stays in the granary (10 §1.4)."""
+    price = STALL_RICE.model_copy(update={"word": word})
+    notes: dict[str, JsonValue] = {}
+    look = _look(market=(price,), when="early afternoon", day=f"the {day} day of the week", carrying=())
+    ctx, _ = _ctx(look, MASANORI, Recorder(notes))
+    options = town._market_round(ctx)
+    assert notes.get("fetch rice", 0) == fetch
+    assert [o.name for o in options] == (["go to the storehouses"] if fetch else [])
+
+
+def test_the_watchman_keeps_the_west_gate_and_the_racks_in_turn_through_the_night() -> None:
+    notes: dict[str, JsonValue] = {"arrived": "go to the west gate"}
+    at_gate = _look(place="at the west gate, in The castle town", when="night")
+    ctx, api = _ctx(at_gate, GORO, Recorder(notes), phase="night")
+    [watch] = town.night_watch(ctx)
+    assert (watch.name, watch.score) == ("guard", town.WATCH) and town.WATCH > 70  # over sleep
+    watch.start()
+    assert ("work", "guard") in api.calls and notes["beat"] == "racks"
+    ctx, _ = _ctx(at_gate, GORO, Recorder(notes), phase="night")
+    assert [o.name for o in town.night_watch(ctx)] == ["go to the rice fields"]
+    morning = _look(place="at the west gate", when="early morning")
+    assert [(o.name, o.score) for o in town.night_watch(_ctx(morning, GORO, Recorder(notes), phase="morning")[0])] == [
+        ("go home", town.WATCH)
+    ]  # the night on watch is slept off in the morning, however rested he feels
+    home = _look(place="at your home, in The castle town", when="mid-morning")
+    town.night_watch(_ctx(home, GORO, Recorder(notes))[0])[0].start()
+    assert not notes["kept watch"]
+    rested = [o.name for o in town.night_watch(_ctx(home, GORO, Recorder(notes))[0])]
+    assert rested and "sleep" not in rested
+
+
+def test_the_smith_buys_his_supplies_forges_and_brings_every_second_tool_to_the_lord() -> None:
+    smith = _profile("Tetsu", "smith", dues=5)
+    notes: dict[str, JsonValue] = {"arrived": "go to the market"}
+    stall = (STALL_RICE,)
+    ctx, api = _ctx(_look(market=stall, carrying=("a short string of coins", "some rice")), smith, Recorder(notes))
+    town.smith(ctx)[0].start()
+    assert ("buy", "wood", 4) in api.calls  # wood first, then the iron sand
+    supplied = ("a short string of coins", "some rice", "some wood", "a little iron sand")
+    ctx, api = _ctx(_look(market=stall, carrying=supplied), smith, Recorder(notes))
+    town.smith(ctx)[0].start()
+    assert ("buy", "iron sand", 3) in api.calls
+    ready = ("a short string of coins", "some rice", "some wood", "some iron sand")
+    notes["arrived"] = "go to the forge"
+    at_forge = _look(place="at the forge, in The castle town", carrying=ready, when="midday")
+    ctx, api = _ctx(at_forge, smith, Recorder(notes))
+    town.smith(ctx)[0].start()
+    assert ("craft", "iron axe") in api.calls
+    early = _look(place="at the forge, in The castle town", carrying=ready, when="mid-morning")
+    assert [o.name for o in town.smith(_ctx(early, smith, Recorder(notes))[0])] != ["forge"]  # forging from midday
+    notes["order"] = "iron axe"
+    with_axe = (*ready, "an iron axe")
+    ctx, api = _ctx(_look(carrying=with_axe, people=(_beside("Masanori"),)), smith, Recorder(notes))
+    [hand] = town.smith(ctx)
+    hand.start()
+    assert ("give", "iron axe", "Masanori") in api.calls
+    assert ("say", "Your iron axe, my lord, as you ordered.") in api.calls
+
+
+# --- the rice shock (10 §1.4; plan BR1 and the critic checklist) ---
+
+SHOCK_DAYS = 4
+SEED = 20261028
+RICE_LOT = stall_lot("rice")
+
+
+def test_a_day_without_the_farmers_selling_makes_rice_dear_and_the_price_rule_brings_it_back(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The town alone, its stall at its target: the farmers sell nothing on the first day, the buyers empty the
+    stall until the price factor is ≥ 1.2, then the price rule (farmers ×1.5 while dear, the lord's granary rice
+    every day while dear) has rice fair again within 3 days."""
+    sim = new_sim(seed=SEED)
+    cast = load_citizens(CITIZENS)
+    sim.add_cast(cast.model_copy(update={"citizens": [c for c in cast.citizens if c.region == "town"]}))
+    brains = citizen_brains(sim, SEED)
+    sim.drain()
+    selling = town._sell_rice
+    monkeypatch.setattr(town, "_sell_rice", lambda ctx, score: None if sim.tick < DAY_MINUTES else selling(ctx, score))
+    stall, target = stalls(sim.core)[0], RICE_LOT.target if RICE_LOT is not None else 0
+    peak, peak_tick, fair_again = 0.0, 0, None
+    for _ in range(SHOCK_DAYS * DAY_MINUTES):
+        brains(sim)
+        sim.step()
+        sim.drain()
+        stock = stock_of(sim.core, stall, "rice")
+        if factor(stock, target) > peak:
+            peak, peak_tick = factor(stock, target), sim.tick
+        if peak >= 1.2 and fair_again is None and price_word("rice", stock) == "fair":
+            fair_again = sim.tick
+    assert peak >= 1.2
+    assert fair_again is not None and fair_again - peak_tick <= 3 * DAY_MINUTES

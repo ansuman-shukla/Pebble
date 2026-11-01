@@ -34,7 +34,7 @@ from app.db.models import Run
 from app.db.schemas import MAX_SPEED, ClockChange
 from app.lib.ulid import UlidFactory
 from app.observability.store import EventStore, create_run, discard_after, latest_run, latest_snapshot, pending_commands
-from app.sim import society
+from app.sim import society, tax
 from app.sim.citizens import CITIZENS, load_citizens
 from app.sim.clock import SECONDS_PER_TICK, TICKS_PER_HOUR
 from app.sim.grounds import forage_grounds
@@ -43,6 +43,7 @@ from app.sim.ownership import fed_by_granary
 from app.sim.simulation import Simulation
 from app.sim.snapshot import SimSnapshot, restore, take_snapshot
 from app.sim.snapshot import resumable as snapshot_resumable
+from app.sim.state import Citizen
 from app.sim.world import SimWorld, load_sim_world
 from app.world.generate import GENERATOR
 from app.world.spec import load_site_kinds, load_world_spec
@@ -66,7 +67,9 @@ def citizen_brains(sim: Simulation, seed: int) -> CitizenBrains:
     """A scripted brain for every citizen, acting through their own `WorldApi`."""
     places = sim.world.places
     cast = sim.state.citizens
-    traits = {spec.id: spec.traits for spec in load_citizens(CITIZENS).citizens if spec.traits is not None}
+    specs = load_citizens(CITIZENS).citizens
+    traits = {spec.id: spec.traits for spec in specs if spec.traits is not None}
+    households = town_households(sim.core.citizens(), [spec.id for spec in specs])
     grounds = {
         region: tuple(Ground(way, legs) for way, legs in forage_grounds(sim.world, camp, TRIP_LEGS))
         for region, camp in HOME_AREAS.items()
@@ -92,12 +95,40 @@ def citizen_brains(sim: Simulation, seed: int) -> CitizenBrains:
                     granary=citizen.region == "town" and fed_by_granary(citizen),
                     honesty=traits[citizen.id].honesty if citizen.id in traits else 0.5,
                     grounds=grounds.get(citizen.region, ()),
+                    household=households.get(citizen.id, Household()).mouths,
+                    paddies=households.get(citizen.id, Household()).paddies,
+                    dues=households.get(citizen.id, Household()).dues,
                 ),
             )
             for citizen in sim.core.citizens()
         ),
         seed,
     )
+
+
+@dataclass(frozen=True)
+class Household:
+    mouths: int = 1
+    paddies: int = 0
+    dues: int = 0  # mon a day of the household's dues this citizen settles
+
+
+def town_households(citizens: Sequence[Citizen], cast_order: Sequence[str]) -> dict[str, Household]:
+    """Each town citizen's household as they know it (10 §1.4, §2.7): its mouths, its paddies and the share of its
+    dues a day each adult settles (equal shares, the first adult in the cast's order paying what doesn't divide)."""
+    order = {citizen_id: index for index, citizen_id in enumerate(cast_order)}
+    homes: dict[str, list[Citizen]] = {}
+    for citizen in sorted(citizens, key=lambda c: (order.get(c.id, len(order)), c.id)):
+        if citizen.region == "town" and citizen.home is not None:
+            homes.setdefault(citizen.home, []).append(citizen)
+    facts: dict[str, Household] = {}
+    for home, residents in homes.items():
+        adults = [c.id for c in residents if c.group != "child"]
+        share, rest = divmod(tax.dues_of(home), max(1, len(adults)))
+        for citizen in residents:
+            dues = share + (rest if adults and citizen.id == adults[0] else 0) if citizen.id in adults else 0
+            facts[citizen.id] = Household(len(residents), tax.PADDIES.get(home, 0), dues)
+    return facts
 
 
 def is_connection_loss(error: DBAPIError) -> bool:

@@ -16,6 +16,9 @@ Routine = Literal[
     "town_child",
     "townsperson",
     "monk",
+    "night_watch",
+    "smith",
+    "digger",
     "band_leader",
     "healer",
     "hunter",
@@ -25,13 +28,13 @@ Routine = Literal[
 ROLE_ROUTINES: tuple[tuple[str, Routine], ...] = (  # first keyword found in the role picks the routine
     ("lord", "lord"),
     ("samurai", "samurai"),
-    ("ashigaru", "samurai"),  # stub until the night watch: the samurai's rounds of the gates
+    ("ashigaru", "night_watch"),
     ("merchant", "merchant"),
     ("weaver", "weaver"),
     ("farmer's child", "town_child"),
     ("farmer", "farmer"),
-    ("smith", "townsperson"),  # stubs until their trades: errands between the well and the market
-    ("digger", "townsperson"),
+    ("smith", "smith"),
+    ("digger", "digger"),
     ("monk", "monk"),
     ("leader", "band_leader"),
     ("healer", "healer"),
@@ -75,6 +78,11 @@ class BrainProfile:
     honesty: float = 0.5  # 0-1 (§3.1 traits): an honest starving soul is slower to take what isn't theirs
     # bands: the ways from camp their land's food lies, beyond the thin home ring (10 §1.2), most first
     grounds: tuple[Ground, ...] = ()
+    # town households (10 §1.4, §2.7): mouths fed from its chest, paddies it farms, and the mon a day of its dues this
+    # citizen settles on court day (0: someone else of the household does, or it owes none)
+    household: int = 1
+    paddies: int = 0
+    dues: int = 0
 
     def bows_to(self, name: str) -> bool:
         """They hold a title bowed to (lord, samurai, band leader) that outranks yours."""
