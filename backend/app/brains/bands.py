@@ -816,7 +816,7 @@ def _choose_at_fire(ctx: Context) -> list[Option]:
     def tell() -> ActionResult:
         ctx.mark_done("chose")
         _note_choice(ctx, choice)
-        return ctx.api.say(CALLS[choice])
+        return ctx.api.say(CALLS[choice], "shout")  # across the camp: whoever is about hears it
 
     return [
         Option(RAID + 1, "tell the band", lambda: _instant(ctx, tell), "Tell the band what we do for food", "hunger")

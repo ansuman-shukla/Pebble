@@ -432,7 +432,7 @@ def test_after_two_lean_days_band_b_s_leader_tells_the_band_at_the_fire_one_roll
             roll = Rng.for_subsystem(seed, f"brains.band_hunger:band_b:{day}").random()
             choice = "raid" if roll < bands.RAID_CHANCE - bands.COUNSEL else "gold"
             names, api = _leader_at_fire(seed, day, bands.LEAN_DAYS)
-            assert names == ["tell the band"] and ("say", (bands.CALLS[choice],)) in api.calls, (seed, day)
+            assert names == ["tell the band"] and ("say", (bands.CALLS[choice], "shout")) in api.calls, (seed, day)
             assert api.notes["hunger choice"] == [choice, day + (choice == "gold")]  # gold: next morning
     days = range(1, 15)
     told = [[_leader_at_fire(seed, day, 2)[1].notes["hunger choice"] for day in days] for seed in (7, 20261028)]
