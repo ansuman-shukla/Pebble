@@ -425,12 +425,12 @@ def test_yesterday_s_meat_doesn_t_end_today_s_hunt_but_today_s_kill_does() -> No
     assert today.name == "bring the meat home"
 
 
-def test_a_spear_carrier_drives_off_a_wolf_but_runs_from_a_lion() -> None:
+def test_a_spear_carrier_drives_off_a_wolf_or_a_bear_but_runs_from_lions() -> None:
     def best(label: str) -> str:
         brain = UtilityBrain(cast(WorldApi, FakeApi({})), _hunter(), seed=1)
         coming = Seen(label=label, where="a few paces to the north", nearness="a few paces", doing="coming at you")
         look = _look("not far from Band A camp", "dawn", ("a flint spear",), animals=[coming])
         return max(brain.options(look), key=lambda option: option.score).name
 
-    assert best("a wolf") == "fight off"
-    assert best("a lion") == "flee" and best("a bear") == "flee"
+    assert best("a wolf") == "fight off" and best("a bear") == "fight off"  # a bear chases down whoever runs
+    assert best("a lion") == "flee" and best("a pride of lions") == "flee"

@@ -56,7 +56,7 @@ from app.world_api.models import GestureKind, Pace, Perception
 STOREHOUSES = "the storehouses"
 WELL = "the well"
 FIRE = "the fire pit"
-DRIVABLE = ("wolf", "wolves")  # predators a spear carrier stands up to
+DRIVABLE = ("wolf", "wolves", "bear")  # predators a spear carrier stands up to (a pride of lions is run from)
 HURT = ("weak and aching", "close to death")  # how a body that has lost half its health feels
 CHAT_CHANCE = 0.3  # with someone greeted already in earshot and nothing pressing, a word in passing this often
 EAT_ORDER = ("berries", "nuts", "roots", "rice", "dried meat")  # what spoils first goes first; dried meat keeps
@@ -202,7 +202,7 @@ class UtilityBrain:
         threat = danger(p)
         if threat is not None and not behind_walls and fire_here(p) not in ("burning", "low"):  # fire too
             hurt = any(word in p.you.feeling for word in HURT)  # bitten badly already: no more fighting, run
-            # a spear drives off wolves; a lion or a bear is run from (they bit hunters at dawn to half health, BR2)
+            # a spear drives off wolves and a bear; lions are run from (a pride bit hunters at dawn to half health, BR2)
             drivable = any(word in threat.label for word in DRIVABLE)
             if carries(p, "spear") and drivable and not hurt and DISTANCE[threat.nearness] in ("here", "near", "close"):
                 aim = f"Drive off {threat.label}"
