@@ -269,6 +269,7 @@ def test_a_v1_event_a_citizen_does_reads_on_their_timeline_without_their_name(ev
             1,
         ),
         ("released", {"cause": "seizer_down"}, "kaz", "citizen", "Kaz goes free (the seizer is down)", 1),
+        ("released", {"cause": "died"}, "kaz", "citizen", "Kaz dies in custody", 2),
         ("seized", {"person": "kaz", "held": False}, "goro", "citizen", "Goro tries to seize Kaz", 2),
         (
             "standing_changed",

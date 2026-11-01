@@ -318,6 +318,7 @@ LINES: dict[str, Line] = {  # by event type
     "released": Line(
         "{actor} goes free ({cause})",
         1,
+        (Variant(_field("cause", "died"), "{actor} dies in custody", 2),),
         words={"cause": {"judged": "judged", "timeout": "held too long", "seizer_down": "the seizer is down"}},
     ),
     "confined": Line("{actor} is confined in {place}", 2),

@@ -499,6 +499,18 @@ def test_the_held_go_free_when_the_seizer_is_down(
     assert not justice.in_custody(sim.core, "kaz")
 
 
+def test_a_death_in_custody_ends_it_with_one_release(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sim = _scene(new_sim, goro={**ASHIGARU, "at": (-30.0, 50.0)}, kaz={**CAMP_B, "at": (-31.0, 50.0)})
+    _seize(sim, "goro", "kaz", monkeypatch)
+    sim.drain()
+    sim.core.die(sim.citizen("kaz"), "thirst")
+    sim.step()
+    assert _of(sim.drain(), Released) == [("kaz", Released(cause="died"))]
+    assert not justice.in_custody(sim.core, "kaz")
+
+
 def test_the_held_may_only_look_speak_and_wait_and_the_confined_drink_from_the_bucket(
     new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
 ) -> None:

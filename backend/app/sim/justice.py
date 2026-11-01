@@ -9,7 +9,7 @@
 - **Custody** runs on one 12 h clock from the seizure: held, then confined in the gaol (someone held who is led into
   it takes a free gaol seat at the tick's end) or tied at a band's fire by a judgement. It ends at a judgement (a fine
   paid in full frees at once), when a confinement is served, when the 12 h are up, or when the seizer is hurt, asleep
-  or dead: one `released` each time (judged, timeout, seizer_down).
+  or dead, or when they die: one `released` each time (judged, timeout, seizer_down, died).
 - **Judge** (15 min, within 4 m): the lord inside the castle walls, or a band leader within 15 m of the band's fire
   pit; the target held or confined; the judge must know a deed of theirs not yet judged or, the lord, their
   household's tax overdue 3 days running. A fine takes the purse's coins, then the household chest's, then goods at
@@ -343,13 +343,14 @@ def custody_ends(custody: Custody) -> int:
 
 
 def keep_custody(core: SimCore) -> None:
-    """Every-tick hook: custody ends when the seizer is hurt, asleep or dead (`released` seizer_down), when a
-    confinement sentence is served (`sentence_served`, then `released` judged), or after its 12 h (timeout)."""
+    """Every-tick hook: custody ends when they die (`released` died), when the seizer is hurt, asleep or dead
+    (seizer_down), when a confinement sentence is served (`sentence_served`, then `released` judged), or after its
+    12 h (timeout)."""
     justice = JUSTICE.of(core.state)
     for person_id, custody in sorted(justice.custody.items()):
         person = core.state.citizens[person_id]
         if not person.body.alive:
-            _end(core, person)
+            _release(core, person, "died", None)
             continue
         if custody.keeper is not None:
             keeper = core.state.citizens[custody.keeper]
@@ -400,7 +401,7 @@ def _into_gaol(core: SimCore, person: Citizen) -> bool:
 def _release(
     core: SimCore,
     person: Citizen,
-    cause: Literal["judged", "timeout", "seizer_down"],
+    cause: Literal["judged", "timeout", "seizer_down", "died"],
     by: str | None,
     cause_seq: int | None = None,
 ) -> None:
