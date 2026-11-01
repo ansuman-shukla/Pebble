@@ -46,6 +46,7 @@ from app.brains.senses import (
     beside,
     carried_food,
     carries,
+    is_name,
     resources_in_view,
 )
 from app.world_api.facade import ActionHandle
@@ -155,6 +156,7 @@ NUMBERS = {word: n for n, word in enumerate(f"{_ONES} eighteen nineteen".split()
 # what the words for an amount carried mean at the least (`items.amount_words`); anything else is one
 LEAST = (("a great", 41), ("plenty of", 13), ("a handful of", 4), ("some", 4), ("a few", 2), ("a little", 2))
 WATCH = 72.0  # the night watch outscores sleep (70) for the watchman
+MIDNIGHT_ON = "middle of the night"  # how the sun tells the hours after midnight ("It is night." before)
 LAW = 60.0  # an officer's seizing and the lord's judging: over the day's work, under hunger
 LAW_TRIES = 3  # a day: walks after or tries at someone to seize or judge before leaving them be
 GAOL = "the gaol"
@@ -168,6 +170,7 @@ SENTENCES: tuple[tuple[str, Verdict], ...] = (
     ("killed", Confinement(hours=12)),
 )
 UNPAID = Confinement(hours=6)
+GOAL_MAX = 80  # characters a goal holds (`set_goal`)
 EXHAUSTED = 91.0  # over sleeping where he stands (90): the watchman worn out goes home to bed
 STORE_RICE = "Bring the rice into the storehouse"
 TAKE_RICE_HOME = "Take the rice home to the chest"
@@ -638,8 +641,10 @@ def _sell(ctx: Context, item: str, aim: str, score: float = WORK + 1) -> list[Op
     needy = ctx.needs.hunger >= 2 and not carried_food(p.you)
     short_only = item == GOLD  # only while the stall runs short of it, so its till doesn't lurch
     if not needy and price is not None and (price.word == "cheap" or (short_only and price.word != "dear")):
-        ctx.mark_done(f"failed sell {item}")
-    held = ctx.done_today(f"failed sell {item}") and not needy
+        ctx.mark_done(f"kept {item}")
+    # kept while cheap unless needy; a sale the stall refused (its fill reached) isn't asked again that day, needy or
+    # not (Q1: the hungry digger asked every 3 minutes all afternoon and never went for rice)
+    held = (ctx.done_today(f"kept {item}") and not needy) or ctx.done_today(f"failed sell {item}")
     if carrying(p, item) < lot or p.time_of_day not in STALL_TIMES or held or _refused(ctx, f"sell {item}"):
         return []
     option = _at_stall(ctx, score, f"sell {item}", aim, partial(ctx.api.sell, item, 99))
@@ -804,12 +809,15 @@ def night_watch(ctx: Context) -> list[Option]:
         return [Option(EXHAUSTED, "go home", lambda: ctx.api.walk_to_place("home"), aim, "rest")]
     if ctx.phase == "night":
         ctx.notes["kept watch"] = True
-        return _arrest(ctx) or _watch(ctx, WATCH)
+        return _arrest(ctx, WATCH) or _watch(ctx, WATCH)  # catching a thief is the watch: over going to bed
     if ctx.phase == "dusk" or p.time_of_day == "late afternoon":
         wage = _collect_wage(ctx)
         if wage or ctx.phase == "dusk":
             return wage or _watch(ctx, 45.0)
     if not afternoon(p) and (ctx.notes.get("kept watch") or ctx.needs.tiredness):  # the morning after, in bed
+        telling = _arrest(ctx, WATCH) if "to tell" in ctx.notes else []  # whoever he locked up in the night, told first
+        if telling:
+            return telling
         aim = "Sleep after the night watch"
         if at_home(p):
             return [Option(WATCH, "sleep", _then(lambda: _set(ctx, "kept watch", False), ctx.api.sleep), aim, "rest")]
@@ -818,8 +826,13 @@ def night_watch(ctx: Context) -> list[Option]:
 
 
 def _watch(ctx: Context, score: float) -> list[Option]:
-    """A watch at the west gate (on its guard stand), then a look over the racks in the rice fields, and back."""
-    p, beat = ctx.perception, ctx.notes.get("beat", "gate")
+    """A watch at the west gate (on its guard stand), then a look over the racks in the rice fields, and back; in the
+    evening, while the day's rice hangs on the racks (thieves come with the dark, 10 §3.6), he stays by the racks; by
+    day he keeps the gate."""
+    p = ctx.perception
+    evening = ctx.phase in ("dusk", "night") and p.time_of_day != "pre-dawn" and MIDNIGHT_ON not in p.time
+    by_day = ctx.phase in ("morning", "day")  # nobody raids by daylight: the gate's stand, not a look over the racks
+    beat = "racks" if evening else "gate" if by_day else ctx.notes.get("beat", "gate")
     aim = "Keep watch over the west gate and the racks"
     if beat == "gate":
         if not (at(p, WEST_GATE) and _on_spot(ctx, f"go to {WEST_GATE}")):
@@ -827,10 +840,10 @@ def _watch(ctx: Context, score: float) -> list[Option]:
         watch = _then(lambda: _set(ctx, "beat", "racks"), lambda: ctx.api.work("guard"))
         return [Option(score, "guard", watch, aim)]
     rack = next((t for t in p.things if "rice rack" in t.label and DISTANCE[t.nearness] != "far"), None)
-    look = _then(lambda: _set(ctx, "beat", "gate"), lambda: ctx.api.wait(15))
+    look = _then(lambda: _set(ctx, "beat", "gate"), lambda: ctx.api.rest(15))  # sat watching (not standing about)
     to_rack = Option(score, f"go to {RICE_RACK}", partial(ctx.api.walk_to_thing, "rack"), aim)
     tried = _refused(ctx, f"go to {RICE_RACK}")  # not in sight even from the fields: look over them from here
-    if rack is None and not at(p, FIELDS):  # the racks stand by the paddies, out of sight from the gate
+    if not at(p, FIELDS):  # the racks stand by the paddies, out of sight from the gate (not the farm's by its house)
         return [_go(ctx, FIELDS, score, aim)]
     near_rack = rack is not None and (rack.nearness == "right beside you" or ctx.finished(f"go to {RICE_RACK}"))
     if not near_rack and not tried and not ctx.finished(f"go to {RICE_RACK}"):  # night sight is 20 m: stand by them
@@ -841,7 +854,7 @@ def _watch(ctx: Context, score: float) -> list[Option]:
 # --- the law (10 §3.4) ---
 
 
-def _arrest(ctx: Context) -> list[Option]:
+def _arrest(ctx: Context, score: float = LAW) -> list[Option]:
     """An officer seizes someone in view known for a wrong against the town (their `regard` names it), leads them to
     the gaol (they are confined once they stand in it) and tells the lord what they did; the lord judges. Each wrong
     is taken up once (`handed`); someone out of reach is walked after a few times a day."""
@@ -854,23 +867,33 @@ def _arrest(ctx: Context) -> list[Option]:
         who = str(holding[0])
         seen = _person(p, who)
         if seen is not None and (seen.doing or "").startswith("held by"):
-            aim = f"Take {who} to the gaol"
+            aim = _law_aim("Take", who, None, " to the gaol")
             if at(p, GAOL) and _on_spot(ctx, f"go to {GAOL}"):
-                return [Option(LAW, "wait at the gaol", lambda: ctx.api.wait(2), aim)]  # locked up at the tick's end
-            return [_go(ctx, GAOL, LAW, aim)]
+                return [Option(score, "wait at the gaol", lambda: ctx.api.wait(2), aim)]  # locked up at the tick's end
+            return [_go(ctx, GAOL, score, aim)]
         notes.pop("holding")
         if seen is not None and "confined" in (seen.doing or ""):
-            notes["to tell"] = holding
+            queue = notes.setdefault("to tell", [])  # everyone he locked up tonight, each told in turn
+            if isinstance(queue, list):
+                queue.append(holding)
     telling, lord = notes.get("to tell"), _lord(ctx.profile)
-    if isinstance(telling, list) and lord is not None:
-        who = str(telling[0])
+    if isinstance(telling, list) and telling and lord is not None and ctx.phase != "night":  # the lord sleeps
+        first = telling[0]
+        if not isinstance(first, list):
+            raise TypeError("to tell holds [who, wrong] pairs")
+        who = str(first[0])
 
         def accuse() -> ActionHandle:
-            notes.pop("to tell", None)
+            if isinstance(telling, list):
+                telling.pop(0)
+            if not telling:
+                notes.pop("to tell", None)
             ctx.api.accuse(who, lord)
             return ctx.api.wait(2)
 
-        telling_him = _to_the_lord(ctx, LAW, f"accuse {who}", f"Tell the lord what {who} did", accuse)
+        telling_him = _to_the_lord(
+            ctx, score, f"accuse {who}", _law_aim("Tell the lord what", who, None, " did"), accuse
+        )
         if telling_him:
             return telling_him
         notes.pop("to tell")  # the lord couldn't be found today: the gaol keeps them till their 12 h are up
@@ -883,11 +906,11 @@ def _arrest(ctx: Context) -> list[Option]:
             continue
         if _count_today(ctx, f"after {person.label}") >= LAW_TRIES:
             continue
-        aim = f"Seize {person.label}, who {deed}"
+        aim = _law_aim("Seize", person.label, deed)
         wrong: list[JsonValue] = [person.label, deed]
         if person.nearness != "right beside you":
             walk = _then(partial(ctx.mark_done, f"after {person.label}"), partial(ctx.api.walk_to_person, person.label))
-            return [Option(LAW, f"go up to {person.label}", walk, aim)]
+            return [Option(score, f"go up to {person.label}", walk, aim)]
 
         def seize(wrong: list[JsonValue] = wrong) -> ActionHandle:
             ctx.mark_done(f"after {wrong[0]}")
@@ -895,8 +918,16 @@ def _arrest(ctx: Context) -> list[Option]:
             notes["seizing"] = wrong
             return ctx.api.seize(str(wrong[0]))
 
-        return [Option(LAW, "seize", seize, aim)]
+        return [Option(score, "seize", seize, aim)]
     return []
+
+
+def _law_aim(verb: str, label: str, deed: str | None, tail: str = "") -> str:
+    """An aim about someone the law is after that fits a goal (`GOAL_MAX`): a stranger is "a stranger" (not how they
+    look), and their wrong is left out when it doesn't fit."""
+    who = label if is_name(label) else "a stranger"
+    full = f"{verb} {who}{tail}, who {deed}" if deed else f"{verb} {who}{tail}"
+    return full if len(full) <= GOAL_MAX else f"{verb} {who}{tail}"
 
 
 def _judge(ctx: Context) -> list[Option]:
@@ -917,7 +948,7 @@ def _judge(ctx: Context) -> list[Option]:
         unpaid = person.label in fined
         newest = deed.split(" and ")[-1]  # the latest wrong known is told last
         sentence = UNPAID if unpaid else next((v for words, v in SENTENCES if newest.startswith(words)), UNPAID)
-        aim = f"Judge {person.label}, who {deed}"
+        aim = _law_aim("Judge", person.label, deed)
         if person.nearness != "right beside you":
             return [Option(LAW, f"go up to {person.label}", partial(ctx.api.walk_to_person, person.label), aim)]
 
@@ -1183,7 +1214,8 @@ def digger(ctx: Context) -> list[Option]:
 
 
 def town_child(ctx: Context) -> list[Option]:
-    """Plays around the well; sometimes tags along after someone close by, or runs off to the market or the fields."""
+    """Plays around the well; sometimes tags along after someone close by, sits and watches the people go by, or runs
+    off to the market or the fields."""
     if not _daytime(ctx):
         return []
     p = ctx.perception
@@ -1197,8 +1229,8 @@ def town_child(ctx: Context) -> list[Option]:
     if roll < 4:
         direction = COMPASS[ctx.pick(len(COMPASS))]
         return [Option(WORK, "play", lambda: ctx.api.walk_towards(direction, "a few steps"), aim, "social")]
-    if roll < 7:
-        return [Option(WORK, "watch", lambda: ctx.api.wait(10 + 5 * ctx.pick(3)), aim, "social")]
+    if roll < 7:  # sitting, not standing about (audit F8)
+        return [Option(WORK, "watch", lambda: ctx.api.rest(10 + 5 * ctx.pick(3)), aim, "social")]
     return [_go(ctx, (MARKET, WELL, FIELDS)[ctx.pick(3)], aim=aim, driver="social")]
 
 
@@ -1238,14 +1270,16 @@ def _rang(ctx: Context, bell: str) -> bool:
 
 
 def townsperson(ctx: Context) -> list[Option]:
-    """Errands between the well and the market, lingering a while at each (one wait, however short talk cuts it)."""
+    """Errands between the well and the market, sitting a while at each to watch the street (one rest, however short
+    talk cuts it; sitting, not standing about: audit F8)."""
     if not _daytime(ctx):
         return []
     aim = "Run errands about town"
-    here = next((place for place in (WELL, MARKET) if _on_spot(ctx, f"go to {place}")), None)
-    if here is not None and at(ctx.perception, here) and ctx.notes.get("last") != "look around":
-        return [Option(WORK, "look around", lambda: ctx.api.wait(15 + 5 * ctx.pick(3)), aim)]
-    return [_go(ctx, MARKET if here == WELL else WELL, aim=aim)]
+    here = ctx.notes.get("errand")  # where the last errand walk went (a seat taken there moves them off its end)
+    if here in (WELL, MARKET) and at(ctx.perception, str(here)) and ctx.notes.get("last") != "look around":
+        return [Option(WORK, "look around", lambda: ctx.api.rest(15 + 5 * ctx.pick(3)), aim)]
+    on = MARKET if here == WELL else WELL
+    return [Option(WORK, f"go to {on}", _then(lambda: _set(ctx, "errand", on), lambda: ctx.api.walk_to_place(on)), aim)]
 
 
 TOWN_ROUTINES: dict[Routine, Callable[[Context], list[Option]]] = {

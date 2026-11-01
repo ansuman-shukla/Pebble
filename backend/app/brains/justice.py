@@ -50,10 +50,20 @@ def _officers(ctx: Context, but: str = "") -> list[Seen]:
     ]
 
 
+TOWN_OFFICERS = frozenset({"lord", "samurai", "ashigaru"})
+
+
 def _culprit(ctx: Context) -> list[Option]:
+    """Someone wanted runs home from an officer of a group that wants them: one wanted in the castle town from the
+    lord, a samurai or the watch, one wanted by a band from a band leader (not band B's raiders from their own
+    leader, who doesn't judge wrongs against the town: Q1)."""
     p = ctx.perception
-    officers = _officers(ctx)
-    if not p.you.wanted or not officers or at_home(p):
+    wanted = p.you.wanted or ""
+    titles = (TOWN_OFFICERS if "castle town" in wanted else frozenset()) | (
+        {"leader"} if "by band" in wanted else set()
+    )
+    officers = [o for o in _officers(ctx) if dict(ctx.profile.titled).get(o.label) in titles]
+    if not wanted or not officers or at_home(p):
         return []
     home = lambda: ctx.api.walk_to_place("home", "run")  # noqa: E731  # a tiny closure reads best inline
     return [Option(CULPRIT, "run home", home, f"Get away from {officers[0].label}", "danger")]

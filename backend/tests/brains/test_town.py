@@ -292,9 +292,12 @@ def test_the_lord_sells_granary_rice_only_while_rice_is_dear_or_fair(word: Price
     assert [o.name for o in options] == (["go to the storehouses"] if fetch else [])
 
 
+MIDNIGHT = "It is the middle of the night."
+
+
 def test_the_watchman_keeps_the_west_gate_and_the_racks_in_turn_through_the_night() -> None:
     notes: dict[str, JsonValue] = {"arrived": "go to the west gate"}
-    at_gate = _look(place="at the west gate, in The castle town", when="night")
+    at_gate = _look(place="at the west gate, in The castle town", when="night").model_copy(update={"time": MIDNIGHT})
     ctx, api = _ctx(at_gate, GORO, Recorder(notes), phase="night")
     [watch] = town.night_watch(ctx)
     assert (watch.name, watch.score) == ("guard", town.WATCH) and town.WATCH > 70  # over sleep
@@ -437,6 +440,10 @@ def test_a_hungry_seller_with_nothing_to_eat_takes_what_the_stall_pays(
     ctx, api = _ctx(_look(market=(better,), carrying=carrying), digger, api=Recorder(ctx.notes))
     town._sell(ctx, item, "Sell it")[0].start()
     assert ("sell", item, 99) in api.calls
+    refused, _ = _ctx(_look(market=(seen,), carrying=carrying), digger, api=Recorder(refuse="sell"), hunger=2)
+    town._sell(refused, item, "Sell it")[0].start()  # the stall holds its fill: refused
+    again, _ = _ctx(_look(market=(seen,), carrying=carrying), digger, api=Recorder(refused.notes), hunger=2)
+    assert town._sell(again, item, "Sell it") == []  # not asked again that day, hungry or not (Q1)
 
 
 def test_the_weaver_fetches_reeds_on_reed_days_and_makes_a_pack_from_two_hides() -> None:
@@ -472,6 +479,73 @@ def test_a_child_tagging_along_stops_when_the_one_followed_lies_down_to_sleep(
 
 KENJI = _profile("Kenji", "samurai retainer", titles=("samurai",))
 ENNEN = _profile("Ennen", "monk of the temple", skills=("healing",))
+
+
+FARM_RACK = Seen(
+    label="a rice rack", where="right beside you to the east", nearness="right beside you", kind="building"
+)
+
+
+def test_in_the_evening_the_watchman_stays_by_the_field_racks_not_the_farm_s_rack_by_the_houses() -> None:
+    """Thieves come with the dark (10 §3.6): before midnight the beat is the racks in the rice fields, every look;
+    the farm's own rack by the farmhouses is no field rack (#129: he watched it, 70 m off the raids)."""
+    notes: dict[str, JsonValue] = {"arrived": "go to the west gate"}
+    evening = _look(place="at the west gate, in The castle town", when="night")  # "It is night.": before midnight
+    assert [o.name for o in town.night_watch(_ctx(evening, GORO, Recorder(notes), phase="night")[0])] == [
+        "go to the rice fields"
+    ]
+    by_farm = evening.model_copy(update={"place": "in The castle town", "things": [FARM_RACK]})
+    assert [o.name for o in town.night_watch(_ctx(by_farm, GORO, Recorder(notes), phase="night")[0])] == [
+        "go to the rice fields"
+    ]
+    at_rack = evening.model_copy(update={"place": FIELDS_AT, "things": [NEXT_RACK]})
+    for _ in range(3):  # look after look, he stays: the gate waits till after midnight
+        ctx, api = _ctx(at_rack, GORO, Recorder(notes), phase="night")
+        [look] = town.night_watch(ctx)
+        look.start()
+        assert look.name == "look over the racks" and ("rest", 15) in api.calls
+    after_midnight = at_rack.model_copy(update={"time": MIDNIGHT})
+    assert [o.name for o in town.night_watch(_ctx(after_midnight, GORO, Recorder(notes), phase="night")[0])] == [
+        "go to the west gate"
+    ]
+
+
+def test_at_night_catching_a_thief_is_the_watch_itself_and_whom_he_locks_up_is_told_at_first_light() -> None:
+    notes: dict[str, JsonValue] = {}
+    thief = _look(place=FIELDS_AT, when="night", people=(_kaz(),))
+    [seize] = town.night_watch(_ctx(thief, GORO, Recorder(notes), phase="night")[0])
+    assert (seize.name, seize.score) == ("seize", town.WATCH) and town.WATCH > 70  # over going to bed (#129)
+    notes |= {"to tell": [["Kaz", "stole rice from the racks"]], "kept watch": True}
+    lord_asleep = _look(place="at the castle, in The castle town", when="night")
+    names = [o.name for o in town.night_watch(_ctx(lord_asleep, GORO, Recorder(notes), phase="night")[0])]
+    assert "wait for the lord" not in names and "to tell" in notes  # the lord sleeps: kept for the morning
+    dawn = _look(place="at the well, in The castle town", when="dawn", people=(_beside("Masanori"),))
+    ctx, api = _ctx(dawn, GORO, Recorder(notes), phase="morning")
+    [tell] = town.night_watch(ctx)
+    assert tell.score == town.WATCH  # before his bed
+    tell.start()
+    assert ("accuse", "Kaz", "Masanori") in api.calls and "to tell" not in notes
+    [bed] = town.night_watch(_ctx(dawn, GORO, Recorder(notes), phase="morning")[0])
+    assert bed.name == "go home"
+
+
+def test_aims_about_someone_the_law_is_after_fit_a_goal_and_name_no_stranger_s_looks() -> None:
+    stranger = "a young woman with a fur stole and a spear"
+    assert town._law_aim("Seize", "Kaz", "stole rice") == "Seize Kaz, who stole rice"
+    assert town._law_aim("Seize", stranger, "stole rice") == "Seize a stranger, who stole rice"
+    long_deed = "stole rice from the rack and was in the castle town at night and took meat from the Lord's woods"
+    assert town._law_aim("Judge", "Kaz", long_deed) == "Judge Kaz"
+    assert town._law_aim("Take", stranger, None, " to the gaol") == "Take a stranger to the gaol"
+    assert all(len(town._law_aim(v, stranger, long_deed)) <= town.GOAL_MAX for v in ("Seize", "Judge"))
+
+
+def test_a_child_watching_the_town_sits_rather_than_stands_about() -> None:
+    hana = _profile("Hana", "child of the farm")
+    ctx, api = _ctx(_look(place="at the well, in The castle town"), hana)
+    ctx.pick = lambda _n: 5  # the roll for watching
+    [watch] = town.town_child(ctx)
+    watch.start()
+    assert watch.name == "watch" and api.calls[0][0] == "rest"
 
 
 def _kaz(nearness: Nearness = "right beside you", doing: str | None = None) -> Seen:
@@ -528,6 +602,8 @@ def test_the_monk_tends_whoever_looks_hurt() -> None:
     assert (tend.score, ("tend", "Lia") in api.calls) == (TEND, True)
     well = beside.model_copy(update={"doing": "walking"})
     assert [o.name for o in town.monk(_ctx(_look(people=(well,)), ENNEN)[0])] != ["tend"]
+    bitten = beside.model_copy(update={"doing": "walking, looking a little hurt"})  # a bite, D201
+    assert [o.name for o in town.monk(_ctx(_look(people=(bitten,)), ENNEN)[0])] == ["tend"]
 
 
 def test_a_fine_paid_leaves_a_clean_slate_and_a_second_wrong_gets_its_own_sentence() -> None:
@@ -554,13 +630,14 @@ def test_the_monk_leaves_someone_hurt_far_away_be() -> None:
 def test_a_household_s_dues_are_shared_by_its_adults_the_first_paying_what_doesn_t_divide(
     new_sim: Callable[..., Simulation],
 ) -> None:
-    """farmhouse-2 owes 12 a day (two paddies): five adults pay 2 each, the first in the cast's order 2 more."""
+    """farmhouse-2 owes 10 a day (two paddies at 5, D190): four adults pay 2 each, the first in the cast's order 2
+    more."""
     sim = new_sim()
-    for who, age in (("ann", 30), ("bo", 40), ("cy", 50), ("dee", 35), ("eve", 60), ("kid", 8)):
+    for who, age in (("ann", 30), ("bo", 40), ("cy", 50), ("dee", 35), ("kid", 8)):
         sim.add_citizen(make_spec(who, home="farmhouse-2", age=age))
-    facts = town_households(sim.core.citizens(), ["cy", "ann", "bo", "dee", "eve", "kid"])
-    assert {who: facts[who].dues for who in facts} == {"cy": 4, "ann": 2, "bo": 2, "dee": 2, "eve": 2, "kid": 0}
-    assert {facts[who].mouths for who in facts} == {6} and {facts[who].paddies for who in facts} == {2}
+    facts = town_households(sim.core.citizens(), ["cy", "ann", "bo", "dee", "kid"])
+    assert {who: facts[who].dues for who in facts} == {"cy": 4, "ann": 2, "bo": 2, "dee": 2, "kid": 0}
+    assert {facts[who].mouths for who in facts} == {5} and {facts[who].paddies for who in facts} == {2}
 
 
 def test_the_lord_buys_a_grain_of_gold_a_round_only_while_the_stall_holds_its_fill_and_a_week_s_worth() -> None:
@@ -674,7 +751,7 @@ def test_in_the_town_the_farmers_rice_dries_on_their_own_racks_overnight_and_com
     brains = citizen_brains(sim, SEED)
     sim.drain()
     racks = ("field-rack-1", "field-rack-2")
-    on: list[tuple[int, str]] = []
+    on: list[tuple[int, str, int]] = []  # (tick, rack, rice on it after the stash)
     off: list[tuple[int, str]] = []
     strangers, stolen, midnights = [], [], []  # rice moved by someone not of the rack's household
     first = DAY_MINUTES - START_MINUTE  # the run starts at 08:00
@@ -687,31 +764,40 @@ def test_in_the_town_the_farmers_rice_dries_on_their_own_racks_overnight_and_com
                 stolen.append(who)
             if not isinstance(moved, ItemMoved) or moved.item != "rice" or who is None:
                 continue
-            for rack, moves in ((moved.destination.id, on), (moved.source.id, off)):
+            for rack, moved_off in ((moved.destination.id, False), (moved.source.id, True)):
                 if rack in racks:
-                    moves.append((sim.tick, rack))
+                    if moved_off:
+                        off.append((sim.tick, rack))
+                    else:
+                        on.append((sim.tick, rack, sim.state.stores[rack].get("rice", 0)))
                     if owner_of(sim.world, rack) != sim.citizen(who).home:
                         strangers.append(who)
         if (sim.tick - first) % DAY_MINUTES == 0:
             midnights.append({rack: sim.state.stores[rack].get("rice", 0) for rack in racks})
-    assert {rack for _, rack in on} == set(racks) and not strangers and not stolen  # each household at its own
-    for tick, rack in on:  # the afternoon's rice hangs there at midnight and comes in by the next noon
+    assert {rack for _, rack, _ in on} == set(racks) and not strangers and not stolen  # each household at its own
+    for tick, rack, hung in on:  # the afternoon's rice hangs there at midnight and comes in by the next noon
         night = first + (tick - first) // DAY_MINUTES * DAY_MINUTES + DAY_MINUTES
-        assert midnights[(night - first) // DAY_MINUTES][rack] > 4, (tick, rack)  # the racks start with 4
+        assert midnights[(night - first) // DAY_MINUTES][rack] >= hung > 0, (tick, rack)
         assert any(night < when < night + 12 * 60 and where == rack for when, where in off), (tick, rack)
 
 
 def test_on_the_rack_beat_the_watchman_walks_up_to_the_racks_looks_them_over_and_goes_back_to_the_gate() -> None:
     notes: dict[str, JsonValue] = {"beat": "racks"}
     near = Seen(label="two rice racks", where="the nearest a few paces to the south", nearness="a few paces")
-    ctx, api = _ctx(_at_racks("night", (), near), GORO, Recorder(notes), phase="night")
+    ctx, api = _ctx(
+        _at_racks("night", (), near).model_copy(update={"time": MIDNIGHT}), GORO, Recorder(notes), phase="night"
+    )
     [walk] = town.night_watch(ctx)
     walk.start()
     assert walk.name == "go to a rice rack" and ("walk_to_thing", "rack") in api.calls  # night sight is short
     beside = near.model_copy(update={"nearness": "right beside you"})
-    ctx, api = _ctx(_at_racks("night", (), beside), GORO, Recorder(notes), phase="night")
+    ctx, api = _ctx(
+        _at_racks("night", (), beside).model_copy(update={"time": MIDNIGHT}), GORO, Recorder(notes), phase="night"
+    )
     [look] = town.night_watch(ctx)
     look.start()
-    assert look.name == "look over the racks" and ("wait", 15) in api.calls and notes["beat"] == "gate"
-    ctx, _ = _ctx(_at_racks("night", (), beside), GORO, Recorder(notes), phase="night")
+    assert look.name == "look over the racks" and ("rest", 15) in api.calls and notes["beat"] == "gate"
+    ctx, _ = _ctx(
+        _at_racks("night", (), beside).model_copy(update={"time": MIDNIGHT}), GORO, Recorder(notes), phase="night"
+    )
     assert [o.name for o in town.night_watch(ctx)] == ["go to the west gate"]
