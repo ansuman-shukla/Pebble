@@ -52,7 +52,8 @@ class Granary(Check):
 
 
 class Theft(Check):
-    """Takes from a store the taker neither owns nor has a grant at, that emitted no `stole` (must be none)."""
+    """Takes from a store the taker neither owns nor has a grant at, that emitted no `stole` (must be none); goods
+    bought at the stall (moves caused by a `bought`) are no take."""
 
     name = "e2.theft"
 
@@ -64,13 +65,14 @@ class Theft(Check):
     @override
     def after_step(self, sim: Simulation, events: list[EventDraft]) -> None:
         stole = {event.seq for event in events if event.type == "stole"}
+        bought = {event.seq for event in events if event.type == "bought"}
         self.thefts += len(stole)
         for event in events:
             moved = event.payload
             if not isinstance(moved, ItemMoved) or moved.source.kind != "store" or moved.destination.kind not in TAKEN:
                 continue
             store, actor = str(moved.source.id), event.actor_id
-            if actor is None or owner_of(sim.world, store) is None or event.cause_seq in stole:
+            if actor is None or owner_of(sim.world, store) is None or event.cause_seq in stole | bought:
                 continue
             citizen = sim.state.citizens[actor]
             if free_to_take(sim.core, citizen, store, moved.item) == 0 and not is_granary(sim.world, store):

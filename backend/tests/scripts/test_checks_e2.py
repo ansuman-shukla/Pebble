@@ -53,6 +53,17 @@ def test_the_theft_check_catches_a_take_from_another_household_with_no_theft_tol
     assert told.outcome(town).ok
 
 
+def test_the_theft_check_counts_goods_bought_at_the_stall_as_no_take(town: Simulation) -> None:
+    """A purchase moves the stall's goods to the buyer, caused by its `bought` (regression: BR1's buyers were flagged)."""
+    town.core.place_at(town.citizen("fumiko"), town.world.town.to_unit(20.0, 52.3))  # behind the stall
+    town.core.place_at(town.citizen("goro"), town.world.town.to_unit(20.0, 55.0))  # before it
+    WorldApi(town, "fumiko").work("trade")
+    check = e2.Theft()
+    _judge(check, town, lambda: WorldApi(town, "goro").buy("rice", 4))
+    assert town.citizen("goro").inventory.get("rice") == 4
+    assert check.outcome(town).ok, check.outcome(town).words
+
+
 def test_the_granary_check_catches_rice_its_eaters_don_t_get(town: Simulation) -> None:
     check = e2.Granary()
     _judge(check, town, lambda: _take_unseen(town, "kenji", "store-2"))
