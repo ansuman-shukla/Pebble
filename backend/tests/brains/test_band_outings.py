@@ -409,3 +409,17 @@ def test_someone_on_a_shore_spot_whose_nearest_cell_is_water_is_told_where_they_
     wader = sim.add_citizen(make_spec("wader", knows_places=["town"]))
     wader.position, wader.cell = world.unit(lake), lake
     assert "the shore of a lake" in WorldApi(sim, wader.id).look_around().place
+
+
+def test_yesterday_s_meat_doesn_t_end_today_s_hunt_but_today_s_kill_does() -> None:
+    meat = ("a flint spear", "some meat")
+    yesterday = _choose(_ctx(_look(CAMP, "dawn", meat), _hunter(), {"night": True, "days": 0}))
+    assert yesterday.name == "go to the A savanna"  # (no rack in view here; at camp with one it is dried first)
+    today = _choose(
+        _ctx(
+            _look("at the A savanna", "mid-morning", meat),
+            _hunter(),
+            {"night": False, "days": 1, "chores": ["hunt-try"]},
+        )
+    )
+    assert today.name == "bring the meat home"

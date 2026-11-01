@@ -444,11 +444,13 @@ def _hunt(ctx: Context) -> list[Option]:
     sharing = _share_meat(ctx)
     if sharing or ctx.done_today("hunt"):
         return sharing
-    if carried_food(p.you).get("meat"):
+    tries = _count_today(ctx, "hunt-try")
+    if (
+        carried_food(p.you).get("meat") and tries
+    ):  # today's kill (yesterday's meat is dried at camp, and the hunt goes on)
         ctx.mark_done("hunt")
         home = Option(WORK + 5, "bring the meat home", lambda: api.walk_to_place("home"), "Bring the meat home")
         return [] if at_home(p) else [home]
-    tries = _count_today(ctx, "hunt-try")
     if tries >= HUNT_TRIES:
         return []
     grounds = ctx.profile.hunting_grounds
