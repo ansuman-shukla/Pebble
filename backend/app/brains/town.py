@@ -18,6 +18,9 @@ from collections.abc import Callable
 from dataclasses import replace
 from functools import partial
 
+from pydantic import JsonValue
+
+from app.brains.justice import known_deed
 from app.brains.profile import BrainProfile, Routine
 from app.brains.routines import (
     COMPASS,
@@ -46,13 +49,16 @@ from app.brains.senses import (
 from app.world_api.facade import ActionHandle
 from app.world_api.models import (
     ActionResult,
+    Confinement,
     Driver,
+    Fine,
     Perception,
     PriceSeen,
     PriceWord,
     RecipeName,
     Seen,
     TimeOfDay,
+    Verdict,
 )
 
 FIELDS = "the rice fields"
@@ -140,6 +146,21 @@ NUMBERS = {word: n for n, word in enumerate(f"{_ONES} eighteen nineteen".split()
 # what the words for an amount carried mean at the least (`items.amount_words`); anything else is one
 LEAST = (("a great", 41), ("plenty of", 13), ("a handful of", 4), ("some", 4), ("a few", 2), ("a little", 2))
 WATCH = 72.0  # the night watch outscores sleep (70) for the watchman
+LAW = 60.0  # an officer's seizing and the lord's judging: over the day's work, under hunger
+TEND = WORK + 20  # the monk tends the hurt before his prayers
+LAW_TRIES = 3  # a day: walks after or tries at someone to seize, judge or tend before leaving them be
+GAOL = "the gaol"
+HURT_LOOKS = ("looking hurt", "looking near death")
+# the lord's table (10 §3.4) by the deed's words: theft 2× its value (a few measures: ~20 mon), poaching 1× (~10), a
+# night in the walls confined till dawn, a blow 12 h; a fine they can't pay: confined 6 h
+SENTENCES: tuple[tuple[str, Verdict], ...] = (
+    ("stole", Fine(mon=20)),
+    ("took", Fine(mon=10)),
+    ("was in", Confinement(hours=8)),
+    ("struck", Confinement(hours=12)),
+    ("killed", Confinement(hours=12)),
+)
+UNPAID = Confinement(hours=6)
 EXHAUSTED = 91.0  # over sleeping where he stands (90): the watchman worn out goes home to bed
 STORE_RICE = "Bring the rice into the storehouse"
 TAKE_RICE_HOME = "Take the rice home to the chest"
@@ -638,6 +659,9 @@ def _stall_meal(ctx: Context, at_stall: bool) -> list[Option]:
 def samurai(ctx: Context) -> list[Option]:
     """Rounds of the gates, the castle and the training ground, keeping watch at each (on its guard stand: the walk
     there ends on it); fire baskets lit at dusk."""
+    arrest = _arrest(ctx)
+    if arrest:
+        return arrest
     if ctx.phase == "dusk":
         return _light_baskets(ctx)
     if not _daytime(ctx):
@@ -698,7 +722,7 @@ def night_watch(ctx: Context) -> list[Option]:
         return [Option(EXHAUSTED, "go home", lambda: ctx.api.walk_to_place("home"), aim, "rest")]
     if ctx.phase == "night":
         ctx.notes["kept watch"] = True
-        return _watch(ctx, WATCH)
+        return _arrest(ctx) or _watch(ctx, WATCH)
     if ctx.phase == "dusk" or p.time_of_day == "late afternoon":
         wage = _collect_wage(ctx)
         if wage or ctx.phase == "dusk":
@@ -726,14 +750,125 @@ def _watch(ctx: Context, score: float) -> list[Option]:
     return [Option(score, "look over the racks", look, aim)]
 
 
+# --- the law (10 §3.4) ---
+
+
+def _arrest(ctx: Context) -> list[Option]:
+    """An officer seizes someone in view known for a wrong against the town (their `regard` names it), leads them to
+    the gaol (they are confined once they stand in it) and tells the lord what they did; the lord judges. Each wrong
+    is taken up once (`handed`); someone out of reach is walked after a few times a day."""
+    p, notes = ctx.perception, ctx.notes
+    seizing = notes.get("seizing")
+    if ctx.finished("seize") and isinstance(seizing, list):
+        notes["holding"] = seizing
+    holding = notes.get("holding")
+    if isinstance(holding, list):
+        who = str(holding[0])
+        seen = _person(p, who)
+        if seen is not None and (seen.doing or "").startswith("held by"):
+            aim = f"Take {who} to the gaol"
+            if at(p, GAOL) and _on_spot(ctx, f"go to {GAOL}"):
+                return [Option(LAW, "wait at the gaol", lambda: ctx.api.wait(2), aim)]  # locked up at the tick's end
+            return [_go(ctx, GAOL, LAW, aim)]
+        notes.pop("holding")
+        if seen is not None and "confined" in (seen.doing or ""):
+            notes["to tell"] = holding
+    telling, lord = notes.get("to tell"), _lord(ctx.profile)
+    if isinstance(telling, list) and lord is not None:
+        who = str(telling[0])
+
+        def accuse() -> ActionHandle:
+            notes.pop("to tell", None)
+            ctx.api.accuse(who, lord)
+            return ctx.api.wait(2)
+
+        telling_him = _to_the_lord(ctx, LAW, f"accuse {who}", f"Tell the lord what {who} did", accuse)
+        if telling_him:
+            return telling_him
+        notes.pop("to tell")  # the lord couldn't be found today: the gaol keeps them till their 12 h are up
+    handed = notes.setdefault("handed", [])
+    if not isinstance(handed, list):
+        raise TypeError("handed must be a list")
+    for person in p.people:
+        deed, doing = known_deed(person), person.doing or ""
+        if deed is None or [person.label, deed] in handed or doing.startswith(("held by", "confined", "asleep")):
+            continue
+        if _count_today(ctx, f"after {person.label}") >= LAW_TRIES:
+            continue
+        aim = f"Seize {person.label}, who {deed}"
+        wrong: list[JsonValue] = [person.label, deed]
+        if person.nearness != "right beside you":
+            walk = _then(partial(ctx.mark_done, f"after {person.label}"), partial(ctx.api.walk_to_person, person.label))
+            return [Option(LAW, f"go up to {person.label}", walk, aim)]
+
+        def seize(wrong: list[JsonValue] = wrong) -> ActionHandle:
+            ctx.mark_done(f"after {wrong[0]}")
+            handed.append(wrong)
+            notes["seizing"] = wrong
+            return ctx.api.seize(str(wrong[0]))
+
+        return [Option(LAW, "seize", seize, aim)]
+    return []
+
+
+def _judge(ctx: Context) -> list[Option]:
+    """The lord judges someone held or confined whose wrong he knows of (told by the officer, or seen) by his table;
+    a fine they can't pay is followed by confinement."""
+    p, notes = ctx.perception, ctx.notes
+    judged, fined = notes.setdefault("judged", []), notes.setdefault("fined", [])
+    if not isinstance(judged, list) or not isinstance(fined, list):
+        raise TypeError("judged and fined must be lists")
+    for person in p.people:
+        deed, doing = known_deed(person), person.doing or ""
+        if deed is None or [person.label, deed] in judged or not doing.startswith(("held by", "confined")):
+            continue
+        if _count_today(ctx, f"judging {person.label}") >= LAW_TRIES:
+            continue
+        unpaid = person.label in fined
+        sentence = UNPAID if unpaid else next((v for words, v in SENTENCES if deed.startswith(words)), UNPAID)
+        aim = f"Judge {person.label}, who {deed}"
+        if person.nearness != "right beside you":
+            return [Option(LAW, f"go up to {person.label}", partial(ctx.api.walk_to_person, person.label), aim)]
+
+        def judge(who: str = person.label, deed: str = deed, sentence: Verdict = sentence) -> ActionHandle:
+            ctx.mark_done(f"judging {who}")
+            if isinstance(sentence, Fine) and who not in fined:
+                fined.append(who)  # if it isn't paid in full, they stay held: confinement next
+            else:
+                judged.append([who, deed])
+            return ctx.api.judge(who, sentence)
+
+        return [Option(LAW, "judge", judge, aim)]
+    return []
+
+
+def _tend(ctx: Context) -> list[Option]:
+    """The monk tends anyone in view who looks hurt (10 §3.4: +3 health an hour), walking up to them first."""
+    if "healing" not in ctx.profile.skills:
+        return []
+    for person in ctx.perception.people:
+        looks = person.doing or ""
+        if not any(words in looks for words in HURT_LOOKS) or DISTANCE[person.nearness] == "far":
+            continue
+        if _count_today(ctx, f"tending {person.label}") >= 2 * LAW_TRIES:
+            continue
+        aim = f"Tend {person.label}, who is hurt"
+        if person.nearness != "right beside you":
+            return [Option(TEND, f"go up to {person.label}", partial(ctx.api.walk_to_person, person.label), aim)]
+        tend = _then(partial(ctx.mark_done, f"tending {person.label}"), partial(ctx.api.tend, person.label))
+        return [Option(TEND, "tend", tend, aim)]
+    return []
+
+
 # --- the castle ---
 
 
 def lord(ctx: Context) -> list[Option]:
     """Holds court at the castle in the morning (on his seat: the walk there ends on it); in the afternoon walks the
     market (gold, cloth, the price of rice) and the granary, selling its rice while rice is dear or fair; pays the
-    watchman's wage at dusk and the smith for each tool he orders (10 §3.1, §2.7)."""
-    paying = _payments(ctx)
+    watchman's wage at dusk and the smith for each tool he orders, and judges whoever is brought to the gaol
+    (10 §3.1, §2.7, §3.4)."""
+    paying = _payments(ctx) or _judge(ctx)
     if paying:
         return paying
     p = ctx.perception
@@ -970,15 +1105,15 @@ def town_child(ctx: Context) -> list[Option]:
 
 
 def monk(ctx: Context) -> list[Option]:
-    """Rings the bell at dawn, noon and dusk; prays at the temple by day (alms and tending come with their own
-    systems)."""
+    """Rings the bell at dawn, noon and dusk; tends anyone in view who looks hurt; prays at the temple by day."""
     bell = BELLS.get(ctx.perception.time_of_day)
     if bell is not None and not ctx.done_today(bell) and _rang(ctx, bell):
         ctx.mark_done(bell)
     if bell is not None and not ctx.done_today(bell):
         return [_ring(ctx, bell)]
-    if not _daytime(ctx):
-        return []
+    tending = _tend(ctx) if ctx.phase != "night" else []
+    if tending or not _daytime(ctx):
+        return tending
     return [_work_at(ctx, TEMPLE, "pray", aim="Pray at the temple")]
 
 

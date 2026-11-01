@@ -21,8 +21,11 @@ from app.world_api.facade import WorldApi
 from app.world_api.models import (
     ActionResult,
     ChestView,
+    Confinement,
+    Fine,
     HeardWords,
     MarketView,
+    Nearness,
     Perception,
     PriceSeen,
     PriceWord,
@@ -402,3 +405,65 @@ def test_a_child_tagging_along_stops_when_the_one_followed_lies_down_to_sleep(
     goro.body.asleep = True
     sim.step()
     assert follow.result is not None and follow.result.text == "Goro lies down to sleep."
+
+
+# --- the law ---
+
+KENJI = _profile("Kenji", "samurai retainer", titles=("samurai",))
+ENNEN = _profile("Ennen", "monk of the temple", skills=("healing",))
+
+
+def _kaz(nearness: Nearness = "right beside you", doing: str | None = None) -> Seen:
+    return Seen(
+        label="Kaz",
+        where=f"{nearness} to the west",
+        nearness=nearness,
+        doing=doing,
+        regard="who stole rice from the racks",
+    )
+
+
+def test_an_officer_seizes_someone_known_for_a_wrong_leads_them_to_the_gaol_and_tells_the_lord() -> None:
+    notes: dict[str, JsonValue] = {}
+    far = _ctx(_look(people=(_kaz("close by"),)), KENJI, Recorder(notes))[0]
+    assert [(o.name, o.score) for o in town.samurai(far)] == [("go up to Kaz", town.LAW)]
+    ctx, api = _ctx(_look(people=(_kaz(),)), KENJI, Recorder(notes))
+    town.samurai(ctx)[0].start()
+    assert ("seize", "Kaz") in api.calls
+    notes |= {"last": "seize", "chosen": 7}
+    held = _look(place="at the market, in The castle town", people=(_kaz(doing="held by a man in armour"),))
+    assert [o.name for o in town.samurai(_ctx(held, KENJI, Recorder(notes))[0])] == ["go to the gaol"]
+    notes |= {"last": "go to the gaol", "arrived": "go to the gaol"}
+    confined = _look(place="at the gaol, in The castle town", people=(_kaz(doing="confined in the gaol"),))
+    assert [o.name for o in town.samurai(_ctx(confined, KENJI, Recorder(notes))[0])] == ["go to the castle"]
+    with_lord = _look(people=(_kaz(doing="confined in the gaol"), _beside("Masanori")))
+    ctx, api = _ctx(with_lord, KENJI, Recorder(notes))
+    town.samurai(ctx)[0].start()
+    assert ("accuse", "Kaz", "Masanori") in api.calls and "to tell" not in notes
+    assert [o.name for o in town.samurai(_ctx(_look(people=(_kaz(),)), KENJI, Recorder(notes))[0])] != ["seize"]
+
+
+def test_the_lord_judges_by_his_table_and_confines_whoever_can_t_pay_the_fine() -> None:
+    notes: dict[str, JsonValue] = {}
+    confined = _look(people=(_kaz(doing="confined in the gaol"),), place="at the gaol, in The castle town")
+    ctx, api = _ctx(confined, MASANORI, Recorder(notes))
+    town.lord(ctx)[0].start()
+    assert ("judge", "Kaz", Fine(mon=20)) in api.calls  # theft: twice a few measures' worth
+    ctx, api = _ctx(confined, MASANORI, Recorder(notes))
+    town.lord(ctx)[0].start()
+    assert ("judge", "Kaz", Confinement(hours=6)) in api.calls  # still held: the fine wasn't paid
+    assert town._judge(_ctx(confined, MASANORI, Recorder(notes))[0]) == []  # judged
+    free = _look(people=(_kaz(),))
+    assert town._judge(_ctx(free, MASANORI, Recorder({}))[0]) == []  # only the held or confined
+
+
+def test_the_monk_tends_whoever_looks_hurt() -> None:
+    hurt = Seen(label="Lia", where="close by to the east", nearness="close by", doing="walking, looking hurt")
+    assert [o.name for o in town.monk(_ctx(_look(people=(hurt,)), ENNEN)[0])] == ["go up to Lia"]
+    beside = hurt.model_copy(update={"nearness": "right beside you"})
+    ctx, api = _ctx(_look(people=(beside,)), ENNEN)
+    [tend] = town.monk(ctx)
+    tend.start()
+    assert (tend.score, ("tend", "Lia") in api.calls) == (town.TEND, True)
+    well = beside.model_copy(update={"doing": "walking"})
+    assert [o.name for o in town.monk(_ctx(_look(people=(well,)), ENNEN)[0])] != ["tend"]
