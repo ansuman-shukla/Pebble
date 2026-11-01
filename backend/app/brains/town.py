@@ -176,6 +176,7 @@ TAKE_IN_RICE = "Take in the rice from the rack"
 RICE_RACK = "a rice rack"
 YOUR_RACK = "your rice rack"  # the household's own hasa rack by the paddies
 LADEN = "hung with rice"  # a rice rack with rice drying on it
+YOUR_LADEN_RACK = f"{YOUR_RACK} {LADEN}"
 BUY_TRIES = 3  # refused rice buys a day before giving up till tomorrow (Daisuke went hungry after one, seed 7)
 RACK_SHARE = 0.5  # of the rice carried off the paddies in the afternoon left on the rack overnight (tax: 40 %)
 RACK_TIMES: frozenset[TimeOfDay] = frozenset({"early afternoon", "late afternoon"})
@@ -513,19 +514,24 @@ def _rack_rice(ctx: Context) -> Option | None:
 
 
 def _take_in_rice(ctx: Context) -> list[Option]:
-    """The morning after, the rice left on the rack comes in (it goes home with the day's harvest)."""
+    """The morning after, the rice left on the household's own rack by the paddies comes in, if any still hangs there
+    (a raid may have taken it), and goes home with the day's harvest; never from another household's rack."""
     p = ctx.perception
-    if not ctx.notes.get("on the rack") or not _daytime(ctx):
+    if not ctx.notes.get("on the rack") or ctx.done_today("racked") or not _daytime(ctx):
         return []
-    rack = next((t for t in p.things if "rice rack" in t.label and DISTANCE[t.nearness] != "far"), None)
-    if rack is None:
-        return [] if not at(p, FIELDS) else [_go(ctx, FIELDS, aim=TAKE_IN_RICE)]
-    if rack.nearness != "right beside you" and not ctx.finished(f"go to {RICE_RACK}"):
-        return [Option(WORK + 1, f"go to {RICE_RACK}", partial(ctx.api.walk_to_thing, "rack"), TAKE_IN_RICE)]
+    laden = next((t for t in p.things if t.label == YOUR_RACK and t.doing == LADEN), None)
+    if laden is None and not at(p, FIELDS):
+        return [_go(ctx, FIELDS, aim=TAKE_IN_RICE)]
+    if laden is None:  # bare by the paddies: taken in the night
+        ctx.notes.pop("on the rack", None)
+        return []
+    if laden.nearness != "right beside you" and not ctx.finished(f"go to {YOUR_LADEN_RACK}"):
+        walk = partial(ctx.api.walk_to_thing, YOUR_LADEN_RACK)
+        return [Option(WORK + 1, f"go to {YOUR_LADEN_RACK}", walk, TAKE_IN_RICE)]
 
     def take() -> ActionHandle:
         ctx.notes.pop("on the rack", None)
-        ctx.api.pick_up(RICE)  # what is left of it: a raid may have taken some
+        ctx.api.pick_up(RICE)  # from their own rack: the one hung with rice they stand by
         return ctx.api.rest(5)
 
     return [Option(WORK + 1, "take in the rice", take, TAKE_IN_RICE)]

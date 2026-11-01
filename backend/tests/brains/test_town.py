@@ -14,9 +14,11 @@ from app.brains.profile import BrainProfile, known_titles
 from app.brains.routines import WORK, Context
 from app.brains.senses import Needs, Phase
 from app.engine import citizen_brains, town_households
+from app.observability.events import ItemMoved, Stole
 from app.sim.citizens import CITIZENS, load_citizens
-from app.sim.clock import DAY_MINUTES
+from app.sim.clock import DAY_MINUTES, START_MINUTE
 from app.sim.market import factor, price_word, stall_lot, stalls, stock_of
+from app.sim.ownership import owner_of
 from app.sim.perception import BIOME_WORDS
 from app.sim.simulation import Simulation
 from app.world.biomes import BIOME_IDS
@@ -635,3 +637,62 @@ def test_a_farmer_leaving_the_paddies_in_the_afternoon_hangs_half_the_rice_on_th
     late, api = _ctx(_at_racks("late afternoon", ("plenty of rice",), beside), GENZO)  # the day's last trip
     town.farmer(late)[0].start()
     assert ("stash", "rice", 12) in api.calls
+
+
+def test_next_morning_a_farmer_takes_in_rice_only_from_the_household_s_own_rack_while_rice_hangs_on_it() -> None:
+    laden_next = NEXT_RACK.model_copy(update={"doing": "hung with rice"})
+    laden_own = OWN_RACK.model_copy(update={"doing": "hung with rice"})
+    racked: dict[str, JsonValue] = {"on the rack": True, "chores": ["racked"]}
+    assert town._take_in_rice(_ctx(_at_racks("late afternoon", (), laden_own), GENZO, Recorder(racked))[0]) == []
+    ctx, api = _ctx(_at_racks("early morning", (), laden_next, laden_own), GENZO, Recorder({"on the rack": True}))
+    [go] = town._take_in_rice(ctx)
+    go.start()
+    assert ("walk_to_thing", "your rice rack hung with rice") in api.calls  # the neighbour's rack is nearer
+    beside = laden_own.model_copy(update={"nearness": "right beside you"})
+    ctx, api = _ctx(_at_racks("early morning", (), laden_next, beside), GENZO, Recorder({"on the rack": True}))
+    town._take_in_rice(ctx)[0].start()
+    assert ("pick_up", "rice") in api.calls and "on the rack" not in ctx.notes
+    home = _look(place="at your home, in The castle town", when="early morning", carrying=())
+    by_the_house = home.model_copy(update={"things": [OWN_RACK]})  # the elder's other rack, bare
+    [go] = town._take_in_rice(_ctx(by_the_house, TOKUJI, Recorder({"on the rack": True}))[0])
+    assert go.name == "go to the rice fields"
+    bare = OWN_RACK.model_copy(update={"nearness": "right beside you"})
+    ctx, api = _ctx(_at_racks("early morning", (), laden_next, bare), GENZO, Recorder({"on the rack": True}))
+    assert town._take_in_rice(ctx) == [] and "on the rack" not in ctx.notes  # raided: nothing from the neighbour's
+    assert not api.calls
+
+
+def test_in_the_town_the_farmers_rice_dries_on_their_own_racks_overnight_and_comes_home_next_morning(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    sim = new_sim(seed=SEED)
+    cast = load_citizens(CITIZENS)
+    sim.add_cast(cast.model_copy(update={"citizens": [c for c in cast.citizens if c.region == "town"]}))
+    brains = citizen_brains(sim, SEED)
+    sim.drain()
+    racks = ("field-rack-1", "field-rack-2")
+    on: list[tuple[int, str]] = []
+    off: list[tuple[int, str]] = []
+    strangers, stolen, midnights = [], [], []  # rice moved by someone not of the rack's household
+    first = DAY_MINUTES - START_MINUTE  # the run starts at 08:00
+    for _ in range(2 * DAY_MINUTES + 4 * 60):  # till noon of the third day
+        brains(sim)
+        sim.step()
+        for event in sim.drain():
+            moved, who = event.payload, event.actor_id
+            if isinstance(moved, Stole):
+                stolen.append(who)
+            if not isinstance(moved, ItemMoved) or moved.item != "rice" or who is None:
+                continue
+            for rack, moves in ((moved.destination.id, on), (moved.source.id, off)):
+                if rack in racks:
+                    moves.append((sim.tick, rack))
+                    if owner_of(sim.world, rack) != sim.citizen(who).home:
+                        strangers.append(who)
+        if (sim.tick - first) % DAY_MINUTES == 0:
+            midnights.append({rack: sim.state.stores[rack].get("rice", 0) for rack in racks})
+    assert {rack for _, rack in on} == set(racks) and not strangers and not stolen  # each household at its own
+    for tick, rack in on:  # the afternoon's rice hangs there at midnight and comes in by the next noon
+        night = first + (tick - first) // DAY_MINUTES * DAY_MINUTES + DAY_MINUTES
+        assert midnights[(night - first) // DAY_MINUTES][rack] > 4, (tick, rack)  # the racks start with 4
+        assert any(night < when < night + 12 * 60 and where == rack for when, where in off), (tick, rack)
