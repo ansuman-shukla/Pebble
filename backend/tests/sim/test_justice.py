@@ -26,6 +26,7 @@ from app.observability.lines import Resident, Told, namer, tell
 from app.sim import justice, slots, society, tax
 from app.sim.clock import START_MINUTE, TICKS_PER_HOUR, sun_altitude_deg, sun_direction
 from app.sim.coins import number_words
+from app.sim.custody import CUSTODY, CUSTODY_HOURS, Custody, custody_ends, custody_of, in_custody
 from app.sim.economy import coins_held
 from app.sim.justice import JUSTICE
 from app.sim.simulation import Simulation
@@ -85,7 +86,7 @@ def _lead_to_gaol(sim: Simulation, seizer: str, person: str) -> tuple[list[Event
     for _ in range(40):
         sim.step()
         events += sim.drain()
-        custody = justice.custody_of(sim.core, person)
+        custody = custody_of(sim.core, person)
         if custody is not None and custody.keeper is not None:
             farthest = max(farthest, _distance(sim, seizer, person))
         if walk.done and custody is not None and custody.place == "gaol":
@@ -120,12 +121,12 @@ def test_theft_witness_accuse_seize_judge_fine_and_served(
     assert thief == "kaz" and set(theft.witnesses) >= {"genzo", "goro"}
 
     told = WorldApi(sim, "genzo").accuse("Kaz", "Goro")
-    assert told == ActionResult(action="accuse", outcome="done", text='You tell Goro: "Kaz stole rice."')
+    assert told == ActionResult(action="accuse", outcome="done", text='You tell Goro: "Kaz stole rice from the rack."')
     assert _of(sim.drain(), Accused) == [("genzo", Accused(person="kaz", to="goro", deeds=[stole.seq]))]
 
     seized = _seize(sim, "goro", "kaz", monkeypatch)
     assert seized.text == "You seize Kaz; you hold them fast."
-    assert justice.custody_of(sim.core, "kaz") is not None
+    assert custody_of(sim.core, "kaz") is not None
 
     events, farthest = _lead_to_gaol(sim, "goro", "kaz")
     assert 0 < farthest <= 3.0  # led, never more than 3 m behind
@@ -155,7 +156,7 @@ def test_theft_witness_accuse_seize_judge_fine_and_served(
         "Released",
     ]
     assert _of(events, Released) == [("kaz", Released(cause="judged", by="masanori"))]
-    assert not justice.in_custody(sim.core, "kaz")
+    assert not in_custody(sim.core, "kaz")
     assert coins_held(sim.state) == money
     assert ("goro", "town", "accusation") in [
         (actor, change.group, change.cause) for actor, change in _of(events, StandingChanged)
@@ -165,9 +166,9 @@ def test_theft_witness_accuse_seize_judge_fine_and_served(
 
 
 def _custody_end(sim: Simulation, person: str) -> int:
-    custody = justice.custody_of(sim.core, person)
+    custody = custody_of(sim.core, person)
     assert custody is not None
-    return justice.custody_ends(custody)
+    return custody_ends(custody)
 
 
 # --- the night law, the gaol and the dawn ---
@@ -197,7 +198,7 @@ def test_night_trespass_seize_confine_and_served_at_dawn(
     _seize(sim, "goro", "kaz", monkeypatch)
     events, farthest = _lead_to_gaol(sim, "goro", "kaz")
     assert farthest <= 3.0
-    assert justice.custody_of(sim.core, "kaz") is not None
+    assert custody_of(sim.core, "kaz") is not None
     assert [t.kind for a, t in _of(events, Trespassed) if a == "kaz"] == []  # led into the castle: no entry of his
     assert WorldApi(sim, "goro").accuse("Kaz", "Masanori").outcome == "done"
     lord = WorldApi(sim, "masanori")
@@ -206,16 +207,16 @@ def test_night_trespass_seize_confine_and_served_at_dawn(
     hours = -(-(dawn - sim.tick - justice.JUDGE_MINUTES) // TICKS_PER_HOUR)
     sentence = _done(sim, lord.judge("Kaz", Confinement(hours=hours)), 20)
     assert sentence.text == f"You sentence Kaz to {number_words(hours)} hours confined."  # words, never digits
-    custody = justice.custody_of(sim.core, "kaz")
+    custody = custody_of(sim.core, "kaz")
     assert custody is not None and custody.place == "gaol" and custody.judgement is not None
     events = []
-    while justice.in_custody(sim.core, "kaz"):
+    while in_custody(sim.core, "kaz"):
         sim.step()
         events += sim.drain()
     assert _of(events, SentenceServed) == [("kaz", SentenceServed(sentence="confine", judgement=custody.judgement))]
     assert _of(events, Released) == [("kaz", Released(cause="judged"))]
     assert dawn <= sim.tick < dawn + TICKS_PER_HOUR  # served at dawn
-    assert sim.tick - custody.since <= justice.CUSTODY_HOURS * TICKS_PER_HOUR
+    assert sim.tick - custody.since <= CUSTODY_HOURS * TICKS_PER_HOUR
     sim.run(3)
     assert [a for a, _ in _of(events + sim.drain(), Trespassed)] == []  # walking free inside: no new entry
 
@@ -259,7 +260,7 @@ def test_tax_arrears_are_fined_into_the_treasury_and_clear_the_account(
     assert payer == "tokuji" and (paid.household, paid.coins, paid.rice, paid.owed_coins) == ("farmhouse-2", 12, 0, 0)
     assert tax.account(sim.core, "farmhouse-2").days == 0
     assert sim.state.stores["castle-keep-chest"]["coins"] - treasury == 12
-    assert coins_held(sim.state) == money and not justice.in_custody(sim.core, "tokuji")
+    assert coins_held(sim.state) == money and not in_custody(sim.core, "tokuji")
 
 
 def test_nobody_is_judged_without_a_known_deed_or_arrears(
@@ -333,12 +334,12 @@ def test_custody_never_outlasts_twelve_hours(
     sim = _theft_scene(new_sim)
     _seize(sim, "goro", "kaz", monkeypatch)
     _lead_to_gaol(sim, "goro", "kaz")
-    custody = justice.custody_of(sim.core, "kaz")
+    custody = custody_of(sim.core, "kaz")
     assert custody is not None and custody.place == "gaol"
     sim.state.tick = custody.since + 12 * TICKS_PER_HOUR - 2
     sim.drain()
     sim.step()
-    assert justice.in_custody(sim.core, "kaz")
+    assert in_custody(sim.core, "kaz")
     sim.step()
     assert _of(sim.drain(), Released) == [("kaz", Released(cause="timeout"))]
     assert sim.tick == custody.since + 12 * TICKS_PER_HOUR
@@ -353,15 +354,15 @@ def test_a_confinement_ends_when_the_custody_s_twelve_hours_do(
     WorldApi(sim, "kaz").pick_up("5 rice")
     _seize(sim, "goro", "kaz", monkeypatch)
     _lead_to_gaol(sim, "goro", "kaz")
-    custody = justice.custody_of(sim.core, "kaz")
+    custody = custody_of(sim.core, "kaz")
     assert custody is not None
     sim.state.tick = custody.since + 10 * TICKS_PER_HOUR
     lord = WorldApi(sim, "masanori")
     assert _done(sim, lord.walk_to_place("gaol")).outcome == "done"
     assert _done(sim, lord.judge("Kaz", Confinement(hours=12)), 20).outcome == "done"
-    assert justice.custody_ends(custody) == custody.since + 12 * TICKS_PER_HOUR  # not 12 h from the judgement
+    assert custody_ends(custody) == custody.since + 12 * TICKS_PER_HOUR  # not 12 h from the judgement
     sim.drain()
-    while justice.in_custody(sim.core, "kaz"):
+    while in_custody(sim.core, "kaz"):
         sim.step()
     assert sim.tick == custody.since + 12 * TICKS_PER_HOUR
     events = sim.drain()
@@ -387,7 +388,7 @@ def test_a_fine_paid_short_keeps_them_held_and_leaves_the_deed_open_to_confineme
     assert kaz.inventory == {}
     events = sim.drain()
     assert _of(events, SentenceServed) == [] and _of(events, Released) == []
-    assert justice.in_custody(sim.core, "kaz")
+    assert in_custody(sim.core, "kaz")
     assert _done(sim, lord.judge("Kaz", Confinement(hours=6)), 20).text == "You sentence Kaz to six hours confined."
     [(_, verdict)] = _of(sim.drain(), Judged)
     assert verdict.sentence == "confine" and len(verdict.deeds) == 1
@@ -485,7 +486,7 @@ def test_a_failed_seizure_interrupts_the_target_who_stays_free(
     assert (failed.outcome, failed.text) == ("failed", "Kaz twists free of your grip.")
     assert resting.result is not None and resting.result.text == "Goro tries to seize you!"
     assert _of(sim.drain(), Seized) == [("goro", Seized(person="kaz", held=False))]
-    assert not justice.in_custody(sim.core, "kaz")
+    assert not in_custody(sim.core, "kaz")
 
 
 def test_a_seizure_holds_by_its_roll(new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch) -> None:
@@ -499,7 +500,7 @@ def test_a_seizure_holds_by_its_roll(new_sim: Callable[..., Simulation], monkeyp
 
 
 def _release_now(sim: Simulation, person: str) -> None:
-    JUSTICE.of(sim.state).custody.pop(person)
+    CUSTODY.of(sim.state).pop(person)
 
 
 @pytest.mark.parametrize("down", ["hurt", "asleep", "dead"])
@@ -509,7 +510,7 @@ def test_the_held_go_free_when_the_seizer_is_down(
     sim = _scene(new_sim, goro={**ASHIGARU, "at": (-30.0, 50.0)}, kaz={**CAMP_B, "at": (-31.0, 50.0)})
     _seize(sim, "goro", "kaz", monkeypatch)
     sim.step()
-    assert justice.in_custody(sim.core, "kaz")
+    assert in_custody(sim.core, "kaz")
     goro = sim.citizen("goro")
     sim.drain()
     if down == "hurt":
@@ -520,7 +521,7 @@ def test_the_held_go_free_when_the_seizer_is_down(
         sim.core.die(goro, "violence")
     justice.keep_custody(sim.core)  # the hook, in the tick that hurt them
     assert _of(sim.drain(), Released) == [("kaz", Released(cause="seizer_down", by="goro"))]
-    assert not justice.in_custody(sim.core, "kaz")
+    assert not in_custody(sim.core, "kaz")
 
 
 def test_a_seizer_seized_lets_their_prisoner_go(
@@ -537,13 +538,13 @@ def test_a_seizer_seized_lets_their_prisoner_go(
     sim.core.place_at(sim.citizen("barro"), sim.world.town.to_unit(-29.5, 51.0))
     _seize(sim, "barro", "goro", monkeypatch)
     assert _of(sim.drain(), Released) == [("kaz", Released(cause="seizer_down", by="goro"))]
-    assert not justice.in_custody(sim.core, "kaz") and justice.in_custody(sim.core, "goro")
+    assert not in_custody(sim.core, "kaz") and in_custody(sim.core, "goro")
 
 
 def test_a_seizer_in_custody_holds_nobody(new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch) -> None:
     sim = _scene(new_sim, goro={**ASHIGARU, "at": (-30.0, 50.0)}, kaz={**CAMP_B, "at": (-31.0, 50.0)})
     _seize(sim, "goro", "kaz", monkeypatch)
-    JUSTICE.of(sim.state).custody["goro"] = justice.Custody(since=sim.tick, keeper=None, place="gaol")
+    CUSTODY.of(sim.state)["goro"] = Custody(since=sim.tick, keeper=None, place="gaol")
     sim.drain()
     justice.keep_custody(sim.core)
     assert ("kaz", Released(cause="seizer_down", by="goro")) in _of(sim.drain(), Released)
@@ -558,7 +559,7 @@ def test_a_death_in_custody_ends_it_with_one_release(
     sim.core.die(sim.citizen("kaz"), "thirst")
     sim.step()
     assert _of(sim.drain(), Released) == [("kaz", Released(cause="died"))]
-    assert not justice.in_custody(sim.core, "kaz")
+    assert not in_custody(sim.core, "kaz")
 
 
 def test_the_held_may_only_look_speak_and_wait_and_the_confined_drink_from_the_bucket(
@@ -677,7 +678,7 @@ def test_a_band_confines_by_tying_them_at_the_fire(
     assert confined.place == "the band's fire" and confined.by == "barro"
     assert _done(sim, WorldApi(sim, "tek").walk_to_place("band_b_camp")).text == "You are tied at the fire."
     sim.run(TICKS_PER_HOUR)
-    assert not justice.in_custody(sim.core, "tek")
+    assert not in_custody(sim.core, "tek")
 
 
 def test_a_leader_away_from_the_fire_can_t_judge(
@@ -715,21 +716,23 @@ def test_the_one_accused_before_hears_it_and_stops_what_they_do(new_sim: Callabl
     sim.step()
     WorldApi(sim, "genzo").accuse("Kaz", "Goro")
     sim.step()
-    assert resting.result is not None and resting.result.text == 'You stop resting: Genzo says, "Kaz stole rice."'
+    assert (
+        resting.result is not None
+        and resting.result.text == 'You stop resting: Genzo says, "Kaz stole rice from the rack."'
+    )
     assert [deed.doer for deed in society.known_deeds(sim.core, "goro")] == ["kaz"]
 
 
-def test_the_deeds_are_said_once_each_in_order(new_sim: Callable[..., Simulation]) -> None:
+def test_an_accusation_says_each_deed_once_in_the_listener_s_words(new_sim: Callable[..., Simulation]) -> None:
     sim = _theft_scene(new_sim)
-    first = society.Deed(1, 0, "theft", "kaz", "town", owner="farmhouse-1")
-    JUSTICE.of(sim.state).losses[1] = JUSTICE.of(sim.state).losses[2] = justice.Loss("farmhouse-1", "rice", 4.0)
-    again = society.Deed(2, 0, "theft", "kaz", "town", owner="farmhouse-1")
-    night = society.Deed(3, 0, "trespass", "kaz", "town")
-    struck = society.Deed(4, 0, "assault", "kaz", "town", victim="genzo")
-    assert justice._deeds_words(sim.core, [first, again]) == "stole rice"
-    assert justice._deeds_words(sim.core, [first, night, again]) == "stole rice and trespassed at night"
-    words = justice._deeds_words(sim.core, [first, night, struck])
-    assert words == "stole rice, trespassed at night and struck Genzo"
+    kaz = WorldApi(sim, "kaz")
+    kaz.pick_up("2 rice")
+    kaz.pick_up("2 rice")  # the same deed twice: said once
+    assert WorldApi(sim, "genzo").accuse("Kaz", "Goro").text == 'You tell Goro: "Kaz stole rice from the rack."'
+    trespass = Trespassed(kind="walls", owner="town", place="the castle town", witnesses=["genzo"])
+    sim.core.emit("trespassed", trespass, actor=sim.citizen("kaz"))
+    told = WorldApi(sim, "genzo").accuse("Kaz", "Goro")
+    assert told.text == 'You tell Goro: "Kaz stole rice from the rack and was in the castle town at night."'
 
 
 # --- tend ---
@@ -795,10 +798,10 @@ def test_custody_and_the_judged_deeds_survive_a_snapshot(
     sim = _theft_scene(new_sim)
     WorldApi(sim, "kaz").pick_up("5 rice")
     _seize(sim, "goro", "kaz", monkeypatch)
-    JUSTICE.of(sim.state).judged = [3, 7]
+    JUSTICE.of(sim.state).unpaid["kaz"] = [3, 7]
     restored = restore(take_snapshot(sim.state))
     assert JUSTICE.of(restored) == JUSTICE.of(sim.state)
-    assert JUSTICE.of(restored).custody["kaz"].keeper == "goro"
+    assert CUSTODY.of(restored) == CUSTODY.of(sim.state) and CUSTODY.of(restored)["kaz"].keeper == "goro"
 
 
 # --- the feed ---
@@ -872,7 +875,7 @@ def test_the_held_hold_their_spot_behind_the_seizer_along_the_seizer_s_corners(
         assert all(point in led for point, _ in sim.core.strides["goro"].walked[1:-1])
         claim = slots.claim_of(sim.core, sim.citizen("kaz"))
         assert claim is not None and claim.position == sim.citizen("kaz").position
-        held = justice.custody_of(sim.core, "kaz")
+        held = custody_of(sim.core, "kaz")
         if held is not None and held.keeper == "goro":  # (not once seated in the gaol)
             assert _distance(sim, "goro", "kaz") == pytest.approx(1.0, abs=0.01)  # a metre behind
     assert corners > 0  # the walk turned some corners on the way
@@ -888,7 +891,7 @@ def test_with_no_free_spot_the_held_walk_right_behind_the_seizer(
     while not walk.done:
         sim.step()
         goro, kaz = sim.citizen("goro"), sim.citizen("kaz")
-        held = justice.custody_of(sim.core, "kaz")
+        held = custody_of(sim.core, "kaz")
         if held is None or held.keeper is None:  # seated in the gaol
             break
         assert _distance(sim, "goro", "kaz") == pytest.approx(1.0, abs=0.01)
@@ -907,7 +910,7 @@ def test_a_full_gaol_takes_nobody(new_sim: Callable[..., Simulation], monkeypatc
         slots.claim(sim.core, other, seat, seat.position)
     _seize(sim, "goro", "kaz", monkeypatch)
     _lead_to_gaol(sim, "goro", "kaz")
-    custody = justice.custody_of(sim.core, "kaz")
+    custody = custody_of(sim.core, "kaz")
     assert custody is not None and custody.keeper == "goro"  # still held
     lord = WorldApi(sim, "masanori")
     assert _done(sim, lord.walk_to_place("gaol")).outcome == "done"
@@ -928,7 +931,7 @@ def test_a_confinement_with_no_way_into_the_gaol_is_no_judgement(
     refused = _done(sim, WorldApi(sim, "masanori").judge("Kaz", Confinement(hours=3)), 20)
     assert (refused.outcome, refused.text) == ("failed", "You can't get Kaz into the gaol.")
     assert _of(sim.drain(), Judged) == []
-    custody = justice.custody_of(sim.core, "kaz")
+    custody = custody_of(sim.core, "kaz")
     assert custody is not None and custody.keeper == "goro" and custody.judgement is None
 
 
@@ -960,3 +963,25 @@ def test_a_fine_paid_short_counts_only_whole_coins_paid(
     _seize(sim, "kenji", "tokuji", monkeypatch)
     short = _done(sim, WorldApi(sim, "masanori").judge("Tokuji", Fine(mon=10)), 20)
     assert short.text == "You fine Tokuji ten coins; they can pay only four coins."
+
+
+# --- what the held, the confined and those who see them perceive ---
+
+
+def test_the_held_and_the_confined_know_it_and_others_see_it(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sim = _theft_scene(new_sim)
+    kaz = WorldApi(sim, "kaz")
+    assert (kaz.check_self().held, kaz.check_self().confined) == (None, None)
+    _seize(sim, "goro", "kaz", monkeypatch)
+    me = kaz.check_self()
+    assert (me.held, me.confined) == ("Goro holds you fast.", None)
+    assert "Goro holds you fast." in me.text()
+    seen = {person.label: person for person in WorldApi(sim, "genzo").look_around().people}
+    assert seen["Kaz"].doing == "held by Goro"
+    _lead_to_gaol(sim, "goro", "kaz")
+    me = kaz.check_self()
+    assert (me.held, me.confined) == (None, "You are confined in the gaol.")
+    seen = {person.label: person for person in WorldApi(sim, "masanori").look_around().people}
+    assert seen["Kaz"].doing == "confined in the gaol"

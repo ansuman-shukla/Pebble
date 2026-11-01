@@ -620,36 +620,36 @@ def test_what_you_know_of_someone_is_their_standing_of_note_and_their_deeds(
 
 def test_others_are_seen_working_running_sitting_and_hurt(new_sim: Callable[..., Simulation]) -> None:
     sim = _v1(new_sim, {"citizen_id": "genzo", "knows_people": ["aiko"]}, {"citizen_id": "aiko"})
-    aiko = sim.citizen("aiko")
-    sim.core.place_at(aiko, _near(sim, sim.citizen("genzo").position, 0.0, 5.0))
+    aiko, genzo = sim.citizen("aiko"), sim.citizen("genzo")
+    sim.core.place_at(aiko, _near(sim, genzo.position, 0.0, 5.0))
     action = ActionState(number=1, kind="work", started_tick=0, started_seq=0, args={"task": "farm"}, label="tending")
     aiko.action = action
-    assert perception.person_doing(sim.core, aiko) == "farming"  # what she'd say of herself in full: "tending"
+    assert perception.person_doing(sim.core, genzo, aiko) == "farming"  # what she'd say of herself in full: "tending"
     assert perception.self_view(sim.core, aiko).doing == "You are tending."
     aiko.action = replace(action, kind="gather", label="berries", args={"node_kind": "berry_bush"})
-    assert perception.person_doing(sim.core, aiko) == "gathering berries"
+    assert perception.person_doing(sim.core, genzo, aiko) == "gathering berries"
     aiko.action = replace(action, kind="gather", label="wood", args={"node_kind": nodes.TREE_KIND})
-    assert perception.person_doing(sim.core, aiko) == "chopping a tree"
+    assert perception.person_doing(sim.core, genzo, aiko) == "chopping a tree"
     aiko.action = replace(action, kind="rest", label="", args={"posture": "sitting", "where": "on the bench"})
-    assert perception.person_doing(sim.core, aiko) == "sitting"
+    assert perception.person_doing(sim.core, genzo, aiko) == "sitting"
     aiko.action = replace(action, kind="walk_to", label="the well", args={})
-    assert perception.person_doing(sim.core, aiko) == "walking"
+    assert perception.person_doing(sim.core, genzo, aiko) == "walking"
     aiko.action = replace(action, kind="flee", label="", args={})
-    assert perception.person_doing(sim.core, aiko) == "running"  # fleeing runs, however the last stride went
+    assert perception.person_doing(sim.core, genzo, aiko) == "running"  # fleeing runs, however the last stride went
     aiko.action = replace(action, kind="walk_to", label="the well", args={})
     sim.core.strides[aiko.id] = Stride(action=1, walked=(), gait="run")
-    assert perception.person_doing(sim.core, aiko) == "running"
+    assert perception.person_doing(sim.core, genzo, aiko) == "running"
     del sim.core.strides[aiko.id]
     aiko.inventory["wood"] = int(aiko.traits.carry_kg * 0.6)
-    assert perception.person_doing(sim.core, aiko) == "carrying a load"
+    assert perception.person_doing(sim.core, genzo, aiko) == "carrying a load"
     aiko.body.health = 40.0
-    assert perception.person_doing(sim.core, aiko) == "carrying a load, looking hurt"
+    assert perception.person_doing(sim.core, genzo, aiko) == "carrying a load, looking hurt"
     aiko.action, aiko.body.health, aiko.body.hunger = None, 100.0, 95.0
-    assert perception.person_doing(sim.core, aiko) == "looking starved"
+    assert perception.person_doing(sim.core, genzo, aiko) == "looking starved"
     aiko.body.health = 10.0
     assert _look(sim, "genzo").people[0].doing == "looking near death"
     aiko.body.asleep = True
-    assert perception.person_doing(sim.core, aiko) == "asleep"
+    assert perception.person_doing(sim.core, genzo, aiko) == "asleep"
 
 
 def test_predators_are_seen_after_their_quarry_and_at_their_kills(new_sim: Callable[..., Simulation]) -> None:

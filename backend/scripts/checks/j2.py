@@ -7,14 +7,14 @@ from collections.abc import Mapping
 from typing import override
 
 from app.observability.events import EventDraft, Judged, Released, SentenceServed, Tended
-from app.sim import justice
 from app.sim.clock import TICKS_PER_HOUR
+from app.sim.custody import CUSTODY, CUSTODY_HOURS, held_pairs
 from app.sim.simulation import Simulation
 from app.sim.society import SOCIETY
 from scripts.checks.base import Check, Outcome
 
 HELD_M = 3.0
-CUSTODY_TICKS = justice.CUSTODY_HOURS * TICKS_PER_HOUR
+CUSTODY_TICKS = CUSTODY_HOURS * TICKS_PER_HOUR
 SERVED_LEAST = 2  # both seeds together
 TENDS_LEAST = 2  # both seeds together: the monk and the band healers tend someone hurt
 WAITS_FOR = "BR1/BR2 brains that seize, judge and tend"
@@ -32,7 +32,7 @@ class HeldClose(Check):
 
     @override
     def after_step(self, sim: Simulation, events: list[EventDraft]) -> None:
-        for person, keeper in justice.held_pairs(sim.core):
+        for person, keeper in held_pairs(sim.core):
             self.held_ticks += 1
             metres = sim.core.distance_m(sim.state.citizens[person].position, sim.state.citizens[keeper].position)
             if metres > HELD_M:
@@ -56,7 +56,7 @@ class Custody(Check):
 
     @override
     def after_step(self, sim: Simulation, events: list[EventDraft]) -> None:
-        for custody in justice.JUSTICE.of(sim.state).custody.values():
+        for custody in CUSTODY.of(sim.state).values():
             self.longest = max(self.longest, sim.tick - custody.since)
         self.ended += sum(isinstance(event.payload, Released) for event in events)
 

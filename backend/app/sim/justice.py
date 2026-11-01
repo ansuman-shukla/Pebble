@@ -18,8 +18,10 @@
   in the gaol in town, tied at the fire in a band, and never outlasts the custody's 12 h.
 - **Tend** (30 min, reach 2 m, the healing skill): the hurt person gains 3 health an hour while tended (`tended`).
 
-The system `justice` keeps who is in custody, the deeds judged, what each theft or poaching took (from its event, the
-`on_event` hook) and the health each running tend has given.
+Who is in custody is the `custody` system's (`app.sim.custody`); the deeds a judgement settled are society's
+(`settled`), and what they were is told by perception's `deed_words`. The system `justice` keeps what each theft or
+poaching took that is still owed back (from its event, the `on_event` hook, less what fines paid), the deeds of fines
+paid short (open to a confinement), and the health each running tend has given.
 """
 
 import math
@@ -50,15 +52,17 @@ from app.sim.citizens import store_ids
 from app.sim.clock import TICKS_PER_HOUR
 from app.sim.coins import number_words, price_words
 from app.sim.core import HEARING_M, KEPT_HEARD, SimCore
+from app.sim.custody import CUSTODY, Custody, CustodyPlace, custody_ends, custody_of, held_pairs, in_custody, leading
 from app.sim.doing import apply_partial
 from app.sim.economy import value_of
 from app.sim.items import tool_in
 from app.sim.ownership import CAMP_GROUPS, CHEST, KEEP
-from app.sim.perception import match_person, normalize, person_label
+from app.sim.perception import confined_words, deed_words, held_words, match_person, normalize, person_label
 from app.sim.state import ActionState, Citizen, Heard, Region, System
 from app.sim.vec import Vec3
 from app.world.town import load_town
 from app.world_api.models import Accuse, ActionName, ActionResult, Confinement, Fine, Judge, Seize, Tend
+from app.world_api.phrases import join
 
 SEIZE_MINUTES = 1
 SEIZE_REACH_M = 2.0
@@ -69,7 +73,6 @@ FIRE_COURT_M = 15.0  # a band leader judges within this far of the band's fire p
 TEND_MINUTES = 30
 TEND_REACH_M = 2.0
 TEND_PER_HOUR = 3.0
-CUSTODY_HOURS = 12  # the gaol has water but no food
 ARREARS_DAYS = 3  # days of `tax_overdue` running before the lord may fine a household's arrears
 HEALING = "healing"
 ARMS = "arms"
@@ -79,34 +82,22 @@ COURT_AREA = "castle-courtyard"  # the town area inside the castle walls, where 
 HELD_MAY: frozenset[ActionName] = frozenset({"say", "wait", "set_goal", "recall"})  # (and look and check)
 CONFINED_MAY: frozenset[ActionName] = HELD_MAY | {"drink", "eat", "sleep"}
 CAMPS: dict[Region, str] = {group: camp for camp, group in CAMP_GROUPS.items()}
-CustodyPlace = Literal["held", "gaol", "fire"]
 PLACE_WORDS: dict[CustodyPlace, str] = {"held": "", "gaol": "the gaol", "fire": "the band's fire"}
 Court = Literal["town", "band"]
 
 
-@dataclass
-class Custody:
-    since: int  # the tick they were seized: custody ends this many CUSTODY_HOURS on at the latest
-    keeper: str | None  # who holds them while held; None once confined
-    place: CustodyPlace = "held"
-    until: int | None = None  # a confinement sentence's last tick
-    judgement: int | None = None  # the `judged` seq of the confinement being served
-
-
 @dataclass(frozen=True)
 class Loss:
-    """What a theft or a poaching took, at its town value, and from whom."""
+    """What a theft or a poaching took, at its town value, and from whom (what it was: the society's deed)."""
 
     owner: str  # the robbed household or group
-    item: str
     mon: float
 
 
 @dataclass
 class Justice:
-    custody: dict[str, Custody] = field(default_factory=dict)  # citizen -> their custody
-    judged: list[int] = field(default_factory=list)  # deed seqs judged (sorted)
-    losses: dict[int, Loss] = field(default_factory=dict)  # deed seq -> what it took
+    losses: dict[int, Loss] = field(default_factory=dict)  # deed seq -> what it took, still owed back
+    unpaid: dict[str, list[int]] = field(default_factory=dict)  # person -> deeds of a fine paid short, still open
     tended: dict[str, float] = field(default_factory=dict)  # healer -> health given in their running tend
 
 
@@ -127,51 +118,23 @@ JUSTICE = System[Justice]("justice", 1, new=lambda _world: Justice(), dump=_dump
 # --- what other systems read ---
 
 
-def custody_of(core: SimCore, citizen_id: str) -> Custody | None:
-    return JUSTICE.of(core.state).custody.get(citizen_id)
-
-
-def in_custody(core: SimCore, citizen_id: str) -> bool:
-    return citizen_id in JUSTICE.of(core.state).custody
-
-
-def held_pairs(core: SimCore) -> list[tuple[str, str]]:
-    """(held, seizer) for everyone held (not confined), by id."""
-    return [
-        (person, custody.keeper)
-        for person, custody in sorted(JUSTICE.of(core.state).custody.items())
-        if custody.keeper is not None
-    ]
-
-
-def leading(core: SimCore, keeper_id: str) -> str | None:
-    """The person this citizen holds, if any."""
-    return next((person for person, keeper in held_pairs(core) if keeper == keeper_id), None)
-
-
 def restraint(core: SimCore, citizen: Citizen, kind: ActionName) -> str | None:
-    """Why someone in custody may not do this (held: only look, speak, wait; confined: also drink, eat and sleep), or
-    None when they may."""
+    """Why someone in custody may not do this (held: only look, speak, wait; confined: also drink, eat and sleep), told
+    as they see themselves (`perception`), or None when they may."""
     custody = custody_of(core, citizen.id)
-    if custody is None:
+    if custody is None or kind in (HELD_MAY if custody.keeper is not None else CONFINED_MAY):
         return None
-    if custody.keeper is not None:
-        if kind in HELD_MAY:
-            return None
-        return f"{capital(person_label(citizen, core.state.citizens[custody.keeper]))} holds you fast."
-    if kind in CONFINED_MAY:
-        return None
-    return "You are confined in the gaol." if custody.place == "gaol" else "You are tied at the fire."
+    return held_words(core, citizen) or confined_words(core, citizen)
 
 
 def on_event(core: SimCore, event: EventDraft) -> None:
     """Event hook: what each theft and poaching took, so a fine can pay it back."""
     payload = event.payload
     if isinstance(payload, Stole):
-        loss = Loss(payload.owner, payload.item, payload.count * value_of(payload.item, "town"))
+        loss = Loss(payload.owner, payload.count * value_of(payload.item, "town"))
     elif isinstance(payload, Trespassed) and payload.took is not None:
         took = payload.took
-        loss = Loss(payload.owner, took.item, took.count * value_of(took.item, "town"))
+        loss = Loss(payload.owner, took.count * value_of(took.item, "town"))
     else:
         return
     JUSTICE.of(core.state).losses[event.seq] = loss
@@ -199,7 +162,7 @@ def accuse(core: SimCore, citizen: Citizen, action: Accuse) -> ActionResult:
     if not deeds:
         return refuse(core, citizen, "accuse", f"You know of no wrong done by {label}.")
     seq = core.emit("accused", Accused(person=person.id, to=to.id, deeds=[deed.seq for deed in deeds]), actor=citizen)
-    words = f"{person.name} {_deeds_words(core, deeds)}."
+    words = f"{person.name} {join(list(dict.fromkeys(deed_words(core, to, deed) for deed in deeds)))}."
     who = person_label(to, citizen)
     to.heard.append(Heard(core.state.tick, seq, citizen.id, who, words, "normal", citizen.position))
     del to.heard[:-KEPT_HEARD]
@@ -214,25 +177,6 @@ def _named(core: SimCore, citizen: Citizen, who: str) -> Citizen | None:
         if person is not None and query and query == normalize(person.name):
             return person
     return match_person(core, citizen, who)
-
-
-def _deeds_words(core: SimCore, deeds: list[society.Deed]) -> str:
-    """What the deeds were, as said aloud ("stole rice and trespassed at night")."""
-    losses = JUSTICE.of(core.state).losses
-    said: list[str] = []
-    for deed in deeds:
-        loss = losses.get(deed.seq)
-        victim = core.state.citizens[deed.victim].name if deed.victim is not None else "someone"
-        words = {
-            "theft": f"stole {loss.item if loss else 'something'}",
-            "poaching": f"poached {loss.item if loss else 'game'}",
-            "trespass": "trespassed at night",
-            "assault": f"struck {victim}",
-            "killing": f"killed {victim}",
-        }[deed.kind]
-        if words not in said:
-            said.append(words)
-    return said[0] if len(said) == 1 else ", ".join(said[:-1]) + " and " + said[-1]
 
 
 # --- seize ---
@@ -273,7 +217,7 @@ def finish_seize(core: SimCore, citizen: Citizen, action: ActionState) -> None:
     prisoner = leading(core, person.id)
     if prisoner is not None:  # a seizer seized lets go of whoever they held
         _release(core, core.state.citizens[prisoner], "seizer_down", person.id, seq)
-    JUSTICE.of(core.state).custody[person.id] = Custody(since=core.state.tick, keeper=citizen.id)
+    CUSTODY.of(core.state)[person.id] = Custody(since=core.state.tick, keeper=citizen.id)
     slots.release(core, person)
     _stop(core, person, f"{seizer} seizes you; you are held fast.", seq)
     core.end_action(citizen, "done", f"You seize {label}; you hold them fast.")
@@ -339,18 +283,11 @@ def _target(person: Citizen) -> Target:
 # --- custody: confining, serving, releasing ---
 
 
-def custody_ends(custody: Custody) -> int:
-    """The last tick of a custody: its 12 h from the seizure, sooner if a confinement sentence ends before."""
-    cap = custody.since + CUSTODY_HOURS * TICKS_PER_HOUR
-    return cap if custody.until is None else min(cap, custody.until)
-
-
 def keep_custody(core: SimCore) -> None:
     """Every-tick hook: custody ends when they die (`released` died), when the seizer is hurt, asleep, dead or in
     custody themselves (seizer_down), when a confinement sentence is served (`sentence_served`, then `released`
     judged), or after its 12 h (timeout)."""
-    justice = JUSTICE.of(core.state)
-    for person_id, custody in sorted(justice.custody.items()):
+    for person_id, custody in sorted(CUSTODY.of(core.state).items()):
         person = core.state.citizens[person_id]
         if not person.body.alive:
             _release(core, person, "died", None)
@@ -377,7 +314,7 @@ def lock_up(core: SimCore) -> None:
     for person_id, keeper in held_pairs(core):
         person = core.state.citizens[person_id]
         if core.distance_m(person.position, gaol.centre) <= gaol.radius_m and _into_gaol(core, person):
-            custody = JUSTICE.of(core.state).custody[person_id]
+            custody = CUSTODY.of(core.state)[person_id]
             custody.keeper, custody.place = None, "gaol"
             confined = Confined(place=PLACE_WORDS["gaol"], until_tick=custody_ends(custody), by=keeper)
             core.emit("confined", confined, actor=person)
@@ -413,7 +350,8 @@ def _release(
 
 
 def _end(core: SimCore, person: Citizen) -> None:
-    custody = JUSTICE.of(core.state).custody.pop(person.id)
+    custody = CUSTODY.of(core.state).pop(person.id)
+    JUSTICE.of(core.state).unpaid.pop(person.id, None)
     if custody.place == "gaol":
         slots.release(core, person)
 
@@ -462,20 +400,21 @@ def finish_judge(core: SimCore, judge: Citizen, action: ActionState) -> None:
             tax.pay_by_fine(core, person, person.home, paid, seq)
         fined = f"You fine {label} {price_words(sentence.mon)}"
         if paid < sentence.mon:  # still in custody; the deeds are left open to a confinement
+            if deeds:
+                JUSTICE.of(core.state).unpaid[person.id] = deeds
             core.end_action(judge, "done", f"{fined}; they can pay only {price_words(paid) if paid else 'nothing'}.")
             return
-        _mark_judged(core, deeds)
         core.emit("sentence_served", SentenceServed(sentence="fine", judgement=seq), actor=person, cause_seq=seq)
         _release(core, person, "judged", judge.id, seq)
         core.end_action(judge, "done", f"{fined}; it is paid.")
         return
-    custody = JUSTICE.of(core.state).custody[person.id]
+    custody = CUSTODY.of(core.state)[person.id]
     if custody.keeper is not None and court == "town" and not _into_gaol(core, person):
         core.end_action(judge, "failed", f"You can't get {label} into the gaol.")  # a seat free, but no way to it
         return
     judged = Judged(person=person.id, sentence="confine", confine_h=float(sentence.hours), deeds=deeds)
     seq = core.emit("judged", judged, actor=judge)
-    _mark_judged(core, deeds)
+    JUSTICE.of(core.state).unpaid.pop(person.id, None)
     custody.until, custody.judgement = core.state.tick + sentence.hours * TICKS_PER_HOUR, seq
     if custody.keeper is not None:
         custody.keeper, custody.place = None, "gaol" if court == "town" else "fire"
@@ -538,10 +477,11 @@ def _court_rect() -> tuple[float, float, float, float]:
 
 
 def _open_deeds(core: SimCore, judge: Citizen, person: Citizen) -> list[int]:
-    """The deeds of the person the judge knows of that nobody has judged yet."""
-    judged = set(JUSTICE.of(core.state).judged)
+    """The deeds of the person the judge knows of that no judgement has settled (`society`'s settled deeds), and those
+    of a fine they paid short (open to a confinement)."""
+    settled = set(society.SOCIETY.of(core.state).settled) - set(JUSTICE.of(core.state).unpaid.get(person.id, []))
     known = society.known_deeds(core, judge.id)
-    return [deed.seq for deed in known if deed.doer == person.id and deed.seq not in judged]
+    return [deed.seq for deed in known if deed.doer == person.id and deed.seq not in settled]
 
 
 def _overdue(core: SimCore, person: Citizen) -> bool:
@@ -549,11 +489,6 @@ def _overdue(core: SimCore, person: Citizen) -> bool:
     `tax_overdue`), still unpaid."""
     owed = tax.TAX.of(core.state).accounts.get(person.home or "")
     return owed is not None and owed.days >= ARREARS_DAYS and bool(owed.rice or owed.arrears)
-
-
-def _mark_judged(core: SimCore, deeds: list[int]) -> None:
-    justice = JUSTICE.of(core.state)
-    justice.judged = sorted(set(justice.judged) | set(deeds))
 
 
 # --- fines ---

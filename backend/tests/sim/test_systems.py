@@ -10,7 +10,7 @@ from pydantic import JsonValue
 from app.observability.events import EventDraft, Spoiled
 from app.sim.clock import local_minute
 from app.sim.core import SimCore
-from app.sim.justice import JUSTICE
+from app.sim.custody import CUSTODY
 from app.sim.navigation import Planner
 from app.sim.simulation import Simulation
 from app.sim.slots import SLOTS
@@ -137,7 +137,7 @@ def test_hooks_run_after_bodies_and_before_interrupts_in_list_order(sim_world: S
     def local(name: str) -> Callable[[SimCore, LocalTest], None]:
         return lambda _core, _now: calls.append(name)
 
-    systems = (SLOTS, JUSTICE)  # resting takes a seat (slots); every action asks whether its actor is held (justice)
+    systems = (SLOTS, CUSTODY)  # resting takes a seat (slots); every action asks whether its actor is held (custody)
     hooks = Registry(systems=systems, every_tick=(bite,), at_dawn=(local("dawn"),), at_midnight=(local("mid"),))
     sim = _sim(sim_world, planner, hooks)
     api = WorldApi(sim, "ann")

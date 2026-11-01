@@ -6,7 +6,7 @@ A walk goes at its `pace` (walk, or run), a flee always runs. Running lasts whil
 `running` system: seconds of run left per citizen, a minute spent by each minute of running, held while jogging,
 coming back at half speed otherwise), then the runner jogs; children, elders and heavy loads jog at most.
 
-Someone held (`justice`) is led along their seizer's steps to a free spot about a metre behind them, and a seizer
+Someone held (`custody`) is led along their seizer's steps to a free spot about a metre behind them, and a seizer
 leading someone walks at 0.8× their pace.
 """
 
@@ -14,7 +14,7 @@ from typing import cast
 
 from pydantic import JsonValue
 
-from app.sim import justice, slots
+from app.sim import custody, slots
 from app.sim.acting import VERB, begin, settled
 from app.sim.clock import SECONDS_PER_TICK
 from app.sim.core import WALK_AHEAD_TICKS, SimCore, Stride, TimedPoint
@@ -127,7 +127,7 @@ def advance_walk(core: SimCore, citizen: Citizen, walk: ActionState) -> None:
         raise ValueError(f"walk {walk.number} of {citizen.id} has no route")
     gait = walk_gait(core, citizen, walk)
     budget = ground_mps(core, citizen, gait) * SECONDS_PER_TICK  # metres of flat ground this minute
-    if justice.leading(core, citizen.id) is not None:
+    if custody.leading(core, citizen.id) is not None:
         budget *= LEAD_PACE
     progress = walk_along(walk.route, walk.leg, walk.along_m, budget, core.world.radius_m)
     core.strides[citizen.id] = _walk_stride(core, citizen, walk, progress, budget, gait)
@@ -163,7 +163,7 @@ def lead_held(core: SimCore) -> None:
     of LEAD_RADII_M behind them (right behind, a metre off, when none is free: never left out of reach), drawn
     walking at the seizer's times; next to a seizer standing still they stay put. The spot is claimed (a ring spot),
     so nobody is stepped aside onto it."""
-    for person_id, keeper_id in justice.held_pairs(core):
+    for person_id, keeper_id in custody.held_pairs(core):
         held, keeper = core.state.citizens[person_id], core.state.citizens[keeper_id]
         stride = core.strides.get(keeper.id)
         walked = stride.walked if stride is not None else ()

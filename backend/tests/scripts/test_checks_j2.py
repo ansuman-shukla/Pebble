@@ -3,8 +3,8 @@
 from collections.abc import Callable
 
 from app.observability.events import EventDraft, EventType, Judged, Payload, SentenceServed, Tended
-from app.sim import justice
 from app.sim.clock import TICKS_PER_HOUR
+from app.sim.custody import CUSTODY, Custody
 from app.sim.simulation import Simulation
 from app.sim.society import SOCIETY
 from scripts.checks import CHECKS, j2
@@ -27,7 +27,7 @@ def test_the_held_close_check_catches_a_held_person_over_3_m_off(new_sim: Callab
     sim = _pair(new_sim)
     check = j2.HeldClose()
     check.start(sim)
-    justice.JUSTICE.of(sim.state).custody["kaz"] = justice.Custody(since=0, keeper="goro")
+    CUSTODY.of(sim.state)["kaz"] = Custody(since=0, keeper="goro")
     check.after_step(sim, [])
     assert check.outcome(sim) == Outcome(0, True, "1 held ticks, all within 3 m")
     sim.core.place_at(sim.citizen("kaz"), sim.world.town.to_unit(-33.5, 50.0))
@@ -40,7 +40,7 @@ def test_the_custody_check_fails_past_twelve_hours(new_sim: Callable[..., Simula
     sim = _pair(new_sim)
     check = j2.Custody()
     check.start(sim)
-    justice.JUSTICE.of(sim.state).custody["kaz"] = justice.Custody(since=0, keeper=None, place="gaol")
+    CUSTODY.of(sim.state)["kaz"] = Custody(since=0, keeper=None, place="gaol")
     sim.state.tick = 12 * TICKS_PER_HOUR
     check.after_step(sim, [])
     assert check.outcome(sim).ok
