@@ -94,3 +94,18 @@ test("B opens the scoreboard: it sorts, a row selects, the inspector shows the c
   await expect(board).toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+test('a replay shows the scoreboard of its tick', async ({ page }) => {
+  const errors: string[] = [];
+  await openGlobe(page, errors, '?tick=1000');
+  const badge = page.getByTestId('replay-badge');
+  await expect(badge).toContainText(/day \d+ · \d\d:\d\d/);
+  const [, day, time] = (await badge.textContent())!.match(
+    /day (\d+) · (\d\d:\d\d)/,
+  )!;
+  await page.getByRole('button', { name: 'scores' }).click();
+  const board = scoreboard(page);
+  await expect(board.locator('[data-row]').first()).toBeVisible();
+  await expect(board.locator('header')).toContainText(`day ${day} ${time}`);
+  expect(errors).toEqual([]);
+});
