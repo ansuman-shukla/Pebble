@@ -526,7 +526,7 @@ test.describe('ground marks of the real world', () => {
     }
   });
 
-  test('work spots wear patches: worn at the water, dug at flint and obsidian, iron sand at its bar', () => {
+  test('work spots wear patches: worn at the water, dug at flint and obsidian, iron sand at its bar; pools none', () => {
     const expected: Record<string, MarkKind> = {
       fishing_spot: 'worn',
       waterhole: 'worn',
@@ -534,10 +534,20 @@ test.describe('ground marks of the real world', () => {
       obsidian_field: 'dug',
       iron_sand_bar: 'iron_sand',
     };
+    // a pool waterhole draws its own muddy bank (waterholes.ts), not a patch
     const spots = view.places.features.filter(
-      (feature) => feature.kind in expected,
+      (feature) => feature.kind in expected && !feature.pool,
     );
     expect(spots.length).toBeGreaterThan(10);
+    const pools = view.places.features.filter((feature) => feature.pool);
+    expect(pools.length).toBeGreaterThan(0);
+    for (const pool of pools) {
+      const at = new Vector3(...pool.position);
+      expect(
+        marks.patches.some((patch) => patch.centre.angleTo(at) < 1e-9),
+        pool.id,
+      ).toBe(false);
+    }
     for (const spot of spots) {
       const at = new Vector3(...spot.position);
       expect(

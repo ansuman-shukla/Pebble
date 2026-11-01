@@ -24,6 +24,7 @@ import {
   biomeGroundClaims,
   groundWeights,
 } from '../../src/lib/world/globe-mesh';
+import { routeLines } from '../../src/lib/world/ground-marks';
 import { GROUND_LAYERS } from '../../src/lib/world/ground-shader';
 import {
   fillMeshes,
@@ -206,7 +207,7 @@ test('no decor grows where the ground is mostly rock', () => {
   expect(decor).toBeGreaterThan(500);
 });
 
-test('decor keeps off nodes and their spots, roads and paths, and rocks keep out of mineral hotspots', () => {
+test('decor keeps off nodes and their spots, roads and paths as drawn, and rocks keep out of mineral hotspots', () => {
   const minerals = view.places.hotspots
     .filter((h) =>
       view.places.features.some(
@@ -217,30 +218,34 @@ test('decor keeps off nodes and their spots, roads and paths, and rocks keep out
     )
     .map((h) => ({ at: unit(h.centre), radius: h.radius_m }));
   expect(minerals.length).toBeGreaterThanOrEqual(5);
-  const roadCells = new Map<number, [number, number, number][]>();
-  for (const road of view.places.roads)
-    road.cells.forEach((cell, i) => {
-      if (i === 0) return;
-      for (const c of [cell, road.cells[i - 1]])
-        roadCells.set(c, [
-          ...(roadCells.get(c) ?? []),
-          [road.cells[i - 1], cell, ROAD_CLEARANCE[road.kind]],
-        ]);
-    });
+  // the roads and paths as drawn (their middle lines in steps), by the cell nearest each step's end
+  const roadSteps = new Map<number, [Vector3, Vector3, number][]>();
+  let hint: number | undefined;
+  for (const { kind, points } of routeLines(terrain.globe, view.places.roads)
+    .lines)
+    for (let i = 1; i < points.length; i++) {
+      hint = terrain.nearestCell(points[i], hint);
+      roadSteps.set(hint, [
+        ...(roadSteps.get(hint) ?? []),
+        [
+          points[i - 1].clone().multiplyScalar(R()),
+          points[i].clone().multiplyScalar(R()),
+          ROAD_CLEARANCE[kind],
+        ],
+      ]);
+    }
   const cells = [
     ...cellsOfInterest(),
     // along the roads out of the camps and the town
     ...view.places.roads.flatMap((road) => road.cells.slice(0, 40)),
   ];
-  const a = new Vector3();
-  const b = new Vector3();
   const faults: string[] = [];
   let decor = 0;
   let nearRoads = 0;
   for (const cell of new Set(cells)) {
     const near = [cell, ...terrain.neighbours(cell)];
     const nodes = near.flatMap((c) => scatter.nodes(c));
-    const segments = near.flatMap((c) => roadCells.get(c) ?? []);
+    const segments = near.flatMap((c) => roadSteps.get(c) ?? []);
     for (const instance of scatter.decor(cell)) {
       decor += 1;
       for (const node of nodes)
@@ -250,9 +255,7 @@ test('decor keeps off nodes and their spots, roads and paths, and rocks keep out
         )
           faults.push(`${instance.kind} by ${node.id}`);
       const p = unit(instance.position.toArray()).multiplyScalar(R());
-      for (const [from, to, clear] of segments) {
-        cellDirection(terrain.globe, from, a).multiplyScalar(R());
-        cellDirection(terrain.globe, to, b).multiplyScalar(R());
+      for (const [a, b, clear] of segments) {
         const ab = b.clone().sub(a);
         const t = Math.min(
           1,
