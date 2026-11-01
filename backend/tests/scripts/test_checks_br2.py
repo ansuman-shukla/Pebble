@@ -82,3 +82,26 @@ def test_band_b_deeds_need_six_one_seen_and_judged_and_one_unseen(new_sim: Calla
     assert not br2.BandBDeeds.overall({1: one}).ok  # only 2 deeds
     assert br2.BandBDeeds.overall({1: one, 7: br2.DeedsSeen(4, True, "", 0, 4)}).ok
     assert not br2.BandBDeeds.overall({1: br2.DeedsSeen(6, True, "", 0, 6)}).ok  # none judged
+
+
+def test_band_b_gold_days_count_its_gold_sales_and_pans_once_a_day(new_sim: Callable[..., Simulation]) -> None:
+    from app.observability.events import ItemLocation, ItemMoved
+
+    sim = new_sim()
+    nim, ama = _band(sim, "nim", "band_b"), _band(sim, "ama", "band_a")
+    check = br2.GoldTrips()
+    check.start(sim)
+    gold = Traded(item="gold", count=1, lots=1, coins=40, stall="market-stall", merchant="fumiko")
+    hide = Traded(item="hide", count=1, lots=1, coins=11, stall="market-stall", merchant="fumiko")
+    check.after_step(sim, [_event(sim, "sold", ama, gold), _event(sim, "sold", nim, hide)])  # band A's, or no gold
+    assert check.outcome(sim).value == 0
+    check.after_step(sim, [_event(sim, "sold", nim, gold), _event(sim, "sold", nim, gold)])
+    sim.state.tick = DAY_MINUTES
+    panned = ItemMoved(
+        item="gold",
+        count=1,
+        source=ItemLocation(kind="resource", id="gold:1"),
+        destination=ItemLocation(kind="inventory", id=nim),
+    )
+    check.after_step(sim, [_event(sim, "item_moved", nim, panned)])
+    assert check.outcome(sim).value == 2

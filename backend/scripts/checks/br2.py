@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import ClassVar, override
 
-from app.observability.events import Died, EventDraft, ItemMoved, Judged, Stole, Trespassed
+from app.observability.events import Died, EventDraft, ItemMoved, Judged, Stole, Traded, Trespassed
 from app.sim.clock import DAY_MINUTES
 from app.sim.simulation import Simulation
 from app.sim.vec import Vec3, as_vec
@@ -182,7 +182,7 @@ class GoldTrips(_OverSeeds):
             if doer is None or doer not in sim.state.citizens or sim.state.citizens[doer].region != "band_b":
                 continue
             moved = isinstance(event.payload, ItemMoved) and event.payload.item == "gold"
-            sold = event.type == "sold" and getattr(event.payload, "item", None) == "gold"
+            sold = event.type == "sold" and isinstance(event.payload, Traded) and event.payload.item == "gold"
             if moved or sold:
                 self.days.add(sim.tick // DAY_MINUTES)
 
