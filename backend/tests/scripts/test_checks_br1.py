@@ -28,7 +28,8 @@ def _event(sim: Simulation, kind: EventType, payload: Payload, actor: str = "gor
 
 def test_the_checks_are_registered() -> None:
     assert set(br1.CHECKS) <= set(CHECKS)
-    assert all(check.pending is None for check in br1.CHECKS)
+    pending = {check.name: check.pending for check in br1.CHECKS if check.pending is not None}
+    assert pending == {"br1.coin_trend": "BR2 band purchases (about 7 rice a day of the stall's balance)"}
 
 
 def test_sales_count_the_town_s_and_add_the_seeds_up(town: Simulation) -> None:
