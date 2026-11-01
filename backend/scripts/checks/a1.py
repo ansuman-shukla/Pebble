@@ -363,7 +363,6 @@ class PeopleFlights(Check):
     """Days on which some herd near each camp bolted from a person, as a share of the days (≥ 1 a day per camp)."""
 
     name = "a1.people_flights"
-    pending = EXPOSURE
 
     @override
     def start(self, sim: Simulation) -> None:

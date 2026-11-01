@@ -113,8 +113,8 @@ def test_a_pending_check_is_printed_but_does_not_fail_the_run(
 
 def test_the_threat_checks_wait_for_the_exposure_schedules() -> None:
     pending = {check.name for check in CHECKS if check.pending is not None}
-    assert {"a1.approaches", "a1.attacks", "a1.den_charges", "a1.people_flights"} <= pending
-    assert "a1.kills" not in pending and "a1.herds_kept" not in pending
+    assert {"a1.approaches", "a1.attacks", "a1.den_charges"} <= pending
+    assert not {"a1.kills", "a1.herds_kept", "a1.people_flights"} & pending  # herds flee people every day (BR1)
 
 
 def test_the_home_ring_check_waits_for_band_trips_and_the_node_checks_count() -> None:
