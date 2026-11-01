@@ -12,6 +12,7 @@ import {
   citizensReadCitizenTimeline,
   clockReadGameClock,
   conversationsReadConversations,
+  scoreboardReadScoreboard,
   statsReadStats,
 } from '@/lib/client/sdk.gen';
 
@@ -156,6 +157,24 @@ export function useStats(at: number | null = null) {
     queryKey: ['stats', at],
     queryFn: async () =>
       (await statsReadStats({ query: atQuery(at), throwOnError: true })).data,
+    placeholderData: keepPreviousData,
+    retry: false,
+  });
+}
+
+/** The spectator scoreboard (10-world-v1 §7) at `at` (or now, refreshed every few seconds: it reads the whole run). */
+export function useScoreboard(at: number | null = null) {
+  const live = useLive(at === null, SLOW_MS);
+  return useQuery({
+    ...live,
+    queryKey: ['scoreboard', at],
+    queryFn: async () =>
+      (
+        await scoreboardReadScoreboard({
+          query: atQuery(at),
+          throwOnError: true,
+        })
+      ).data,
     placeholderData: keepPreviousData,
     retry: false,
   });

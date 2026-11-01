@@ -52,6 +52,7 @@ import type {
 import { GlobeWalker } from '@/components/world/globe/globe-walker';
 import { Minimap, type MinimapTown } from '@/components/world/globe/minimap';
 import { EventFeed } from '@/components/world/globe/event-feed';
+import { Scoreboard } from '@/components/world/globe/scoreboard';
 import {
   CitizenPicker,
   Inspector,
@@ -764,6 +765,7 @@ function GlobeWorld({
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [feedOpen, setFeedOpen] = useState(true);
   const [minimapOpen, setMinimapOpen] = useState(true);
+  const [scoreboardOpen, setScoreboardOpen] = useState(false);
   const pinned = useMemo(
     () => [...new Set([selectedId, followId])].filter((id) => id !== null),
     [selectedId, followId],
@@ -842,9 +844,11 @@ function GlobeWorld({
   );
 
   // the spectator keys (10-world-v1 §5.4): Tab cycles the selection, F follows it, G goes to it, Space pauses,
-  // 1-4 pick the clock's speeds, I, L and M show or hide the inspector, the event feed and the minimap, Esc lets go
-  // of everything
+  // 1-4 pick the clock's speeds, I, L, M and B show or hide the inspector, the event feed, the minimap and the
+  // scoreboard, Esc lets go of everything
   const clockLive = feed.status !== 'off';
+  // the scoreboard reads the backend's run: live from it, or replayed
+  const scoresShown = source === 'backend' || replayTick !== null;
   const { paused: livePaused, citizens } = live;
   const { setClock } = feed;
   useKeys(
@@ -861,12 +865,21 @@ function GlobeWorld({
         if (code === 'KeyI') setInspectorOpen((open) => !open);
         if (code === 'KeyL') setFeedOpen((open) => !open);
         if (code === 'KeyM') setMinimapOpen((open) => !open);
+        if (code === 'KeyB' && scoresShown) setScoreboardOpen((open) => !open);
         if (clockLive && code === 'Space') setClock({ paused: !livePaused });
         const speed = CLOCK_SPEEDS[Number(code.replace('Digit', '')) - 1];
         if (clockLive && code.startsWith('Digit') && speed)
           setClock(speed.change);
       },
-      [selectedId, follow, goToCitizen, clockLive, livePaused, setClock],
+      [
+        selectedId,
+        follow,
+        goToCitizen,
+        clockLive,
+        livePaused,
+        setClock,
+        scoresShown,
+      ],
     ),
   );
   // Tab and Space belong to the scene here, not to focus moves or page scrolls; Tab (Shift+Tab back) cycles,
@@ -1153,6 +1166,19 @@ function GlobeWorld({
             people
           </Button>
         )}
+        {scoresShown && (
+          <Button
+            size="sm"
+            variant={scoreboardOpen ? 'default' : 'outline'}
+            aria-pressed={scoreboardOpen}
+            onClick={(event) => {
+              setScoreboardOpen((open) => !open);
+              event.currentTarget.blur();
+            }}
+          >
+            scores
+          </Button>
+        )}
         <span>
           WASD move, Shift run, T travel (25 m/s), drag to look, wheel zoom, C
           camera
@@ -1163,6 +1189,7 @@ function GlobeWorld({
           <span className="basis-full" data-testid="spectator-keys">
             Tab select, F follow, G go to, I inspector
             {clockLive && ', L events'}, M minimap
+            {scoresShown && ', B scoreboard'}
             {clockLive && ', Space pause, 1-4 speed'}, Esc let go
           </span>
         )}
@@ -1231,6 +1258,17 @@ function GlobeWorld({
           open={feedOpen}
           onToggle={() => setFeedOpen((open) => !open)}
           onFly={flyTo}
+        />
+      )}
+      {scoresShown && scoreboardOpen && (
+        <Scoreboard
+          at={replayTick}
+          selectedId={selectedId}
+          onSelect={(id) => {
+            setSelectedId(id);
+            setInspectorOpen(true);
+          }}
+          onClose={() => setScoreboardOpen(false)}
         />
       )}
       {selected && inspectorOpen && (
