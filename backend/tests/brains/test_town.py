@@ -501,3 +501,20 @@ def test_the_monk_tends_whoever_looks_hurt() -> None:
     assert (tend.score, ("tend", "Lia") in api.calls) == (town.TEND, True)
     well = beside.model_copy(update={"doing": "walking"})
     assert [o.name for o in town.monk(_ctx(_look(people=(well,)), ENNEN)[0])] != ["tend"]
+
+
+def test_a_fine_paid_leaves_a_clean_slate_and_a_second_wrong_gets_its_own_sentence() -> None:
+    notes: dict[str, JsonValue] = {}
+    confined = _look(people=(_kaz(doing="confined in the gaol"),))
+    town._judge(_ctx(confined, MASANORI, Recorder(notes))[0])[0].start()
+    assert notes["fined"] == ["Kaz"]
+    town._judge(_ctx(_look(people=(_kaz(),)), MASANORI, Recorder(notes))[0])  # seen free: the fine was paid
+    assert notes["fined"] == []
+    again = _kaz(doing="confined in the gaol").model_copy(
+        update={"regard": "who stole rice from the racks and struck you"}
+    )
+    ctx, api = _ctx(_look(people=(again,)), MASANORI, Recorder(notes))
+    town._judge(ctx)[0].start()
+    assert ("judge", "Kaz", Confinement(hours=12)) in api.calls  # the blow, not the 6 h of a fine unpaid
+    assert notes["fined"] == []
+

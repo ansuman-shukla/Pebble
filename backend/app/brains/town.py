@@ -825,6 +825,8 @@ def _judge(ctx: Context) -> list[Option]:
     judged, fined = notes.setdefault("judged", []), notes.setdefault("fined", [])
     if not isinstance(judged, list) or not isinstance(fined, list):
         raise TypeError("judged and fined must be lists")
+    free = {person.label for person in p.people if not (person.doing or "").startswith(("held by", "confined"))}
+    fined[:] = [who for who in fined if who not in free]  # the fine paid (or the confinement over): a clean slate
     for person in p.people:
         deed, doing = known_deed(person), person.doing or ""
         if deed is None or [person.label, deed] in judged or not doing.startswith(("held by", "confined")):
@@ -832,7 +834,8 @@ def _judge(ctx: Context) -> list[Option]:
         if _count_today(ctx, f"judging {person.label}") >= LAW_TRIES:
             continue
         unpaid = person.label in fined
-        sentence = UNPAID if unpaid else next((v for words, v in SENTENCES if deed.startswith(words)), UNPAID)
+        newest = deed.split(" and ")[-1]  # the latest wrong known is told last
+        sentence = UNPAID if unpaid else next((v for words, v in SENTENCES if newest.startswith(words)), UNPAID)
         aim = f"Judge {person.label}, who {deed}"
         if person.nearness != "right beside you":
             return [Option(LAW, f"go up to {person.label}", partial(ctx.api.walk_to_person, person.label), aim)]
@@ -843,6 +846,8 @@ def _judge(ctx: Context) -> list[Option]:
                 fined.append(who)  # if it isn't paid in full, they stay held: confinement next
             else:
                 judged.append([who, deed])
+                if who in fined:
+                    fined.remove(who)
             return ctx.api.judge(who, sentence)
 
         return [Option(LAW, "judge", judge, aim)]
