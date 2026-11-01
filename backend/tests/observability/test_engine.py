@@ -168,6 +168,8 @@ def test_a_new_run_starts_with_the_cast_and_the_stocked_stores(db_session: Sessi
         "castle-keep-chest": {"coins": 2015},  # the treasury
         "farmhouse-1-chest": {"rice": 20},
         "farmhouse-2-chest": {"rice": 20},
+        "field-rack-1": {"rice": 4},  # each farm household's hasa rack (BR2 follow-up)
+        "field-rack-2": {"rice": 4},
         "band_a_camp:drying-rack": {"dried meat": 6},  # each band's store of strips (BR2)
         "band_b_camp:drying-rack": {"dried meat": 4},
     }
@@ -176,6 +178,8 @@ def test_a_new_run_starts_with_the_cast_and_the_stocked_stores(db_session: Sessi
     assert [(e.payload["source"]["kind"], e.payload["destination"]["id"], e.payload["item"]) for e in stocked] == [
         ("world", "band_a_camp:drying-rack", "dried meat"),
         ("world", "band_b_camp:drying-rack", "dried meat"),
+        ("world", "field-rack-1", "rice"),
+        ("world", "field-rack-2", "rice"),
         *(("world", "market-stall", item) for item in sorted(stall)),
         ("world", "store-2", "rice"),
         ("world", "store-2", "wood"),

@@ -20,6 +20,7 @@ from functools import partial
 
 from pydantic import JsonValue
 
+from app.brains.healing import tend_the_hurt
 from app.brains.justice import known_deed
 from app.brains.profile import BrainProfile, Routine
 from app.brains.routines import (
@@ -155,10 +156,8 @@ NUMBERS = {word: n for n, word in enumerate(f"{_ONES} eighteen nineteen".split()
 LEAST = (("a great", 41), ("plenty of", 13), ("a handful of", 4), ("some", 4), ("a few", 2), ("a little", 2))
 WATCH = 72.0  # the night watch outscores sleep (70) for the watchman
 LAW = 60.0  # an officer's seizing and the lord's judging: over the day's work, under hunger
-TEND = WORK + 20  # the monk tends the hurt before his prayers
-LAW_TRIES = 3  # a day: walks after or tries at someone to seize, judge or tend before leaving them be
+LAW_TRIES = 3  # a day: walks after or tries at someone to seize or judge before leaving them be
 GAOL = "the gaol"
-HURT_LOOKS = ("looking hurt", "looking near death")
 # the lord's table (10 §3.4) by the deed's words: theft 2× its value (a few measures: ~20 mon), poaching 1× (~10), a
 # night in the walls confined till dawn, a blow 12 h; a fine they can't pay: confined 6 h
 SENTENCES: tuple[tuple[str, Verdict], ...] = (
@@ -172,6 +171,15 @@ UNPAID = Confinement(hours=6)
 EXHAUSTED = 91.0  # over sleeping where he stands (90): the watchman worn out goes home to bed
 STORE_RICE = "Bring the rice into the storehouse"
 TAKE_RICE_HOME = "Take the rice home to the chest"
+RACK_RICE = "Leave rice on the rack to dry"
+TAKE_IN_RICE = "Take in the rice from the rack"
+RICE_RACK = "a rice rack"
+YOUR_RACK = "your rice rack"  # the household's own hasa rack by the paddies
+LADEN = "hung with rice"  # a rice rack with rice drying on it
+YOUR_LADEN_RACK = f"{YOUR_RACK} {LADEN}"
+BUY_TRIES = 3  # refused rice buys a day before giving up till tomorrow (Daisuke went hungry after one, seed 7)
+RACK_SHARE = 0.5  # of the rice carried off the paddies in the afternoon left on the rack overnight (tax: 40 %)
+RACK_TIMES: frozenset[TimeOfDay] = frozenset({"early afternoon", "late afternoon"})
 SELL_RICE = "Sell our spare rice at the stall"
 
 
@@ -297,7 +305,7 @@ def _buy_rice(ctx: Context) -> list[Option]:
     low = NIGHT_RICE if p.time_of_day == "late afternoon" else LOW_RICE  # before the stall shuts: enough for the night
     if carrying(p, RICE) >= low or p.time_of_day not in STALL_TIMES or not carries(p, COINS):
         return []
-    if ctx.done_today("failed buy rice"):
+    if _count_today(ctx, "failed buy rice") >= BUY_TRIES:  # a refused buy is tried again later that day
         return []
     hungry = None if food else HUNGRY_BUY.get(ctx.needs.hunger)
     buy = partial(ctx.api.buy, RICE, BUY_RICE)
@@ -476,6 +484,59 @@ def _sell_rice(ctx: Context, score: float) -> Option | None:
     return option
 
 
+def _own_rack(p: Perception) -> Seen | None:
+    return next((t for t in p.things if t.label == YOUR_RACK and DISTANCE[t.nearness] != "far"), None)
+
+
+def _rack_rice(ctx: Context) -> Option | None:
+    """Leaving the paddies with a harvest in the afternoon, a farmer first hangs half of it on the household's own hasa
+    rack to dry overnight (10 §2.6: the raid target; the tax is paid from the other half), once a day; it comes in
+    next morning. Those who only help in the fields (the weaver) take their harvest straight in."""
+    p = ctx.perception
+    share = int(carried_food(p.you).get(RICE, 0) * RACK_SHARE)
+    if ctx.profile.routine != "farmer" or p.time_of_day not in RACK_TIMES or not at(p, FIELDS) or share < 1:
+        return None
+    if ctx.done_today("racked"):
+        return None
+    rack = _own_rack(p)
+    if rack is None or _refused(ctx, f"go to {YOUR_RACK}") or _refused(ctx, "rack rice"):
+        return None
+    if rack.nearness != "right beside you" and not ctx.finished(f"go to {YOUR_RACK}"):
+        return Option(WORK + 1, f"go to {YOUR_RACK}", partial(ctx.api.walk_to_thing, YOUR_RACK), RACK_RICE)
+
+    def leave() -> ActionHandle:
+        ctx.mark_done("racked")
+        if ctx.api.stash(RICE, share).outcome == "done":
+            ctx.notes["on the rack"] = True
+        return ctx.api.rest(5)
+
+    return Option(WORK + 1, "rack rice", leave, RACK_RICE)
+
+
+def _take_in_rice(ctx: Context) -> list[Option]:
+    """The morning after, the rice left on the household's own rack by the paddies comes in, if any still hangs there
+    (a raid may have taken it), and goes home with the day's harvest; never from another household's rack."""
+    p = ctx.perception
+    if not ctx.notes.get("on the rack") or ctx.done_today("racked") or not _daytime(ctx):
+        return []
+    laden = next((t for t in p.things if t.label == YOUR_RACK and t.doing == LADEN), None)
+    if laden is None and not at(p, FIELDS):
+        return [_go(ctx, FIELDS, aim=TAKE_IN_RICE)]
+    if laden is None:  # bare by the paddies: taken in the night
+        ctx.notes.pop("on the rack", None)
+        return []
+    if laden.nearness != "right beside you" and not ctx.finished(f"go to {YOUR_LADEN_RACK}"):
+        walk = partial(ctx.api.walk_to_thing, YOUR_LADEN_RACK)
+        return [Option(WORK + 1, f"go to {YOUR_LADEN_RACK}", walk, TAKE_IN_RICE)]
+
+    def take() -> ActionHandle:
+        ctx.notes.pop("on the rack", None)
+        ctx.api.pick_up(RICE)  # from their own rack: the one hung with rice they stand by
+        return ctx.api.rest(5)
+
+    return [Option(WORK + 1, "take in the rice", take, TAKE_IN_RICE)]
+
+
 def _stash_rice(ctx: Context) -> ActionHandle:
     """Put the carried rice in the household chest (as much as they reckon they carry), then rest a moment at home."""
     ctx.api.stash(RICE, max(1, carried_food(ctx.perception.you).get(RICE, 0)))
@@ -519,8 +580,11 @@ def _farm(ctx: Context) -> list[Option]:
         return [_store_rice(ctx, 46)]  # bring the day's harvest in before supper
     if not _daytime(ctx):
         return []
+    taking_in = _take_in_rice(ctx)
+    if taking_in:
+        return taking_in
     if rice >= 25 or (rice and p.time_of_day == "late afternoon"):  # and in before the dusk bell and the stall shuts
-        return [_store_rice(ctx)]
+        return [_rack_rice(ctx) or _store_rice(ctx)]
     sickle = _buy_sickle(ctx)
     if sickle:
         return sickle
@@ -567,13 +631,16 @@ def _gather_at(ctx: Context, place: str, resource: str, aim: str, score: float =
 
 def _sell(ctx: Context, item: str, aim: str, score: float = WORK + 1) -> list[Option]:
     """Sell what you carry of a good at the stall (as much as it takes, in its lots) while it is kept; while it is
-    cheap there (the stall holds more than it wants) it is kept for another day."""
+    cheap there (the stall holds more than it wants) it is kept for another day, unless the seller is hungry with
+    nothing to eat: then what the stall pays will do."""
     p = ctx.perception
     lot, price = LOTS.get(item, 1), _price(p, item)
+    needy = ctx.needs.hunger >= 2 and not carried_food(p.you)
     short_only = item == GOLD  # only while the stall runs short of it, so its till doesn't lurch
-    if price is not None and (price.word == "cheap" or (short_only and price.word != "dear")):
+    if not needy and price is not None and (price.word == "cheap" or (short_only and price.word != "dear")):
         ctx.mark_done(f"failed sell {item}")
-    if carrying(p, item) < lot or p.time_of_day not in STALL_TIMES or ctx.done_today(f"failed sell {item}"):
+    held = ctx.done_today(f"failed sell {item}") and not needy
+    if carrying(p, item) < lot or p.time_of_day not in STALL_TIMES or held or _refused(ctx, f"sell {item}"):
         return []
     option = _at_stall(ctx, score, f"sell {item}", aim, partial(ctx.api.sell, item, 99))
     return [option] if option is not None else []
@@ -759,9 +826,15 @@ def _watch(ctx: Context, score: float) -> list[Option]:
             return [_go(ctx, WEST_GATE, score, aim)]
         watch = _then(lambda: _set(ctx, "beat", "racks"), lambda: ctx.api.work("guard"))
         return [Option(score, "guard", watch, aim)]
-    if not (at(p, FIELDS) and _on_spot(ctx, f"go to {FIELDS}")):
-        return [_go(ctx, FIELDS, score, aim)]
+    rack = next((t for t in p.things if "rice rack" in t.label and DISTANCE[t.nearness] != "far"), None)
     look = _then(lambda: _set(ctx, "beat", "gate"), lambda: ctx.api.wait(15))
+    to_rack = Option(score, f"go to {RICE_RACK}", partial(ctx.api.walk_to_thing, "rack"), aim)
+    tried = _refused(ctx, f"go to {RICE_RACK}")  # not in sight even from the fields: look over them from here
+    if rack is None and not at(p, FIELDS):  # the racks stand by the paddies, out of sight from the gate
+        return [_go(ctx, FIELDS, score, aim)]
+    near_rack = rack is not None and (rack.nearness == "right beside you" or ctx.finished(f"go to {RICE_RACK}"))
+    if not near_rack and not tried and not ctx.finished(f"go to {RICE_RACK}"):  # night sight is 20 m: stand by them
+        return [to_rack]
     return [Option(score, "look over the racks", look, aim)]
 
 
@@ -859,24 +932,6 @@ def _judge(ctx: Context) -> list[Option]:
             return ctx.api.judge(who, sentence)
 
         return [Option(LAW, "judge", judge, aim)]
-    return []
-
-
-def _tend(ctx: Context) -> list[Option]:
-    """The monk tends anyone in view who looks hurt (10 §3.4: +3 health an hour), walking up to them first."""
-    if "healing" not in ctx.profile.skills:
-        return []
-    for person in ctx.perception.people:
-        looks = person.doing or ""
-        if not any(words in looks for words in HURT_LOOKS) or DISTANCE[person.nearness] == "far":
-            continue
-        if _count_today(ctx, f"tending {person.label}") >= 2 * LAW_TRIES:
-            continue
-        aim = f"Tend {person.label}, who is hurt"
-        if person.nearness != "right beside you":
-            return [Option(TEND, f"go up to {person.label}", partial(ctx.api.walk_to_person, person.label), aim)]
-        tend = _then(partial(ctx.mark_done, f"tending {person.label}"), partial(ctx.api.tend, person.label))
-        return [Option(TEND, "tend", tend, aim)]
     return []
 
 
@@ -1154,7 +1209,7 @@ def monk(ctx: Context) -> list[Option]:
         ctx.mark_done(bell)
     if bell is not None and not ctx.done_today(bell):
         return [_ring(ctx, bell)]
-    tending = _tend(ctx) if ctx.phase != "night" else []
+    tending = tend_the_hurt(ctx)
     if tending or not _daytime(ctx):
         return tending
     return [_work_at(ctx, TEMPLE, "pray", aim="Pray at the temple")]

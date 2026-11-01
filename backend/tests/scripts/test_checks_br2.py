@@ -64,3 +64,46 @@ def test_a_day_with_nobody_out_at_a_far_hotspot_counts_against_the_band(new_sim:
     check.after_step(sim, [])
     assert check.outcome(sim).value == 1  # band A was
     assert {c.name for c in CHECKS} >= {"br2.outings", "br2.trade_trips", "br2.band_hunger"}
+
+
+def test_band_b_deeds_need_six_one_seen_and_judged_and_one_unseen(new_sim: Callable[..., Simulation]) -> None:
+    from app.observability.events import Judged, Trespassed
+
+    sim = new_sim()
+    kaz, nim, goro = _band(sim, "kaz", "band_b"), _band(sim, "nim", "band_b"), sim.add_citizen(make_spec("goro")).id
+    check = br2.BandBDeeds()
+    check.start(sim)
+    seen = Trespassed(kind="walls", owner="town", place="the castle town", witnesses=[goro])
+    unseen = Trespassed(kind="ground", owner="town", place="the Lord's woods")
+    mates = Trespassed(kind="walls", owner="town", place="the castle town", witnesses=[nim])  # only a fellow raider
+    check.after_step(sim, [_event(sim, "trespassed", kaz, seen), _event(sim, "trespassed", kaz, unseen)])
+    check.after_step(sim, [_event(sim, "trespassed", kaz, mates)])
+    check.after_step(sim, [_event(sim, "judged", "masanori", Judged(person=kaz, sentence="fine", fine_mon=5))])
+    one = check.outcome(sim)
+    assert (one.value, one.judged, one.unseen) == (3, 1, 2)
+    assert not br2.BandBDeeds.overall({1: one}).ok  # only 3 deeds
+    assert br2.BandBDeeds.overall({1: one, 7: br2.DeedsSeen(4, True, "", 0, 4)}).ok
+    assert not br2.BandBDeeds.overall({1: br2.DeedsSeen(6, True, "", 0, 6)}).ok  # none judged
+
+
+def test_band_b_gold_days_count_its_gold_sales_and_pans_once_a_day(new_sim: Callable[..., Simulation]) -> None:
+    from app.observability.events import ItemLocation, ItemMoved
+
+    sim = new_sim()
+    nim, ama = _band(sim, "nim", "band_b"), _band(sim, "ama", "band_a")
+    check = br2.GoldTrips()
+    check.start(sim)
+    gold = Traded(item="gold", count=1, lots=1, coins=40, stall="market-stall", merchant="fumiko")
+    hide = Traded(item="hide", count=1, lots=1, coins=11, stall="market-stall", merchant="fumiko")
+    check.after_step(sim, [_event(sim, "sold", ama, gold), _event(sim, "sold", nim, hide)])  # band A's, or no gold
+    assert check.outcome(sim).value == 0
+    check.after_step(sim, [_event(sim, "sold", nim, gold), _event(sim, "sold", nim, gold)])
+    sim.state.tick = DAY_MINUTES
+    panned = ItemMoved(
+        item="gold",
+        count=1,
+        source=ItemLocation(kind="resource", id="gold:1"),
+        destination=ItemLocation(kind="inventory", id=nim),
+    )
+    check.after_step(sim, [_event(sim, "item_moved", nim, panned)])
+    assert check.outcome(sim).value == 2

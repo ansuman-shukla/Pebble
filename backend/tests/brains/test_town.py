@@ -9,13 +9,16 @@ import pytest
 from pydantic import JsonValue
 
 from app.brains import town
+from app.brains.healing import TEND, tend_the_hurt
 from app.brains.profile import BrainProfile, known_titles
 from app.brains.routines import WORK, Context
 from app.brains.senses import Needs, Phase
 from app.engine import citizen_brains, town_households
+from app.observability.events import ItemMoved, Stole
 from app.sim.citizens import CITIZENS, load_citizens
-from app.sim.clock import DAY_MINUTES
+from app.sim.clock import DAY_MINUTES, START_MINUTE
 from app.sim.market import factor, price_word, stall_lot, stalls, stock_of
+from app.sim.ownership import owner_of
 from app.sim.perception import BIOME_WORDS
 from app.sim.simulation import Simulation
 from app.world.biomes import BIOME_IDS
@@ -414,6 +417,28 @@ def test_a_good_cheap_at_the_stall_is_kept_for_another_day() -> None:
     assert ("sell", "iron sand", 99) in api.calls
 
 
+@pytest.mark.parametrize(("item", "word", "wanted"), [("iron sand", "cheap", "fair"), ("gold", "fair", "dear")])
+def test_a_hungry_seller_with_nothing_to_eat_takes_what_the_stall_pays(
+    item: str, word: PriceWord, wanted: PriceWord
+) -> None:
+    digger = _profile("Daisuke", "iron-sand digger", dues=5)
+    seen = PriceSeen(item=item, price="three coins each; it pays two coins", word=word)
+    carrying = ("three coins", f"some {item}")
+    ctx, _ = _ctx(_look(market=(seen,), carrying=carrying), digger, hunger=1)
+    assert town._sell(ctx, item, "Sell it") == []  # peckish: kept for another day
+    ctx, api = _ctx(_look(market=(seen,), carrying=carrying), digger, api=Recorder(ctx.notes), hunger=2)
+    town._sell(ctx, item, "Sell it")[0].start()  # hungry with nothing to eat, though held earlier today
+    assert ("sell", item, 99) in api.calls
+    fed = _look(market=(seen,), carrying=(*carrying, "a little rice"))
+    assert town._sell(_ctx(fed, digger, hunger=2)[0], item, "Sell it") == []  # food in hand: it can wait
+    ctx, api = _ctx(_look(market=(seen,), carrying=carrying), digger, hunger=2)
+    town._sell(ctx, item, "Sell it")[0].start()  # sold hungry, so not held for the rest of the day
+    better = PriceSeen(item=item, price="three coins each; it pays three coins", word=wanted)
+    ctx, api = _ctx(_look(market=(better,), carrying=carrying), digger, api=Recorder(ctx.notes))
+    town._sell(ctx, item, "Sell it")[0].start()
+    assert ("sell", item, 99) in api.calls
+
+
 def test_the_weaver_fetches_reeds_on_reed_days_and_makes_a_pack_from_two_hides() -> None:
     aiko = _profile("Aiko", "weaver, the farmer's wife", household=3, paddies=4, dues=12)
     home = "at your home, in The castle town"
@@ -500,7 +525,7 @@ def test_the_monk_tends_whoever_looks_hurt() -> None:
     ctx, api = _ctx(_look(people=(beside,)), ENNEN)
     [tend] = town.monk(ctx)
     tend.start()
-    assert (tend.score, ("tend", "Lia") in api.calls) == (town.TEND, True)
+    assert (tend.score, ("tend", "Lia") in api.calls) == (TEND, True)
     well = beside.model_copy(update={"doing": "walking"})
     assert [o.name for o in town.monk(_ctx(_look(people=(well,)), ENNEN)[0])] != ["tend"]
 
@@ -523,7 +548,7 @@ def test_a_fine_paid_leaves_a_clean_slate_and_a_second_wrong_gets_its_own_senten
 
 def test_the_monk_leaves_someone_hurt_far_away_be() -> None:
     far = Seen(label="Lia", where="far away to the east", nearness="far away", doing="walking, looking hurt")
-    assert town._tend(_ctx(_look(people=(far,)), ENNEN)[0]) == []
+    assert tend_the_hurt(_ctx(_look(people=(far,)), ENNEN)[0]) == []
 
 
 def test_a_household_s_dues_are_shared_by_its_adults_the_first_paying_what_doesn_t_divide(
@@ -579,3 +604,114 @@ def test_the_lord_s_spending_follows_his_treasury_against_where_it_started() -> 
             )[0]
         )
         assert notes.get("fetch rice", 0) == fetch
+
+
+# --- the field racks ---
+
+FIELDS_AT = "at the rice fields, in The castle town"
+OWN_RACK = Seen(label="your rice rack", where="a few paces to the west", nearness="a few paces", kind="building")
+NEXT_RACK = Seen(
+    label="a rice rack", where="right beside you to the north", nearness="right beside you", kind="building"
+)
+
+
+def _at_racks(when: TimeOfDay, carrying: tuple[str, ...], *racks: Seen) -> Perception:
+    return _look(place=FIELDS_AT, when=when, carrying=carrying).model_copy(update={"things": list(racks)})
+
+
+def test_a_farmer_leaving_the_paddies_in_the_afternoon_hangs_half_the_rice_on_the_household_s_own_rack() -> None:
+    load = ("a great deal of rice",)  # 50 or more: off to the granary
+    ctx, api = _ctx(_at_racks("early afternoon", load, NEXT_RACK, OWN_RACK), GENZO)
+    [go] = town.farmer(ctx)
+    go.start()
+    assert go.name == "go to your rice rack" and ("walk_to_thing", "your rice rack") in api.calls  # not the nearest
+    beside = OWN_RACK.model_copy(update={"nearness": "right beside you"})
+    ctx, api = _ctx(_at_racks("early afternoon", load, NEXT_RACK, beside), GENZO, Recorder(ctx.notes))
+    [rack] = town.farmer(ctx)
+    rack.start()
+    assert rack.name == "rack rice" and ("stash", "rice", 25) in api.calls and ctx.notes["on the rack"] is True
+    again, _ = _ctx(_at_racks("late afternoon", ("plenty of rice",), beside), GENZO, Recorder(ctx.notes))
+    assert [o.name for o in town.farmer(again)] != ["rack rice"]  # once a day
+    morning, _ = _ctx(_at_racks("mid-morning", load, beside), GENZO)
+    assert [o.name for o in town.farmer(morning)] != ["rack rice"]  # a morning harvest goes in whole
+    late, api = _ctx(_at_racks("late afternoon", ("plenty of rice",), beside), GENZO)  # the day's last trip
+    town.farmer(late)[0].start()
+    assert ("stash", "rice", 12) in api.calls
+    aiko = _profile("Aiko", "weaver, the farmer's wife", household=3, paddies=4, dues=12)
+    helping, _ = _ctx(_at_racks("late afternoon", ("plenty of rice",), beside), aiko)
+    assert not [o for o in town.weaver(helping) if "rack" in o.name]  # who only helps takes the harvest straight in
+
+
+def test_next_morning_a_farmer_takes_in_rice_only_from_the_household_s_own_rack_while_rice_hangs_on_it() -> None:
+    laden_next = NEXT_RACK.model_copy(update={"doing": "hung with rice"})
+    laden_own = OWN_RACK.model_copy(update={"doing": "hung with rice"})
+    racked: dict[str, JsonValue] = {"on the rack": True, "chores": ["racked"]}
+    assert town._take_in_rice(_ctx(_at_racks("late afternoon", (), laden_own), GENZO, Recorder(racked))[0]) == []
+    ctx, api = _ctx(_at_racks("early morning", (), laden_next, laden_own), GENZO, Recorder({"on the rack": True}))
+    [go] = town._take_in_rice(ctx)
+    go.start()
+    assert ("walk_to_thing", "your rice rack hung with rice") in api.calls  # the neighbour's rack is nearer
+    beside = laden_own.model_copy(update={"nearness": "right beside you"})
+    ctx, api = _ctx(_at_racks("early morning", (), laden_next, beside), GENZO, Recorder({"on the rack": True}))
+    town._take_in_rice(ctx)[0].start()
+    assert ("pick_up", "rice") in api.calls and "on the rack" not in ctx.notes
+    home = _look(place="at your home, in The castle town", when="early morning", carrying=())
+    by_the_house = home.model_copy(update={"things": [OWN_RACK]})  # the elder's other rack, bare
+    [go] = town._take_in_rice(_ctx(by_the_house, TOKUJI, Recorder({"on the rack": True}))[0])
+    assert go.name == "go to the rice fields"
+    bare = OWN_RACK.model_copy(update={"nearness": "right beside you"})
+    ctx, api = _ctx(_at_racks("early morning", (), laden_next, bare), GENZO, Recorder({"on the rack": True}))
+    assert town._take_in_rice(ctx) == [] and "on the rack" not in ctx.notes  # raided: nothing from the neighbour's
+    assert not api.calls
+
+
+def test_in_the_town_the_farmers_rice_dries_on_their_own_racks_overnight_and_comes_home_next_morning(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    sim = new_sim(seed=SEED)
+    cast = load_citizens(CITIZENS)
+    sim.add_cast(cast.model_copy(update={"citizens": [c for c in cast.citizens if c.region == "town"]}))
+    brains = citizen_brains(sim, SEED)
+    sim.drain()
+    racks = ("field-rack-1", "field-rack-2")
+    on: list[tuple[int, str]] = []
+    off: list[tuple[int, str]] = []
+    strangers, stolen, midnights = [], [], []  # rice moved by someone not of the rack's household
+    first = DAY_MINUTES - START_MINUTE  # the run starts at 08:00
+    for _ in range(2 * DAY_MINUTES + 4 * 60):  # till noon of the third day
+        brains(sim)
+        sim.step()
+        for event in sim.drain():
+            moved, who = event.payload, event.actor_id
+            if isinstance(moved, Stole):
+                stolen.append(who)
+            if not isinstance(moved, ItemMoved) or moved.item != "rice" or who is None:
+                continue
+            for rack, moves in ((moved.destination.id, on), (moved.source.id, off)):
+                if rack in racks:
+                    moves.append((sim.tick, rack))
+                    if owner_of(sim.world, rack) != sim.citizen(who).home:
+                        strangers.append(who)
+        if (sim.tick - first) % DAY_MINUTES == 0:
+            midnights.append({rack: sim.state.stores[rack].get("rice", 0) for rack in racks})
+    assert {rack for _, rack in on} == set(racks) and not strangers and not stolen  # each household at its own
+    for tick, rack in on:  # the afternoon's rice hangs there at midnight and comes in by the next noon
+        night = first + (tick - first) // DAY_MINUTES * DAY_MINUTES + DAY_MINUTES
+        assert midnights[(night - first) // DAY_MINUTES][rack] > 4, (tick, rack)  # the racks start with 4
+        assert any(night < when < night + 12 * 60 and where == rack for when, where in off), (tick, rack)
+
+
+def test_on_the_rack_beat_the_watchman_walks_up_to_the_racks_looks_them_over_and_goes_back_to_the_gate() -> None:
+    notes: dict[str, JsonValue] = {"beat": "racks"}
+    near = Seen(label="two rice racks", where="the nearest a few paces to the south", nearness="a few paces")
+    ctx, api = _ctx(_at_racks("night", (), near), GORO, Recorder(notes), phase="night")
+    [walk] = town.night_watch(ctx)
+    walk.start()
+    assert walk.name == "go to a rice rack" and ("walk_to_thing", "rack") in api.calls  # night sight is short
+    beside = near.model_copy(update={"nearness": "right beside you"})
+    ctx, api = _ctx(_at_racks("night", (), beside), GORO, Recorder(notes), phase="night")
+    [look] = town.night_watch(ctx)
+    look.start()
+    assert look.name == "look over the racks" and ("wait", 15) in api.calls and notes["beat"] == "gate"
+    ctx, _ = _ctx(_at_racks("night", (), beside), GORO, Recorder(notes), phase="night")
+    assert [o.name for o in town.night_watch(ctx)] == ["go to the west gate"]

@@ -46,6 +46,7 @@ STRUCTURE_LABELS: dict[str, str] = {  # town placements
     "castle_gatehouse": "a gatehouse",
     "castle_keep": "the keep",
     "temple_hall": "the temple hall",
+    "drying_rack": "a rice rack",  # the farm households' hasa racks by the paddies (10 §2.6)
 }
 CAMP_STRUCTURE_LABELS: dict[str, str] = {  # camp placements one walks up to by what they are
     "lean_to": "a lean-to",

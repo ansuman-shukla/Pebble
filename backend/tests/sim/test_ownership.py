@@ -8,6 +8,7 @@ import pytest
 
 from app.brains.brain import UtilityBrain
 from app.brains.profile import BrainProfile
+from app.brains.senses import Needs
 from app.engine import citizen_brains
 from app.observability.events import EventDraft, ItemMoved, Stole
 from app.sim import ownership
@@ -269,6 +270,36 @@ def test_a_failed_meal_at_home_tells_the_brain_the_chest_is_empty(new_sim: Calla
     assert brain.api.notes.get("chest empty") is True
 
 
+def test_a_hungry_townsman_whose_chest_is_empty_does_not_walk_home_to_eat_again(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    sim = _scene(new_sim, ("tetsu", "main-w-3", "store-2"), tetsu={"inventory": {"coins": 3}})
+    sim.citizen("tetsu").body.hunger = 95.0
+    sim.drain()
+    brain = _brain(sim, "tetsu", honesty=1.0)
+    look, needs = brain.api.look_around(), Needs(3, 0, 0)
+    option = brain.hunger_option(look, needs, "midday")
+    assert option is not None and option.name == "go eat"  # nothing known about the chest yet: home to eat
+    brain.api.notes["chest empty"] = True  # the meal at home failed: nothing there today
+    assert brain.hunger_option(look, needs, "midday") is None  # the routine buys rice or earns the coins for it
+
+
+def test_a_hungry_townsman_at_home_eats_from_the_chest_someone_of_the_house_filled_since_it_was_empty(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    sim = _scene(new_sim, ("aiko", "farmhouse-1", "farmhouse-1"))
+    sim.state.stores["farmhouse-1-chest"] = {"coins": 5}
+    sim.citizen("aiko").body.hunger = 70.0
+    brain = _brain(sim, "aiko", honesty=1.0)
+    brain.api.notes["chest empty"] = True  # this morning's meal at home failed
+    look, needs = brain.api.look_around(), Needs(2, 0, 0)
+    assert look.chest is not None and brain.hunger_option(look, needs, "midday") is None  # still empty: no meal
+    sim.stock_store("farmhouse-1-chest", "rice", 13)  # the house's farmer brought rice home since
+    look = brain.api.look_around()
+    option = brain.hunger_option(look, needs, "midday")
+    assert option is not None and option.name == "eat" and brain.api.notes["chest empty"] is False
+
+
 @pytest.mark.parametrize(
     ("inventory", "honesty", "hunger"),
     [
@@ -324,3 +355,18 @@ def test_out_at_the_gate_no_store_is_in_reach(new_sim: Callable[..., Simulation]
     sim = without_animals(new_sim(seed=5))
     sim.add_citizen(make_spec("goro", at=GATE))
     assert store_in_reach(sim.core, sim.citizen("goro")) is None
+
+
+def test_a_storehouse_and_a_chest_are_reached_at_a_door_and_a_rack_where_it_stands(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    from app.sim.ownership import reach_point
+    from app.sim.wear import store_spot
+
+    sim = new_sim(seed=5)
+    world = sim.world
+    assert reach_point(sim.core, "store-2") == world.structures["store-2"].door
+    assert reach_point(sim.core, "farmhouse-1-chest") == world.structures["farmhouse-1"].door
+    for rack in ("field-rack-1", "band_b_camp:drying-rack"):  # racks are structures too, but have no door to use
+        assert reach_point(sim.core, rack) == store_spot(world, rack)
+    assert world.distance_m(reach_point(sim.core, "field-rack-1"), world.structures["field-rack-1"].centre) < 0.5

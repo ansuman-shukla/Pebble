@@ -3,6 +3,7 @@ there; band A's leader and toolmaker take hides and strips to the stall every 4t
 6th; a hunter without a spear knaps one (the toolmaker an axe too), and a felled tree's logs go home."""
 
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any, Literal, cast
 
 from pydantic import JsonValue
@@ -10,16 +11,20 @@ from pydantic import JsonValue
 from app.brains.bands import (
     FLINT_TRIES,
     KEEP_STRIPS,
+    NIGHT_SHARE,
     RACK,
     RICE_BOUGHT,
     STALL_WAITS,
     TREK_SHARDS,
+    _raid,
 )
 from app.brains.profile import BrainProfile, Spot
+from app.brains.routines import Context
 from app.brains.senses import Needs
+from app.core.rng import Rng
 from app.sim.simulation import Simulation
 from app.world_api.facade import WorldApi
-from app.world_api.models import ActionResult, MarketView, Perception, PriceSeen, Seen, TimeOfDay
+from app.world_api.models import ActionResult, HeardWords, MarketView, Perception, PriceSeen, Seen, TimeOfDay
 from tests.brains.test_band_outings import MARSH, SAVANNA, FakeApi, _choose, _ctx, _ended, _look, _start
 from tests.sim_helpers import make_spec, without_animals
 
@@ -304,8 +309,8 @@ def test_kaz_poaches_in_the_lord_s_woods_when_band_b_s_grass_is_empty_and_tempta
 
 def test_hungry_at_camp_with_nothing_carried_eats_from_the_rack_until_it_is_bare() -> None:
     api = FakeApi(_day(1))
-    oru = _band("oru", "elder healer")
-    hungry = _camp("mid-morning", (), RACK_NEAR)
+    oru = _band("vesa", "elder healer", "band_b")  # band B's rack is its food store (band A's its trading stock)
+    hungry = _look("at your home, at Band B camp", "mid-morning", (), things=[RACK_NEAR])
 
     def ctx(look: Perception) -> Any:
         made = _ctx(look, oru, api)
@@ -330,6 +335,29 @@ def test_hungry_at_camp_with_nothing_carried_eats_from_the_rack_until_it_is_bare
     assert "rack bare" in cast(list[str], api.notes["chores"])
     fed = _ctx(hungry, oru, FakeApi(_day(1)))  # not hungry: no reason to eat the band's store
     assert _choose(fed).name not in ("eat at the rack", "go to the drying rack")
+    for day, eats in ((1, False), (2, False), (3, True), (4, True), (5, False)):  # band A keeps its stock for trading
+        band_a = _ctx(_camp("mid-morning", (), RACK_NEAR), _band("oru", "elder healer"), FakeApi(_day(day)))
+        band_a.needs = Needs(hunger=2, thirst=0, tiredness=0)
+        assert (_choose(band_a).name == "go to the drying rack") is eats, day
+    night = _ctx(_camp("dusk", (), RACK_NEAR), _band("bo", "toolmaker and hunter"), FakeApi(_day(2)))
+    night.needs = Needs(hunger=2, thirst=0, tiredness=0)
+    assert _choose(night).name == "go to the drying rack"  # sleeping hungry: even the trade stock
+    for level, eats in ((0, False), (1, True)):  # a little hungry at dusk is starving by morning: a strip first
+        supper = _ctx(_camp("dusk", (), RACK_NEAR), _band("bo", "toolmaker and hunter"), FakeApi(_day(1)))
+        supper.needs = Needs(hunger=level, thirst=0, tiredness=0)
+        assert (_choose(supper).name == "go to the drying rack") is eats, level
+    shared: dict[str, JsonValue] = {**_day(1), "chores": ["fished", NIGHT_SHARE]}  # band B took its night strip
+    band_b = _ctx(
+        _look("at your home, at Band B camp", "dusk", (), things=[RACK_NEAR]), _band("suna", "x", "band_b"), shared
+    )
+    band_b.needs = Needs(hunger=1, thirst=0, tiredness=0)
+    assert _choose(band_b).driver != "hunger"  # its supper is that strip, a little hunger doesn't eat the store
+    bare = _ctx(_camp("night", ()), _band("ama", "band leader"), FakeApi(_day(1)))  # no strips to be had
+    bare.needs = Needs(hunger=1, thirst=0, tiredness=0)
+    assert _choose(bare).driver != "hunger"  # a little hunger isn't worth a search in the dark
+    midday = _ctx(_camp("midday", (), RACK_NEAR), _band("bo", "toolmaker and hunter"), FakeApi(_day(1)))
+    midday.needs = Needs(hunger=1, thirst=0, tiredness=0)
+    assert _choose(midday).name != "go to the drying rack"  # by day a little hunger forages
 
 
 def test_kaz_is_tempted_with_one_minus_his_honesty_rolled_once_a_day() -> None:
@@ -348,3 +376,258 @@ def test_kaz_is_tempted_with_one_minus_his_honesty_rolled_once_a_day() -> None:
         ctx.chance = roll
         assert _choose(ctx).name == "go to the Lord's woods"
     assert rolls == [0.7]  # p = 1 - honesty, once a day
+
+
+# --- band B's hunger choice, the healers and the fire ---
+
+
+B_CAMP = "at your home, at Band B camp"
+
+
+def _barro_reckons(carrying: tuple[str, ...], food: dict[str, int], *chores: str) -> int:
+    """Band B's leader at dusk with the night's strip taken: his lean days running after reckoning a day that was lean
+    once already."""
+    from app.brains import bands
+
+    notes: dict[str, JsonValue] = {"night": False, "days": 5, "chores": [bands.NIGHT_SHARE, *chores], "lean": 1}
+    bands._reckon_lean(_ctx(_look(B_CAMP, "dusk", carrying), _band("barro", "band leader", "band_b"), notes), food)
+    return cast(int, notes["lean"])
+
+
+def test_band_b_s_leader_reckons_a_lean_day_by_hunger_a_light_load_or_a_bare_rack() -> None:
+    from app.brains import bands
+
+    fed = ("plenty of roots",)
+    assert _barro_reckons(fed, {"roots": 25}) == 0  # a day's food and more carried, never hungry, strips on the rack
+    assert _barro_reckons((), {}) == 2  # less than a day's food carried at dusk
+    assert _barro_reckons(fed, {"roots": 25}, "went hungry") == 2
+    assert _barro_reckons(fed, {"roots": 25}, "rack bare") == 2  # the camp's food ran short
+    nim: dict[str, JsonValue] = {"night": False, "days": 5, "chores": [bands.NIGHT_SHARE], "lean": 1}
+    bands._reckon_lean(_ctx(_look(B_CAMP, "dusk", ()), _band("nim", "mother", "band_b"), nim), {})
+    assert nim["lean"] == 1  # the band's day is the leader's to reckon
+    hungry: dict[str, JsonValue] = {"night": False, "days": 5, "chores": [], "lean": 0}
+    by_day = _ctx(_look(B_CAMP, "midday", ()), _band("barro", "band leader", "band_b"), hungry)
+    by_day.needs = Needs(hunger=2, thirst=0, tiredness=0)
+    bands._reckon_lean(by_day, {})
+    assert "went hungry" in cast(list[str], hungry["chores"]) and hungry["lean"] == 0  # noted, reckoned at dusk
+
+
+def _leader_at_fire(seed: int, day: int, lean: int) -> tuple[list[str], FakeApi]:
+    from app.brains import bands
+
+    api = FakeApi({"night": False, "days": day, "chores": [bands.NIGHT_SHARE, "reckoned"], "lean": lean})
+    ctx = replace(_ctx(_look(B_CAMP, "dusk", ()), _band("barro", "band leader", "band_b"), api), seed=seed)
+    options = bands._choose_at_fire(ctx)
+    for option in options:
+        option.start()
+    return [o.name for o in options], api
+
+
+def test_after_two_lean_days_band_b_s_leader_tells_the_band_at_the_fire_one_roll_of_the_world_s_seed() -> None:
+    from app.brains import bands
+
+    assert _leader_at_fire(7, 3, 1)[0] == []  # one lean day is not enough
+    for seed in (20261028, 7, 1, 2, 3):
+        for day in range(1, 15):
+            roll = Rng.for_subsystem(seed, f"brains.band_hunger:band_b:{day}").random()
+            choice = "raid" if roll < bands.RAID_CHANCE - bands.COUNSEL else "gold"
+            names, api = _leader_at_fire(seed, day, bands.LEAN_DAYS)
+            assert names == ["tell the band"] and ("say", (bands.CALLS[choice], "shout")) in api.calls, (seed, day)
+            assert api.notes["hunger choice"] == [choice, day + (choice == "gold")]  # gold: next morning
+    days = range(1, 15)
+    told = [[_leader_at_fire(seed, day, 2)[1].notes["hunger choice"] for day in days] for seed in (7, 20261028)]
+    assert told[0] != told[1]  # the seed tells
+    again = FakeApi({"night": False, "days": 3, "chores": [bands.NIGHT_SHARE, "chose"], "lean": 2})
+    assert bands._choose_at_fire(_ctx(_look(B_CAMP, "dusk", ()), _band("barro", "band leader", "band_b"), again)) == []
+    town = _band("ama", "band leader")  # band A never raids
+    assert bands._choose_at_fire(_ctx(_look(CAMP, "dusk", ()), town, {"days": 3, "lean": 5})) == []
+
+
+def _heard(choice: str, who: str = "Barro") -> HeardWords:
+    from app.brains import bands
+
+    return HeardWords(who=who, words=bands.CALLS[choice], volume="normal")
+
+
+def test_band_b_goes_along_with_what_its_leader_tells_at_the_fire() -> None:
+    from app.brains import bands
+
+    for who in ("kaz", "nim"):  # both raiders hear it and go, at the town's night
+        api = FakeApi({"night": False, "days": 5, "chores": []})
+        heard = _ctx(_look(B_CAMP, "dusk", (), heard=[_heard("raid")]), _band(who, "x", "band_b"), api)
+        go = _choose(heard)
+        assert go.name == "go to the rice fields" and go.score > 70.0, who  # over sleep
+    suna = FakeApi({"night": False, "days": 5, "chores": []})
+    _choose(_ctx(_look(B_CAMP, "dusk", (), heard=[_heard("raid")]), _band("suna", "x", "band_b"), suna))
+    assert _choose(_ctx(_look(B_CAMP, "night", ()), _band("suna", "x", "band_b"), suna)).name != "go to the rice fields"
+    gold = FakeApi({"night": False, "days": 5, "chores": []})
+    nim = _band("nim", "mother", "band_b", spots=(Spot("the Falls pool", 400, ("gold",)),))
+    _choose(_ctx(_look(B_CAMP, "dusk", (), heard=[_heard("gold")]), nim, gold))
+    assert bands._hungry_choice(_ctx(_look(B_CAMP, "night", ()), nim, gold)) is None  # not tonight
+    morning = _choose(_ctx(_look(B_CAMP, "early morning", ()), nim, gold))
+    assert morning.name == "go to the Falls pool"  # the morning after
+    nobody = FakeApi({"night": False, "days": 5, "chores": []})
+    words = HeardWords(who="Barro", words="Tonight we sleep.", volume="normal")
+    _choose(_ctx(_look(B_CAMP, "dusk", (), heard=[words]), _band("kaz", "x", "band_b"), nobody))
+    assert "hunger choice" not in nobody.notes
+
+
+def _raiding() -> FakeApi:
+    """A band B raider on the night their leader told them of a raid."""
+    return FakeApi({"night": False, "days": 5, "chores": [], "hunger choice": ["raid", 5]})
+
+
+BARE = Seen(label="a rice rack", where="a few paces to the north", nearness="a few paces", kind="building")
+HUNG = BARE.model_copy(update={"doing": "hung with rice", "where": "close by to the north", "nearness": "close by"})
+
+
+def test_a_raider_takes_rice_from_a_rack_hung_with_it_and_walks_home() -> None:
+    kaz = _band("kaz", "young hunter", "band_b")
+    api = _raiding()
+    ctx = _ctx(_look("at the rice fields", "night", (), things=[BARE, HUNG]), kaz, api)
+    go = _choose(ctx)
+    assert _start(ctx, go) == ("walk_to_thing", ("a rice rack hung with rice",))  # past the bare one
+    _ended(ctx, "done")
+    ctx = _ctx(_look("at the rice fields", "night", (), things=[BARE, HUNG]), kaz, api)
+    take = _choose(ctx)
+    assert take.name == "take rice from the racks"
+    _start(ctx, take)
+    assert api.calls[-2:] == [("pick_up", ("5 rice",)), ("walk_to_place", ("home", "walk"))]
+    assert (
+        _choose(_ctx(_look("at the rice fields", "night", (), things=[HUNG]), kaz, api)).name
+        != "take rice from the racks"
+    )
+    hurt = _raiding()
+    look = _look("not far from Band B camp", "night", ())
+    bitten = look.model_copy(update={"you": look.you.model_copy(update={"feeling": ["weak and aching"]})})  # a bite
+    assert _raid(_ctx(bitten, kaz, hurt)) == []
+    assert "raided" in cast(list[str], hurt.notes["chores"])  # no raid that night
+
+
+def test_a_raider_finding_the_racks_bare_looks_them_over_close_up_before_going_home() -> None:
+    kaz = _band("kaz", "young hunter", "band_b")
+    api = _raiding()
+    far = _ctx(_look("not far from Band B camp", "night", ()), kaz, api)
+    assert _choose(far).name == "go to the rice fields"
+    ctx = _ctx(_look("at the rice fields", "night", (), things=[BARE]), kaz, api)
+    look = _choose(ctx)
+    assert _start(ctx, look) == ("walk_to_thing", ("rice rack",))  # the night's sight is short: up to the racks
+    _ended(ctx, "done")
+    ctx = _ctx(_look("at the rice fields", "night", (), things=[BARE, HUNG]), kaz, api)
+    assert _choose(ctx).name == "go to a rice rack hung with rice"  # the other rack, seen from there
+    api = _raiding()
+    ctx = _ctx(_look("at the rice fields", "night", (), things=[BARE]), kaz, api)
+    _start(ctx, _choose(ctx))
+    _ended(ctx, "done")
+    ctx = _ctx(_look("at the rice fields", "night", (), things=[BARE]), kaz, api)
+    home = _choose(ctx)
+    assert home.name == "go home with nothing" and _start(ctx, home) == ("walk_to_place", ("home", "walk"))
+    assert "raided" in cast(list[str], api.notes["chores"]) and ("pick_up", ("5 rice",)) not in api.calls
+
+
+def test_a_band_healer_tends_a_hurt_bandmate_by_day_but_not_a_stranger_or_in_the_night() -> None:
+    vesa = BrainProfile("vesa", "Vesa", "elder healer", "band_b", "Band B camp", ("gathering", "healing"))
+    hurt = Seen(label="Kaz", where="close by to the east", nearness="close by", doing="sitting, looking hurt")
+    stranger = hurt.model_copy(update={"label": "a young man"})
+    camp = "at your home, at Band B camp"
+    assert _choose(_ctx(_look(camp, "midday", (), people=[hurt]), vesa, _day(1))).name == "go up to Kaz"
+    assert "a young man" not in _choose(_ctx(_look(camp, "midday", (), people=[stranger]), vesa, _day(1))).name
+    assert _choose(_ctx(_look(camp, "night", (), people=[hurt]), vesa, _day(1))).name != "go up to Kaz"
+
+
+def test_a_raider_who_sees_no_rack_at_the_fields_looks_a_few_steps_each_way_round_then_goes_home() -> None:
+    from app.brains import bands
+
+    kaz = _band("kaz", "young hunter", "band_b")
+    api = _raiding()
+    ctx = _ctx(_look("not far from the rice fields", "night", ()), kaz, api)
+    _start(ctx, _choose(ctx))
+    ctx = _ctx(_look("at the rice fields", "night", ()), kaz, api)
+    assert _choose(ctx).name == "go to the rice fields"  # in the fields, not yet where the walk ends
+    _ended(ctx, "done")
+    ways = []
+    for _ in range(bands.RACK_SEARCHES):
+        ctx = _ctx(_look("at the rice fields", "night", ()), kaz, api)
+        ways.append(_start(ctx, _choose(ctx)))
+        _ended(ctx, "done")
+    assert ways == [("walk_towards", (way, "a few steps", "walk")) for way in ("north", "east", "south", "west")]
+    ctx = _ctx(_look("at the rice fields", "night", ()), kaz, api)
+    assert _choose(ctx).name == "go home with nothing"
+    found = _raiding()
+    found.notes["chores"] = ["rack search"]
+    assert _choose(_ctx(_look("at the rice fields", "night", (), things=[HUNG]), kaz, found)).name == (
+        "go to a rice rack hung with rice"
+    )
+
+
+def test_band_b_s_leader_judges_a_wrong_against_the_band_at_the_fire_not_one_against_the_town(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    from app.brains import bands
+    from app.brains.senses import phase
+    from app.observability.events import Stole
+    from app.sim.custody import CUSTODY, Custody
+    from app.world_api.models import Fine
+
+    sim = without_animals(new_sim())
+    camp: dict[str, Any] = {"site": "band_b_camp", "home": "band_b_camp:shelter-n", "region": "band_b"}
+    sim.add_citizen(make_spec("barro", name="Barro", knows_people=["kaz"], at=(0.0, 6.0), **camp))
+    sim.add_citizen(make_spec("kaz", name="Kaz", knows_people=["barro"], at=(1.0, 6.0), **camp))
+    sim.drain()
+    barro = _band("barro", "band leader", "band_b")
+
+    def judging() -> list[tuple[str, tuple[Any, ...]]]:
+        look = WorldApi(sim, "barro").look_around()
+        api = FakeApi({"night": False, "days": 5, "chores": []})
+        ctx = Context(cast(WorldApi, api), barro, look, Needs(0, 0, 0), phase(look), lambda _p: False, lambda _n: 0)
+        for option in bands._judge_at_fire(ctx):
+            option.start()
+        return api.calls
+
+    town = Stole(owner="farmhouse-1", store="field-rack-1", item="rice", count=5, witnesses=["barro"])
+    sim.core.emit("stole", town, actor=sim.citizen("kaz"))  # a raid they went on together
+    assert judging() == []  # none of the band's business
+    band = Stole(owner="band_b", store="band_b_camp:drying-rack", item="dried meat", count=2, witnesses=["barro"])
+    sim.core.emit("stole", band, actor=sim.citizen("kaz"))
+    assert judging() == [("seize", ("Kaz",))]
+    CUSTODY.of(sim.state)["kaz"] = Custody(since=sim.tick, keeper="barro")  # seized
+    assert judging() == [("judge", ("Kaz", Fine(mon=bands.BAND_FINE)))]
+    member = _band("barro", "young hunter", "band_b")  # only the leader judges
+    look = WorldApi(sim, "barro").look_around()
+    ctx = Context(
+        cast(WorldApi, FakeApi({})), member, look, Needs(0, 0, 0), phase(look), lambda _p: False, lambda _n: 0
+    )
+    assert bands._judge_at_fire(ctx) == []
+
+
+POOL = Spot("the Falls pool", 400, ("gold",))
+
+
+def test_band_b_s_gold_trip_pans_the_falls_pool_then_sells_the_gold_for_rice() -> None:
+    from app.brains import bands
+
+    nim = _band("nim", "mother", "band_b", spots=(POOL,))
+    api = FakeApi({"night": False, "days": 5, "chores": ["fished"], "hunger choice": ["gold", 5]})
+    ctx = _ctx(_look(B_CAMP, "early morning", ()), nim, api)
+    assert _start(ctx, _choose(ctx)) == ("walk_to_place", ("the Falls pool", "walk"))
+    gold = Seen(
+        label="a pool, gold in its gravel", where="right beside you", nearness="right beside you", resource="gold"
+    )
+    for _ in range(bands.PANS):
+        ctx = _ctx(_look("at the Falls pool", "early morning", (), things=[gold]), nim, api)
+        assert _start(ctx, _choose(ctx)) == ("gather", ("gold",))
+    ctx = _ctx(_look("at the Falls pool", "mid-morning", ("a grain of gold",), things=[gold]), nim, api)
+    assert _start(ctx, _choose(ctx)) == ("walk_to_place", ("the market", "walk"))  # panned: to the stall
+    ctx = _ctx(_look("at the market, in The castle town", "mid-morning", ("a grain of gold",), market=OPEN), nim, api)
+    deal = _choose(ctx)
+    assert deal.name == "trade at the stall"
+    _start(ctx, deal)
+    assert api.calls[-3:] == [
+        ("sell", ("gold", 99)),
+        ("buy", ("rice", bands.GOLD_RICE)),
+        ("walk_to_place", ("home", "walk")),
+    ]
+    kaz = FakeApi({"night": False, "days": 5, "chores": ["fished"], "hunger choice": ["gold", 5]})
+    lords = Spot("the Falls pool", 400, ("gold",))
+    hunter = _band("kaz", "young hunter", "band_b", spots=(lords,))
+    assert _choose(_ctx(_look(B_CAMP, "early morning", ()), hunter, kaz)).name != "go to the Falls pool"  # not a panner

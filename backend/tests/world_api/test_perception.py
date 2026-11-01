@@ -806,3 +806,29 @@ def test_a_deed_is_said_as_the_one_who_knows_it_would_say_it(
         {"citizen_id": "aiko", "appearance": "a woman in a headwrap"},
     )
     assert perception.deed_words(sim.core, sim.citizen("genzo"), deed) == words
+
+
+def test_a_farmer_knows_their_own_rice_rack_and_anyone_sees_which_rack_is_hung_with_rice(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    sim = _v1(
+        new_sim,
+        {"citizen_id": "genzo", "home": "farmhouse-1", "at": (-106.5, 36.0)},  # by field-rack-1, his household's
+        {"citizen_id": "kaz", "region": "band_b", "home": None, "at": (-106.5, 39.0)},
+        {"citizen_id": "tokuji", "home": "farmhouse-2", "at": (-107.0, 35.0)},  # nearer Genzo's rack than his own
+    )
+    for rack in ("field-rack-1", "field-rack-2"):
+        sim.state.stores[rack] = {}
+    sim.stock_store("field-rack-2", "rice", 6)
+    near = ("right beside you", "a few paces", "close by")  # the elder farmer's rack stands by his house
+    racks = {(t.label, t.doing) for t in _look(sim, "genzo").things if "rack" in t.label and t.nearness in near}
+    assert racks == {("your rice rack", None), ("a rice rack", "hung with rice")}
+    kaz = {(t.label, t.doing) for t in _look(sim, "kaz").things if "rack" in t.label and t.nearness in near}
+    assert kaz == {("a rice rack", "hung with rice"), ("two rice racks", None)}  # the bare ones told apart
+    tokuji = perception.match_thing(sim.core, sim.citizen("tokuji"), "your rice rack")
+    assert tokuji is not None and tokuji.ref == "field-rack-2"  # his own, not the nearest
+    own = perception.match_thing(sim.core, sim.citizen("genzo"), "your rice rack")
+    laden = perception.match_thing(sim.core, sim.citizen("kaz"), "a rice rack hung with rice")
+    assert own is not None and own.ref == "field-rack-1" and laden is not None and laden.ref == "field-rack-2"
+    sim.state.stores["field-rack-2"] = {}
+    assert [t.label for t in _look(sim, "kaz").things if "rack" in t.label] == ["three rice racks"]

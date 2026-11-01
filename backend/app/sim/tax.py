@@ -195,14 +195,27 @@ def _local_day_ended(core: SimCore, unit: Vec3) -> int:
     return society.day_of_week(before + math.floor(ahead))
 
 
+def _midnight_since(core: SimCore, unit: Vec3, tick: int) -> bool:
+    """A local midnight at this spot fell after `tick` (by this tick)."""
+    _, lon = lat_lon_deg(unit)
+    ahead = (lon - core.world.town_lon_deg) * 4  # minutes the spot's clock is ahead of the town's
+    return (game_minute(core.state.tick) + ahead) // DAY_MINUTES > (game_minute(tick) + ahead) // DAY_MINUTES
+
+
 def ledger_at_midnight(core: SimCore, now: LocalTest) -> None:
     """Midnight hook: every living citizen whose local midnight it is gets their `ledger` for the day, once: someone
-    walking west across their midnight (a few minutes a hundred metres) meets it again."""
+    walking west across their midnight (a few minutes a hundred metres) meets it again, and someone walking east
+    across it steps past the tick it falls on, so after the first a ledger is due once a midnight has passed where
+    they stand at least `LEDGER_GAP` after the last."""
     books = TAX.of(core.state)
     chests = _chest_shares(core)
     for citizen in core.living():
         last = books.ledgered.get(citizen.id)
-        if not now(citizen.position) or (last is not None and core.state.tick - last < LEDGER_GAP):
+        if last is None:
+            due = now(citizen.position)
+        else:
+            due = core.state.tick - last >= LEDGER_GAP and _midnight_since(core, citizen.position, last + LEDGER_GAP)
+        if not due:
             continue
         books.ledgered[citizen.id] = core.state.tick
         owed = books.accounts.get(citizen.home or "", Account())
@@ -228,6 +241,15 @@ def chest_share(chest: Mapping[str, int], residents: int) -> float:
     return sum(value_of(item, "town") * count for item, count in chest.items()) / residents
 
 
+def household_goods(stores: Mapping[str, Mapping[str, int]], home: str) -> dict[str, int]:
+    """What a household has put by: its chest and the rice drying on its field racks overnight."""
+    goods = dict(stores.get(home + CHEST, {}))
+    for rack in ownership.field_racks(home):
+        for item, count in stores.get(rack, {}).items():
+            goods[item] = goods.get(item, 0) + count
+    return goods
+
+
 def count_coins(core: SimCore, event: EventDraft) -> None:
     """Event hook: coins moving into or out of a citizen's inventory count as their income or spending (not when they
     come from or go to their own household's store)."""
@@ -244,12 +266,13 @@ def count_coins(core: SimCore, event: EventDraft) -> None:
 
 
 def _chest_shares(core: SimCore) -> dict[str, float]:
-    """Household -> each living resident's equal share of the town value of its chest."""
+    """Household -> each living resident's equal share of the town value of its chest and field racks."""
     residents: dict[str, int] = {}
     for citizen in core.living():
         if citizen.home is not None:
             residents[citizen.home] = residents.get(citizen.home, 0) + 1
-    return {home: chest_share(core.state.stores.get(home + CHEST, {}), count) for home, count in residents.items()}
+    stores = core.state.stores
+    return {home: chest_share(household_goods(stores, home), count) for home, count in residents.items()}
 
 
 def _food(citizen: Citizen) -> list[str]:

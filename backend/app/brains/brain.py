@@ -25,6 +25,7 @@ from app.brains.profile import BrainProfile
 from app.brains.routines import Context, Option
 from app.brains.senses import (
     DISTANCE,
+    HURT,
     NIGHT_HUNGER,
     NIGHT_THIRST,
     Needs,
@@ -57,7 +58,6 @@ STOREHOUSES = "the storehouses"
 WELL = "the well"
 FIRE = "the fire pit"
 DRIVABLE = ("wolf", "wolves", "bear")  # predators a spear carrier stands up to (a pride of lions is run from)
-HURT = ("weak and aching", "close to death")  # how a body that has lost half its health feels
 CHAT_CHANCE = 0.3  # with someone greeted already in earshot and nothing pressing, a word in passing this often
 EAT_ORDER = ("berries", "nuts", "roots", "rice", "dried meat")  # what spoils first goes first; dried meat keeps
 MOVING = frozenset({"walk_to", "follow", "flee", "hunt", "attack", "rest", "sleep"})  # they move the body
@@ -70,6 +70,7 @@ class UtilityBrain:
     def __init__(self, api: WorldApi, profile: BrainProfile, seed: int) -> None:
         self.api = api
         self.profile = profile
+        self.seed = seed
         notes = api.notes
         if "rng" not in notes:
             notes["rng"] = str(Rng.for_subsystem(seed, f"brain:{profile.citizen_id}").state)
@@ -196,7 +197,7 @@ class UtilityBrain:
         needs = Needs.read(p.you.feeling)
         now = phase(p)
         pace = self.pace(p, needs)
-        ctx = Context(self.api, self.profile, p, needs, now, self.chance, self.pick, pace)
+        ctx = Context(self.api, self.profile, p, needs, now, self.chance, self.pick, pace, self.seed)
         options = [Option(1, "idle", lambda: self.api.wait(15))]
         behind_walls = self.profile.region == "town" and at(p, self.profile.home_area)  # walls keep animals out
         threat = danger(p)
@@ -299,11 +300,15 @@ class UtilityBrain:
             if at(p, STOREHOUSES) and not failed:
                 return option(score, "eat", lambda: self.api.eat("rice"))
             return option(score - 2, "go eat", lambda: self.api.walk_to_place(STOREHOUSES, pace))
+        if p.chest is not None:  # at the chest: what it holds is seen (someone of the house may have filled it)
+            self.api.notes["chest empty"] = not any(line.endswith("rice") for line in p.chest.holds)
         if at_home(p) and failed:
             self.api.notes["chest empty"] = True  # nothing to eat at home today
         starving = needs.hunger >= 3 and not carries(p, "coins") and self.api.notes.get("chest empty") is True
         if starving and self.tempted():  # no food carried, none at home, no coins to buy any
             return self.steal_option(p, score, pace)
+        if self.api.notes.get("chest empty") is True:
+            return None  # nothing at home to walk back for: the routine buys rice or earns the coins for it
         if not at_home(p):  # the household's own rice is in the chest at home
             return option(score - 2, "go eat", lambda: self.api.walk_to_place("home", pace))
         return None if failed else option(score, "eat", lambda: self.api.eat("rice"))

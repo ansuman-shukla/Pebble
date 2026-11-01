@@ -27,10 +27,10 @@ from app.sim.clock import DAY_MINUTES, town_clock
 from app.sim.crafting import load_recipes, stations
 from app.sim.economy import load_economy
 from app.sim.market import STALL_KIND, pays_for, price_word, sell_price, stall_goods, stall_lot
-from app.sim.ownership import CHEST, owner_of, owns
+from app.sim.ownership import owner_of, owns
 from app.sim.society import GROUPS, SOCIETY, standing_word
 from app.sim.state import Region
-from app.sim.tax import chest_share, wealth_mon
+from app.sim.tax import chest_share, household_goods, wealth_mon
 from app.sim.work import work_task
 from app.sim.world import SimWorld
 
@@ -211,12 +211,12 @@ def score_board(
 
 
 def _chest_shares(state: ReplayState) -> dict[str, float]:
-    """Household -> each living resident's share of its chest (the ledger's rule)."""
+    """Household -> each living resident's share of its chest and field racks (the ledger's rule)."""
     residents: dict[str, int] = {}
     for citizen in state.citizens.values():
         if citizen.alive and citizen.home is not None:
             residents[citizen.home] = residents.get(citizen.home, 0) + 1
-    return {home: chest_share(state.stores.get(home + CHEST, {}), count) for home, count in residents.items()}
+    return {home: chest_share(household_goods(state.stores, home), count) for home, count in residents.items()}
 
 
 def _share(citizen: ReplayCitizen, shares: Mapping[str, float]) -> float:
