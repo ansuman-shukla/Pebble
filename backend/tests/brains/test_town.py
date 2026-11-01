@@ -518,3 +518,7 @@ def test_a_fine_paid_leaves_a_clean_slate_and_a_second_wrong_gets_its_own_senten
     assert ("judge", "Kaz", Confinement(hours=12)) in api.calls  # the blow, not the 6 h of a fine unpaid
     assert notes["fined"] == []
 
+
+def test_the_monk_leaves_someone_hurt_far_away_be() -> None:
+    far = Seen(label="Lia", where="far away to the east", nearness="far away", doing="walking, looking hurt")
+    assert town._tend(_ctx(_look(people=(far,)), ENNEN)[0]) == []
