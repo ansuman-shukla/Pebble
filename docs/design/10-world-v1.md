@@ -685,8 +685,10 @@ sleeping (legs folded), dead (rolled 90°).
 - **Inspector** (click in 3D or in the list): now (activity + target), why (goal + driver), needs bars, coins and
   wealth, rank/standing word, ambition + progress, carrying, home, top 3 bonds, last 6 own events; follow / go to.
 - **Event feed** (collapsible): every event's backend `line`, `importance` 0-3 (3 death, attack on a person, theft
-  seen, judgement, predator kill; 2 hunt kill, sale, trespass, tree felled, injury, harvest; 1 speech nearby, node
-  emptied, fire lit; 0 hidden), filters All/People/Danger/Economy, ▶ flies there, repeats merge ("Tek fished ×3").
+  seen, judgement, predator kill; 2 hunt kill, sale, trespass, tree felled, injury, harvest, a shout; 1 speech nearby,
+  node emptied, fire lit; 0 hidden), filters All/People/Danger/Economy, ▶ flies there, repeats merge ("Tek fished
+  ×3"), a group's greetings and small talk fold into one line ("Band B greet each other and chat ×12", D201); shouts
+  never fold.
 - **Minimap** (2D canvas, nearest site, 1 px = 2 m): water, roads, fields, footprints, hotspot outlines, nodes as dots
   coloured by stock (the scarcity view), citizens by group, predators red, fires orange; click = go to.
 - **Scoreboard tab** (§7) with sortable columns; store/stall stocks and prices.

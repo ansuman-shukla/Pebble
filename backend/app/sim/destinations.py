@@ -8,6 +8,7 @@ from app.sim import paddies, reach, slots
 from app.sim.acting import capital
 from app.sim.core import SimCore
 from app.sim.fauna import SPECIES
+from app.sim.items import ITEMS
 from app.sim.perception import Thing, compass, match_animal, match_person, match_thing, normalize, person_label
 from app.sim.state import ActionState, Citizen
 from app.sim.vec import Vec3, bearing_deg, step_towards
@@ -74,7 +75,7 @@ def resolve(core: SimCore, citizen: Citizen, target: Target) -> Destination | st
         thing = match_thing(core, citizen, target.what)
         if thing is not None:
             return Destination(
-                _thing_spot(core, citizen, thing), thing.label, None, f"You reach {thing.label}.", thing.label
+                _thing_spot(core, citizen, thing), thing.label, None, f"You reach {thing.label}.", _shown(core, thing)
             )
         animal = match_animal(core, citizen, target.what)
         if animal is not None:
@@ -102,6 +103,16 @@ def _resolve_direction(core: SimCore, citizen: Citizen, target: DirectionTarget)
     return Destination(
         slots.reserve_near(core, citizen, goal, with_centre=True), f"the {target.direction}", None, arrive, label
     )
+
+
+def _shown(core: SimCore, thing: Thing) -> str:
+    """A thing walked to as spectators see it: what it is ("a berry bush", "the meat on the ground"), not how it
+    looks to the walker now ("three berry bushes with a few berries left")."""
+    if thing.kind == "node":
+        return core.world.nodes.kind(core.world.nodes.index[thing.ref]).one
+    if thing.kind == "ground" and thing.item is not None:
+        return f"the {ITEMS[thing.item].name} on the ground"
+    return thing.label
 
 
 def _thing_spot(core: SimCore, citizen: Citizen, thing: Thing) -> Vec3:
