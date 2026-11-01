@@ -196,17 +196,15 @@ def _strike_hunt(core: SimCore, citizen: Citizen, animal: Animal) -> None:
         ]
         got = " and ".join(words for words in taken if words)
         tail = f" You take {got}." if got else " You can't carry any of it."
-        core.end_action(citizen, "done", f"You bring down {species.one}.{tail}")
-        if spear is not None:
-            wear.use_tool(core, citizen, spear, died)
+        broke = _use_spear(core, citizen, spear, died)
+        core.end_action(citizen, "done", f"You bring down {species.one}.{tail}{broke}")
         return
-    if spear is not None:
-        wear.use_tool(core, citizen, spear)
+    broke = _use_spear(core, citizen, spear)
     _scatter(core, animal, citizen)
-    text = f"{capital(species.one)} gets away."
+    text = f"{capital(species.one)} gets away.{broke}"
     if species.fights_back and rng.random() < species.fights_back:
         low, high = species.hurts
-        text = f"{capital(species.one)} turns on you and gets away."
+        text = f"{capital(species.one)} turns on you and gets away.{broke}"
         core.end_action(citizen, "failed", text)
         core.injure(
             citizen,
@@ -228,20 +226,19 @@ def _strike_animal(core: SimCore, citizen: Citizen, animal: Animal) -> None:
     blow = (BLOW[0] + (BLOW[1] - BLOW[0]) * rng.random()) * citizen.traits.strength
     blow *= SPEAR if spear is not None else 1.0
     killed = animals.wound(core, animal, blow, f"attacked by {citizen.name}", attacker=citizen.id)
-    if spear is not None:
-        wear.use_tool(core, citizen, spear)
+    broke = _use_spear(core, citizen, spear)
     if killed:
-        core.end_action(citizen, "done", f"You kill {species.one}.")
+        core.end_action(citizen, "done", f"You kill {species.one}.{broke}")
         return
     _scatter(core, animal, citizen)
     if species.bite[1] > 0 and rng.random() < FIGHT_BACK:
-        core.end_action(citizen, "done", f"You strike {species.one}; it bites back and runs off.")
+        core.end_action(citizen, "done", f"You strike {species.one}; it bites back and runs off.{broke}")
         low, high = species.bite
         core.injure(
             citizen, low + (high - low) * rng.random(), "animal attack", f"{species.one} bites you", attacker=animal.id
         )
         return
-    core.end_action(citizen, "done", f"You strike {species.one} and it runs off.")
+    core.end_action(citizen, "done", f"You strike {species.one} and it runs off.{broke}")
 
 
 def _strike_person(core: SimCore, citizen: Citizen, action: ActionState) -> None:
@@ -257,6 +254,13 @@ def _strike_person(core: SimCore, citizen: Citizen, action: ActionState) -> None
     blow *= SPEAR if tool_in(citizen.inventory, "spear") else 1.0
     core.end_action(citizen, "done", f"You strike {action.label}.")
     core.injure(victim, blow, "violence", f"{person_label(victim, citizen)} strikes you", attacker=citizen.id)
+
+
+def _use_spear(core: SimCore, citizen: Citizen, spear: str | None, cause_seq: int | None = None) -> str:
+    """A spear used in a blow may break (10 §2.4): the words its result adds if it does (10 §6.2)."""
+    if spear is None or not wear.use_tool(core, citizen, spear, cause_seq):
+        return ""
+    return f" Your {spear} breaks."
 
 
 def _scatter(core: SimCore, animal: Animal, citizen: Citizen) -> None:
