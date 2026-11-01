@@ -467,6 +467,7 @@ const GlobeScene = memo(function GlobeScene({
           sites={view.sites}
           places={view.places}
           rivers={planet.rivers}
+          nodeStages={nodeStages}
           onPlacementsReady={onPlacementsReady}
         />
         <GlobeSites
