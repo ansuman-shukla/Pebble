@@ -22,7 +22,7 @@ from app.brains.senses import Needs
 from app.core.rng import Rng
 from app.sim.simulation import Simulation
 from app.world_api.facade import WorldApi
-from app.world_api.models import ActionResult, MarketView, Perception, PriceSeen, Seen, TimeOfDay
+from app.world_api.models import ActionResult, HeardWords, MarketView, Perception, PriceSeen, Seen, TimeOfDay
 from tests.brains.test_band_outings import MARSH, SAVANNA, FakeApi, _choose, _ctx, _ended, _look, _start
 from tests.sim_helpers import make_spec, without_animals
 
@@ -379,33 +379,102 @@ def test_kaz_is_tempted_with_one_minus_his_honesty_rolled_once_a_day() -> None:
 # --- band B's hunger choice, the healers and the fire ---
 
 
-def test_two_lean_days_running_make_band_b_choose_a_raid_or_gold_alike_for_all() -> None:
+B_CAMP = "at your home, at Band B camp"
+
+
+def _barro_reckons(carrying: tuple[str, ...], food: dict[str, int], *chores: str) -> int:
+    """Band B's leader at dusk with the night's strip taken: his lean days running after reckoning a day that was lean
+    once already."""
     from app.brains import bands
 
-    barro = _band("barro", "band leader", "band_b")
-    notes: dict[str, JsonValue] = {"night": False, "days": 5, "chores": [bands.NIGHT_SHARE], "lean": 1}
-    dusk = _look("at your home, at Band B camp", "dusk", ())  # nothing carried: a lean day
-    bands._reckon_lean(_ctx(dusk, barro, notes), {})
-    assert notes["lean"] == 2
-    choices = {bands._hungry_choice(_ctx(dusk, _band(who, "x", "band_b"), dict(notes))) for who in ("barro", "nim")}
-    assert len(choices) == 1 and choices <= {"raid", "gold"}  # one choice for the band that day
-    fed: dict[str, JsonValue] = {"night": False, "days": 5, "chores": [bands.NIGHT_SHARE], "lean": 1}
-    bands._reckon_lean(
-        _ctx(_look("at your home, at Band B camp", "dusk", ("plenty of roots",)), barro, fed), {"roots": 25}
-    )
-    assert fed["lean"] == 0
+    notes: dict[str, JsonValue] = {"night": False, "days": 5, "chores": [bands.NIGHT_SHARE, *chores], "lean": 1}
+    bands._reckon_lean(_ctx(_look(B_CAMP, "dusk", carrying), _band("barro", "band leader", "band_b"), notes), food)
+    return cast(int, notes["lean"])
+
+
+def test_band_b_s_leader_reckons_a_lean_day_by_hunger_a_light_load_or_a_bare_rack() -> None:
+    from app.brains import bands
+
+    fed = ("plenty of roots",)
+    assert _barro_reckons(fed, {"roots": 25}) == 0  # a day's food and more carried, never hungry, strips on the rack
+    assert _barro_reckons((), {}) == 2  # less than a day's food carried at dusk
+    assert _barro_reckons(fed, {"roots": 25}, "went hungry") == 2
+    assert _barro_reckons(fed, {"roots": 25}, "rack bare") == 2  # the camp's food ran short
+    nim: dict[str, JsonValue] = {"night": False, "days": 5, "chores": [bands.NIGHT_SHARE], "lean": 1}
+    bands._reckon_lean(_ctx(_look(B_CAMP, "dusk", ()), _band("nim", "mother", "band_b"), nim), {})
+    assert nim["lean"] == 1  # the band's day is the leader's to reckon
+    hungry: dict[str, JsonValue] = {"night": False, "days": 5, "chores": [], "lean": 0}
+    by_day = _ctx(_look(B_CAMP, "midday", ()), _band("barro", "band leader", "band_b"), hungry)
+    by_day.needs = Needs(hunger=2, thirst=0, tiredness=0)
+    bands._reckon_lean(by_day, {})
+    assert "went hungry" in cast(list[str], hungry["chores"]) and hungry["lean"] == 0  # noted, reckoned at dusk
+
+
+def _leader_at_fire(seed: int, day: int, lean: int) -> tuple[list[str], FakeApi]:
+    from app.brains import bands
+
+    api = FakeApi({"night": False, "days": day, "chores": [bands.NIGHT_SHARE, "reckoned"], "lean": lean})
+    ctx = replace(_ctx(_look(B_CAMP, "dusk", ()), _band("barro", "band leader", "band_b"), api), seed=seed)
+    options = bands._choose_at_fire(ctx)
+    for option in options:
+        option.start()
+    return [o.name for o in options], api
+
+
+def test_after_two_lean_days_band_b_s_leader_tells_the_band_at_the_fire_one_roll_of_the_world_s_seed() -> None:
+    from app.brains import bands
+
+    assert _leader_at_fire(7, 3, 1)[0] == []  # one lean day is not enough
+    for seed in (20261028, 7, 1, 2, 3):
+        for day in range(1, 15):
+            roll = Rng.for_subsystem(seed, f"brains.band_hunger:band_b:{day}").random()
+            choice = "raid" if roll < bands.RAID_CHANCE - bands.COUNSEL else "gold"
+            names, api = _leader_at_fire(seed, day, bands.LEAN_DAYS)
+            assert names == ["tell the band"] and ("say", (bands.CALLS[choice],)) in api.calls, (seed, day)
+            assert api.notes["hunger choice"] == [choice, day + (choice == "gold")]  # gold: next morning
+    days = range(1, 15)
+    told = [[_leader_at_fire(seed, day, 2)[1].notes["hunger choice"] for day in days] for seed in (7, 20261028)]
+    assert told[0] != told[1]  # the seed tells
+    again = FakeApi({"night": False, "days": 3, "chores": [bands.NIGHT_SHARE, "chose"], "lean": 2})
+    assert bands._choose_at_fire(_ctx(_look(B_CAMP, "dusk", ()), _band("barro", "band leader", "band_b"), again)) == []
     town = _band("ama", "band leader")  # band A never raids
-    assert bands._hungry_choice(_ctx(dusk, town, {"lean": 5})) is None
+    assert bands._choose_at_fire(_ctx(_look(CAMP, "dusk", ()), town, {"days": 3, "lean": 5})) == []
 
 
-def test_a_raider_walks_to_the_rice_fields_at_night_and_takes_rice_from_the_racks(
-    monkeypatch: Any,
-) -> None:
+def _heard(choice: str, who: str = "Barro") -> HeardWords:
     from app.brains import bands
 
-    monkeypatch.setattr(bands, "_hungry_choice", lambda _ctx: "raid")
+    return HeardWords(who=who, words=bands.CALLS[choice], volume="normal")
+
+
+def test_band_b_goes_along_with_what_its_leader_tells_at_the_fire() -> None:
+    from app.brains import bands
+
+    for who in ("kaz", "nim"):  # both raiders hear it and go, at the town's night
+        api = FakeApi({"night": False, "days": 5, "chores": []})
+        heard = _ctx(_look(B_CAMP, "dusk", (), heard=[_heard("raid")]), _band(who, "x", "band_b"), api)
+        go = _choose(heard)
+        assert go.name == "go to the rice fields" and go.score > 70.0, who  # over sleep
+    suna = FakeApi({"night": False, "days": 5, "chores": []})
+    _choose(_ctx(_look(B_CAMP, "dusk", (), heard=[_heard("raid")]), _band("suna", "x", "band_b"), suna))
+    assert _choose(_ctx(_look(B_CAMP, "night", ()), _band("suna", "x", "band_b"), suna)).name != "go to the rice fields"
+    gold = FakeApi({"night": False, "days": 5, "chores": []})
+    nim = _band("nim", "mother", "band_b", spots=(Spot("the Falls pool", 400, ("gold",)),))
+    _choose(_ctx(_look(B_CAMP, "dusk", (), heard=[_heard("gold")]), nim, gold))
+    assert bands._hungry_choice(_ctx(_look(B_CAMP, "night", ()), nim, gold)) is None  # not tonight
+    morning = _choose(_ctx(_look(B_CAMP, "early morning", ()), nim, gold))
+    assert morning.name == "go to the Falls pool"  # the morning after
+    nobody = FakeApi({"night": False, "days": 5, "chores": []})
+    words = HeardWords(who="Barro", words="Tonight we sleep.", volume="normal")
+    _choose(_ctx(_look(B_CAMP, "dusk", (), heard=[words]), _band("kaz", "x", "band_b"), nobody))
+    assert "hunger choice" not in nobody.notes
+
+
+def test_a_raider_walks_to_the_rice_fields_at_night_and_takes_rice_from_the_racks() -> None:
+    from app.brains import bands
+
     kaz = _band("kaz", "young hunter", "band_b")
-    api = FakeApi({"night": False, "days": 5, "chores": [], "lean": 2})
+    api = FakeApi({"night": False, "days": 5, "chores": [], "hunger choice": ["raid", 5]})
     ctx = _ctx(_look("at your home, at Band B camp", "dusk", ()), kaz, api)
     go = _choose(ctx)
     assert go.name == "go to the rice fields" and go.score > 70.0  # over sleep
@@ -415,7 +484,7 @@ def test_a_raider_walks_to_the_rice_fields_at_night_and_takes_rice_from_the_rack
     _start(ctx, take)
     assert api.calls[-2:] == [("pick_up", ("5 rice",)), ("walk_to_place", ("home", "walk"))]
     assert _choose(_ctx(_look("at the rice fields", "night", ()), kaz, api)).name != "take rice from the racks"
-    hurt = FakeApi({"night": False, "days": 5, "chores": [], "lean": 2})
+    hurt = FakeApi({"night": False, "days": 5, "chores": [], "hunger choice": ["raid", 5]})
     look = _look("not far from Band B camp", "night", ())
     bitten = look.model_copy(update={"you": look.you.model_copy(update={"feeling": ["weak and aching"]})})  # a bite
     assert bands._raid(_ctx(bitten, kaz, hurt)) == []
@@ -430,21 +499,3 @@ def test_a_band_healer_tends_a_hurt_bandmate_by_day_but_not_a_stranger_or_in_the
     assert _choose(_ctx(_look(camp, "midday", (), people=[hurt]), vesa, _day(1))).name == "go up to Kaz"
     assert "a young man" not in _choose(_ctx(_look(camp, "midday", (), people=[stranger]), vesa, _day(1))).name
     assert _choose(_ctx(_look(camp, "night", (), people=[hurt]), vesa, _day(1))).name != "go up to Kaz"
-
-
-def test_band_b_s_choice_is_one_roll_of_the_world_s_seed_a_band_day() -> None:
-    from app.brains import bands
-
-    dusk = _look("at your home, at Band B camp", "dusk", ())
-
-    def choice(seed: int, day: int, who: str = "barro") -> str | None:
-        notes: dict[str, JsonValue] = {"night": False, "days": day, "chores": [], "lean": bands.LEAN_DAYS}
-        return bands._hungry_choice(replace(_ctx(dusk, _band(who, "x", "band_b"), notes), seed=seed))
-
-    for seed in (20261028, 7, 1, 2, 3):
-        for day in range(1, 15):
-            roll = Rng.for_subsystem(seed, f"brains.band_hunger:band_b:{day}").random()
-            expected = "raid" if roll < bands.RAID_CHANCE - bands.COUNSEL else "gold"
-            assert choice(seed, day) == choice(seed, day, "nim") == expected, (seed, day)  # alike for the band
-    days = range(1, 15)
-    assert [choice(7, day) for day in days] != [choice(20261028, day) for day in days]  # the seed tells

@@ -92,11 +92,16 @@ SPEAR_STONES = ("obsidian", "flint")  # what a spear is knapped from, the best f
 POACHERS = frozenset({"kaz"})  # hunts in the Lord's woods when band B's grass is empty (10 §3.6)
 POACH_AFTER = 2  # searches of the band's own ground without game before he is tempted
 FLINT_TRIES = 3  # flint mined (one nodule each) before knapping
-# band B's hunger choice (10 §3.6): two lean days running (less than a day's food carried at dusk), then a raid or gold
+# band B's hunger choice (10 §3.6): two lean days running (the camp's food short), then a raid or gold, as the leader
+# tells it at the fire
 LEAN_FOOD = 60.0
 LEAN_DAYS = 2
 RAIDERS = frozenset({"barro", "kaz", "nim"})
-PANNERS = frozenset({"barro", "nim", "kaz"})  # Barro and Nim pan (10 §3.6), Kaz goes along when he is the lean one
+PANNERS = frozenset({"barro", "nim"})
+CALLS = {  # what band B's leader tells the band at the fire, by the choice
+    "raid": "Tonight we take rice from the town's racks.",
+    "gold": "Tomorrow we pan gold at the falls pool for rice.",
+}
 RAID_CHANCE = 0.6  # Barro's boldness and temper (10 §3.1)
 COUNSEL = 0.3  # Vesa counsels against raids (10 §3.1: −0.3)
 RAID = 75.0  # the night's raid: over sleep (70), under danger and real need
@@ -158,7 +163,8 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
     if feeding:
         return feeding
     _reckon_lean(ctx, food)
-    hunger_choice = _raid(ctx) or _judge_at_fire(ctx)
+    _hear_the_choice(ctx)
+    hunger_choice = _choose_at_fire(ctx) or _raid(ctx) or _judge_at_fire(ctx)
     if hunger_choice:
         return hunger_choice
     if ctx.phase == "dusk":
@@ -772,28 +778,67 @@ def _trek(ctx: Context) -> list[Option]:
     return [Option(ERRAND, f"go to {MARKET}", _walk_to(ctx, MARKET), aim)]
 
 
+def _leads(ctx: Context) -> bool:
+    return "leader" in ctx.profile.role.lower()
+
+
 def _reckon_lean(ctx: Context, food: dict[str, int]) -> None:
-    """At dusk each band member reckons the day: hungry at some point of it, or carrying less than a day's food, makes
-    it a lean one (`lean`: lean days running; the camp's food ran short)."""
+    """At dusk band B's leader reckons the band's day (10 §3.6: the camp's food short): the camp's rack bare at the
+    night's share, the leader hungry at some point of it, or carrying less than a day's food make it a lean one
+    (`lean`: lean days running)."""
+    if ctx.profile.region != "band_b" or not _leads(ctx):
+        return
     if ctx.needs.hunger >= 2 and not ctx.done_today("went hungry"):
         ctx.mark_done("went hungry")
     if ctx.phase not in ("dusk", "night") or ctx.done_today("reckoned"):
         return
-    if ctx.profile.region == "band_b" and ctx.phase == "dusk" and not ctx.done_today(NIGHT_SHARE):
+    if ctx.phase == "dusk" and not ctx.done_today(NIGHT_SHARE):
         return  # the night's share from the rack first: a bare rack is a lean day
     ctx.mark_done("reckoned")
     lean = ctx.done_today("went hungry") or food_value(food) < LEAN_FOOD or ctx.done_today("rack bare")
     _set(ctx, "lean", ctx.counter("lean") + 1 if lean else 0)
 
 
-def _hungry_choice(ctx: Context) -> str | None:
-    """Band B's hunger choice (10 §3.6) after two lean days running: a raid on the town's racks at night, or a gold
-    trip to buy rice; the band decides it together at the fire (one roll a band day for all of them, from the world's
-    seed: p of a raid = `RAID_CHANCE` less Vesa's counsel)."""
-    if ctx.profile.region != "band_b" or ctx.counter("lean") < LEAN_DAYS:
-        return None
+def _choose_at_fire(ctx: Context) -> list[Option]:
+    """After two lean days running band B's leader chooses at the fire (10 §3.6): a raid on the town's racks that
+    night, or a gold trip next morning to buy rice (one roll a band day from the world's seed: p of a raid =
+    `RAID_CHANCE` less Vesa's counsel), and tells the band; whoever hears it goes along."""
+    if ctx.profile.region != "band_b" or not _leads(ctx) or ctx.counter("lean") < LEAN_DAYS:
+        return []
+    if ctx.done_today("chose") or ctx.phase not in ("dusk", "night") or not at_home(ctx.perception):
+        return []
     roll = Rng.for_subsystem(ctx.seed, f"brains.band_hunger:{ctx.profile.region}:{_today(ctx)}").random()
-    return "raid" if roll < RAID_CHANCE - COUNSEL else "gold"
+    choice = "raid" if roll < RAID_CHANCE - COUNSEL else "gold"
+
+    def tell() -> ActionResult:
+        ctx.mark_done("chose")
+        _note_choice(ctx, choice)
+        return ctx.api.say(CALLS[choice])
+
+    return [
+        Option(RAID + 1, "tell the band", lambda: _instant(ctx, tell), "Tell the band what we do for food", "hunger")
+    ]
+
+
+def _hear_the_choice(ctx: Context) -> None:
+    """A band B member who hears the leader's choice at the fire notes it for the night or the morning after."""
+    if ctx.profile.region != "band_b":
+        return
+    for heard in ctx.perception.heard:
+        for choice, words in CALLS.items():
+            if words in heard.words:
+                _note_choice(ctx, choice)
+
+
+def _note_choice(ctx: Context, choice: str) -> None:
+    """`hunger choice`: [choice, the band day it is for] (a raid tonight, a gold trip tomorrow)."""
+    ctx.notes["hunger choice"] = [choice, _today(ctx) + (1 if choice == "gold" else 0)]
+
+
+def _hungry_choice(ctx: Context) -> str | None:
+    """Band B's hunger choice for today as its leader told it at the fire (10 §3.6), or None."""
+    told = ctx.notes.get("hunger choice")
+    return str(told[0]) if isinstance(told, list) and told[1] == _today(ctx) else None
 
 
 def _night_share(ctx: Context) -> list[Option]:
@@ -890,7 +935,7 @@ def _judge_at_fire(ctx: Context) -> list[Option]:
     """A band leader seizes someone at camp known for a wrong and judges them at the fire (10 §3.4: a fine; in a
     band it goes to the one wronged)."""
     p, api = ctx.perception, ctx.api
-    if "leader" not in ctx.profile.role.lower() or not (at_home(p) or at(p, ctx.profile.home_area)):
+    if not _leads(ctx) or not (at_home(p) or at(p, ctx.profile.home_area)):
         return []
     if _count_today(ctx, "judging") >= JUDGE_TRIES:
         return []
