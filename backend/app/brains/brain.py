@@ -70,6 +70,7 @@ class UtilityBrain:
     def __init__(self, api: WorldApi, profile: BrainProfile, seed: int) -> None:
         self.api = api
         self.profile = profile
+        self.seed = seed
         notes = api.notes
         if "rng" not in notes:
             notes["rng"] = str(Rng.for_subsystem(seed, f"brain:{profile.citizen_id}").state)
@@ -196,7 +197,7 @@ class UtilityBrain:
         needs = Needs.read(p.you.feeling)
         now = phase(p)
         pace = self.pace(p, needs)
-        ctx = Context(self.api, self.profile, p, needs, now, self.chance, self.pick, pace)
+        ctx = Context(self.api, self.profile, p, needs, now, self.chance, self.pick, pace, self.seed)
         options = [Option(1, "idle", lambda: self.api.wait(15))]
         behind_walls = self.profile.region == "town" and at(p, self.profile.home_area)  # walls keep animals out
         threat = danger(p)

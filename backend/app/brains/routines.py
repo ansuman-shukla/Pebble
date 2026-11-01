@@ -56,6 +56,7 @@ class Context:
     chance: Callable[[float], bool]
     pick: Callable[[int], int]
     pace: Pace = "walk"  # how walks home go: run when desperate or a predator prowls in view
+    seed: int = 0  # the world's seed, for the rolls a group makes alike (a band's choice at the fire)
 
     @property
     def notes(self) -> dict[str, JsonValue]:

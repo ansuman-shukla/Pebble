@@ -3,6 +3,7 @@ there; band A's leader and toolmaker take hides and strips to the stall every 4t
 6th; a hunter without a spear knaps one (the toolmaker an axe too), and a felled tree's logs go home."""
 
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any, Literal, cast
 
 from pydantic import JsonValue
@@ -18,6 +19,7 @@ from app.brains.bands import (
 )
 from app.brains.profile import BrainProfile, Spot
 from app.brains.senses import Needs
+from app.core.rng import Rng
 from app.sim.simulation import Simulation
 from app.world_api.facade import WorldApi
 from app.world_api.models import ActionResult, MarketView, Perception, PriceSeen, Seen, TimeOfDay
@@ -428,3 +430,21 @@ def test_a_band_healer_tends_a_hurt_bandmate_by_day_but_not_a_stranger_or_in_the
     assert _choose(_ctx(_look(camp, "midday", (), people=[hurt]), vesa, _day(1))).name == "go up to Kaz"
     assert "a young man" not in _choose(_ctx(_look(camp, "midday", (), people=[stranger]), vesa, _day(1))).name
     assert _choose(_ctx(_look(camp, "night", (), people=[hurt]), vesa, _day(1))).name != "go up to Kaz"
+
+
+def test_band_b_s_choice_is_one_roll_of_the_world_s_seed_a_band_day() -> None:
+    from app.brains import bands
+
+    dusk = _look("at your home, at Band B camp", "dusk", ())
+
+    def choice(seed: int, day: int, who: str = "barro") -> str | None:
+        notes: dict[str, JsonValue] = {"night": False, "days": day, "chores": [], "lean": bands.LEAN_DAYS}
+        return bands._hungry_choice(replace(_ctx(dusk, _band(who, "x", "band_b"), notes), seed=seed))
+
+    for seed in (20261028, 7, 1, 2, 3):
+        for day in range(1, 15):
+            roll = Rng.for_subsystem(seed, f"brains.band_hunger:band_b:{day}").random()
+            expected = "raid" if roll < bands.RAID_CHANCE - bands.COUNSEL else "gold"
+            assert choice(seed, day) == choice(seed, day, "nim") == expected, (seed, day)  # alike for the band
+    days = range(1, 15)
+    assert [choice(7, day) for day in days] != [choice(20261028, day) for day in days]  # the seed tells

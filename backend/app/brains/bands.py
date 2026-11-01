@@ -3,7 +3,6 @@ are taken care of: forage around camp in outings and come back, hunt, scavenge, 
 on the camp's rack, knap spears and axes, fell trees, and take the band's goods to the town's stall.
 """
 
-import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import partial
@@ -38,6 +37,7 @@ from app.brains.senses import (
     resources_in_view,
     wood_at_hand,
 )
+from app.core.rng import Rng
 from app.world_api.facade import ActionHandle
 from app.world_api.models import ActionResult, Compass, Driver, Fine, Perception, RoughDistance, Seen
 
@@ -788,18 +788,12 @@ def _reckon_lean(ctx: Context, food: dict[str, int]) -> None:
 
 def _hungry_choice(ctx: Context) -> str | None:
     """Band B's hunger choice (10 §3.6) after two lean days running: a raid on the town's racks at night, or a gold
-    trip to buy rice; the band decides it together at the fire (one roll a day for all of them: p of a raid =
-    `RAID_CHANCE` less Vesa's counsel)."""
+    trip to buy rice; the band decides it together at the fire (one roll a band day for all of them, from the world's
+    seed: p of a raid = `RAID_CHANCE` less Vesa's counsel)."""
     if ctx.profile.region != "band_b" or ctx.counter("lean") < LEAN_DAYS:
         return None
-    roll = _band_roll(f"{ctx.profile.region}:hunger:{_today(ctx)}")
+    roll = Rng.for_subsystem(ctx.seed, f"brains.band_hunger:{ctx.profile.region}:{_today(ctx)}").random()
     return "raid" if roll < RAID_CHANCE - COUNSEL else "gold"
-
-
-def _band_roll(words: str) -> float:
-    """A roll every member of a band makes alike (what they agree at the fire): a stable hash of the words, 0-1."""
-    digest = hashlib.sha256(words.encode()).digest()
-    return int.from_bytes(digest[:8], "big") / 2**64
 
 
 def _night_share(ctx: Context) -> list[Option]:
