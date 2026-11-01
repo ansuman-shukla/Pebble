@@ -19,6 +19,7 @@ from typing import Any
 from app.sim import (
     animals,
     custody,
+    expression,
     justice,
     market,
     movement,
@@ -72,6 +73,7 @@ REGISTRY = Registry(
         senses.SENSES,
         custody.CUSTODY,
         justice.JUSTICE,
+        expression.GOALS,
     ),
     every_tick=(
         movement.catch_breath,

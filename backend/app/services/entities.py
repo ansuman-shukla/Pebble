@@ -112,8 +112,8 @@ class CitizenEntity(BaseModel):
     needs: Needs
     carrying: dict[str, int]  # item -> count (coins apart)
     coins: int
-    rank: int | None  # 1 child .. 5 lord (10 §3.2), once the cast carries it
-    standing: int | None  # -100..100 with their own group, once society keeps it
+    rank: int | None  # 1 child .. 5 lord (10 §3.2); None: no member of society
+    standing: int | None  # -100..100 with their own group; None: no member of society
     titles: list[str]  # lord, samurai, ashigaru, leader
 
 
@@ -207,9 +207,9 @@ def citizen_entity(citizen: ReplayCitizen, tick: int) -> CitizenEntity:
         needs=Needs(hunger=hunger, thirst=thirst, energy=energy, health=health),
         carrying={item: count for item, count in citizen.inventory.items() if item != "coins"},
         coins=citizen.inventory.get("coins", 0),
-        rank=None,
-        standing=citizen.standing,
-        titles=[],
+        rank=citizen.member.rank if citizen.member is not None else None,
+        standing=citizen.standing.get(citizen.region),
+        titles=list(citizen.member.titles) if citizen.member is not None else [],
     )
 
 

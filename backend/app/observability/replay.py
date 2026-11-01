@@ -5,7 +5,7 @@ the "every change has an event" test.
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from app.observability.events import (
     ActionEnded,
@@ -21,16 +21,19 @@ from app.observability.events import (
     ItemMoved,
     JsonScalar,
     KnowledgeChanged,
+    LeaderChanged,
     NodeChanged,
     RoutePoint,
     StandingChanged,
     Target,
     TickSummary,
 )
+from app.sim.expression import GOALS
 from app.sim.fire import strength
 from app.sim.locomotion import Gait
 from app.sim.nodes import NodeView, node_views
 from app.sim.snapshot import SimSnapshot
+from app.sim.society import GROUPS, SOCIETY, Member, member_of, start_standing
 from app.sim.state import AnimalActivity, FireKind, Region
 from app.sim.vec import Vec3
 from app.world_api.models import Driver
@@ -69,11 +72,13 @@ class ReplayCitizen:
     route: tuple[RoutePoint, ...] = field(default=(), compare=False)
     speed_mps: float = field(default=0.0, compare=False)
     gait: Gait | None = field(default=None, compare=False)  # how they moved this tick (None: they didn't)
-    # spectator facts the sim keeps no state for yet (not in snapshots: a replay from a snapshot starts without them)
-    target: Target | None = field(default=None, compare=False)  # what their action is about
-    goal: str = field(default="", compare=False)  # their latest `goal_set`
-    driver: Driver | None = field(default=None, compare=False)
-    standing: int | None = field(default=None, compare=False)  # with their own group (`standing_changed`)
+    # what their action is about: a spectator fact the sim keeps no state for (not in snapshots: a replay from a
+    # snapshot starts without it until their next action starts)
+    target: Target | None = field(default=None, compare=False)
+    goal: str = ""  # their latest `goal_set` (the `goals` system's block)
+    driver: Driver | None = None
+    standing: dict[Region, int] = field(default_factory=dict)  # group -> -100..100 (`standing_changed`, `society`)
+    member: Member | None = None  # rank and titles as society keeps them (`leader_changed`; the `society` block)
 
 
 @dataclass
@@ -145,8 +150,11 @@ class ReplayEvent:
 
 
 def from_snapshot(snapshot: SimSnapshot) -> ReplayState:
+    society = SOCIETY.load(snapshot.systems["society"].data)
+    goals = GOALS.load(snapshot.systems["goals"].data)
     citizens = {}
     for c in snapshot.citizens:
+        goal = goals.get(c.id)
         citizens[c.id] = ReplayCitizen(
             id=c.id,
             name=c.name,
@@ -173,6 +181,10 @@ def from_snapshot(snapshot: SimSnapshot) -> ReplayState:
             skills=tuple(c.skills),
             places={place_id: known.level for place_id, known in c.places.items()},
             people=set(c.people),
+            goal=goal.text if goal is not None else "",
+            driver=goal.driver if goal is not None else None,
+            standing=dict(society.standing.get(c.id, {})),
+            member=society.members.get(c.id),
         )
     animals = {
         a.id: ReplayAnimal(a.id, a.kind, a.group, a.position, a.height_m, a.cell, a.heading_deg, a.activity, a.alive)
@@ -226,6 +238,7 @@ def apply_event(state: ReplayState, event: ReplayEvent) -> None:
             animal.goal, animal.target = pose.goal, pose.target
     elif kind == "citizen_spawned":
         spawned = CitizenSpawned.model_validate(event.payload)
+        member = member_of(spawned)
         state.citizens[spawned.id] = ReplayCitizen(
             id=spawned.id,
             name=spawned.name,
@@ -245,6 +258,8 @@ def apply_event(state: ReplayState, event: ReplayEvent) -> None:
             skills=tuple(spawned.skills),
             places=dict(spawned.places),
             people=set(spawned.people),
+            standing={group: start_standing(member, group) for group in GROUPS},
+            member=member,
         )
     elif kind == "action_started":
         started = ActionStarted.model_validate(event.payload)
@@ -271,6 +286,8 @@ def apply_event(state: ReplayState, event: ReplayEvent) -> None:
         else:
             citizen = state.citizens[actor]
             citizen.alive, citizen.asleep, citizen.cause_of_death = False, False, died.cause
+            if citizen.member is not None:  # the dead hold no lord's or leader's title (an heir's `leader_changed`)
+                citizen.member.titles = [title for title in citizen.member.titles if title not in ("lord", "leader")]
     elif kind == "animal_spawned":
         spawned_animal = AnimalSpawned.model_validate(event.payload)
         if spawned_animal.replaces is not None:
@@ -310,9 +327,9 @@ def apply_event(state: ReplayState, event: ReplayEvent) -> None:
         citizen.goal, citizen.driver = goal.text, goal.driver
     elif kind == "standing_changed":
         standing = StandingChanged.model_validate(event.payload)
-        citizen = state.citizens[_actor(event)]
-        if standing.group == citizen.region:
-            citizen.standing = standing.after
+        state.citizens[_actor(event)].standing[cast(Region, standing.group)] = standing.after
+    elif kind == "leader_changed":
+        _crowned(state, _actor(event), LeaderChanged.model_validate(event.payload))
     elif kind == "knowledge_changed":
         learned = KnowledgeChanged.model_validate(event.payload)
         citizen = state.citizens[_actor(event)]
@@ -320,6 +337,24 @@ def apply_event(state: ReplayState, event: ReplayEvent) -> None:
             citizen.places[learned.ref] = learned.level
         else:
             citizen.people.add(learned.ref)
+
+
+def _crowned(state: ReplayState, heir: str, changed: LeaderChanged) -> None:
+    """Titles as society moves them: the heir takes the title; a band leader overtaken loses theirs, a samurai who
+    becomes lord gives up being samurai."""
+    titles = _member(state, heir).titles
+    titles.append(changed.title)
+    if changed.cause == "succession":
+        titles.remove("samurai")
+    if changed.cause == "standing" and changed.previous is not None:
+        _member(state, changed.previous).titles.remove("leader")
+
+
+def _member(state: ReplayState, citizen_id: str) -> Member:
+    member = state.citizens[citizen_id].member
+    if member is None:
+        raise ValueError(f"{citizen_id} is no member of society")
+    return member
 
 
 def _actor(event: ReplayEvent) -> str:

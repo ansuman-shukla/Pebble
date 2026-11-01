@@ -361,19 +361,23 @@ def on_event(core: SimCore, event: EventDraft) -> None:
         handler(core, SOCIETY.of(core.state), event)
 
 
-def _enrol(_core: SimCore, society: Society, event: EventDraft) -> None:
-    spawned = cast(CitizenSpawned, event.payload)
-    titled = bool(spawned.titles)
-    member = Member(
+def member_of(spawned: CitizenSpawned) -> Member:
+    """The member a `citizen_spawned` enrols (replay builds the same one)."""
+    return Member(
         group=spawned.region,
         age=spawned.age,
         home=spawned.home,
-        base_rank=_untitled_rank(spawned.age) if titled else spawned.rank,
+        base_rank=_untitled_rank(spawned.age) if spawned.titles else spawned.rank,
         titles=list(spawned.titles),
         family=cast(dict[str, Kin], dict(spawned.family)),
     )
+
+
+def _enrol(_core: SimCore, society: Society, event: EventDraft) -> None:
+    spawned = cast(CitizenSpawned, event.payload)
+    member = member_of(spawned)
     society.members[spawned.id] = member
-    society.standing[spawned.id] = {group: _start(member, group) for group in GROUPS}
+    society.standing[spawned.id] = {group: start_standing(member, group) for group in GROUPS}
     laws = load_laws().bonds
     for other, kin in sorted(spawned.family.items()):
         society.bonds.setdefault(_pair(spawned.id, other), laws.mate if kin == "mate" else laws.kin)
@@ -386,7 +390,8 @@ def _untitled_rank(age: int) -> int:
     return {"child": 1, "elder": 3}.get(age_group(age), 2)
 
 
-def _start(member: Member, group: Region) -> int:
+def start_standing(member: Member, group: Region) -> int:
+    """Where a member's standing with a group starts, and drifts back to."""
     laws = load_laws().standing
     if group == member.group:
         return laws.leader if {"lord", "leader"} & set(member.titles) else laws.own
@@ -724,7 +729,7 @@ def society_at_dawn(core: SimCore, _now: LocalTest) -> None:
             before = society.standing[citizen.id][group]
             bonus = fared if group == member.group else 0
             moved = max(-100, min(100, before + bonus))
-            after = moved + max(-drift, min(drift, _start(member, group) - moved))
+            after = moved + max(-drift, min(drift, start_standing(member, group) - moved))
             if after != before:
                 _change(core, society, citizen.id, group, after - before, "leader" if bonus else "drift", None)
         if leads:

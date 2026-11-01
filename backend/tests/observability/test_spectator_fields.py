@@ -11,6 +11,8 @@ from app.services.entities import animal_entity, citizen_entity
 from app.sim.items import ITEMS, ItemKind
 from app.sim.simulation import Simulation
 from app.sim.snapshot import take_snapshot
+from app.sim.society import SOCIETY
+from app.world_api.facade import WorldApi
 from tests.observability.payload_samples import ANIMAL_POSE
 from tests.sim_helpers import add_animal, make_spec, without_animals
 
@@ -66,7 +68,7 @@ def test_needs_purse_and_carrying_and_the_gait_of_a_move(
     assert (entity.motion, entity.posture) == ("run", "standing")
     _apply(state, 2, "tick_summary", None, {"moved": {}, "bodies": {}})
     assert citizen_entity(ann, 2).motion == "idle"  # stood still: no gait
-    assert (entity.rank, entity.titles, entity.slot_heading) == (None, [], None)  # until the cast and slots say
+    assert (entity.rank, entity.titles, entity.slot_heading) == (2, [], None)  # an untitled adult, on no slot
 
 
 def test_animals_show_their_drawn_path_goal_and_target(new_sim: Callable[..., Simulation]) -> None:
@@ -82,3 +84,61 @@ def test_animals_show_their_drawn_path_goal_and_target(new_sim: Callable[..., Si
     still = animal_entity(state.animals[deer.id])
     assert (still.route, still.speed_mps) == ([], 0.0)  # it didn't move this tick
     assert (still.gait, still.goal) == ("trot", "fleeing the wolf")  # what it is after stays until it changes
+
+
+def test_a_goal_told_before_the_snapshot_shows_after_it(new_sim: Callable[..., Simulation]) -> None:
+    """Regression (#95): a goal set before the latest snapshot vanished from a replay that starts at it, so the
+    inspector's "why" was empty for everyone whose aim hadn't changed since."""
+    sim = without_animals(new_sim(seed=1))
+    WorldApi(sim, sim.add_citizen(make_spec("ann", name="Ann", age=25)).id).set_goal("tend the rice fields", "duty")
+    sim.add_citizen(make_spec("bob", name="Bob", age=30))
+    sim.drain()
+    state = from_snapshot(take_snapshot(sim.state))
+    ann, bob = citizen_entity(state.citizens["ann"], 0), citizen_entity(state.citizens["bob"], 0)
+    assert (ann.goal, ann.driver) == ("tend the rice fields", "duty")
+    assert (bob.goal, bob.driver) == ("", None)  # told nothing yet
+
+
+def test_standing_rank_and_titles_come_from_the_snapshot(new_sim: Callable[..., Simulation]) -> None:
+    sim, _ = _world(new_sim)
+    society = SOCIETY.of(sim.state)
+    society.standing["ann"] |= {"town": 33, "band_a": -12}
+    society.members["ann"].titles.append("samurai")
+    ann = from_snapshot(take_snapshot(sim.state)).citizens["ann"]
+    entity = citizen_entity(ann, 0)
+    assert (entity.standing, entity.rank, entity.titles) == (33, 4, ["samurai"])  # the feed: with her own group
+    assert (ann.standing["town"], ann.standing["band_a"]) == (33, -12)  # replay keeps every group's
+
+
+def _crown(state: ReplayState, heir: str, title: str, previous: str | None, cause: str) -> None:
+    _apply(state, 3, "leader_changed", heir, {"group": "town", "title": title, "previous": previous, "cause": cause})
+
+
+def _titles(state: ReplayState, citizen_id: str) -> tuple[int | None, list[str]]:
+    entity = citizen_entity(state.citizens[citizen_id], 3)
+    return entity.rank, entity.titles
+
+
+def test_titles_move_as_society_moves_them(new_sim: Callable[..., Simulation]) -> None:
+    sim = without_animals(new_sim(seed=1))
+    for citizen_id in ("lord", "heir", "chief", "rival"):
+        sim.add_citizen(make_spec(citizen_id, name=citizen_id.title(), age=40))
+    society = SOCIETY.of(sim.state)
+    society.members["lord"].titles.append("lord")
+    society.members["heir"].titles.append("samurai")
+    society.members["chief"].titles.append("leader")
+    sim.drain()
+    state = from_snapshot(take_snapshot(sim.state))
+    assert [_titles(state, c) for c in ("lord", "heir", "chief")] == [(5, ["lord"]), (4, ["samurai"]), (4, ["leader"])]
+
+    _crown(state, "rival", "leader", "chief", "standing")  # overtaken: the old leader steps down
+    assert (_titles(state, "rival"), _titles(state, "chief")) == ((4, ["leader"]), (2, []))
+
+    _apply(state, 3, "died", "lord", {"cause": "starvation"})  # the dead hold no title
+    assert _titles(state, "lord") == (2, [])
+    _crown(state, "heir", "lord", "lord", "succession")  # the samurai becomes lord
+    assert _titles(state, "heir") == (5, ["lord"])
+
+    _apply(state, 3, "died", "rival", {"cause": "starvation"})
+    _crown(state, "chief", "leader", "rival", "death")
+    assert (_titles(state, "rival"), _titles(state, "chief")) == ((2, []), (4, ["leader"]))
