@@ -758,6 +758,21 @@ def test_only_a_healer_tends_someone_hurt_within_reach(new_sim: Callable[..., Si
     assert _of(sim.drain(), Tended) == []
 
 
+def test_an_interrupted_tend_forgets_what_it_gave(new_sim: Callable[..., Simulation]) -> None:
+    sim = _scene(
+        new_sim,
+        ennen={"age": 50, "home": "temple-hall", "skills": ["healing"], "at": (-30.0, 50.0)},
+        genzo={"home": "farmhouse-1", "at": (-31.0, 50.0)},
+    )
+    sim.citizen("genzo").body.health = 60.0
+    WorldApi(sim, "ennen").tend("Genzo")
+    sim.run(3)
+    assert JUSTICE.of(sim.state).tended["ennen"] == pytest.approx(3 * justice.TEND_PER_HOUR / 60)
+    WorldApi(sim, "ennen").rest(10)  # stops tending
+    sim.step()
+    assert JUSTICE.of(sim.state).tended == {}
+
+
 # --- the snapshot ---
 
 

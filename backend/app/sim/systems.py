@@ -79,6 +79,7 @@ REGISTRY = Registry(
         territory.keep_the_law,
         territory.learn_dens,
         justice.keep_custody,
+        justice.forget_stopped_tends,
     ),
     at_dawn=(
         wear.spoil_at_dawn,

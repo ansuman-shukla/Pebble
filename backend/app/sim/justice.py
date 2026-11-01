@@ -714,6 +714,15 @@ def advance_tend(core: SimCore, citizen: Citizen, action: ActionState) -> None:
     core.end_action(citizen, "done", f"You tend {label}; they look a little better.")
 
 
+def forget_stopped_tends(core: SimCore) -> None:
+    """Every-tick hook: a tend that was interrupted or replaced (by anything but its own end) forgets what it gave."""
+    given = JUSTICE.of(core.state).tended
+    for healer in sorted(given):
+        action = core.state.citizens[healer].action
+        if action is None or action.kind != "tend":
+            del given[healer]
+
+
 def _cannot_tend(core: SimCore, healer: Citizen, person: Citizen | None) -> str | None:
     if person is None:
         return "You don't see anyone like that."
