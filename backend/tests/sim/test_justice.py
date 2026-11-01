@@ -562,6 +562,22 @@ def test_a_death_in_custody_ends_it_with_one_release(
     assert not in_custody(sim.core, "kaz")
 
 
+def test_a_wrong_done_before_a_witness_s_eyes_stops_what_they_are_doing(new_sim: Callable[..., Simulation]) -> None:
+    """A watchman standing a long watch by the racks reacts to a theft at once (Q1: he waited out his quarter hour
+    while the thief bundled the rice and left); only the wrong done that minute stops anyone."""
+    sim = _theft_scene(new_sim)
+    watch = WorldApi(sim, "goro").wait(15)
+    sim.step()
+    sim.drain()
+    assert WorldApi(sim, "kaz").pick_up("5 rice").outcome == "done"
+    sim.step()
+    sim.drain()
+    assert watch.done and watch.result is not None and watch.result.outcome == "interrupted"
+    assert watch.result.text == "You stop waiting: Kaz stole rice from the rack!"
+    sim.step()
+    assert WorldApi(sim, "goro").wait(5).result is None  # an old wrong stops nobody again
+
+
 def test_the_held_may_only_look_speak_and_wait_and_the_confined_drink_from_the_bucket(
     new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -712,6 +728,7 @@ def test_an_accusation_needs_a_known_deed_and_an_awake_listener_in_earshot(new_s
 def test_the_one_accused_before_hears_it_and_stops_what_they_do(new_sim: Callable[..., Simulation]) -> None:
     sim = _theft_scene(new_sim)
     WorldApi(sim, "kaz").pick_up("5 rice")
+    sim.step()  # the theft is old news by the time he sits down
     resting = WorldApi(sim, "goro").rest(30)
     sim.step()
     WorldApi(sim, "genzo").accuse("Kaz", "Goro")

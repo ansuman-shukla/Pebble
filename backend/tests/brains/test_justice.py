@@ -13,7 +13,7 @@ from app.world_api.facade import WorldApi
 from app.world_api.models import Nearness, Perception, Seen, SelfView
 
 THIEF = "who stole rice from the racks"
-TOWN_TITLES = known_titles([("Kenji", ["samurai"]), ("Masanori", ["lord"])])
+TOWN_TITLES = known_titles([("Kenji", ["samurai"]), ("Masanori", ["lord"]), ("Barro", ["leader"])])
 
 
 class Recorder:
@@ -112,6 +112,11 @@ def test_someone_wanted_runs_home_when_an_officer_comes_into_view() -> None:
     assert justice.options(_ctx(_look(_person("Kenji", doing="asleep"), wanted=wanted))[0]) == []
     assert justice.options(_ctx(_look(_person("Kenji"), wanted=wanted, place="at your home, in town"))[0]) == []
     assert justice.options(_ctx(_look(_person("Kenji")))[0]) == []  # not wanted: nothing to fear
+    # a band leader doesn't judge wrongs against the town: band B's raiders don't run from their own (Q1)
+    assert justice.options(_ctx(_look(_person("Barro"), wanted=wanted))[0]) == []
+    by_band = "You are wanted by band B for theft."
+    assert _one(justice.options(_ctx(_look(_person("Barro"), wanted=by_band))[0])).aim == "Get away from Barro"
+    assert justice.options(_ctx(_look(_person("Kenji"), wanted=by_band))[0]) == []
 
 
 def test_someone_wanted_runs_rather_than_bring_a_wrong_to_an_officer() -> None:

@@ -44,6 +44,8 @@ from app.world_api.models import ActionResult, Compass, Driver, Fine, Perception
 FOODS = ("roots", "nuts", "berries")  # wild food, most filling first
 OUTING_FOOD = 150.0  # bands head back to camp carrying about this much (a day and a half of food)
 HUNT_TRIES = 3  # hunts (and as many searches for game) a hunter tries a day
+KILL_CALL = "We took game at "  # a hunter back with meat calls where across camp: the band spares that ground
+SPARE_DAYS = 2  # band days a ground is left alone after a kill there (a herd's dead are replaced in about two)
 TRIP_TIMES = frozenset({"dawn", "early morning", "mid-morning", "midday", "early afternoon"})  # time to be back
 TRIP_LEGS = 4  # short walks on past where a forage trip's long walk ended, while no food shows (fewer near a den)
 FISH_TRIES = 4  # casts a fisher makes a day at the band's fishing spot (each lands fish 35 % of the time, D70)
@@ -79,7 +81,7 @@ TRADERS = frozenset({"ama", "bo"})
 TRADE_EVERY, TRADE_DAY = 4, 2  # band A trades on its 2nd day, then every 4th (6th, 10th, 14th)
 TRADE_TIMES = frozenset({"early afternoon"})  # band A sets out then: the town's morning, when the stall is open
 TREKKERS = frozenset({"nim"})
-TREK_EVERY, TREK_DAY = 6, 3  # Nim's obsidian trek: band B's 3rd day, then every 6th (9th)
+TREK_EVERY, TREK_DAY = 5, 3  # Nim's obsidian trek: band B's 3rd day, then every 5th (8th, 13th)
 TREK_TIMES = frozenset({"dawn", "early morning", "mid-morning"})  # band B's morning is the town's (3 h behind)
 TREK_SHARDS = 4  # shards she mines (one each) before taking them to the stall
 STALL_WAITS = 6  # quarter hours a trader waits at a shut stall before heading home
@@ -102,7 +104,7 @@ CALLS = {  # what band B's leader tells the band at the fire, by the choice
     "raid": "Tonight we take rice from the town's racks.",
     "gold": "Tomorrow we pan gold at the falls pool for rice.",
 }
-RAID_CHANCE = 0.6  # Barro's boldness and temper (10 §3.1)
+RAID_CHANCE = 0.75  # Barro's boldness and temper (10 §3.1; 0.6 before Q1, D190: too few raids for the watch to judge)
 COUNSEL = 0.3  # Vesa counsels against raids (10 §3.1: −0.3)
 RAID = 75.0  # the night's raid: over sleep (70), under danger and real need
 FIELDS = "the rice fields"
@@ -110,6 +112,7 @@ RICE_RACK = "a rice rack"  # the town's hasa racks by the paddies, where the day
 LADEN = "hung with rice"  # a rice rack with the day's rice drying on it
 LADEN_RACK = f"{RICE_RACK} {LADEN}"
 RACK_SEARCHES = 4  # short walks about the rice fields at night looking for the racks before going home
+BUNDLE_MINUTES = 5  # tying the rice taken off a rack into a bundle before heading home
 NIGHT_SHARE = "take the night's strip"
 PANS = 3  # pans at the falls pool a trip (each finds a grain half the time)
 JUDGE = 60.0  # a leader's justice at the fire: over the day's work
@@ -147,6 +150,7 @@ def _about_camp(ctx: Context) -> bool:
 def _forage(ctx: Context, style: Forager) -> list[Option]:
     p, api = ctx.perception, ctx.api
     _today(ctx)
+    _hear_kills(ctx)
     if style.chore is not None and ctx.finished(f"gather {style.chore}"):  # gathered to the end, not cut short
         ctx.mark_done(style.chore)
     home_area = ctx.profile.home_area
@@ -190,7 +194,7 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
     if scavenging:
         return scavenging
     if not hungry_empty:
-        for errand in (_trade, _trek, _gold_trip, _share_meat, _dry_meat, _knap, _logs):
+        for errand in (_trade, _trek, _gold_trip, _tell_kill, _share_meat, _dry_meat, _knap, _logs):
             options = errand(ctx)
             if options:
                 return options
@@ -496,6 +500,7 @@ def _hunt(ctx: Context) -> list[Option]:
         for ground_name in ctx.profile.hunting_grounds:
             if at(p, ground_name):
                 ctx.notes["kill ground"] = [ground_name, _today(ctx)]
+                _spare(ctx, ground_name)
         home = Option(WORK + 5, "bring the meat home", lambda: api.walk_to_place("home"), "Bring the meat home")
         return [] if at_home(p) else [home]
     if tries >= HUNT_TRIES:
@@ -505,11 +510,10 @@ def _hunt(ctx: Context) -> list[Option]:
     turn, of = ctx.profile.hunt_turn
     if not grounds and day % of != turn:
         return []  # another hunter's day on the grass round camp
-    ground = grounds[(day - 1) % len(grounds)] if grounds else None
-    if ground is not None and ctx.notes.get("kill ground") == [ground, day - 1]:  # yesterday's herd is spared today
-        ground = grounds[day % len(grounds)] if len(grounds) > 1 and grounds[day % len(grounds)] != ground else None
-        if ground is None:
-            return []
+    rotation = [grounds[(day - 1 + k) % len(grounds)] for k in range(len(grounds))]
+    ground = next((name for name in rotation if not _spared(ctx, name)), None)  # the day's ground, or the next
+    if grounds and ground is None:
+        return []  # every ground the band hunts lost a beast lately: their herds are left to recover
     poach = _poach_spot(ctx)
     where_allowed = ground is None or at(p, ground) or _about_camp(ctx)  # the day's ground, or about camp
     where_allowed = where_allowed or (poach is not None and at(p, poach))
@@ -567,6 +571,44 @@ def _thin(label: str) -> bool:
     """One or two of a herd in sight ("a deer", "two goats"): spared, so hunting never takes a herd down to nothing."""
     words = label.split()
     return words[0] == "two" or (words[0] in ("a", "an") and len(words) == 2)
+
+
+def _spare(ctx: Context, ground: str) -> None:
+    spared = ctx.notes.setdefault("spared", {})
+    if not isinstance(spared, dict):
+        raise TypeError("spared must be a dict")
+    spared[ground] = _today(ctx)
+
+
+def _spared(ctx: Context, ground: str) -> bool:
+    """A beast was taken at this ground (by you or, as heard at camp, a bandmate) within the last `SPARE_DAYS` band
+    days: its herd is left to recover (issue #130: hunters in turn took four of one herd in two days)."""
+    spared = ctx.notes.get("spared")
+    day = spared.get(ground) if isinstance(spared, dict) else None
+    return isinstance(day, int) and _today(ctx) - day < SPARE_DAYS
+
+
+def _hear_kills(ctx: Context) -> None:
+    """A hunter back at camp calls out where the game was taken; every bandmate who hears it spares that ground."""
+    for heard in ctx.perception.heard:
+        if heard.words.startswith(KILL_CALL):
+            _spare(ctx, heard.words.removeprefix(KILL_CALL).removesuffix("."))
+
+
+def _tell_kill(ctx: Context) -> list[Option]:
+    """Back at camp after a kill at a hunting ground, tell the band where (once): the herd there is spared a while."""
+    p, kill = ctx.perception, ctx.notes.get("kill ground")
+    if not isinstance(kill, list) or kill[1] != _today(ctx) or ctx.done_today("told kill"):
+        return []
+    if not (at_home(p) or at(p, ctx.profile.home_area)):
+        return []
+
+    def tell() -> ActionResult:
+        ctx.mark_done("told kill")
+        return ctx.api.say(f"{KILL_CALL}{kill[0]}.", "shout")  # across the camp
+
+    aim = "Tell the band where the game was taken"
+    return [Option(WORK + 6, "tell the band of the kill", lambda: _instant(ctx, tell), aim, "social")]
 
 
 def _share_meat(ctx: Context) -> list[Option]:
@@ -749,6 +791,7 @@ def _trek(ctx: Context) -> list[Option]:
     p, api = ctx.perception, ctx.api
     day = _today(ctx)
     if ctx.profile.citizen_id not in TREKKERS or day % TREK_EVERY != TREK_DAY % TREK_EVERY:
+        ctx.notes.pop("trekking", None)
         return []
     if ctx.done_today("traded"):
         return _back_from_town(ctx)
@@ -766,10 +809,16 @@ def _trek(ctx: Context) -> list[Option]:
     if field is None or _count_today(ctx, "shard") >= TREK_SHARDS:
         ctx.notes["trading"] = True
         return [Option(ERRAND, f"go to {MARKET}", _walk_to(ctx, MARKET), aim)]
-    if not at(p, field):
-        if ctx.done_today("trek") or p.time_of_day not in TREK_TIMES:
-            return []  # left the field (or too late to go): the trek's mining is over
-        return [Option(ERRAND, f"go to {field}", _then(lambda: ctx.mark_done("trek"), _walk_to(ctx, field)), aim)]
+    if not at(p, field):  # on the way (the long walk is offered again each look till she gets there)
+        walking = ctx.notes.get("trekking") is True
+        if ctx.done_today("trek") or _refused(ctx, f"go to {field}") or not (walking or p.time_of_day in TREK_TIMES):
+            ctx.notes.pop("trekking", None)
+            return []  # left the field (or too late to go, or no way there): the trek's mining is over
+        set_out = _then(lambda: ctx.notes.__setitem__("trekking", True), _walk_to(ctx, field))
+        return [Option(ERRAND, f"go to {field}", set_out, aim)]
+    if not ctx.done_today("trek"):
+        ctx.mark_done("trek")
+    ctx.notes.pop("trekking", None)
     seen = [r for r in resources_in_view(p) if r.kind == "obsidian"]
     here = [r for r in seen if r.distance == "here"]
     if here:
@@ -880,15 +929,25 @@ def _raid(ctx: Context) -> list[Option]:
     """The raiders go to the rice fields in band B's evening (the town's night) and take rice from a rack hung with it,
     then home (a theft, and a night trespass inside the walls: Goro's watch may catch them). With no rack in sight
     hung with rice they walk up to the racks to look them over, or a few steps each way round the fields when no rack
-    is in sight at all (night sight is short), then go home with nothing."""
+    is in sight at all (night sight is short), then go home with nothing. Bundling the rice takes a few minutes at
+    the rack (the watch may catch them at it). A raid over (or given up, or the night nearly gone) with the raider
+    still away from camp, home is all that is left (issue #131: never asleep inside the walls)."""
     p, api = ctx.perception, ctx.api
-    if ctx.profile.citizen_id not in RAIDERS or _hungry_choice(ctx) != "raid" or ctx.done_today("raided"):
+    if ctx.profile.citizen_id not in RAIDERS:
         return []
-    if ctx.phase not in ("dusk", "night") or p.time_of_day == "pre-dawn":
-        return []
+    if ctx.phase not in ("dusk", "night") or at_home(p) or _about_camp(ctx):  # by day no law keeps them out of town
+        ctx.notes.pop("raiding", None)
+        if ctx.phase not in ("dusk", "night"):
+            return []
+    raiding = _hungry_choice(ctx) == "raid" and not ctx.done_today("raided") and p.time_of_day != "pre-dawn"
+    if not raiding:
+        if ctx.notes.get("raiding") is not True:
+            return []
+        return [Option(RAID, "go home", _home(ctx), "Get home from the raid", "hunger")]
     if any(word in p.you.feeling for word in HURT):  # badly hurt on the way: no raid tonight, home
         ctx.mark_done("raided")
-        return []
+        return _raid(ctx)
+    ctx.notes["raiding"] = True
     aim = "Take rice from the town's racks"
     racks = [t for t in p.things if RICE_RACK.removeprefix("a ") in t.label and DISTANCE[t.nearness] != "far"]
     laden = next((t for t in racks if t.doing == LADEN), None)
@@ -897,7 +956,7 @@ def _raid(ctx: Context) -> list[Option]:
         def take() -> ActionHandle:
             ctx.mark_done("raided")
             api.pick_up("5 rice")
-            return api.walk_to_place("home", ctx.pace)
+            return api.wait(BUNDLE_MINUTES)
 
         return [Option(RAID, "take rice from the racks", take, aim, "hunger")]
     if laden is not None and not _refused(ctx, f"go to {LADEN_RACK}"):

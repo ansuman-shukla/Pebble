@@ -440,7 +440,7 @@ def test_a_ground_whose_herd_was_hunted_yesterday_is_spared_today() -> None:
     notes: dict[str, JsonValue] = {"night": False, "days": 1, "chores": ["hunt-try"]}
     kill = _ctx(_look("at the A savanna", "mid-morning", ("a flint spear", "some meat")), _hunter(), notes)
     assert _choose(kill).name == "bring the meat home"
-    assert notes["kill ground"] == ["the A savanna", 1]
+    assert notes["kill ground"] == ["the A savanna", 1] and notes["spared"] == {"the A savanna": 1}
     notes.update(night=True, chores=[])
     again = replace(_hunter(), hunting_grounds=("the A savanna", "the A savanna", "the Bridge meadows"))  # day 2: again
     assert (
@@ -448,6 +448,7 @@ def test_a_ground_whose_herd_was_hunted_yesterday_is_spared_today() -> None:
     )
     notes.update(night=True, chores=[], days=1)  # day 2 again, but the kill was elsewhere: no rest
     notes["kill ground"] = ["the Bridge meadows", 1]
+    notes["spared"] = {"the Bridge meadows": 1}
     assert _choose(_ctx(_look(CAMP, "early morning", ("a flint spear",)), again, notes)).name == "go to the A savanna"
 
 
@@ -458,3 +459,27 @@ def test_a_herd_whose_kill_lies_about_is_spared_by_every_hunter() -> None:
     fresh = _choose(_ctx(_look("at the A savanna", "mid-morning", animals=[herd]), _hunter(), dict(notes)))
     spared = _choose(_ctx(_look("at the A savanna", "mid-morning", animals=[herd, remains]), _hunter(), dict(notes)))
     assert fresh.name == "hunt goat" and spared.name != "hunt goat"
+
+
+# --- custody (Q1) ---
+
+
+def test_the_confined_drink_from_the_bucket_eat_what_they_carry_and_sleep_and_the_held_only_wait() -> None:
+    """A raider locked up for the night waited it out, parched, and collapsed (Q1 run: 40 health lost to thirst in
+    the gaol): the confined drink, eat and sleep (all J2 allows them); the held can only wait."""
+    api = FakeApi({})
+    brain = UtilityBrain(cast(WorldApi, api), _profile(), seed=1)
+    look = _look("at the gaol, in The castle town", "night", ("some rice",))
+    confined = look.model_copy(
+        update={"you": look.you.model_copy(update={"confined": "You are confined in the gaol.", "feeling": []})}
+    )
+    assert sorted(o.name for o in brain.options(confined)) == ["idle", "sleep"]  # the night: sleep
+    parched = confined.model_copy(
+        update={"you": confined.you.model_copy(update={"feeling": ["thirsty", "hungry"]}), "time_of_day": "midday"}
+    )
+    names = {o.name: o.score for o in brain.options(parched)}
+    assert set(names) == {"idle", "drink", "eat"} and names["drink"] > names["eat"] > 1
+    held = look.model_copy(
+        update={"you": look.you.model_copy(update={"held": "Goro holds you fast.", "feeling": ["thirsty"]})}
+    )
+    assert [o.name for o in brain.options(held)] == ["idle"]

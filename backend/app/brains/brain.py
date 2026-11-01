@@ -199,6 +199,8 @@ class UtilityBrain:
         pace = self.pace(p, needs)
         ctx = Context(self.api, self.profile, p, needs, now, self.chance, self.pick, pace, self.seed)
         options = [Option(1, "idle", lambda: self.api.wait(15))]
+        if p.you.held or p.you.confined:
+            return options + self.custody_options(p, needs, now)
         behind_walls = self.profile.region == "town" and at(p, self.profile.home_area)  # walls keep animals out
         threat = danger(p)
         if threat is not None and not behind_walls and fire_here(p) not in ("burning", "low"):  # fire too
@@ -217,6 +219,22 @@ class UtilityBrain:
         options += self.rest_options(p, needs, now, pace)
         routine = (TOWN_ROUTINES | BAND_ROUTINES)[self.profile.routine]
         options += routine(ctx)
+        return options
+
+    def custody_options(self, p: Perception, needs: Needs, now: str) -> list[Option]:
+        """Held, they can only wait; confined (10 §3.4: the gaol has a bucket, no food), they drink from the bucket,
+        eat what they carry and sleep the night or the weariness away (J2's restraint allows those three)."""
+        if p.you.held:
+            return []
+        aim = "Bear the confinement"
+        options: list[Option] = []
+        if needs.thirst >= 1:
+            options.append(Option(50.0 + 30.0 * needs.thirst, "drink", self.api.drink, aim, "thirst"))
+        food = [name for name in EAT_ORDER if name in carried_food(p.you)]
+        if needs.hunger >= 1 and food:
+            options.append(Option(45.0 + 30.0 * needs.hunger, "eat", partial(self.api.eat, food[0]), aim, "hunger"))
+        if now == "night" or needs.tiredness >= 1:
+            options.append(Option(70.0, "sleep", self.api.sleep, aim, "rest"))
         return options
 
     def pace(self, p: Perception, needs: Needs) -> Pace:

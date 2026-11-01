@@ -254,9 +254,10 @@ time ("Some of your rice is gone.") without learning who. No pickpocketing.
 ### 2.7 Tax, dues, wages and the coin loop (`sim/tax.py`)
 - **Rice tax 40 % of each paddy harvest** (nengu): `owed += ⌈0.4 × count⌉` on the harvester's household at each
   `gather("rice")` (`tax_assessed`); `work("store food")` at the granary pays it down first (`tax_paid`).
-- **Coin dues**, owed daily, settled on court day (week day 7) by `give(coins, lord)` at the keep (`tax_paid`): 5 mon
+- **Coin dues**, owed daily, settled on court day (week day 7) by `give(coins, lord)` at the keep (`tax_paid`): 4 mon
   a day per non-farm household (Fumiko, Tetsu, Daisuke, Goro; the keep and the temple pay none) and **field dues** of
-  6 mon per paddy farmed per day (Genzo 24, Tokuji 12). Unpaid rice tax at local midnight or unpaid dues after court
+  5 mon per paddy farmed per day (Genzo 20, Tokuji 10; Q1 lowered both from 5 and 6, D190: the lord's gold buying runs
+  at ~11 mon a day, not 18, so the treasury trended up 9-15 a day). Unpaid rice tax at local midnight or unpaid dues after court
   day → `tax_overdue {household, rice, coins}`; arrears carry over; 3 days overdue lets the lord fine them (§3.4).
 - **Wages** are the lord giving coins: Goro 25 mon at dusk (he buys his food). Kenji is household (fed and housed, no
   wage). The lord orders one iron tool every 2 days for the armoury (60 mon) while the treasury holds > 1 500, and
@@ -276,6 +277,10 @@ time ("Some of your rice is gone.") without learning who. No pickpocketing.
 | Daisuke | iron sand 7.5, wood 1.9, gold 9 = **18.4** | rice 16, dues 5 = **21** | −2.6 |
 | Band A | hides 5.5 (2 a trip), dried meat 4 (4 lots a trip) = **9.5** | rice 6, obsidian 3 = **9** | +0.5 |
 | Band B | gold 4.5, obsidian 2.7 (4 shards a trek), hide 1.8 (1 a trek) = **9** | rice 8 | +1 |
+
+  Q1 (D190) lowered the dues to 4 and the field dues to 5: the treasury takes 10 a day less (65.5; the table's gold
+  18 a day doesn't come about, the falls pool yields ~0.5 grain a day), Genzo nets −1, Tokuji +11, every other
+  paying household +1. The measured flows are in `docs/findings/2026-11-01-world-v1-run.md`.
 
   The loop: treasury → wages, orders, gold and cloth → stall and producers → rice, iron sand, hides, gold → farmers,
   digger, bands → dues and the lord's granary sales → treasury. Gold leaves the loop into the lord's hoard (≈ 0.9 a
@@ -397,8 +402,8 @@ apron/headband/straw hat; Bo/Vesa = existing band outfits.
 | Contact | Who | Rule (scripted) |
 |---|---|---|
 | Trade | band A ↔ stall | every 4th day band A's leader + one adult with 2 hides and 4 lots (8 strips) of dried meat leave in their early afternoon (town 07:00), sell at the stall, buy rice and obsidian (a tool or cloth when they can), leave town by 10:30 |
-| Obsidian | band B ↔ stall | Nim treks to the obsidian field every 6 days for 4 shards and sells them, with a hide from Barro's hunts, at the stall on her way back (band B's local morning = the stall's hours) |
-| Raids | band B → field racks | when B's camp food < 1 day for the band 2 days running: Barro, Kaz, Nim go at town night (B's evening) to the racks; Goro's watch may catch them |
+| Obsidian | band B ↔ stall | Nim treks to the obsidian field every 5 days (Q1, D190) for 4 shards and sells them, with a hide from Barro's hunts, at the stall on her way back (band B's local morning = the stall's hours) |
+| Raids | band B → field racks | when B's camp food < 1 day for the band 2 days running: Barro, Kaz, Nim go at town night (B's evening) to the racks and bundle the rice (a few minutes) before heading home; Goro keeps watch by the racks till midnight and may catch them (seize → gaol → told to the lord at first light → judged, D189) |
 | Poaching | Kaz | no game in B's ground after 2 searches → hunts in the Lord's woods with p = 1 − H |
 | Justice | outsiders caught | judged by the lord; band leaders come to pay fines for their own |
 | Healers | Ennen ↔ Oru/Vesa | meet at noon alms at the main gate, greet and walk together |

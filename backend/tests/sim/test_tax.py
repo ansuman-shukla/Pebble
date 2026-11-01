@@ -135,10 +135,10 @@ def test_the_keep_fills_its_own_granary_and_others_owing_nothing_keep_their_food
 @pytest.mark.parametrize(
     ("household", "dues"),
     [
-        ("main-e-2", 5),
-        ("cross-s-1", 5),
-        ("farmhouse-1", 24),
-        ("farmhouse-2", 12),
+        ("main-e-2", 4),
+        ("cross-s-1", 4),
+        ("farmhouse-1", 20),
+        ("farmhouse-2", 10),
         ("castle-keep", 0),
         ("temple-hall", 0),
     ],
@@ -152,18 +152,18 @@ def test_dues_are_owed_daily_and_overdue_only_once_court_day_passes_unpaid(new_s
     for day in range(1, 7):  # the midnights before court day ends
         events = _midnight(sim, COURT_ENDS - (7 - day) * DAY_MINUTES)
         assert [(kind, change.household, change.coins) for kind, _, change in _tax(events)] == [
-            ("tax_assessed", "cross-n-9", 5)
+            ("tax_assessed", "cross-n-9", 4)
         ]
-    assert tax.account(sim.core, "cross-n-9") == Account(coins=30)
+    assert tax.account(sim.core, "cross-n-9") == Account(coins=24)
     events = _midnight(sim, COURT_ENDS)
     assert [(kind, change.coins, change.days) for kind, _, change in _tax(events)] == [
-        ("tax_overdue", 30, 1),
-        ("tax_assessed", 5, 0),
+        ("tax_overdue", 24, 1),
+        ("tax_assessed", 4, 0),
     ]
     events = _midnight(sim, COURT_ENDS + DAY_MINUTES)
     assert [(kind, change.coins, change.days) for kind, _, change in _tax(events)] == [
-        ("tax_overdue", 30, 2),  # the arrears; the new week's dues aren't overdue yet
-        ("tax_assessed", 5, 0),
+        ("tax_overdue", 24, 2),  # the arrears; the new week's dues aren't overdue yet
+        ("tax_assessed", 4, 0),
     ]
     assert tax.account(sim.core, "temple-hall") == Account()
 
@@ -183,10 +183,10 @@ def test_a_house_west_of_the_castle_puts_its_dues_in_arrears_at_its_own_midnight
     assert told
     assert [(kind, change.household, change.coins) for _, kind, change in told] == [
         ("tax_overdue", "farmhouse-1", 30),
-        ("tax_assessed", "farmhouse-1", 24),
+        ("tax_assessed", "farmhouse-1", 20),
     ]
     assert told[0][0] > COURT_ENDS
-    assert tax.account(sim.core, "farmhouse-1") == Account(coins=54, arrears=30, days=1)
+    assert tax.account(sim.core, "farmhouse-1") == Account(coins=50, arrears=30, days=1)
 
 
 def test_paying_the_lord_clears_the_arrears_and_the_overdue_count(new_sim: Callable[..., Simulation]) -> None:
@@ -207,11 +207,11 @@ def test_paying_the_lord_clears_the_arrears_and_the_overdue_count(new_sim: Calla
     tetsu.give("20 coins", "Masanori")
     events = sim.drain()
     paid = [e for e in events if e.type == "tax_paid"]
-    assert [e.payload for e in paid] == [TaxChange(household="cross-n-9", coins=20, owed_coins=15)]
+    assert [e.payload for e in paid] == [TaxChange(household="cross-n-9", coins=20, owed_coins=14)]
     assert next(e for e in events if isinstance(e.payload, ItemMoved)).cause_seq == paid[0].seq
-    assert tax.account(sim.core, "cross-n-9") == Account(coins=15, arrears=10, days=1)  # 30 in arrears + 5 today
-    tetsu.give("20 coins", "Masanori")  # 15 pays the rest; 5 more is a gift
-    assert [change.coins for kind, _, change in _tax(sim.drain()) if kind == "tax_paid"] == [15]
+    assert tax.account(sim.core, "cross-n-9") == Account(coins=14, arrears=10, days=1)  # 30 in arrears + 4 today
+    tetsu.give("20 coins", "Masanori")  # 14 pays the rest; 6 more is a gift
+    assert [change.coins for kind, _, change in _tax(sim.drain()) if kind == "tax_paid"] == [14]
     assert tax.account(sim.core, "cross-n-9") == Account()
     assert [kind for kind, _, _ in _tax(_midnight(sim, COURT_ENDS + DAY_MINUTES))] == ["tax_assessed"]
     assert sim.citizen("masanori").inventory["coins"] == 40
@@ -222,7 +222,7 @@ def test_rice_still_owed_at_midnight_is_overdue_and_counts_the_days(new_sim: Cal
     tax.account(sim.core, "farmhouse-1").rice = 5
     for day in (1, 2):
         overdue = [c for kind, _, c in _tax(_midnight(sim, _night(day))) if kind == "tax_overdue"]
-        assert overdue == [TaxChange(household="farmhouse-1", rice=5, owed_rice=5, owed_coins=24 * (day - 1), days=day)]
+        assert overdue == [TaxChange(household="farmhouse-1", rice=5, owed_rice=5, owed_coins=20 * (day - 1), days=day)]
     tax.account(sim.core, "farmhouse-1").rice = 0
     assert [kind for kind, _, _ in _tax(_midnight(sim, _night(3)))] == ["tax_assessed"]
     assert tax.account(sim.core, "farmhouse-1").days == 0

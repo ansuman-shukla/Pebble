@@ -75,5 +75,5 @@ def test_sentences_served_and_tends_are_summed_over_the_seeds(new_sim: Callable[
     assert tends.outcome(sim) == Outcome(1, False, "1 tended")
     assert j2.Served.overall({1: Outcome(1, False, ""), 7: Outcome(1, False, "")}).ok
     assert not j2.Tends.overall({1: Outcome(1, False, ""), 7: Outcome(0, False, "")}).ok
-    assert j2.Served.pending is not None and j2.Tends.pending is not None
+    assert j2.Served.pending is None and j2.Tends.pending is None  # the brains seize, judge and tend (Q1)
     assert j2.HeldClose.pending is None and j2.Custody.pending is None and j2.Grounds.pending is None

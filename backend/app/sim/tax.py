@@ -36,8 +36,8 @@ from app.sim.vec import Vec3, lat_lon_deg
 
 LocalTest = Callable[[Vec3], bool]  # app.sim.systems' (which registers these hooks, so can't be imported here)
 RICE_TAX = 0.4  # of each harvest
-DUES = 5  # mon a day, a household outside the fields
-FIELD_DUES = 6  # mon a day for each paddy a farm household farms
+DUES = 4  # mon a day, a household outside the fields (5 in 10 §2.7 before Q1, D190)
+FIELD_DUES = 5  # mon a day for each paddy a farm household farms (6 before Q1, D190)
 PADDIES: Mapping[str, int] = {"farmhouse-1": 4, "farmhouse-2": 2}  # farm household -> paddies (§1.4)
 NO_DUES = frozenset({KEEP, "temple-hall"})
 COURT_DAY = 7  # dues still owed when it ends (at the household's local midnight) are in arrears

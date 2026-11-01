@@ -1,6 +1,6 @@
 """Band errands (World v1 plan BR2, 10 §2.3, §2.7, §3.6): meat is dried on the camp's rack and the band's goods kept
 there; band A's leader and toolmaker take hides and strips to the stall every 4th day; Nim treks for obsidian every
-6th; a hunter without a spear knaps one (the toolmaker an axe too), and a felled tree's logs go home."""
+5th; a hunter without a spear knaps one (the toolmaker an axe too), and a felled tree's logs go home."""
 
 from collections.abc import Callable
 from dataclasses import replace
@@ -9,8 +9,10 @@ from typing import Any, Literal, cast
 from pydantic import JsonValue
 
 from app.brains.bands import (
+    BUNDLE_MINUTES,
     FLINT_TRIES,
     KEEP_STRIPS,
+    KILL_CALL,
     NIGHT_SHARE,
     RACK,
     RICE_BOUGHT,
@@ -154,14 +156,17 @@ def test_the_traders_take_the_band_s_goods_sell_them_buy_rice_and_head_home() ->
 # --- Nim's obsidian trek ---
 
 
-def test_nim_treks_for_obsidian_every_sixth_day_and_sells_it_on_the_way_back() -> None:
+def test_nim_treks_for_obsidian_every_fifth_day_and_sells_it_on_the_way_back() -> None:
     nim = _band("nim", "mother", "band_b", spots=(FIELD,))
     api = FakeApi(_day(3))
     ctx = _ctx(_look("at your home, at Band B camp", "dawn"), nim, api)
     out = _choose(ctx)
     assert out.name == "go to the Obsidian field"
     assert _choose(_ctx(_look("at your home, at Band B camp", "dawn"), nim, _day(4))).name != out.name
+    assert _choose(_ctx(_look("at your home, at Band B camp", "dawn"), nim, _day(8))).name == out.name
     _start(ctx, out)
+    on_the_way = _ctx(_look("not far from Band B camp", "midday"), nim, api)  # past the setting-out hours
+    assert _choose(on_the_way).name == out.name  # the long walk goes on (it was dropped after one step, Q1)
     shard = Seen(label="an obsidian field", where="right beside you", nearness="right beside you", kind="node",
                  resource="obsidian")  # fmt: skip
     mined = 0
@@ -492,11 +497,11 @@ def test_a_raider_takes_rice_from_a_rack_hung_with_it_and_walks_home() -> None:
     take = _choose(ctx)
     assert take.name == "take rice from the racks"
     _start(ctx, take)
-    assert api.calls[-2:] == [("pick_up", ("5 rice",)), ("walk_to_place", ("home", "walk"))]
-    assert (
-        _choose(_ctx(_look("at the rice fields", "night", (), things=[HUNG]), kaz, api)).name
-        != "take rice from the racks"
-    )
+    assert api.calls[-2:] == [("pick_up", ("5 rice",)), ("wait", (BUNDLE_MINUTES,))]  # bundling it: may be caught
+    _ended(ctx, "done")
+    ctx = _ctx(_look("at the rice fields", "night", (), things=[HUNG]), kaz, api)
+    home = _choose(ctx)
+    assert home.name == "go home" and _start(ctx, home) == ("walk_to_place", ("home", "walk"))
     hurt = _raiding()
     look = _look("not far from Band B camp", "night", ())
     bitten = look.model_copy(update={"you": look.you.model_copy(update={"feeling": ["weak and aching"]})})  # a bite
@@ -523,6 +528,58 @@ def test_a_raider_finding_the_racks_bare_looks_them_over_close_up_before_going_h
     home = _choose(ctx)
     assert home.name == "go home with nothing" and _start(ctx, home) == ("walk_to_place", ("home", "walk"))
     assert "raided" in cast(list[str], api.notes["chores"]) and ("pick_up", ("5 rice",)) not in api.calls
+
+
+def test_a_raider_still_in_the_fields_when_the_night_runs_out_goes_home_not_to_sleep_inside_the_walls() -> None:
+    """Issue #131: at pre-dawn the raid is over, but a raider still in town has the way home left; by day (no law
+    keeps a band in town by daylight) and once about camp the raid is forgotten."""
+    kaz = _band("kaz", "young hunter", "band_b")
+    api = _raiding()
+    ctx = _ctx(_look("at the rice fields", "night", (), things=[BARE]), kaz, api)
+    _choose(ctx)
+    predawn = _ctx(_look("at the rice fields", "pre-dawn", ()), kaz, api)
+    assert [(o.name, o.score) for o in _raid(predawn)] == [("go home", bands_raid_score())]
+    assert _raid(_ctx(_look("not far from Band B camp", "pre-dawn", ()), kaz, api)) == []
+    assert "raiding" not in api.notes
+    by_day = _raiding()
+    _choose(_ctx(_look("at the rice fields", "night", (), things=[BARE]), kaz, by_day))
+    assert _raid(_ctx(_look("at the rice fields", "early morning", ()), kaz, by_day)) == []
+
+
+def bands_raid_score() -> float:
+    from app.brains import bands
+
+    return bands.RAID
+
+
+def test_a_hunter_back_with_a_kill_tells_the_band_where_and_the_band_spares_that_ground() -> None:
+    """Issue #130: hunters taking turns at the grounds took four of one herd in two days; a kill is called out at
+    camp and every hunter who hears it leaves that ground for SPARE_DAYS band days."""
+    from app.brains import bands
+
+    grounds = ("the A savanna", "the Bridge meadows")
+    tek = _band("tek", "hunter", hunting_grounds=grounds)
+    api = FakeApi(_day(1) | {"kill ground": ["the A savanna", 1]})
+    ctx = _ctx(_camp("late afternoon", ("plenty of meat",)), tek, api)
+    tell = next(o for o in bands._tell_kill(ctx))
+    tell.start()
+    assert ("say", (f"{KILL_CALL}the A savanna.", "shout")) in api.calls
+    assert bands._tell_kill(_ctx(_camp("late afternoon", ("plenty of meat",)), tek, api)) == []  # once
+    ama = _band("ama", "band leader", hunting_grounds=grounds)
+    heard = HeardWords(who="Tek", words=f"{KILL_CALL}the A savanna.", volume="shout")
+    herd = Seen(label="a herd of antelope", where="close by to the north", nearness="close by", doing="grazing")
+    at_savanna = _look("at the A savanna", "mid-morning", ("a flint spear",), animals=[herd])
+    assert _choose(_ctx(at_savanna, ama, _day(3))).name == "hunt antelope"  # day 3 is her savanna day
+    notes = _day(3)
+    bands._hear_kills(_ctx(_look(CAMP, "dawn", (), heard=[heard]), ama, notes))
+    assert _choose(_ctx(at_savanna, ama, notes)).name != "hunt antelope"  # spared
+    assert _choose(_ctx(_look(CAMP, "dawn", ("a flint spear",)), ama, notes)).name == "go to the Bridge meadows"
+    notes |= {"days": 5}
+    assert _choose(_ctx(at_savanna, ama, notes)).name == "hunt antelope"  # two days on, hunted again
+    notes |= {"days": 4}
+    bands._hear_kills(_ctx(_look(CAMP, "dusk", (), heard=[heard]), ama, notes))
+    notes |= {"days": 5}
+    assert _choose(_ctx(at_savanna, ama, notes)).name != "hunt antelope"  # heard yesterday: still spared
 
 
 def test_a_band_healer_tends_a_hurt_bandmate_by_day_but_not_a_stranger_or_in_the_night() -> None:
