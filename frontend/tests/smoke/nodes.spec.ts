@@ -239,7 +239,7 @@ test('a picked bush loses its fruit on screen, a felled tree is a stump within 3
       intervals: [100],
       timeout: 5000,
     })
-    .toEqual(['fallen_log', 'tree_stump']);
+    .toEqual(['tree_stump']); // its logs are the ground stack the feed sends (ground-stacks.spec.ts)
   expect(Date.now() - felled).toBeLessThanOrEqual(3000);
   expect(errors).toEqual([]);
 });

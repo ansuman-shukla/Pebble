@@ -1,13 +1,14 @@
 /*
- * What the client knows of the live world: the latest frame of citizens, animals, fires and the clock, the recent
- * speech, and the recent gestures and blows bodies show (cues). Pure: the hook feeds it the entities answer and every
- * feed message.
+ * What the client knows of the live world: the latest frame of citizens, animals, fires, ground stacks and the clock,
+ * the recent speech, and the recent gestures and blows bodies show (cues). Pure: the hook feeds it the entities answer
+ * and every feed message.
  */
 import {
   type LiveAnimal,
   type LiveCitizen,
   type LiveFire,
   type LiveMessage,
+  type LiveStack,
   TICK_SECONDS,
 } from './live-contract';
 import { GESTURES, type GestureKind } from './motion';
@@ -55,6 +56,7 @@ export interface LiveState {
   citizens: LiveCitizen[];
   animals: LiveAnimal[];
   fires: LiveFire[];
+  stacks: LiveStack[];
   speech: Speech[];
   cues: Cue[];
 }
@@ -70,6 +72,7 @@ export const EMPTY_LIVE: LiveState = {
   citizens: [],
   animals: [],
   fires: [],
+  stacks: [],
   speech: [],
   cues: [],
 };
@@ -83,6 +86,7 @@ export interface EntitiesAnswer {
   citizens: LiveCitizen[];
   animals: LiveAnimal[];
   fires: LiveFire[];
+  stacks: LiveStack[];
 }
 
 /** `GET /api/v1/entities` (the first load, before the socket's snapshot). */
@@ -103,6 +107,7 @@ export function applyEntities(
     citizens: view.citizens,
     animals: view.animals,
     fires: view.fires,
+    stacks: view.stacks,
     speech: sameRun ? state.speech : [],
     cues: sameRun ? state.cues : [],
   };
@@ -171,9 +176,29 @@ export function applyMessage(
     citizens: message.citizens,
     animals: message.animals,
     fires: message.fires,
+    stacks:
+      message.type === 'tick' && sameRun
+        ? mergeStacks(state.stacks, message.stacks)
+        : message.stacks,
     speech: sameRun ? state.speech : [],
     cues: sameRun ? state.cues : [],
   };
+}
+
+/**
+ * The ground after a tick's stack changes (a snapshot lists every stack, a tick only the ones that changed): changed
+ * and new stacks in, gone ones (count 0) out, the rest kept as they were; the same list when nothing changed.
+ */
+function mergeStacks(stacks: LiveStack[], changes: LiveStack[]): LiveStack[] {
+  if (changes.length === 0) return stacks;
+  const changed = new Map(changes.map((stack) => [stack.id, stack]));
+  const next = stacks.flatMap((stack) => {
+    const change = changed.get(stack.id);
+    if (!change) return [stack];
+    changed.delete(stack.id);
+    return change.count > 0 ? [change] : [];
+  });
+  return [...next, ...[...changed.values()].filter((stack) => stack.count > 0)];
 }
 
 /** Game seconds into the current tick at client time `now` (ms): what the feed said, plus what passed since at the

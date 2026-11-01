@@ -2700,6 +2700,13 @@
             },
             "type": "array",
             "title": "Fires"
+          },
+          "stacks": {
+            "items": {
+              "$ref": "#/components/schemas/StackEntity"
+            },
+            "type": "array",
+            "title": "Stacks"
           }
         },
         "type": "object",
@@ -2711,7 +2718,8 @@
           "tick_elapsed_s",
           "citizens",
           "animals",
-          "fires"
+          "fires",
+          "stacks"
         ],
         "title": "EntitiesView"
       },
@@ -3753,6 +3761,13 @@
             "type": "array",
             "title": "Fires"
           },
+          "stacks": {
+            "items": {
+              "$ref": "#/components/schemas/StackEntity"
+            },
+            "type": "array",
+            "title": "Stacks"
+          },
           "nodes": {
             "items": {
               "$ref": "#/components/schemas/NodeEntity"
@@ -3774,7 +3789,8 @@
           "tick_elapsed_s",
           "citizens",
           "animals",
-          "fires"
+          "fires",
+          "stacks"
         ],
         "title": "LiveState",
         "description": "Where everyone is: on connect (`snapshot`) and after every engine tick (`tick`)."
@@ -4364,6 +4380,53 @@
           "heading_deg"
         ],
         "title": "Spawn"
+      },
+      "StackEntity": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "item": {
+            "type": "string",
+            "title": "Item"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "unit": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "Unit"
+          },
+          "cell": {
+            "type": "integer",
+            "title": "Cell"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "item",
+          "count",
+          "unit",
+          "cell"
+        ],
+        "title": "StackEntity",
+        "description": "Things lying on the ground: a felled tree's logs at its trunk, meat a predator left at the remains, goods put\ndown. Spectators see every stack; citizens only what their own perception tells them."
       },
       "StallGood": {
         "properties": {

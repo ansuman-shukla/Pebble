@@ -1,5 +1,5 @@
-"""Where everyone (citizens and animals) is and what they're doing, and which fires burn, now or at any past tick
-(nearest snapshot + events)."""
+"""Where everyone (citizens and animals) is and what they're doing, which fires burn and what lies on the ground, now
+or at any past tick (nearest snapshot + events)."""
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -140,6 +140,17 @@ class FireEntity(BaseModel):
     strength: float  # 0 out, 1/3 embers, 2/3 burning low, 1 burning
 
 
+class StackEntity(BaseModel):
+    """Things lying on the ground: a felled tree's logs at its trunk, meat a predator left at the remains, goods put
+    down. Spectators see every stack; citizens only what their own perception tells them."""
+
+    id: str
+    item: str  # an item kind (app.sim.items: wood, meat, hide, coins, ...)
+    count: int
+    unit: Vec3  # where it lies: a direction from the planet's centre (drawn on the ground there)
+    cell: int
+
+
 class EntitiesView(BaseModel):
     run_id: str
     tick: int
@@ -149,6 +160,7 @@ class EntitiesView(BaseModel):
     citizens: list[CitizenEntity]
     animals: list[AnimalEntity]
     fires: list[FireEntity]
+    stacks: list[StackEntity]
 
 
 def activity(citizen: ReplayCitizen, tick: int) -> Activity:
@@ -251,6 +263,15 @@ def wild_entities(state: ReplayState) -> tuple[list[AnimalEntity], list[FireEnti
     return animals, fires
 
 
+def ground_stacks(state: ReplayState) -> list[StackEntity]:
+    """Every stack on the ground, by id: it appears when something is put down, shrinks as it is taken and is gone
+    once the last of it is (the replay follows `item_moved`)."""
+    return [
+        StackEntity(id=stack_id, item=stack.item, count=stack.count, unit=stack.position, cell=stack.cell)
+        for stack_id, stack in sorted(state.ground.items())
+    ]
+
+
 def tick_elapsed(counted_s: float, counted_at: datetime, speed: float, paused: bool, now: datetime) -> float:
     """Game seconds since the current tick happened, 0..SECONDS_PER_TICK: `counted_s` of them counted up to
     `counted_at` (the engine's write time of the tick: 0), the rest passing at the clock's speed while it runs. A page
@@ -315,4 +336,5 @@ def entities_at(
         citizens=citizens,
         animals=animals,
         fires=fires,
+        stacks=ground_stacks(world.state),
     )

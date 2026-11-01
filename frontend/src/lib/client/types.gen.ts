@@ -757,6 +757,10 @@ export type EntitiesView = {
      * Fires
      */
     fires: Array<FireEntity>;
+    /**
+     * Stacks
+     */
+    stacks: Array<StackEntity>;
 };
 
 /**
@@ -1376,6 +1380,10 @@ export type LiveState = {
      */
     fires: Array<FireEntity>;
     /**
+     * Stacks
+     */
+    stacks: Array<StackEntity>;
+    /**
      * Nodes
      */
     nodes?: Array<NodeEntity>;
@@ -1778,6 +1786,39 @@ export type Spawn = {
      * Heading Deg
      */
     heading_deg: number;
+};
+
+/**
+ * StackEntity
+ *
+ * Things lying on the ground: a felled tree's logs at its trunk, meat a predator left at the remains, goods put
+ * down. Spectators see every stack; citizens only what their own perception tells them.
+ */
+export type StackEntity = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Item
+     */
+    item: string;
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Unit
+     */
+    unit: [
+        number,
+        number,
+        number
+    ];
+    /**
+     * Cell
+     */
+    cell: number;
 };
 
 /**

@@ -16,6 +16,7 @@ import { Matrix4, Vector3 } from 'three';
 import { Button } from '@/components/ui/button';
 import { BiomeScatter } from '@/components/world/globe/biome-scatter';
 import { GlobeNodes } from '@/components/world/globe/nodes';
+import { GlobeStacks } from '@/components/world/globe/ground-stacks';
 import {
   type DropApi,
   type DropResult,
@@ -484,6 +485,16 @@ const GlobeScene = memo(function GlobeScene({
           stages={nodeStages}
           focusRef={focusRef}
           radius={terrain.globe.radius}
+          terrain={terrain}
+          town={walkTown}
+        />
+        <GlobeStacks
+          stacks={live.stacks}
+          terrain={terrain}
+          town={walkTown}
+          scatter={planet.scatter}
+          stages={nodeStages}
+          focusRef={focusRef}
         />
       </Suspense>
       <GlobeNpcs
