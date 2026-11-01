@@ -111,10 +111,10 @@ def test_a_pending_check_is_printed_but_does_not_fail_the_run(
     assert main(["--days", "1", "--seeds", "7,"]) == 1
 
 
-def test_the_threat_checks_wait_for_the_exposure_schedules() -> None:
+def test_the_threat_checks_count_now_the_brains_keep_their_exposure_schedules() -> None:
     pending = {check.name for check in CHECKS if check.pending is not None}
-    assert {"a1.approaches", "a1.attacks", "a1.den_charges", "a1.people_flights"} <= pending
-    assert "a1.kills" not in pending and "a1.herds_kept" not in pending
+    assert not {"a1.approaches", "a1.attacks", "a1.den_charges", "a1.people_flights", "a1.kills"} & pending
+    assert not pending  # nothing waits for another stream any more (Q1)
 
 
 def test_the_node_checks_and_the_home_ring_count() -> None:

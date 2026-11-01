@@ -82,7 +82,8 @@ def test_band_b_deeds_need_six_one_seen_and_judged_and_one_unseen(new_sim: Calla
     one = check.outcome(sim)
     assert (one.value, one.judged, one.unseen) == (3, 1, 2)
     assert not br2.BandBDeeds.overall({1: one}).ok  # only 3 deeds
-    assert br2.BandBDeeds.overall({1: one, 7: br2.DeedsSeen(4, True, "", 0, 4)}).ok
+    assert not br2.BandBDeeds.overall({1: one, 7: br2.DeedsSeen(4, True, "", 0, 4)}).ok  # one judged: the bar is 2
+    assert br2.BandBDeeds.overall({1: one, 7: br2.DeedsSeen(4, True, "", 1, 3)}).ok
     assert not br2.BandBDeeds.overall({1: br2.DeedsSeen(6, True, "", 0, 6)}).ok  # none judged
 
 
