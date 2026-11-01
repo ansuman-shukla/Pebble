@@ -95,6 +95,10 @@ BIOME_WORDS: dict[str, str] = {
     "ice": "the ice",
     "beach": "a beach",
     "volcanic": "black volcanic rock",
+    # a shore spot's nearest cell can be the water's own (a fishing spot, the gold pool): said as its shore
+    "lake": "the shore of a lake",
+    "shallow_ocean": "the seashore",
+    "deep_ocean": "the seashore",
 }
 DOING: dict[str, str] = {
     "walk_to": "walking",
