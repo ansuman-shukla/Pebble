@@ -5,7 +5,7 @@ seam: append rows, keep every row). A check sees one seed's run tick by tick and
 `overall` judges all the seeds' outcomes together (by default: every seed passes).
 """
 
-from scripts.checks import a1, b1, br0, e1, e2, e3, j1, k1, n1, s1, t1, x0
+from scripts.checks import a1, b1, br0, e1, e2, e3, j1, j2, k1, n1, s1, t1, x0
 from scripts.checks.base import Check
 
 CHECKS: tuple[type[Check], ...] = (
@@ -21,4 +21,5 @@ CHECKS: tuple[type[Check], ...] = (
     *n1.CHECKS,
     *t1.CHECKS,
     *k1.CHECKS,
+    *j2.CHECKS,
 )
