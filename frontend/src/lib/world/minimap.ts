@@ -1,11 +1,12 @@
 /*
- * The minimap's geometry (10-world-v1 §5.4): a square around the site nearest the camera, local metres (x east,
- * z south) at METRES_PER_PX, north up. Whoever is off the map is drawn on its edge, toward where they are.
+ * The minimap's geometry (10-world-v1 §5.4): a square around where the camera is (the site or hotspot it is in, else
+ * the wilds around it), local metres (x east, z south) at METRES_PER_PX, north up. Whoever is off the map is drawn on
+ * its edge, toward where they are.
  */
 import { Vector3 } from 'three';
 
 import type { LiveAnimal, LiveCitizen } from '@/lib/live/live-contract';
-import type { SiteMapping } from '@/lib/world/globe';
+import { type SiteMapping, siteMapping, tangentFrame } from '@/lib/world/globe';
 
 export const MAP_PX = 200;
 export const METRES_PER_PX = 2;
@@ -96,3 +97,64 @@ export const animalColor = (kind: LiveAnimal['kind']) =>
   PREDATORS.has(kind) ? '#dc2626' : '#a16207';
 
 export const FIRE_COLOR = '#f97316';
+
+/** A named place the minimap centres on while the camera is within `reach` metres of its anchor: a site, a hotspot. */
+export interface MapArea {
+  id: string;
+  name: string;
+  mapping: SiteMapping;
+  reach: number;
+}
+
+/** What the minimap shows: an area, or the wilds (`WILDS`) around the camera. */
+export type MapView = Omit<MapArea, 'reach'>;
+
+export const WILDS = 'wilds';
+/** In the wilds the map stays put until the camera is this far (m) from its centre. */
+const WILDS_RECENTRE_M = 100;
+
+const anchorOf = (mapping: SiteMapping) =>
+  mapping.toWorld(0, 0, 0, new Vector3()).normalize();
+
+/**
+ * Where the camera's `focus` is on the map: the first area (sites before hotspots) it is in, else the wilds named by
+ * the `biome` under it, centred on it and moved once it walks off (`current` is kept while it still fits).
+ */
+export function mapViewAt(
+  focus: Vector3,
+  areas: readonly MapArea[],
+  radius: number,
+  biome: string,
+  current: MapView | null,
+): MapView {
+  const here = focus.clone().normalize();
+  const area = areas.find(
+    (candidate) =>
+      anchorOf(candidate.mapping).angleTo(here) * radius < candidate.reach,
+  );
+  if (area)
+    return current?.id === area.id
+      ? current
+      : { id: area.id, name: area.name, mapping: area.mapping };
+  const name = `the wilds · ${biome.replaceAll('_', ' ')}`;
+  if (
+    current?.id === WILDS &&
+    anchorOf(current.mapping).angleTo(here) * radius < WILDS_RECENTRE_M
+  )
+    return current.name === name ? current : { ...current, name };
+  return { id: WILDS, name, mapping: siteMapping(tangentFrame(here), radius) };
+}
+
+/** A node on the map: its simulation id and where it is (unit direction). */
+export interface MapNode {
+  id: string;
+  direction: Vector3;
+}
+
+/** A node's dot by how full it is (stock / cap): the scarcity view. */
+export function nodeColor(fill: number) {
+  if (fill >= 0.66) return '#15803d';
+  if (fill >= 0.33) return '#ca8a04';
+  if (fill > 0) return '#ea580c';
+  return '#78716c';
+}

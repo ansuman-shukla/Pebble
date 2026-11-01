@@ -1,7 +1,6 @@
 import { type RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import { Vector3 } from 'three';
 
-import type { GoToSite } from './globe-drop';
 import type { NpcViews } from './globe-npcs';
 import type { TownPlacement, TownWater } from '@/lib/client/types.gen';
 import type {
@@ -15,18 +14,25 @@ import {
   animalColor,
   FIRE_COLOR,
   MAP_PX,
+  type MapArea,
+  type MapNode,
   type MapPoint,
   mapPixelOf,
   mapPoint,
+  type MapView,
+  mapViewAt,
   METRES_PER_PX,
+  nodeColor,
   REGION_COLORS,
 } from '@/lib/world/minimap';
+import type { NodeStages } from '@/lib/world/node-stages';
 
 /*
- * The minimap (10-world-v1 §5.4): a 2D map of the site nearest the camera, 1 px = 2 m, north up. The ground is
- * coloured by biome, the town adds its water and building footprints; on top, the camera's spot, fires (orange),
- * animals (predators red) and every citizen by group (those elsewhere on the map's edge, toward where they are).
- * A click goes there. Roads, fields, hotspot outlines and nodes join as the world view carries them.
+ * The minimap (10-world-v1 §5.4): a 2D map of where the camera is (the site or hotspot it is in, else the wilds
+ * around it, named by the biome), 1 px = 2 m, north up. The ground is coloured by biome, the town adds its water and
+ * building footprints; on top, every node as a small square coloured by its stock (the scarcity view), the camera's
+ * spot, fires (orange), animals (predators red) and every citizen by group (those elsewhere on the map's edge,
+ * toward where they are). A click goes there. Roads, fields and hotspot outlines join as the world view carries them.
  */
 
 /** How often the dots are redrawn (ms). */
@@ -48,26 +54,14 @@ interface Dot {
 }
 
 const scratch = new Vector3();
-
-/** The site whose anchor is nearest to where the camera looks. */
-function nearestSite(sites: GoToSite[], focus: Vector3) {
-  const here = scratch.copy(focus).normalize();
-  let best = sites[0];
-  let bestAngle = Infinity;
-  for (const site of sites) {
-    const angle = site.mapping.toWorld(0, 0, 0, new Vector3()).angleTo(here);
-    if (angle < bestAngle) {
-      bestAngle = angle;
-      best = site;
-    }
-  }
-  return best;
-}
+/** Nodes are looked up this far (m) from the map's centre: its corners. */
+const NODE_REACH = Math.SQRT2 * (MAP_PX / 2) * METRES_PER_PX;
+const NODE_PX = 3;
 
 /** The map's ground: biomes, then the town's water and footprints. */
 function drawGround(
   context: CanvasRenderingContext2D,
-  site: GoToSite,
+  site: MapView,
   terrain: GlobeTerrain,
   biomeNames: string[],
   town: MinimapTown,
@@ -132,10 +126,12 @@ function drawDot(
 }
 
 export function Minimap({
-  sites,
+  areas,
   terrain,
   biomeNames,
   town,
+  nodesNear,
+  stages,
   citizens,
   animals,
   fires,
@@ -143,10 +139,15 @@ export function Minimap({
   focusRef,
   onGo,
 }: {
-  sites: GoToSite[];
+  /** Where the map centres while the camera is in one: sites first, then hotspots. */
+  areas: MapArea[];
   terrain: GlobeTerrain;
   biomeNames: string[];
   town: MinimapTown;
+  /** The nodes within some metres of a direction (looked up once per map). */
+  nodesNear: (direction: Vector3, metres: number) => MapNode[];
+  /** How full each node is. */
+  stages: NodeStages;
   citizens: LiveCitizen[];
   animals: LiveAnimal[];
   fires: LiveFire[];
@@ -157,9 +158,11 @@ export function Minimap({
   onGo: (direction: Vector3) => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  // the first draw moves it to the site nearest the camera
-  const [site, setSite] = useState(sites[0]);
+  const radius = terrain.globe.radius;
+  // the first draw moves it to where the camera is
+  const [site, setSite] = useState<MapView>(areas[0]);
   const [dots, setDots] = useState<Dot[]>([]);
+  const [drawnNodes, setDrawnNodes] = useState({ all: 0, scarce: 0 });
   const ground = useMemo(() => {
     const layer = document.createElement('canvas');
     layer.width = layer.height = MAP_PX;
@@ -167,10 +170,25 @@ export function Minimap({
     if (context) drawGround(context, site, terrain, biomeNames, town);
     return layer;
   }, [site, terrain, biomeNames, town]);
+  const { mapping } = site;
+  const nodes = useMemo(
+    () =>
+      nodesNear(
+        mapping.toWorld(0, 0, 0, new Vector3()).normalize(),
+        NODE_REACH,
+      ),
+    [mapping, nodesNear],
+  );
 
   useEffect(() => {
     const draw = () => {
-      const next = nearestSite(sites, focusRef.current);
+      const next = mapViewAt(
+        focusRef.current,
+        areas,
+        radius,
+        biomeNames[terrain.biomeAt(scratch.copy(focusRef.current).normalize())],
+        site,
+      );
       if (next !== site) {
         setSite(next);
         return;
@@ -181,8 +199,31 @@ export function Minimap({
       const unit = (position: { unit: number[] }) =>
         scratch
           .set(position.unit[0], position.unit[1], position.unit[2])
-          .multiplyScalar(terrain.globe.radius);
+          .multiplyScalar(radius);
       context.drawImage(ground, 0, 0);
+      let shown = 0;
+      let scarce = 0;
+      for (const node of nodes) {
+        const point = pixel(
+          scratch.copy(node.direction).multiplyScalar(radius),
+        );
+        if (point.edge) continue;
+        const fill = stages.state(node.id)?.fill ?? 1;
+        context.fillStyle = nodeColor(fill);
+        context.fillRect(
+          point.x - NODE_PX / 2,
+          point.y - NODE_PX / 2,
+          NODE_PX,
+          NODE_PX,
+        );
+        shown += 1;
+        if (fill < 1) scarce += 1;
+      }
+      setDrawnNodes((current) =>
+        current.all === shown && current.scarce === scarce
+          ? current
+          : { all: shown, scarce },
+      );
       for (const fire of fires) {
         const point = pixel(unit(fire.position));
         if (!point.edge) drawDot(context, point, FIRE_COLOR, 3);
@@ -206,16 +247,34 @@ export function Minimap({
     draw();
     const timer = window.setInterval(draw, DRAW_MS);
     return () => window.clearInterval(timer);
-  }, [sites, site, ground, citizens, animals, fires, views, focusRef, terrain]);
+  }, [
+    areas,
+    site,
+    ground,
+    nodes,
+    stages,
+    citizens,
+    animals,
+    fires,
+    views,
+    focusRef,
+    terrain,
+    biomeNames,
+    radius,
+  ]);
 
   return (
     <section
       role="region"
       aria-label="Minimap"
       data-minimap-site={site.id}
+      data-minimap-nodes={drawnNodes.all}
+      data-minimap-scarce={drawnNodes.scarce}
       className="flex flex-col gap-1 rounded-lg bg-white/90 p-1 text-xs shadow-lg"
     >
-      <span className="px-1 font-medium">{site.name}</span>
+      <span className="px-1 font-medium" data-testid="minimap-title">
+        {site.name}
+      </span>
       <canvas
         ref={canvas}
         width={MAP_PX}

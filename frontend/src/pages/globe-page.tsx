@@ -126,6 +126,7 @@ import {
 import { biomeColor } from '@/lib/world/globe-mesh';
 import { groundHides } from '@/lib/world/globe-pick';
 import { clipWater, TOWN_WATER_Y } from '@/lib/world/ground-shape';
+import type { MapArea, MapNode } from '@/lib/world/minimap';
 import type { LabelStore, UpAt } from '@/lib/world/label-store';
 import {
   type RiverLayout,
@@ -599,6 +600,69 @@ function goToSites(planet: Planet, town: TownView): GoToSite[] {
   ];
 }
 
+/**
+ * Where the minimap centres: the sites within their reach (the town on its ground disc, so the hotspots just outside
+ * its walls are theirs), then the hotspots.
+ */
+function minimapAreas(planet: Planet): MapArea[] {
+  const radius = planet.terrain.globe.radius;
+  return [
+    ...planet.view.sites.map((site) => ({
+      id: site.id,
+      name: site.name,
+      mapping: anchorMapping(site.anchor, radius),
+      reach:
+        site.kind === 'town'
+          ? TOWN_GROUND_RADIUS
+          : planet.sites.find((one) => one.id === site.id)!.reach,
+    })),
+    ...planet.view.places.hotspots.map((hotspot) => ({
+      id: hotspot.id,
+      name: hotspot.name,
+      mapping: siteMapping(
+        tangentFrame(new Vector3(...hotspot.centre).normalize()),
+        radius,
+      ),
+      reach: hotspot.radius_m,
+    })),
+  ];
+}
+
+/** The nodes near a direction for the minimap: the flora and fixed features, and the town's rice paddies. */
+function minimapNodes(planet: Planet, town: TownView) {
+  const { scatter, terrain } = planet;
+  const radius = terrain.globe.radius;
+  // a paddy (`paddy-N`) is drawn as many tiles (`paddy-N-k`): it sits at their middle
+  const tiles = new Map<string, { x: number; z: number; count: number }>();
+  for (const placement of town.placements) {
+    if (placement.kind !== 'rice_paddy') continue;
+    const id = placement.id.split('-').slice(0, 2).join('-');
+    const sum = tiles.get(id) ?? { x: 0, z: 0, count: 0 };
+    tiles.set(id, {
+      x: sum.x + placement.x,
+      z: sum.z + placement.z,
+      count: sum.count + 1,
+    });
+  }
+  const paddies: MapNode[] = [...tiles].map(([id, { x, z, count }]) => ({
+    id,
+    direction: planet.town.mapping
+      .toWorld(x / count, 0, z / count, new Vector3())
+      .normalize(),
+  }));
+  return (direction: Vector3, metres: number): MapNode[] => [
+    ...scatter.cellsAround(direction, metres).flatMap((cell) =>
+      scatter.nodes(cell).map((node) => ({
+        id: node.id,
+        direction: node.position.clone().normalize(),
+      })),
+    ),
+    ...paddies.filter(
+      (paddy) => paddy.direction.angleTo(direction) * radius < metres,
+    ),
+  ];
+}
+
 const DROP_MESSAGES: Record<
   Exclude<DropResult, { ok: true }>['reason'],
   string
@@ -677,10 +741,8 @@ function GlobeWorld({
     [planet, town, townWater],
   );
   const goTo = useMemo(() => goToSites(planet, town), [planet, town]);
-  const mapSites = useMemo(
-    () => goTo.filter((site) => site.group === 'site'),
-    [goTo],
-  );
+  const mapAreas = useMemo(() => minimapAreas(planet), [planet]);
+  const nodesNear = useMemo(() => minimapNodes(planet, town), [planet, town]);
   const dropRef = useRef<DropApi | null>(null);
   const [dropping, setDropping] = useState(false);
   // the toolbar wraps onto more lines in narrow windows (and with the drop hint): panels hang below its real end
@@ -1257,10 +1319,12 @@ function GlobeWorld({
         <div className="pointer-events-none! mt-auto flex shrink-0 flex-col items-end gap-2 *:pointer-events-auto">
           {minimapOpen && ready && (
             <Minimap
-              sites={mapSites}
+              areas={mapAreas}
               terrain={planet.terrain}
               biomeNames={view.biome_names}
               town={minimapTown}
+              nodesNear={nodesNear}
+              stages={nodeStages}
               citizens={live.citizens}
               animals={live.animals}
               fires={live.fires}

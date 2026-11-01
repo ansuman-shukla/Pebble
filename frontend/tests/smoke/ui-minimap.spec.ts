@@ -1,20 +1,24 @@
 import { expect, type Page, test } from '@playwright/test';
 import { Vector3 } from 'three';
 
-import type { WorldView } from '../../src/lib/client/types.gen';
+import type { WorldPlaces, WorldView } from '../../src/lib/client/types.gen';
 import {
   latLonFromDirection,
   siteMapping,
   tangentFrame,
 } from '../../src/lib/world/globe';
 import {
+  type MapArea,
   MAP_PX,
   mapPixel,
   mapPixelOf,
   mapPoint,
+  mapViewAt,
   METRES_PER_PX,
+  nodeColor,
+  WILDS,
 } from '../../src/lib/world/minimap';
-import { WORLD_URL } from './globe-helpers';
+import { atParam, WORLD_URL } from './globe-helpers';
 import {
   cameraOf,
   drawn,
@@ -322,5 +326,122 @@ test('a click on the minimap lets go of a followed citizen', async ({
   await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.3);
   await expect(world).not.toHaveAttribute('data-follow');
   await landed(world);
+  expect(errors).toEqual([]);
+});
+
+test('the map is of the site or hotspot the camera is in, else of the wilds around it, named by the ground', () => {
+  const R = 2000;
+  /** A direction `x` m east and `z` m north of a spot (small distances: a flat chart). */
+  const at = (x: number, z: number) => new Vector3(x / R, z / R, 1).normalize();
+  const area = (id: string, x: number, z: number, reach: number): MapArea => ({
+    id,
+    name: id,
+    mapping: siteMapping(tangentFrame(at(x, z)), R),
+    reach,
+  });
+  const camp = area('camp', 0, 0, 100);
+  const woods = area('woods', 80, 0, 120); // overlaps the camp
+  const areas = [camp, woods];
+  const view = (
+    x: number,
+    z: number,
+    current: ReturnType<typeof mapViewAt> | null = null,
+  ) =>
+    mapViewAt(
+      at(x, z).multiplyScalar(R),
+      areas,
+      R,
+      'broadleaf_forest',
+      current,
+    );
+  expect(view(50, 0).id).toBe('camp'); // in both: the site first
+  expect(view(150, 0).id).toBe('woods');
+  // 2.5 km from the camp is not the camp: the wilds, named by the ground under the camera
+  const wilds = view(0, 2500);
+  expect(wilds.id).toBe(WILDS);
+  expect(wilds.name).toBe('the wilds · broadleaf forest');
+  expect(mapPixelOf(wilds.mapping, at(0, 2500).multiplyScalar(R)).edge).toBe(
+    false,
+  );
+  // it stays put while the camera wanders a little, then moves with it
+  expect(view(60, 2500, wilds)).toBe(wilds);
+  const moved = view(300, 2500, wilds);
+  expect(moved).not.toBe(wilds);
+  expect(mapPixelOf(moved.mapping, at(300, 2500).multiplyScalar(R))).toEqual({
+    x: MAP_PX / 2,
+    y: MAP_PX / 2,
+    edge: false,
+  });
+  // the same area keeps its view (no redraw)
+  const inCamp = view(10, 0);
+  expect(view(-10, 5, inCamp)).toBe(inCamp);
+});
+
+test('nodes are coloured by how full they are', () => {
+  const colours = [1, 0.7, 0.5, 0.1, 0].map(nodeColor);
+  expect(new Set(colours).size).toBe(4);
+  expect(colours[0]).toBe(colours[1]);
+  expect(colours[4]).not.toBe(colours[3]);
+});
+
+test('the minimap shows the nodes by stock, the town’s paddies too, and is named for where the camera is', async ({
+  page,
+  request,
+}) => {
+  const errors: string[] = [];
+  const world = await openHeld(page, errors);
+  await expect(minimap(page)).toHaveAttribute('data-minimap-site', 'town');
+  await expect(page.getByTestId('minimap-title')).toHaveText('The castle town');
+  const count = (name: string) =>
+    minimap(page)
+      .getAttribute(`data-minimap-${name}`)
+      .then((value) => Number(value));
+  await expect.poll(() => count('nodes')).toBeGreaterThanOrEqual(6);
+  const scarce = await count('scarce');
+  // a paddy harvested to stubble shows as scarce
+  await page.evaluate(() =>
+    (
+      globalThis as unknown as {
+        __pebbleMockLive: {
+          sendNow(type: string, actor: string, payload: object): void;
+        };
+      }
+    ).__pebbleMockLive.sendNow('node_changed', 'genzo', {
+      node: 'paddy-2',
+      kind: 'rice_paddy',
+      after: 0,
+      stage: 'stubble',
+    }),
+  );
+  await expect.poll(() => count('scarce')).toBe(scarce + 1);
+
+  // in a hotspot it is the hotspot's map; between places, the wilds'
+  const places: WorldPlaces = await (
+    await request.get(`${WORLD_URL}/places`)
+  ).json();
+  const view: WorldView = await (await request.get(WORLD_URL)).json();
+  const woods = places.hotspots.find(
+    (hotspot) => hotspot.id === 'north_woods',
+  )!;
+  await page.getByRole('button', { name: /go to/ }).first().click();
+  await page.getByRole('menuitem', { name: woods.name, exact: true }).click();
+  await landed(world);
+  await expect(minimap(page)).toHaveAttribute(
+    'data-minimap-site',
+    'north_woods',
+  );
+  await expect(page.getByTestId('minimap-title')).toHaveText(woods.name);
+  const town = new Vector3(
+    ...view.sites.find((site) => site.kind === 'town')!.anchor.position,
+  );
+  const bandB = new Vector3(
+    ...view.sites.find((site) => site.id === 'band_b_camp')!.anchor.position,
+  );
+  const between = town.clone().add(bandB).normalize();
+  await page.goto(
+    `/?mockLive=1&at=${atParam(between, bandB.clone().sub(town))}`,
+  );
+  await expect(minimap(page)).toHaveAttribute('data-minimap-site', WILDS);
+  await expect(page.getByTestId('minimap-title')).toHaveText(/^the wilds · /);
   expect(errors).toEqual([]);
 });
