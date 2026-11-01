@@ -68,12 +68,26 @@ const SHALLOW_SEA = 2;
  * contour across the rising bank instead of the bed's polygon of grid edges.
  */
 export const LAKE_LIFT = 0.25;
+/**
+ * Off a lake's cells its water fades out (to DRY_DEPTH: clear, no foam) and settles to DRY_LIFT over the ground as
+ * the lake corners' share of a point falls from DRY_TO to DRY_FROM (0 on a triangle's edge between dry cells).
+ */
+const DRY_FROM = 0.1;
+const DRY_TO = 0.5;
+const DRY_LIFT = 0.05;
+const DRY_DEPTH = -0.1;
+
+const smoothstep = (edge0: number, edge1: number, x: number) => {
+  const k = Math.min(Math.max((x - edge0) / (edge1 - edge0), 0), 1);
+  return k * k * (3 - 2 * k);
+};
+
 /** Lakes are flat in the terrain: their depth for the shader grows by LAKE_STEP per cell from the shore. */
 const LAKE_STEP = 2.5;
 const LAKE_DEPTH_MAX = 9;
 
 /** A water cell above the sea's surface: a lake. */
-const isLakeCell = ({ biomes, heights }: Globe, cell: number) =>
+export const isLakeCell = ({ biomes, heights }: Globe, cell: number) =>
   WATER_BIOMES.has(biomes[cell]) && heights[cell] > WATER_SURFACE;
 
 /**
@@ -197,19 +211,30 @@ export function stillWaterGeometry(terrain: GlobeTerrain) {
       const bedDepths = cells.map((cell) =>
         lakes.isLake(cell) ? lakes.depth[cell] : 0,
       );
+      const lakeCorners = cells.map((cell) => (lakes.isLake(cell) ? 1 : 0));
       lattice((b0, b1, b2, target) => {
+        // on the flat bed the depth grows away from the shore; up the bank it thins to nothing where the
+        // ground meets the surface
+        const bed = b0 * bedDepths[0] + b1 * bedDepths[1] + b2 * bedDepths[2];
+        const ground = surface.height(t, b0, b1, b2);
+        const rise = ground - level;
+        const still = (LAKE_LIFT + bed) * (1 - rise / LAKE_LIFT);
+        // off the lake's own cells, over ground at or below its level (an outlet's floor carved at the lake's
+        // height, the top of a fall), the water thins out and settles onto the ground by the triangle's dry edge
+        // instead of ending there in a straight edge (as a sheet of shore foam, or in mid-air)
+        const wet =
+          b0 * lakeCorners[0] + b1 * lakeCorners[1] + b2 * lakeCorners[2];
+        const dry = 1 - smoothstep(DRY_FROM, DRY_TO, wet);
+        const top = level + LAKE_LIFT;
+        const height = top + (Math.min(ground + DRY_LIFT, top) - top) * dry;
         target
           .copy(corner[0])
           .multiplyScalar(b0)
           .addScaledVector(corner[1], b1)
           .addScaledVector(corner[2], b2)
           .normalize()
-          .multiplyScalar(radius + level + LAKE_LIFT);
-        // on the flat bed the depth grows away from the shore; up the bank it thins to nothing where the
-        // ground meets the surface
-        const bed = b0 * bedDepths[0] + b1 * bedDepths[1] + b2 * bedDepths[2];
-        const rise = surface.height(t, b0, b1, b2) - level;
-        return (LAKE_LIFT + bed) * (1 - rise / LAKE_LIFT);
+          .multiplyScalar(radius + height);
+        return still + (DRY_DEPTH - still) * dry;
       });
     }
   }
