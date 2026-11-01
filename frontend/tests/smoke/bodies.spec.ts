@@ -1,14 +1,22 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 import { expect, type Page, test } from '@playwright/test';
 import {
+  AdditiveBlending,
   Box3,
   type Bone,
   BoxGeometry,
   Group,
+  type Material,
   Mesh,
   type Object3D,
   type SkinnedMesh,
+  type Sprite,
+  type SpriteMaterial,
   Vector3,
 } from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 import type { LiveMessage } from '../../src/lib/live/live-contract';
 import { applyMessage, EMPTY_LIVE } from '../../src/lib/live/live-state';
@@ -30,7 +38,12 @@ import {
   RUN_FROM,
 } from '../../src/lib/live/motion';
 import { CITIZEN_LOOKS } from '../../src/lib/world/citizen-looks';
-import { freeHand, holderOf, propModel } from '../../src/lib/world/hand-props';
+import {
+  freeHand,
+  holderOf,
+  propAsset,
+  propModel,
+} from '../../src/lib/world/hand-props';
 import { animateHumanoid } from '../../src/lib/world/humanoid-clips';
 import {
   cueOver,
@@ -63,6 +76,8 @@ import { createCharacter } from '../../src/vendor/polyfork/humanoid.mjs';
  * ×10, seats, procedural layers (gestures, the jump, the creep, prayer), easing between postures, props in hand and
  * the cues the feed's events give bodies.
  */
+
+const ROOT = path.resolve(import.meta.dirname, '../..');
 
 const lookOf = (id: string) => {
   const look = CITIZEN_LOOKS.find((candidate) => candidate.id === id);
@@ -839,6 +854,48 @@ test.describe('props', () => {
     const model = propModel('torch', stake);
     const size = new Box3().setFromObject(model).getSize(new Vector3());
     expect(Math.max(size.x, size.y, size.z)).toBeCloseTo(0.6, 1);
+  });
+
+  test('a held torch burns: its flame shines unlit by the night with a glow round it, the stake stays lit', async () => {
+    const id = propAsset('torch')!;
+    const file = readFileSync(
+      path.join(ROOT, 'public/assets/polyfork', id, `${id}.glb`),
+    );
+    const { scene } = await new GLTFLoader().parseAsync(
+      file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength),
+      '',
+    );
+    const model = propModel('torch', scene);
+    const meshesUnder = (name: string) => {
+      const meshes: Mesh[] = [];
+      model
+        .getObjectByName(name)!
+        .traverse(
+          (object) => (object as Mesh).isMesh && meshes.push(object as Mesh),
+        );
+      return meshes;
+    };
+    const flames = meshesUnder('flame');
+    expect(flames.length).toBeGreaterThan(0);
+    for (const flame of flames)
+      expect((flame.material as Material).type).toBe('MeshBasicMaterial');
+    for (const stake of meshesUnder('stake'))
+      expect((stake.material as Material).type).not.toBe('MeshBasicMaterial');
+    // the glow is added light, round the flame (the top of the stake)
+    const glow = model.getObjectByName('torch-glow') as Sprite;
+    expect((glow.material as SpriteMaterial).blending).toBe(AdditiveBlending);
+    model.updateMatrixWorld(true);
+    const flameBox = new Box3().setFromObject(flames[0]);
+    expect(
+      flameBox.distanceToPoint(glow.getWorldPosition(new Vector3())),
+    ).toBeLessThan(0.05);
+    // the loaded model other holders copy keeps its own look
+    scene.traverse((object) => {
+      if ((object as Mesh).isMesh)
+        expect(((object as Mesh).material as Material).type).not.toBe(
+          'MeshBasicMaterial',
+        );
+    });
   });
 });
 
