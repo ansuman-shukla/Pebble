@@ -24,7 +24,9 @@ import { windUniforms } from './wind';
  * mesh of puffs for every fire within SMOKE_REACH that burns or went out less than SMOULDER game minutes ago
  * (thinning as it cools), and one cloud of sparks over the burning ones (round glows that fade as they rise).
  * Both rise along the local up, the smoke drifting with the wind, at natural speed × visualRate (the prop clock),
- * so two draw calls carry every fire.
+ * so two draw calls carry every fire. A puff is born thin and narrow over the flame (people round the fire stay in
+ * sight through it) and thickens as it rises and spreads; while the fire burns, the flame lights it from below (warm
+ * where it is low, fading as it rises), so smoke at night reads as smoke, not a dark column.
  */
 
 /** Fires within this distance of the camera smoke. */
@@ -45,6 +47,8 @@ const SPARK_SPRITE = 32;
 const PUFF_LIFT = 0.4;
 /** Metres a puff strays sideways by the time it is gone. */
 const PUFF_WANDER = 0.6;
+/** A puff thickens over the first this much of its rise (above a sitter's or a sleeper's head by then). */
+const PUFF_THIN = 0.35;
 
 /** A fixed pseudo-random number in [0, 1) for `n`. */
 const noiseOf = (n: number) => {
@@ -54,14 +58,18 @@ const noiseOf = (n: number) => {
 
 const PUFF_VERTEX = /* glsl */ `
 attribute float puffAlpha;
+attribute float puffGlow;
 varying float vPuffAlpha;
+varying float vPuffGlow;
 `;
+/** The flame's light on the smoke over it (added to the puff's colour, by how low and close to the flame it is). */
+const FLAME_LIGHT = '0.95, 0.5, 0.18';
 
 function smokeMaterial() {
   const material = new MeshLambertMaterial({
-    color: '#9a9590',
+    color: '#a9a49e',
     transparent: true,
-    opacity: 0.7,
+    opacity: 0.55,
     depthWrite: false,
   });
   material.onBeforeCompile = (shader) => {
@@ -69,17 +77,17 @@ function smokeMaterial() {
       .replace('#include <common>', `#include <common>\n${PUFF_VERTEX}`)
       .replace(
         '#include <begin_vertex>',
-        '#include <begin_vertex>\nvPuffAlpha = puffAlpha;',
+        '#include <begin_vertex>\nvPuffAlpha = puffAlpha;\nvPuffGlow = puffGlow;',
       );
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
-        '#include <common>\nvarying float vPuffAlpha;',
+        '#include <common>\nvarying float vPuffAlpha;\nvarying float vPuffGlow;',
       )
       .replace(
         '#include <opaque_fragment>',
         // soft edges: a puff thins towards its outline
-        '#include <opaque_fragment>\nfloat puffFacing = abs(dot(normal, normalize(vViewPosition)));\ngl_FragColor.a *= vPuffAlpha * smoothstep(0.0, 0.6, puffFacing);',
+        `#include <opaque_fragment>\nfloat puffFacing = abs(dot(normal, normalize(vViewPosition)));\ngl_FragColor.a *= vPuffAlpha * smoothstep(0.0, 0.6, puffFacing);\ngl_FragColor.rgb += vec3(${FLAME_LIGHT}) * vPuffGlow;`,
       );
   };
   material.customProgramCacheKey = () => 'fire-smoke';
@@ -121,13 +129,17 @@ export function smokiness(
   return since >= 0 && since < SMOULDER ? 0.5 * (1 - since / SMOULDER) : 0;
 }
 
-/** A puff's look at `age` (0 born … 1 gone): how high it has risen (0-1), its size (m) and opacity. */
+/**
+ * A puff's look at `age` (0 born … 1 gone): how high it has risen (0-1), its size (m), its opacity (thin over the
+ * flame, thickest a third of the way up, then fading) and how much a burning flame lights it (low puffs most).
+ */
 export function puffAt(age: number) {
   const rise = age;
   return {
     rise,
-    size: 0.25 + 1.1 * age,
-    alpha: Math.min(age / 0.15, 1) * (1 - age),
+    size: 0.2 + 1.2 * age,
+    alpha: Math.min(age / PUFF_THIN, 1) * (1 - age),
+    glow: (1 - age) ** 3,
   };
 }
 
@@ -156,6 +168,7 @@ export class SmokeCloud {
   readonly puffs: InstancedMesh;
   readonly sparks: Points;
   private readonly alpha: InstancedBufferAttribute;
+  private readonly glow: InstancedBufferAttribute;
   private readonly sparkPositions: BufferAttribute;
   private readonly sparkGlows: BufferAttribute;
   /** Each fire as last seen: lit or not, and when it went out (game minutes). */
@@ -166,8 +179,13 @@ export class SmokeCloud {
       new Float32Array(MAX_FIRES * PUFFS_PER_FIRE),
       1,
     );
+    this.glow = new InstancedBufferAttribute(
+      new Float32Array(MAX_FIRES * PUFFS_PER_FIRE),
+      1,
+    );
     const puffGeometry = new IcosahedronGeometry(1, 2);
     puffGeometry.setAttribute('puffAlpha', this.alpha);
+    puffGeometry.setAttribute('puffGlow', this.glow);
     this.puffs = new InstancedMesh(
       puffGeometry,
       smokeMaterial(),
@@ -203,33 +221,38 @@ export class SmokeCloud {
     this.sparks.visible = false;
   }
 
-  /** Moves the smoke of `fires` (by id) as seen from `camera` to the prop clock's time. */
-  frame(camera: Vector3, fires: ReadonlyMap<string, SmokingFire>) {
-    const { puffs, alpha, sparks, sparkPositions, sparkGlows } = this;
+  /**
+   * Moves the smoke of every fire of `sources` (each by id: the live fires, the chimneys of lit hearths) as seen from
+   * `camera` to the prop clock's time.
+   */
+  frame(camera: Vector3, ...sources: ReadonlyMap<string, SmokingFire>[]) {
+    const { puffs, alpha, glow, sparks, sparkPositions, sparkGlows } = this;
     const time = propWorld.clipTime;
     const wind = windUniforms.windDirection.value;
     const strength = windUniforms.windStrength.value;
     const smoking: { fire: SmokingFire; thick: number; seed: number }[] = [];
-    for (const [id, fire] of fires) {
-      let seen = this.seen.get(id);
-      if (!seen) {
-        seen = { lit: fire.lit, outAt: -Infinity };
-        this.seen.set(id, seen);
-      } else if (seen.lit !== fire.lit) {
-        seen.lit = fire.lit;
-        if (!fire.lit) seen.outAt = propWorld.minutes;
+    for (const fires of sources)
+      for (const [id, fire] of fires) {
+        let seen = this.seen.get(id);
+        if (!seen) {
+          seen = { lit: fire.lit, outAt: -Infinity };
+          this.seen.set(id, seen);
+        } else if (seen.lit !== fire.lit) {
+          seen.lit = fire.lit;
+          if (!fire.lit) seen.outAt = propWorld.minutes;
+        }
+        const thick = smokiness(
+          fire.lit,
+          fire.strength,
+          seen.outAt,
+          propWorld.minutes,
+        );
+        if (thick > 0 && camera.distanceTo(fire.position) < SMOKE_REACH)
+          smoking.push({ fire, thick, seed: clipPhase(id, 1) });
       }
-      const thick = smokiness(
-        fire.lit,
-        fire.strength,
-        seen.outAt,
-        propWorld.minutes,
-      );
-      if (thick > 0 && camera.distanceTo(fire.position) < SMOKE_REACH)
-        smoking.push({ fire, thick, seed: clipPhase(id, 1) });
-    }
     // a fire gone from the feed is forgotten
-    for (const id of this.seen.keys()) if (!fires.has(id)) this.seen.delete(id);
+    for (const id of this.seen.keys())
+      if (!sources.some((fires) => fires.has(id))) this.seen.delete(id);
     smoking.sort(
       (a, b) =>
         camera.distanceTo(a.fire.position) - camera.distanceTo(b.fire.position),
@@ -259,6 +282,7 @@ export class SmokeCloud {
         spin.setFromAxisAngle(up, noiseOf(born + 2) * 6.28);
         puffs.setMatrixAt(puffCount, matrix.compose(at, spin, size));
         alpha.setX(puffCount, puff.alpha * thick);
+        glow.setX(puffCount, fire.lit ? puff.glow * thick : 0);
         puffCount++;
       }
       if (!fire.lit) continue;
@@ -278,6 +302,7 @@ export class SmokeCloud {
     puffs.visible = puffCount > 0;
     puffs.instanceMatrix.needsUpdate = true;
     alpha.needsUpdate = true;
+    glow.needsUpdate = true;
     sparks.geometry.setDrawRange(0, sparkCount);
     sparks.visible = sparkCount > 0;
     sparkPositions.needsUpdate = true;

@@ -61,6 +61,7 @@ import { type GameClock, sunDirection } from '@/lib/world/game-clock';
 import { type GlobeTerrain, tangentFrame } from '@/lib/world/globe';
 import {
   freeHand,
+  wornInHand,
   holderOf,
   loadProp,
   propAsset,
@@ -164,6 +165,8 @@ interface NpcView {
   /** What it holds ('' for nothing), the procedural layer over its clip ('' for none). */
   prop: string;
   layer: string;
+  /** The look's own things in hand (a spear, a cane) are put away now (for a prop, for work or at rest). */
+  stowed: boolean;
   /** Gone inside (the body is hidden after the door). */
   hidden: boolean;
   /** The clip playing, '' until the model is loaded (or while it is far). */
@@ -394,10 +397,11 @@ function NpcModel({
 
   const held = shown.pose === 'standing' ? shown.prop : null;
   const propRef = useHeldProp(character, held);
-  const wornFor = useRef<{ held: HeldProp | null; posture: Posture | null }>({
-    held: null,
-    posture: null,
-  });
+  const wornFor = useRef<{
+    held: HeldProp | null;
+    stow: boolean;
+    posture: Posture | null;
+  }>({ held: null, stow: false, posture: null });
 
   const shownOpacity = useRef(1);
   useFrame(({ camera }, delta) => {
@@ -508,12 +512,15 @@ function NpcModel({
       }
       state.posture = posture;
     }
-    // what the hands show: by posture (`showWorn`), then the look's own things put away for a prop
+    // what the hands show: by posture (`showWorn`), then the look's own things put away for a prop or for work
     const worn = wornFor.current;
-    if (held !== worn.held || posture !== worn.posture) {
+    const { stow } = shown;
+    if (held !== worn.held || stow !== worn.stow || posture !== worn.posture) {
       showWorn(character, posture);
-      freeHand(character, held);
-      wornFor.current = { held, posture };
+      freeHand(character, held, stow);
+      wornFor.current = { held, stow, posture };
+      const own = wornInHand(character);
+      view.stowed = own.length > 0 && own.every((worn) => !worn.visible);
     }
     if (state.easing && !ease(state.easing, rig, posed.current, state.laid, dt))
       state.easing = null;
@@ -642,6 +649,7 @@ function newView(citizen: LiveCitizen): NpcView {
     motion: 'idle',
     prop: '',
     layer: '',
+    stowed: false,
     hidden: false,
     clip: '',
     loaded: false,

@@ -1,14 +1,22 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 import { expect, type Page, test } from '@playwright/test';
 import {
+  AdditiveBlending,
   Box3,
   type Bone,
   BoxGeometry,
   Group,
+  type Material,
   Mesh,
   type Object3D,
   type SkinnedMesh,
+  type Sprite,
+  type SpriteMaterial,
   Vector3,
 } from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 import type { LiveMessage } from '../../src/lib/live/live-contract';
 import { applyMessage, EMPTY_LIVE } from '../../src/lib/live/live-state';
@@ -30,7 +38,12 @@ import {
   RUN_FROM,
 } from '../../src/lib/live/motion';
 import { CITIZEN_LOOKS } from '../../src/lib/world/citizen-looks';
-import { freeHand, holderOf, propModel } from '../../src/lib/world/hand-props';
+import {
+  freeHand,
+  holderOf,
+  propAsset,
+  propModel,
+} from '../../src/lib/world/hand-props';
 import { animateHumanoid } from '../../src/lib/world/humanoid-clips';
 import {
   cueOver,
@@ -63,6 +76,8 @@ import { createCharacter } from '../../src/vendor/polyfork/humanoid.mjs';
  * ×10, seats, procedural layers (gestures, the jump, the creep, prayer), easing between postures, props in hand and
  * the cues the feed's events give bodies.
  */
+
+const ROOT = path.resolve(import.meta.dirname, '../..');
 
 const lookOf = (id: string) => {
   const look = CITIZEN_LOOKS.find((candidate) => candidate.id === id);
@@ -121,10 +136,10 @@ test.describe('the motion table', () => {
       clip: 'Planting',
       prop: { kind: 'hoe' },
     });
-    // berries are picked standing, reaching up into the bush; roots crouching, reaching to the ground
+    // berries are picked bent over the bush (it stands waist high); roots crouching, reaching to the ground
     expect(look('gather_high')).toMatchObject({
-      clip: 'Idle',
-      layer: 'reach_high',
+      clip: 'Harvesting',
+      layer: null,
       prop: { kind: 'basket', at: 'left' },
     });
     expect(look('gather_low')).toMatchObject({
@@ -167,6 +182,42 @@ test.describe('the motion table', () => {
       clip: 'Fixing',
       prop: null,
     });
+  });
+
+  test("work with both hands puts the look's own spear or cane away; walking, talking, watch and the hunt keep it", () => {
+    const hunter: Bearer = { ...FARMER, region: 'band_b', spear: true };
+    const guard: Bearer = { ...FARMER, look: 'town-ashigaru', spear: true };
+    for (const motion of [
+      'gather_low',
+      'gather_high',
+      'pick_up',
+      'chop',
+      'mine',
+      'pan',
+      'farm',
+      'craft',
+      'tend',
+      'ring_bell',
+    ] as const) {
+      expect(motionLook(motion, hunter).stow, motion).toBe(true);
+      expect(motionLook(motion, guard).stow, motion).toBe(true);
+    }
+    for (const motion of [
+      'idle',
+      'walk',
+      'run',
+      'carry_walk',
+      'talk',
+      'trade',
+      'eat',
+      'drink',
+      'stalk',
+      'fish',
+      'attack',
+      'gesture',
+    ] as const)
+      expect(motionLook(motion, hunter).stow, motion).toBe(false);
+    expect(motionLook('idle', { ...guard, dark: true }).stow).toBe(false);
   });
 
   test('guards, merchants, hunters and fighters differ', () => {
@@ -243,10 +294,11 @@ test.describe('the motion table', () => {
       seat: 0.3,
       pace: 1,
     });
-    // the lord holding court talks from his seat; a seat whose height the feed doesn't say is a bench's
+    // the lord holding court sits upright on his seat and waits (his task is said `talk` whether or not anyone stands
+    // before him: no talking to nobody); a seat whose height the feed doesn't say is a bench's
     expect(look('talk', 'sitting')).toMatchObject({
       pose: 'seated',
-      clip: 'Sitting talking',
+      clip: 'Sitting',
       layer: null,
       seat: SEAT_HEIGHT,
     });
@@ -286,7 +338,7 @@ test.describe('the motion table', () => {
     });
     // the clips a drawn body may play go by the pose it is drawn in
     expect(motionClips('craft', 'seated')).toEqual(['Sitting']);
-    expect(motionClips('talk', 'seated')).toEqual(['Sitting talking']);
+    expect(motionClips('talk', 'seated')).toEqual(['Sitting']);
     expect(motionClips('talk', 'sitting')).toEqual(['Sitting']);
     expect(motionClips('talk', 'standing')).toEqual(['Talking']);
     expect(motionClips('pray', 'kneeling')).toEqual(['Idle']);
@@ -669,19 +721,6 @@ test.describe('layers', () => {
     expect(at(rig.head).z).toBeGreaterThan(head + 0.04);
   });
 
-  test('picking high reaches the right hand up ahead, picking low down', async () => {
-    const { rig, at, pose } = await posedRig();
-    pose(null, 0.85);
-    const shoulder = at(rig.arms.right.arm);
-    const hand = at(rig.arms.right.hand);
-    pose('reach_high', 0.85);
-    const high = at(rig.arms.right.hand);
-    expect(high.y).toBeGreaterThan(shoulder.y - 0.1);
-    expect(high.z).toBeGreaterThan(hand.z + 0.25);
-    pose('reach', 0.85);
-    expect(at(rig.arms.right.hand).y).toBeLessThan(high.y - 0.4);
-  });
-
   test('weaving seated reaches both hands ahead and carries them across the warp and back', async () => {
     const { rig, at, pose } = await posedRig('town-weaver', 'Sitting');
     pose(null, 0);
@@ -794,6 +833,15 @@ test.describe('props', () => {
     showWorn(character, 'standing');
     freeHand(character, { kind: 'basket', at: 'left' });
     expect(shown(spear)).toBe(true);
+    // work with both hands stows it whatever the other hand holds (picking berries with a basket)
+    freeHand(character, { kind: 'basket', at: 'left' }, true);
+    expect(shown(spear)).toBe(false);
+    showWorn(character, 'standing');
+    freeHand(character, null, true);
+    expect(shown(spear)).toBe(false);
+    showWorn(character, 'standing');
+    freeHand(character, null);
+    expect(shown(spear)).toBe(true);
     // a load rides on the chest bone
     expect(holderOf(character, 'back').name).toBe('Spine2');
   });
@@ -806,6 +854,48 @@ test.describe('props', () => {
     const model = propModel('torch', stake);
     const size = new Box3().setFromObject(model).getSize(new Vector3());
     expect(Math.max(size.x, size.y, size.z)).toBeCloseTo(0.6, 1);
+  });
+
+  test('a held torch burns: its flame shines unlit by the night with a glow round it, the stake stays lit', async () => {
+    const id = propAsset('torch')!;
+    const file = readFileSync(
+      path.join(ROOT, 'public/assets/polyfork', id, `${id}.glb`),
+    );
+    const { scene } = await new GLTFLoader().parseAsync(
+      file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength),
+      '',
+    );
+    const model = propModel('torch', scene);
+    const meshesUnder = (name: string) => {
+      const meshes: Mesh[] = [];
+      model
+        .getObjectByName(name)!
+        .traverse(
+          (object) => (object as Mesh).isMesh && meshes.push(object as Mesh),
+        );
+      return meshes;
+    };
+    const flames = meshesUnder('flame');
+    expect(flames.length).toBeGreaterThan(0);
+    for (const flame of flames)
+      expect((flame.material as Material).type).toBe('MeshBasicMaterial');
+    for (const stake of meshesUnder('stake'))
+      expect((stake.material as Material).type).not.toBe('MeshBasicMaterial');
+    // the glow is added light, round the flame (the top of the stake)
+    const glow = model.getObjectByName('torch-glow') as Sprite;
+    expect((glow.material as SpriteMaterial).blending).toBe(AdditiveBlending);
+    model.updateMatrixWorld(true);
+    const flameBox = new Box3().setFromObject(flames[0]);
+    expect(
+      flameBox.distanceToPoint(glow.getWorldPosition(new Vector3())),
+    ).toBeLessThan(0.05);
+    // the loaded model other holders copy keeps its own look
+    scene.traverse((object) => {
+      if ((object as Mesh).isMesh)
+        expect(((object as Mesh).material as Material).type).not.toBe(
+          'MeshBasicMaterial',
+        );
+    });
   });
 });
 
@@ -895,6 +985,7 @@ async function drawn(page: Page, id: string) {
     label: Number(data.npcLabelHeight),
     prop: data.npcProp ?? '',
     layer: data.npcLayer ?? '',
+    stowed: data.npcStowed === 'true',
     posture: data.npcPosture ?? '',
     hidden: data.npcHidden === 'true',
   };
@@ -940,7 +1031,7 @@ test.describe('on the globe', () => {
       ],
       [
         { activity: 'gathering', motion: 'gather_high' },
-        { clip: 'Idle', prop: 'basket', layer: 'reach_high' },
+        { clip: 'Harvesting', prop: 'basket', layer: '' },
       ],
       [
         { activity: 'gathering', motion: 'gather_low' },
@@ -1014,7 +1105,7 @@ test.describe('on the globe', () => {
           posture: 'sitting',
           slot_height_m: 0.45,
         },
-        { clip: 'Sitting talking', posture: 'seated', layer: '' },
+        { clip: 'Sitting', posture: 'seated', layer: '' },
       ],
       [
         { activity: 'resting', motion: 'sit_ground' },
@@ -1053,6 +1144,35 @@ test.describe('on the globe', () => {
     await expect
       .poll(() => drawn(page, 'tetsu'))
       .toMatchObject({ hidden: false, clip: 'Idle' });
+    expect(errors).toEqual([]);
+  });
+
+  test('a hunter puts his spear away to pick berries and takes it up again after', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    await openGlobe(page, errors, '?mockLive=1&follow=tak');
+    const perform = (doing: Record<string, unknown>) =>
+      page.evaluate(
+        (next) =>
+          (globalThis as unknown as Performer).__pebbleMockLive.perform(
+            'tak',
+            next,
+          ),
+        doing,
+      );
+    await perform({ activity: 'idle', motion: 'idle' });
+    await expect
+      .poll(() => drawn(page, 'tak'), { timeout: 30_000 })
+      .toMatchObject({ loaded: true, clip: 'Idle', stowed: false });
+    await perform({ activity: 'gathering', motion: 'gather_high' });
+    await expect
+      .poll(() => drawn(page, 'tak'), { timeout: 20_000 })
+      .toMatchObject({ clip: 'Harvesting', prop: 'basket', stowed: true });
+    await perform({ activity: 'idle', motion: 'idle' });
+    await expect
+      .poll(() => drawn(page, 'tak'), { timeout: 20_000 })
+      .toMatchObject({ clip: 'Idle', stowed: false });
     expect(errors).toEqual([]);
   });
 

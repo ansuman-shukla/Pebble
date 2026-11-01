@@ -132,6 +132,7 @@ const LABEL_MOTIONS: Record<string, Motion> = {
   'planting the seed beds': 'farm',
   'weaving at the loom': 'craft',
   'mending the drying rack': 'craft',
+  'working at the forge': 'craft',
   'filling the storehouse': 'pick_up',
   'chopping firewood': 'chop',
 };

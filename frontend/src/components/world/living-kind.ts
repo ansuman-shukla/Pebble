@@ -34,7 +34,9 @@ import { visualRate } from '@/lib/world/visual-rate';
  * part: the model's loop plays for the nearest instances (the mill wheel always turns; plants, cloth and ropes
  * sway on wind time, at most ×3, mechanisms, flames and water on clip time), door leaves swing open while
  * someone goes in or out through the doorway, and parts hide while they shouldn't show: a cold fire's `flame`
- * and `fuel`, and dressing a stream turned off (`dressPart`, prop-motion.ts).
+ * and `fuel`, and dressing a stream turned off (`dressPart`, prop-motion.ts). A hearth (the forge's) burns while
+ * someone crafts at it and cools EMBERS game minutes after: its fire glows in it, dying down as it cools, and its
+ * chimney smokes (`propWorld.chimneys`, for the smoke); cold, its fire is gone.
  */
 
 /** Kinds lying flat on the ground: their shadows would be invisible, so they skip the shadow pass. */
@@ -56,6 +58,36 @@ const CLIP_LOOPS = new Set([
 const FIRE_PARTS = new Set(['flame', 'fuel']);
 /** A live fire belongs to the instance within this many metres of its flame. */
 const FIRE_MATCH = 2.5;
+
+/** A hearth's fire part, the middle of its base, and its chimney's top (model space). */
+interface Hearth {
+  part: string;
+  base: [number, number, number];
+  chimney: [number, number, number];
+}
+/** Kinds with a hearth: the forge's fire glows in the hearth at its back and smokes out of the chimney above. */
+const HEARTHS: Partial<Record<string, Hearth>> = {
+  forge: {
+    part: 'fire',
+    base: [-1.45, 0.55, -0.45],
+    chimney: [-1.5, 3.96, -1],
+  },
+};
+/** Someone crafting within this many metres of a hearth's placement works it (the forge's anvil slot is 2.9 m out). */
+const HEARTH_REACH = 5;
+/** Game minutes a hearth's embers glow after the work stops. */
+export const EMBERS = 30;
+/** A cooling hearth's fire shrinks to this much of its size before it goes out. */
+const EMBER_SIZE = 0.35;
+
+/**
+ * How hot a hearth is at town time `minutes` (game minutes) when it was last worked at `workedAt`: 1 while worked,
+ * its embers cooling to 0 over EMBERS minutes after (cold if never worked, or the clock went back before it).
+ */
+export function hearthHeat(workedAt: number, minutes: number) {
+  const since = minutes - workedAt;
+  return since >= 0 && since < EMBERS ? 1 - since / EMBERS : 0;
+}
 /** Doors look for people within this many metres before testing the doorway. */
 const DOOR_NEAR = 6;
 /** Seconds between looks for people at the doors and at what parts should show. */
@@ -74,6 +106,8 @@ const feet = new Vector3();
 const heading = new Vector3();
 const turn = new Quaternion();
 const unused = new Vector3();
+const shrink = new Matrix4();
+const fromBase = new Matrix4();
 
 const coldFireAt = (at: Vector3) => {
   for (const fire of propWorld.fires.values())
@@ -106,6 +140,11 @@ export class LivingKind {
   private readonly toLocal: Matrix4[] = [];
   /** The slots of the swinging door leaves and how each swings. */
   private readonly leaves: { slot: Slot; leaf: DoorSwing }[] = [];
+  /** The kind's hearth, and per instance its chimney's top (world), when last worked and the heat drawn. */
+  private readonly hearth: Hearth | null;
+  private readonly chimneys: Vector3[] = [];
+  private readonly workedAt: Float64Array;
+  private readonly heat: Float32Array;
   private played: readonly number[] = [];
   private lookedAtDoors = -Infinity;
   private lookedAtParts = -Infinity;
@@ -164,6 +203,13 @@ export class LivingKind {
       if (leaf) this.leaves.push({ slot, leaf });
     }
     this.hasFire = this.slots.some((slot) => slot.fire);
+    this.hearth = HEARTHS[kind] ?? null;
+    this.workedAt = new Float64Array(this.hearth ? count : 0).fill(-Infinity);
+    this.heat = new Float32Array(this.hearth ? count : 0).fill(Number.NaN);
+    if (this.hearth)
+      this.chimneys = placed.map((matrix) =>
+        new Vector3(...this.hearth!.chimney).applyMatrix4(matrix),
+      );
   }
 
   frame(camera: Vector3, now: number, delta: number) {
@@ -181,6 +227,8 @@ export class LivingKind {
     for (const placement of this.placements) {
       propViews.turns.delete(placement.id);
       propViews.openDoors.delete(placement.id);
+      propViews.hearths.delete(placement.id);
+      propWorld.chimneys.delete(`${placement.id}:chimney`);
     }
     for (const instances of this.meshes) instances.dispose();
     for (const moves of this.moves) moves.dispose();
@@ -261,14 +309,19 @@ export class LivingKind {
     });
   }
 
-  /** Hides a cold fire's flame and fuel and the dressing turned off, shows them again when they come back. */
+  /**
+   * Hides a cold fire's flame and fuel and the dressing turned off, shows them again when they come back; heats and
+   * cools the hearths.
+   */
   private showParts(now: number) {
     if (now - this.lookedAtParts < PART_LOOK && now >= this.lookedAtParts)
       return;
     this.lookedAtParts = now;
+    if (this.hearth) this.tendHearths(this.hearth);
     this.at.forEach((at, index) => {
       const cold = this.hasFire && coldFireAt(at);
       this.slots.forEach((slot, slotIndex) => {
+        if (slot.node === this.hearth?.part) return;
         const name = `${this.placements[index].id}:${slot.node}`;
         const hidden =
           (slot.fire && cold) || propWorld.dressing.get(name) === false ? 1 : 0;
@@ -281,4 +334,44 @@ export class LivingKind {
       });
     });
   }
+
+  /**
+   * Each hearth someone crafts at is worked now; its heat (by when it was last worked) sizes its fire about the
+   * fire's base (gone when cold) and its chimney smokes while it burns.
+   */
+  private tendHearths(hearth: Hearth) {
+    const slot = this.slots.find(({ node }) => node === hearth.part);
+    this.at.forEach((at, index) => {
+      for (const id of propWorld.crafters) {
+        const feet = propWorld.people.get(id);
+        if (feet && feet.distanceTo(at) < HEARTH_REACH)
+          this.workedAt[index] = propWorld.minutes;
+      }
+      const heat = hearthHeat(this.workedAt[index], propWorld.minutes);
+      const { id } = this.placements[index];
+      propViews.hearths.set(id, heat);
+      propWorld.chimneys.set(`${id}:chimney`, {
+        lit: heat > 0,
+        strength: heat,
+        position: this.chimneys[index],
+      });
+      const drawn = this.heat[index];
+      // a hearth going out or coming alight changes at once, a cooling one by visible steps
+      const out = heat === 0;
+      if (!slot || (out === (drawn === 0) && Math.abs(heat - drawn) < 0.02))
+        return;
+      this.heat[index] = heat;
+      slot.moves.set(index, slot.part, out ? HIDDEN : fireAt(hearth, heat));
+    });
+  }
+}
+
+/** A hearth's fire at `heat` (above 0): its own size worked, shrunk about its base as its embers cool. */
+function fireAt(hearth: Hearth, heat: number) {
+  const size = EMBER_SIZE + (1 - EMBER_SIZE) * heat;
+  const [x, y, z] = hearth.base;
+  return move
+    .makeTranslation(x, y, z)
+    .multiply(shrink.makeScale(size, size, size))
+    .multiply(fromBase.makeTranslation(-x, -y, -z));
 }

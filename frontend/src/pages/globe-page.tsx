@@ -525,6 +525,7 @@ const GlobeScene = memo(function GlobeScene({
       <LivingProps
         clockRef={clockRef}
         peopleRef={peopleRef}
+        views={npcViews}
         fires={fireViews}
       />
       <GlobeWalker

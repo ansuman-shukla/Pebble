@@ -3,25 +3,31 @@
  * none, a stand-in drawn from code (a pan, a knapping stone, a cup, a rice ball, a pick, a fishing rod), placed in a
  * fist grip. Held things hang under the rig's `attach-lefthand` / `attach-righthand` groups (the palm of each hand
  * bone), so whatever hides those (a sitter's or a sleeper's empty hands, D101) hides them too; a load rides on the back
- * (under the chest bone) and is only drawn while walking loaded.
+ * (under the chest bone) and is only drawn while walking loaded. A held torch burns: its flame unlit by the scene,
+ * with a flickering glow.
  *
  * A fist grip: the rig is bound in a T-pose with its hand bones turned like the character, fingers along -x and the
  * palm facing down, so a shaft through the fist runs along the hand's z (thumb side +z). Models stand on y = 0 with
  * their handle up y (the spear lies along x), so each kind turns its handle onto z and slides to where it is held.
  */
 import {
+  AdditiveBlending,
   type Bone,
   BoxGeometry,
   ConeGeometry,
   CylinderGeometry,
+  DataTexture,
   DodecahedronGeometry,
   Euler,
   Group,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   type Object3D,
   Quaternion,
   SphereGeometry,
+  Sprite,
+  SpriteMaterial,
   Vector3,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -135,12 +141,72 @@ const MADE: Record<
   ],
 };
 
+/** A burning flame is drawn unlit (it shines by night) in its own vertex colours. */
+const burning = new MeshBasicMaterial({ vertexColors: true });
+/** Pixels across the glow sprite. */
+const GLOW_SPRITE = 32;
+
+/** A round warm glow: bright at the centre fading to nothing at the rim (added light: black is see-through). */
+function glowSprite() {
+  const pixels = new Uint8Array(GLOW_SPRITE * GLOW_SPRITE * 4);
+  const half = GLOW_SPRITE / 2;
+  for (let y = 0; y < GLOW_SPRITE; y++)
+    for (let x = 0; x < GLOW_SPRITE; x++) {
+      const out = Math.hypot(x + 0.5 - half, y + 0.5 - half) / half;
+      const glow = Math.round(255 * Math.max(0, 1 - out) ** 2);
+      pixels.set([glow, glow, glow, glow], (y * GLOW_SPRITE + x) * 4);
+    }
+  const texture = new DataTexture(pixels, GLOW_SPRITE, GLOW_SPRITE);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+const torchGlow = new SpriteMaterial({
+  map: glowSprite(),
+  color: '#ffa04a',
+  blending: AdditiveBlending,
+  depthWrite: false,
+  transparent: true,
+});
+/** The torch's glow: this wide (model units of the stake, before its grip's scale), round its flame's middle. */
+const TORCH_GLOW = 3.2;
+const TORCH_FLAME_AT = 1.32;
+
+/**
+ * Lights a held torch: its `flame` burns bright (unlit by the scene, so it shows by night) with a flickering glow
+ * round it. Models without a flame are left as they are.
+ */
+function lightFlame(model: Object3D) {
+  const flame = model.getObjectByName('flame');
+  if (!flame) return;
+  flame.traverse((object) => {
+    if ((object as Mesh).isMesh) (object as Mesh).material = burning;
+  });
+  const glow = new Sprite(torchGlow);
+  glow.name = 'torch-glow';
+  glow.position.set(0, TORCH_FLAME_AT, 0);
+  glow.scale.setScalar(TORCH_GLOW);
+  const seed = Math.random() * 10;
+  glow.onBeforeRender = () => {
+    const time = performance.now() / 1000 + seed;
+    glow.scale.setScalar(
+      TORCH_GLOW *
+        (1 + 0.12 * Math.sin(time * 13) + 0.08 * Math.sin(time * 7.3)),
+    );
+  };
+  model.add(glow);
+}
+
 /** A held thing's model: `scene` is a loaded vendored model for kinds with one (each holder gets its own copy). */
 export function propModel(kind: PropKind, scene: Object3D | null): Group {
   const group = new Group();
   group.name = `prop-${kind}`;
   if (kind in MADE) group.add(...MADE[kind as keyof typeof MADE]());
-  else if (scene) group.add(scene.clone());
+  else if (scene) {
+    const model = scene.clone();
+    if (kind === 'torch') lightFlame(model);
+    group.add(model);
+  }
   const grip = GRIPS[kind];
   group.rotation.copy(new Euler(...grip.turn));
   group.position.set(...grip.at);
@@ -187,12 +253,34 @@ export function holderOf(character: Object3D, at: HeldProp['at']): Object3D {
 }
 
 /**
- * Hides what the look itself carries in a hand (a cane, a coin pouch, a spear) while it holds a prop in that hand,
- * and shows it again otherwise; call after `showWorn` (which shows or hides everything in hand by posture).
+ * What the look itself carries in its `hands` (a spear, a cane, a coin pouch: the garments under the root-level
+ * `attach-*hand` groups), not the props held for a motion.
  */
-export function freeHand(character: Object3D, held: HeldProp | null) {
-  if (!held || held.at === 'back') return;
-  const name = `attach-${held.at}hand`;
-  for (const worn of character.getObjectsByProperty('name', name))
-    if (!(worn.parent as Bone | null)?.isBone) worn.visible = false;
+export function wornInHand(
+  character: Object3D,
+  hands: readonly HeldProp['at'][] = ['left', 'right'],
+): Object3D[] {
+  return hands.flatMap((hand) =>
+    character
+      .getObjectsByProperty('name', `attach-${hand}hand`)
+      .filter((worn) => !(worn.parent as Bone | null)?.isBone),
+  );
+}
+
+/**
+ * Hides what the look itself carries in a hand (a cane, a coin pouch, a spear) while it holds a prop in that hand,
+ * or in both hands while it `stow`s them for work, and shows it again otherwise; call after `showWorn` (which shows
+ * or hides everything in hand by posture).
+ */
+export function freeHand(
+  character: Object3D,
+  held: HeldProp | null,
+  stow = false,
+) {
+  const hands = stow
+    ? (['left', 'right'] as const)
+    : held && held.at !== 'back'
+      ? [held.at]
+      : [];
+  for (const worn of wornInHand(character, hands)) worn.visible = false;
 }

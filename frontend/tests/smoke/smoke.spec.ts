@@ -1,5 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { type DataTexture, Matrix4, type PointsMaterial, Vector3 } from 'three';
+import {
+  type DataTexture,
+  Matrix4,
+  type MeshLambertMaterial,
+  type PointsMaterial,
+  Vector3,
+} from 'three';
 
 import { propViews, propWorld } from '../../src/lib/world/prop-motion';
 import {
@@ -24,11 +30,18 @@ test('a burning fire smokes by its strength; a fire that went out smoulders 20 g
   expect(smokiness(false, 0, -Infinity, 100)).toBe(0);
 });
 
-test('a puff rises, grows, fades in quickly and out slowly', () => {
-  expect(puffAt(0)).toEqual({ rise: 0, size: 0.25, alpha: 0 });
-  expect(puffAt(0.15).alpha).toBeCloseTo(0.85, 6);
-  expect(puffAt(0.5)).toEqual({ rise: 0.5, size: 0.8, alpha: 0.5 });
+test('a puff is born thin and narrow over the flame, thickens as it rises and spreads, and fades', () => {
+  expect(puffAt(0)).toEqual({ rise: 0, size: 0.2, alpha: 0, glow: 1 });
+  // thin while it is at the height of people round the fire (the first third of its rise)
+  expect(puffAt(0.1).alpha).toBeLessThan(0.3);
+  expect(puffAt(0.2).alpha).toBeLessThan(0.5);
+  expect(puffAt(0.35).alpha).toBeCloseTo(0.65, 6);
+  expect(puffAt(0.5)).toMatchObject({ rise: 0.5, size: 0.8, alpha: 0.5 });
   expect(puffAt(1).alpha).toBe(0);
+  // the flame lights it from below: brightest just over the flame, gone by the top
+  expect(puffAt(0.1).glow).toBeGreaterThan(0.7);
+  expect(puffAt(0.5).glow).toBeLessThan(0.15);
+  expect(puffAt(1).glow).toBe(0);
 });
 
 test('a spark flares up at once and dies away as it rises', () => {
@@ -111,4 +124,74 @@ test('the cloud carries every fire within 300 m in two objects, puffs drifting u
   expect(cloud.puffs.count).toBe(0);
   cloud.dispose();
   expect([propViews.puffs, propViews.sparks]).toEqual([0, 0]);
+});
+
+test('smoke over a burning fire is lit by its flame low down and thin at the height of people round it; a cold one is unlit', () => {
+  propWorld.rate = 1;
+  propWorld.minutes = 600;
+  const cloud = new SmokeCloud();
+  const camera = new Vector3(0, 0, R + 2);
+  const fires = new Map([['camp', fireAt(0, true)]]);
+  const glows = () => {
+    const glow = cloud.puffs.geometry.getAttribute('puffGlow');
+    const alpha = cloud.puffs.geometry.getAttribute('puffAlpha');
+    const matrix = new Matrix4();
+    const at = new Vector3();
+    return Array.from({ length: cloud.puffs.count }, (_, i) => {
+      cloud.puffs.getMatrixAt(i, matrix);
+      return {
+        height: at.setFromMatrixPosition(matrix).z - R,
+        glow: glow.getX(i),
+        alpha: alpha.getX(i),
+      };
+    });
+  };
+  let seen: ReturnType<typeof glows> = [];
+  // a few moments of the puffs' cycle
+  for (const clip of [0, 1.3, 2.9, 4.4]) {
+    propWorld.clipTime = clip;
+    cloud.frame(camera, fires);
+    seen = seen.concat(glows());
+  }
+  const low = seen.filter(({ height }) => height < 1.2);
+  const high = seen.filter(({ height }) => height > 3);
+  expect(low.length).toBeGreaterThan(3);
+  expect(high.length).toBeGreaterThan(3);
+  for (const puff of low) {
+    expect(puff.glow).toBeGreaterThan(0.4);
+    expect(puff.alpha).toBeLessThan(0.5);
+  }
+  for (const puff of high) expect(puff.glow).toBeLessThan(0.2);
+  // the shader adds the flame's light to the puff's colour
+  const material = cloud.puffs.material as MeshLambertMaterial;
+  const shader = {
+    vertexShader: '#include <common>\n#include <begin_vertex>',
+    fragmentShader: '#include <common>\n#include <opaque_fragment>',
+  };
+  material.onBeforeCompile(shader as never, undefined as never);
+  expect(shader.fragmentShader).toContain('vPuffGlow');
+  expect(shader.vertexShader).toContain('attribute float puffGlow');
+  // gone out, it smoulders unlit
+  fires.set('camp', fireAt(0, false));
+  cloud.frame(camera, fires);
+  expect(glows().every(({ glow }) => glow === 0)).toBe(true);
+  cloud.dispose();
+});
+
+test('the hearths smoke from their chimneys with the fires, in the same two draw calls', () => {
+  propWorld.rate = 1;
+  propWorld.minutes = 600;
+  const cloud = new SmokeCloud();
+  const camera = new Vector3(0, 0, R + 2);
+  const chimneys = new Map([['forge:chimney', fireAt(20, true)]]);
+  cloud.frame(camera, new Map([['camp', fireAt(0, true)]]), chimneys);
+  expect(cloud.puffs.count).toBe(20);
+  // the hearth cools out of the feed's sight: its chimney smoulders, then stops
+  chimneys.set('forge:chimney', fireAt(20, false));
+  cloud.frame(camera, new Map(), chimneys);
+  expect(cloud.puffs.count).toBe(10);
+  propWorld.minutes = 621;
+  cloud.frame(camera, new Map(), chimneys);
+  expect(cloud.puffs.count).toBe(0);
+  cloud.dispose();
 });
