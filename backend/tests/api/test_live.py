@@ -217,7 +217,7 @@ def test_the_snapshot_carries_every_node_that_differs_from_full(client: TestClie
                       "stage": "fruit-3"}  # fmt: skip
 
 
-def test_every_message_carries_the_ground_stacks_as_they_appear_shrink_and_go(
+def test_the_snapshot_carries_every_ground_stack_and_each_tick_only_the_changed_ones(
     client: TestClient, committed_run: EngineLoop
 ) -> None:
     loop = committed_run
@@ -234,10 +234,16 @@ def test_every_message_carries_the_ground_stacks_as_they_appear_shrink_and_go(
         assert api.pick_up("2 coins").outcome == "done"
         loop.run_ticks(1, headless=True)
         assert api.pick_up("coins").outcome == "done"
-        loop.run_ticks(1, headless=True)
-        ticks = [LiveState.model_validate(m) for m in _until_tick(ws, 3) if m["type"] == "tick"]
-    dropped = [[(s.item, s.count, s.unit) for s in t.stacks if s.item != "wood"] for t in ticks]
-    assert dropped == [[("coins", 5, kenji.position)], [("coins", 3, kenji.position)], []]
+        loop.run_ticks(2, headless=True)
+        ticks = [LiveState.model_validate(m) for m in _until_tick(ws, 4) if m["type"] == "tick"]
+    told = [[(s.item, s.count, s.unit) for s in t.stacks] for t in ticks]
+    coins = ("coins", kenji.position)
+    # put down, shrunk, gone (count 0), then a tick where nothing on the ground changed
+    assert told == [[(coins[0], 5, coins[1])], [(coins[0], 3, coins[1])], [(coins[0], 0, coins[1])], []]
+    assert len({s.id for t in ticks for s in t.stacks}) == 1
+    with client.websocket_connect(f"{API}/live?run_id={loop.run.id}") as ws:
+        again = LiveState.model_validate(_receive(ws))
+    assert {s.id for s in again.stacks} == {s.id for s in snapshot.stacks}  # a fresh snapshot: the woodpiles only
 
 
 def test_a_page_opened_mid_tick_learns_how_far_into_the_tick_the_world_is(

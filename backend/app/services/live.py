@@ -8,7 +8,7 @@ LISTENs on that channel, keeps a replayed state per followed run (latest snapsho
  engine ── NOTIFY {run, tick, seqs} ──▶ listener thread ── fetch events after the last seq ──▶ replay per tick
                                               │                                                     │
              WebSocket /api/v1/live ◀── queue ◀── "event" messages (public events with a line worth telling)
-                                              ◀── one "tick" message per tick (citizens, animals, fires, stacks)
+                                              ◀── one "tick" message per tick (citizens, animals, fires, changed stacks)
 ```
 
 On connect a client gets a `snapshot` message; when the clock's speed or pause changes without a tick, a `tick`
@@ -82,7 +82,9 @@ class LiveState(BaseModel):
     citizens: list[CitizenEntity]
     animals: list[AnimalEntity]
     fires: list[FireEntity]
-    stacks: list[StackEntity]  # what lies on the ground now, every message (appears, shrinks, goes)
+    # what lies on the ground: every stack in `snapshot` messages; in `tick` messages only the stacks that appeared or
+    # changed since the last tick message, and the ones that went with count 0
+    stacks: list[StackEntity]
     # every node that differs from full (10-world-v1 §1.1: a picked bush, a stump, a paddy short of ripe), in
     # `snapshot` messages only; after it each change comes as a `node_changed` event (its `stage` and `after`)
     nodes: list[NodeEntity] = []
@@ -124,6 +126,8 @@ class RunFeed:
     # the tick's game seconds counted at the speed in force until `counted_at` (reset when a tick is written)
     counted_s: float = 0.0
     counted_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    # the stacks as the last tick message (or the load) left them: the next tick message tells what changed since
+    told_stacks: dict[str, StackEntity] = field(default_factory=dict)
 
     @property
     def counting(self) -> bool:
@@ -135,6 +139,7 @@ class RunFeed:
         elapsed = tick_elapsed(self.counted_s, self.counted_at, self.speed, not self.counting, now)
         citizens = [citizen_entity(citizen, self.state.tick) for _, citizen in sorted(self.state.citizens.items())]
         animals, fires = wild_entities(self.state)
+        stacks = ground_stacks(self.state)
         return LiveState(
             type=kind,
             run_id=self.run_id,
@@ -147,11 +152,20 @@ class RunFeed:
             citizens=citizens,
             animals=animals,
             fires=fires,
-            stacks=ground_stacks(self.state),
+            stacks=stacks if kind == "snapshot" else self.stack_changes(stacks),
             nodes=[NodeEntity(id=node_id, **view.model_dump()) for node_id, view in sorted(self.state.nodes.items())]
             if kind == "snapshot"
             else [],
         )
+
+    def stack_changes(self, stacks: list[StackEntity]) -> list[StackEntity]:
+        """The stacks that appeared or changed count since the last tick message, and the gone ones at count 0; the
+        current ones become the baseline for the next."""
+        now = {stack.id: stack for stack in stacks}
+        before, self.told_stacks = self.told_stacks, now
+        changed = [stack for stack in stacks if before.get(stack.id) != stack]
+        gone = [stack.model_copy(update={"count": 0}) for stack_id, stack in before.items() if stack_id not in now]
+        return sorted(changed + gone, key=lambda stack: stack.id)
 
     def advance(self, session: Session, run: Run) -> list[LiveMessage] | None:
         """Apply the events stored since the last call: event messages as they come, a tick message after each
@@ -236,6 +250,7 @@ def load_feed(session: Session, run: Run) -> RunFeed:
         speed=float(run.speed),
         paused=run.paused,
         running=run.status == "running",
+        told_stacks={stack.id: stack for stack in ground_stacks(state)},
     )
     written = next((row.real_time for row in reversed(rows) if row.type == "tick_summary"), None)
     if written is not None:

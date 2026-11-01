@@ -191,21 +191,23 @@ test('frames carry the animals, the fires and the ground stacks', () => {
     unit: deer.position.unit,
     cell: 1,
   };
+  const meat: LiveStack = { ...logs, id: 'stack-37', item: 'meat', count: 4 };
   let state = applyMessage(
     EMPTY_LIVE,
     frame('snapshot', 1, [], 'run-1', {
       animals: [deer],
       fires: [pit],
-      stacks: [logs],
+      stacks: [logs, meat],
     }),
     0,
   );
   expect(state.animals).toEqual([deer]);
   expect(state.fires).toEqual([pit]);
-  expect(state.stacks).toEqual([logs]);
+  expect(state.stacks).toEqual([logs, meat]);
   const running = { ...deer, activity: 'running' as const };
   const out = { ...pit, lit: false, strength: 0 };
   const fewer = { ...logs, count: 6 };
+  // a tick tells only the stacks that changed: the logs shrank, the meat lies on as it was
   state = applyMessage(
     state,
     frame('tick', 2, [], 'run-1', {
@@ -217,12 +219,28 @@ test('frames carry the animals, the fires and the ground stacks', () => {
   );
   expect(state.animals[0].activity).toBe('running');
   expect(state.fires[0].lit).toBe(false);
-  expect(state.stacks).toEqual([fewer]);
-  // carried off: the next tick has no stack there
+  expect(state.stacks).toEqual([fewer, meat]);
+  expect(state.stacks[1]).toBe(meat);
+  // nothing changed on the ground: the very same list
+  const quiet = applyMessage(state, frame('tick', 3, [], 'run-1'), 0);
+  expect(quiet.stacks).toBe(state.stacks);
+  // the logs carried off (count 0), a hide put down
+  const hide: LiveStack = { ...logs, id: 'stack-39', item: 'hide', count: 1 };
+  const after = applyMessage(
+    quiet,
+    frame('tick', 4, [], 'run-1', { stacks: [{ ...fewer, count: 0 }, hide] }),
+    0,
+  );
+  expect(after.stacks).toEqual([meat, hide]);
+  // a snapshot (a reconnect, another run) lists the whole ground again
   expect(
-    applyMessage(state, frame('tick', 3, [], 'run-1', { stacks: [] }), 0)
+    applyMessage(after, frame('snapshot', 5, [], 'run-1', { stacks: [] }), 0)
       .stacks,
   ).toEqual([]);
+  expect(
+    applyMessage(after, frame('tick', 1, [], 'run-2', { stacks: [hide] }), 0)
+      .stacks,
+  ).toEqual([hide]);
   expect(applyMessage(state, frame('tick', 1, []), 0)).toBe(state); // stale
 });
 

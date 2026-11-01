@@ -176,10 +176,29 @@ export function applyMessage(
     citizens: message.citizens,
     animals: message.animals,
     fires: message.fires,
-    stacks: message.stacks,
+    stacks:
+      message.type === 'tick' && sameRun
+        ? mergeStacks(state.stacks, message.stacks)
+        : message.stacks,
     speech: sameRun ? state.speech : [],
     cues: sameRun ? state.cues : [],
   };
+}
+
+/**
+ * The ground after a tick's stack changes (a snapshot lists every stack, a tick only the ones that changed): changed
+ * and new stacks in, gone ones (count 0) out, the rest kept as they were; the same list when nothing changed.
+ */
+function mergeStacks(stacks: LiveStack[], changes: LiveStack[]): LiveStack[] {
+  if (changes.length === 0) return stacks;
+  const changed = new Map(changes.map((stack) => [stack.id, stack]));
+  const next = stacks.flatMap((stack) => {
+    const change = changed.get(stack.id);
+    if (!change) return [stack];
+    changed.delete(stack.id);
+    return change.count > 0 ? [change] : [];
+  });
+  return [...next, ...[...changed.values()].filter((stack) => stack.count > 0)];
 }
 
 /** Game seconds into the current tick at client time `now` (ms): what the feed said, plus what passed since at the

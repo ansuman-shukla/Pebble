@@ -1024,7 +1024,8 @@ export class MockLiveServer {
       citizens: this.citizens(),
       animals: this.wild.animals(isDark(this.tick)),
       fires: this.wild.fires(isDark(this.tick)),
-      stacks: this.stacks,
+      // like the engine's: a snapshot lists every stack, a tick only the changes (setStacks sends a snapshot)
+      stacks: type === 'snapshot' ? this.stacks : [],
     };
   }
 
