@@ -211,7 +211,6 @@ class CoinTrend(Check):
     """The steepest trend of a town household's coins over days 4-14 (mon a day, either way; §2.7: ≤ 10)."""
 
     name = "br1.coin_trend"
-    pending = "BR2 band purchases (about 7 rice a day of the stall's balance)"
 
     @override
     def start(self, sim: Simulation) -> None:

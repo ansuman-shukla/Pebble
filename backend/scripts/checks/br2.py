@@ -125,12 +125,12 @@ class DeedsSeen(Outcome):
 
 
 class BandBDeeds(_OverSeeds):
-    """Band B's deeds (thefts and trespasses) over the seeds: ≥ 6, at least one witnessed by someone not of band B and
-    its doer judged after, and at least one no outsider saw (10 §3.3, §3.6)."""
+    """Band B's deeds (thefts and trespasses) over the seeds: ≥ 6, at least two witnessed by someone not of band B and
+    their doer judged after, and at least one no outsider saw (10 §3.3, §3.6)."""
 
     name = "br2.deeds"
-    pending = "raids steal rice from the racks, but Goro's beat has him 37 m or more off at raid time: 1 seen, 0 seized"
     least = 6
+    least_judged = 2  # the checklist's "≥ 2 witnessed and judged" (BR2's own acceptance asked for one)
 
     @override
     def start(self, sim: Simulation) -> None:
@@ -162,7 +162,7 @@ class BandBDeeds(_OverSeeds):
         total = sum(outcome.value for outcome in outcomes.values())
         judged = sum(o.judged for o in outcomes.values() if isinstance(o, DeedsSeen))
         unseen = sum(o.unseen for o in outcomes.values() if isinstance(o, DeedsSeen))
-        ok = total >= cls.least and judged >= 1 and unseen >= 1
+        ok = total >= cls.least and judged >= cls.least_judged and unseen >= 1
         return Outcome(total, ok, f"{total:.0f} deeds ({judged} seen and judged, {unseen} unseen) over the seeds")
 
 

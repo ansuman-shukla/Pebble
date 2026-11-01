@@ -21,7 +21,7 @@ from scripts.checks.base import Check, Outcome
 CAMP_M = 1000.0  # "near a camp": this close to a living site
 
 
-EXPOSURE = "BR1/BR2 exposure schedules"  # people out where predators and herds are (10 §1.6), not there yet
+CAMPS = ("band_a_camp", "band_b_camp")  # "per camp" in the checklist: the bands' camps (the walled town is reported)
 
 
 def _kind(animal_id: str) -> str:
@@ -252,7 +252,6 @@ class Approaches(_Counted):
     """Predators setting out for a person ("coming at" them), over the seeds (≥ 16)."""
 
     name = "a1.approaches"
-    pending = EXPOSURE
     least = 16
 
     @override
@@ -273,7 +272,6 @@ class Attacks(_Counted):
     """Predator attacks on a person that came to a bite (one per predator and person), over the seeds (≥ 4)."""
 
     name = "a1.attacks"
-    pending = EXPOSURE
     least = 4
 
     @override
@@ -297,7 +295,6 @@ class DenCharges(_Counted):
     """Predators charging someone near their den by day, over the seeds (≥ 1)."""
 
     name = "a1.den_charges"
-    pending = EXPOSURE
     least = 1
 
     @override
@@ -359,10 +356,10 @@ class SafeBites(Check):
 
 
 class PeopleFlights(Check):
-    """Days on which some herd near each camp bolted from a person, as a share of the days (≥ 1 a day per camp)."""
+    """Days on which some herd near each camp bolted from a person, as a share of the days (≥ 1 a day per camp; the
+    town is reported, not judged: its walls keep herds off, D191)."""
 
     name = "a1.people_flights"
-    pending = EXPOSURE
 
     @override
     def start(self, sim: Simulation) -> None:
@@ -383,7 +380,7 @@ class PeopleFlights(Check):
     @override
     def outcome(self, sim: Simulation) -> Outcome:
         days = max(1, sim.tick // DAY_MINUTES)
-        share = min(len(seen) for seen in self.days.values()) / days
+        share = min(len(self.days[camp]) for camp in CAMPS) / days
         words = ", ".join(f"{site} {len(seen)}/{days}" for site, seen in self.days.items())
         return Outcome(share, share >= 0.99, words)
 

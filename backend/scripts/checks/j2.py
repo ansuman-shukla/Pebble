@@ -1,7 +1,7 @@
 """J2's run checks (10-world-v1 §3.4): the held stay within 3 m of their seizer, no custody outlasts 12 h, every
 judgement has a known deed or overdue tax behind it, and (summed over both seeds) deeds get witnessed and judged and
 the healers tend. The chains themselves are proven by the scenario tests (`tests/sim/test_justice.py`); the last two
-checks wait for the brains that seize, judge and tend (BR1, BR2) and stay pending until then."""
+checks count what the brains that seize, judge and tend (BR1, BR2) bring about in a run."""
 
 from collections.abc import Mapping
 from typing import override
@@ -17,7 +17,6 @@ HELD_M = 3.0
 CUSTODY_TICKS = CUSTODY_HOURS * TICKS_PER_HOUR
 SERVED_LEAST = 2  # both seeds together
 TENDS_LEAST = 2  # both seeds together: the monk and the band healers tend someone hurt
-WAITS_FOR = "BR1/BR2 brains that seize, judge and tend"
 
 
 class HeldClose(Check):
@@ -100,7 +99,6 @@ class Served(Check):
     (≥ 2: the critic's "≥ 2 witnessed and judged")."""
 
     name = "j2.served"
-    pending = WAITS_FOR
 
     @override
     def start(self, sim: Simulation) -> None:
@@ -125,7 +123,6 @@ class Tends(Check):
     """Half hours of tending done, summed over the seeds (≥ 2)."""
 
     name = "j2.tends"
-    pending = WAITS_FOR
 
     @override
     def start(self, sim: Simulation) -> None:

@@ -1,9 +1,9 @@
 """E3's run checks (10-world-v1 §2.3, §2.5; the plan's money and rice lines): the stall sells every day, the rice
 price answers a shock and settles back to fair, and every recipe gets made.
 
-They read what the scripted citizens do: the town's brains trade and craft (BR1); the band recipes wait for BR2 and the
-rice price's peak for a shock (BR2's raids on the racks; `tests/brains/test_town.py` proves the price rule on a
-scripted shock), so those two are pending: reported, not counted in `world_run`'s exit code.
+They read what the scripted citizens do: the town's brains trade and craft (BR1), the bands knap their spears (BR2),
+and band B's raids on the racks are the shock that lifts the rice price (`tests/brains/test_town.py` proves the price
+rule on a scripted shock).
 """
 
 from collections import Counter
@@ -25,7 +25,6 @@ MIN_RICE_PEAK = 1.2  # the factor a shock lifts rice to (the rice-shock scenario
 MAX_DEAR_DAYS = 3.0  # and fair again within this
 MIN_FAIR_SHARE = 0.8  # of days 4-14 on which rice is mostly fair
 FAIR_FROM_DAY = 4
-SHOCK = "BR2 raids on the racks: the shock"  # until then the check only reports
 RECIPES = get_args(RecipeName)
 
 
@@ -61,7 +60,6 @@ class RicePrice(Check):
     which it was mostly fair."""
 
     name = "e3.rice_price"
-    pending = SHOCK
 
     @override
     def start(self, sim: Simulation) -> None:

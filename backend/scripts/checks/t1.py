@@ -18,7 +18,7 @@ from app.sim.simulation import Simulation
 from app.sim.state import Citizen
 from app.sim.territory import CASTLE_TITLES, TERRITORY, poached
 from app.sim.vec import Vec3
-from scripts.checks.a1 import CAMP_M, EXPOSURE
+from scripts.checks.a1 import CAMP_M, CAMPS
 from scripts.checks.base import Check, Outcome
 
 LIVING_SITES = ("town", "band_a_camp", "band_b_camp")
@@ -86,11 +86,10 @@ class Waterholes(Check):
 
 class NearPeople(Check):
     """Daytime ticks (sun up there) on which some animal stood within 100 m of a person within 1 km of a settlement,
-    as a share of that settlement's daytime ticks; the worst settlement's share over the seeds must be ≥ 50 % (audit
-    F9 measured 20 % within 100 m)."""
+    as a share of that settlement's daytime ticks; the worst camp's share over the seeds must be ≥ 50 % (audit F9
+    measured 20 % within 100 m; the walled town is reported, not judged, D191)."""
 
     name = "t1.near_people"
-    pending = EXPOSURE
     least = 0.5
 
     @override
@@ -120,7 +119,7 @@ class NearPeople(Check):
     @override
     def outcome(self, sim: Simulation) -> Outcome:
         shares = {site: self.hits[site] / max(1, self.ticks[site]) for site in LIVING_SITES}
-        worst = min(shares, key=lambda site: shares[site])
+        worst = min(CAMPS, key=lambda site: shares[site])
         words = ", ".join(f"{site} {self.hits[site]}/{self.ticks[site]}" for site in LIVING_SITES)
         return Outcome(shares[worst], shares[worst] >= self.least, words)
 
@@ -128,7 +127,7 @@ class NearPeople(Check):
     @override
     def overall(cls, outcomes: Mapping[int, Outcome]) -> Outcome:
         worst = min(outcome.value for outcome in outcomes.values())
-        return Outcome(worst, worst >= cls.least, f"worst settlement on the worst seed {worst:.0%} (≥ 50 %)")
+        return Outcome(worst, worst >= cls.least, f"worst camp on the worst seed {worst:.0%} (≥ 50 %)")
 
 
 class Trespasses(Check):
