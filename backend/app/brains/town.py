@@ -45,6 +45,7 @@ from app.brains.senses import (
     beside,
     carried_food,
     carries,
+    is_name,
     resources_in_view,
 )
 from app.world_api.facade import ActionHandle
@@ -930,7 +931,7 @@ def _tend(ctx: Context) -> list[Option]:
             continue
         if _count_today(ctx, f"tending {person.label}") >= 2 * LAW_TRIES:
             continue
-        aim = f"Tend {person.label}, who is hurt"
+        aim = f"Tend {person.label}, who is hurt" if is_name(person.label) else "Tend a stranger who is hurt"  # ≤ 80
         if person.nearness != "right beside you":
             return [Option(TEND, f"go up to {person.label}", partial(ctx.api.walk_to_person, person.label), aim)]
         tend = _then(partial(ctx.mark_done, f"tending {person.label}"), partial(ctx.api.tend, person.label))
