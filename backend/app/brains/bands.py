@@ -34,7 +34,7 @@ from app.brains.senses import (
     resources_in_view,
     wood_at_hand,
 )
-from app.brains.town import _tend
+from app.brains.town import GOLD_DAYS, _tend, weekday
 from app.world_api.facade import ActionHandle
 from app.world_api.models import ActionResult, Compass, Driver, Fine, Perception, RoughDistance, Seen
 
@@ -855,6 +855,8 @@ def _gold_trip(ctx: Context) -> list[Option]:
     p, api = ctx.perception, ctx.api
     if ctx.profile.citizen_id not in PANNERS or _hungry_choice(ctx) != "gold" or ctx.done_today("traded"):
         return _back_from_town(ctx) if ctx.done_today("traded") and ctx.profile.citizen_id in PANNERS else []
+    if weekday(p) in GOLD_DAYS and not ctx.notes.get("trading"):
+        return []  # the town's digger pans the pool on those days (10 §3.6): band B leaves them to him
     pool = next((s.name for s in ctx.profile.spots if "gold" in s.goods), None)
     aim = "Pan gold to buy rice"
     going = ctx.notes.get("trading") is True
