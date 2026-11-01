@@ -111,16 +111,15 @@ WAGE_WORDS = "my wage"
 ORDER_WORDS = "as you ordered"
 PAY = 48.0  # the lord pays what he owes before his evening at home (40) and his work
 PAY_WAITS = 3  # waits for the lord to pay (or to be seen at the castle) before giving up for the day
-# the lord sells granary rice while dear or fair: the bible's 26 every second day at fair halved while the bands'
-# purchases (7 a day of the stall's balance, BR2) aren't there, else the stall's till ran down ~12 a day into the
-# treasury (D180)
-GRANARY_SALE: dict[PriceWord, int] = {"dear": 40, "fair": 13}
+# the lord sells granary rice while dear or fair (10 §1.4: 26 every second day at fair)
+GRANARY_SALE: dict[PriceWord, int] = {"dear": 40, "fair": 26}
 PURSE_LOW = 100  # the lord takes coins from the treasury when his purse holds less
 PURSE_TOP_UP = 150
 PURSE_HEAVY = 300  # and puts what is over the day's needs into it when his purse holds this much
 GOLD = "gold"
 GOLD_TREASURY = 1800  # the lord buys gold for his hoard while the treasury holds more than this (10 §2.2)
-GOLD_A_WEEK = 4  # grains at most, one a round (the bible's ≈ 0.6 a day), so the treasury's coins don't swing
+GOLD_A_WEEK = 7  # grains at most, one a round, so neither the treasury nor the digger swings far
+GOLD_DEAREST = 30  # coins a grain: dearer means the stall holds a grain or none (its price runs 20 at 5 to 40 at 0)
 CLOTH = "cloth"
 CLOTH_DAYS = (1, 5)  # week days the lord buys a length of cloth for the keep (≈ one every 4 days)
 GOLD_DAYS = (2, 6)  # week days the digger pans gold at the Falls pool (10 §3.1)
@@ -220,6 +219,11 @@ def coins_in(lines: list[str]) -> int:
 def _price(p: Perception, item: str) -> PriceSeen | None:
     """The stall at hand's price of a good, if it is open and trades it."""
     return next((seen for seen in p.market.items if seen.item == item), None) if p.market is not None else None
+
+
+def price_of(seen: PriceSeen) -> int:
+    """What the stall asks for a lot, from its words ("twenty-nine coins each; it pays …"): 0 if none are left."""
+    return NUMBERS.get(seen.price.split()[0], 0) if not seen.price.startswith("none left") else 0
 
 
 def _on_sale(p: Perception, item: str) -> bool:
@@ -567,7 +571,8 @@ def _sell(ctx: Context, item: str, aim: str, score: float = WORK + 1) -> list[Op
     cheap there (the stall holds more than it wants) it is kept for another day."""
     p = ctx.perception
     lot, price = LOTS.get(item, 1), _price(p, item)
-    if price is not None and price.word == "cheap":
+    short_only = item == GOLD  # only while the stall runs short of it, so its till doesn't lurch
+    if price is not None and (price.word == "cheap" or (short_only and price.word != "dear")):
         ctx.mark_done(f"failed sell {item}")
     if carrying(p, item) < lot or p.time_of_day not in STALL_TIMES or ctx.done_today(f"failed sell {item}"):
         return []
@@ -969,7 +974,7 @@ def _market_round(ctx: Context) -> list[Option]:
         ctx.mark_done("a new week")
         ctx.notes["gold this week"] = 0
     gold, bought = _price(p, GOLD), ctx.counter("gold this week")
-    stocked = gold is not None and gold.word != "dear"  # the stall holds its fill (not while it runs short)
+    stocked = gold is not None and 0 < price_of(gold) <= GOLD_DEAREST  # not while the stall runs short of it
     if stocked and purse(p) >= PURSE_LOW and treasury > GOLD_TREASURY and bought < GOLD_A_WEEK:
 
         def buy_gold() -> ActionResult:

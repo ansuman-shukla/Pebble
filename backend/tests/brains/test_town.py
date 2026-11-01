@@ -276,7 +276,7 @@ def test_the_lord_pays_for_an_order_only_when_he_was_handed_the_tool() -> None:
 
 @pytest.mark.parametrize(
     ("word", "day", "fetch"),
-    [("dear", "third", 40), ("fair", "fourth", 13), ("fair", "third", 0), ("cheap", "fourth", 0)],
+    [("dear", "third", 40), ("fair", "fourth", 26), ("fair", "third", 0), ("cheap", "fourth", 0)],
 )
 def test_the_lord_sells_granary_rice_only_while_rice_is_dear_or_fair(word: PriceWord, day: str, fetch: int) -> None:
     """Dear: every day; fair: every second day; cheap: the rice stays in the granary (10 §1.4)."""
@@ -538,17 +538,18 @@ def test_a_household_s_dues_are_shared_by_its_adults_the_first_paying_what_doesn
     assert {facts[who].mouths for who in facts} == {6} and {facts[who].paddies for who in facts} == {2}
 
 
-def test_the_lord_buys_a_grain_of_gold_a_round_only_while_the_stall_holds_its_fill_and_four_a_week() -> None:
-    gold = PriceSeen(item="gold", price="twenty coins each; it pays fifteen coins", word="fair")
+def test_the_lord_buys_a_grain_of_gold_a_round_only_while_the_stall_holds_its_fill_and_a_week_s_worth() -> None:
+    gold = PriceSeen(item="gold", price="twenty-nine coins each; it pays twenty-one coins", word="dear")
     purse_ = ("two strings of coins",)
     notes: dict[str, JsonValue] = {"treasury": 1900}
     look = _look(market=(gold,), carrying=purse_, when="early afternoon", day="the first day of the week, market day")
     ctx, api = _ctx(look, MASANORI, Recorder(notes))
     town._market_round(ctx)[0].start()
     assert ("buy", "gold", 1) in api.calls and notes["gold this week"] == 1
-    short = look.model_copy(update={"market": MarketView(items=[gold.model_copy(update={"word": "dear"})])})
+    dear = gold.model_copy(update={"price": "thirty-five coins each; it pays twenty-six coins", "word": "dear"})
+    short = look.model_copy(update={"market": MarketView(items=[dear])})  # a grain left at most
     assert [o.name for o in town._market_round(_ctx(short, MASANORI, Recorder({"treasury": 1900}))[0])] != ["buy gold"]
-    notes |= {"gold this week": 4, "chores": []}
+    notes |= {"gold this week": town.GOLD_A_WEEK, "chores": []}
     later = look.model_copy(update={"day_of_week": "the third day of the week"})
     assert [o.name for o in town._market_round(_ctx(later, MASANORI, Recorder(notes))[0])] != ["buy gold"]
 
