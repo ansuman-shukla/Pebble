@@ -54,7 +54,7 @@ def test_the_theft_check_catches_a_take_from_another_household_with_no_theft_tol
 
 
 def test_the_theft_check_counts_goods_bought_at_the_stall_as_no_take(town: Simulation) -> None:
-    """A purchase moves the stall's goods to the buyer, caused by its `bought` (regression: BR1's buyers were flagged)."""
+    """A purchase moves the stall's goods to the buyer, caused by its `bought` (regression: BR1's buyers flagged)."""
     town.core.place_at(town.citizen("fumiko"), town.world.town.to_unit(20.0, 52.3))  # behind the stall
     town.core.place_at(town.citizen("goro"), town.world.town.to_unit(20.0, 55.0))  # before it
     WorldApi(town, "fumiko").work("trade")
