@@ -334,6 +334,9 @@ def test_hungry_at_camp_with_nothing_carried_eats_from_the_rack_until_it_is_bare
         band_a = _ctx(_camp("mid-morning", (), RACK_NEAR), _band("oru", "elder healer"), FakeApi(_day(day)))
         band_a.needs = Needs(hunger=2, thirst=0, tiredness=0)
         assert (_choose(band_a).name == "go to the drying rack") is eats, day
+    night = _ctx(_camp("dusk", (), RACK_NEAR), _band("bo", "toolmaker and hunter"), FakeApi(_day(2)))
+    night.needs = Needs(hunger=2, thirst=0, tiredness=0)
+    assert _choose(night).name == "go to the drying rack"  # sleeping hungry: even the trade stock
 
 
 def test_kaz_is_tempted_with_one_minus_his_honesty_rolled_once_a_day() -> None:

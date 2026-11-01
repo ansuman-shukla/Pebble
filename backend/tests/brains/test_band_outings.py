@@ -449,3 +449,12 @@ def test_a_ground_whose_herd_was_hunted_yesterday_is_spared_today() -> None:
     notes.update(night=True, chores=[], days=1)  # day 2 again, but the kill was elsewhere: no rest
     notes["kill ground"] = ["the Bridge meadows", 1]
     assert _choose(_ctx(_look(CAMP, "early morning", ("a flint spear",)), again, notes)).name == "go to the A savanna"
+
+
+def test_a_herd_whose_kill_lies_about_is_spared_by_every_hunter() -> None:
+    herd = Seen(label="a herd of goats", where="close by to the north", nearness="close by", doing="grazing")
+    remains = Seen(label="the remains of a goat", where="close by to the east", nearness="close by")
+    notes: dict[str, JsonValue] = {"night": False, "days": 1}
+    fresh = _choose(_ctx(_look("at the A savanna", "mid-morning", animals=[herd]), _hunter(), dict(notes)))
+    spared = _choose(_ctx(_look("at the A savanna", "mid-morning", animals=[herd, remains]), _hunter(), dict(notes)))
+    assert fresh.name == "hunt goat" and spared.name != "hunt goat"

@@ -14,6 +14,7 @@ from app.brains.routines import COMPASS, WORK, Context, Option, _count_today, _d
 from app.brains.senses import (
     DISTANCE,
     FOOD_VALUE,
+    GAME_WORDS,
     Resource,
     at,
     at_home,
@@ -492,7 +493,11 @@ def _hunt(ctx: Context) -> list[Option]:
     poach = _poach_spot(ctx)
     where_allowed = ground is None or at(p, ground) or _about_camp(ctx)  # the day's ground, or about camp
     where_allowed = where_allowed or (poach is not None and at(p, poach))
-    seen = [(name, animal) for name, animal in game(p) if not _thin(animal.label)] if where_allowed else []
+    hunted = {
+        name for word, name in GAME_WORDS for a in p.animals if a.label.startswith("the remains") and word in a.label
+    }
+    seen = [(name, animal) for name, animal in game(p) if not _thin(animal.label) and name not in hunted]
+    seen = seen if where_allowed else []  # a herd one of them was taken from lately (its remains lie about) is spared
     if seen:
         name = seen[0][0]
         hunt = _then(lambda: ctx.mark_done("hunt-try"), lambda: api.hunt(name))
@@ -592,7 +597,8 @@ def _eat_at_rack(ctx: Context) -> list[Option]:
     if rack is None or ctx.done_today("rack bare"):
         return []
     trading_soon = _today(ctx) % TRADE_EVERY in ((TRADE_DAY - 1) % TRADE_EVERY, TRADE_DAY % TRADE_EVERY)
-    if ctx.profile.region == "band_a" and trading_soon and ctx.needs.hunger < 3:
+    bedtime = ctx.phase in ("dusk", "night")  # going to sleep hungry with nothing: urgent, the stock may go
+    if ctx.profile.region == "band_a" and trading_soon and ctx.needs.hunger < 3 and not bedtime:
         return []  # band A's strips are its trading stock (10 §2.7): kept for the trip the day before and on the day
     if _refused(ctx, "eat at the rack"):
         ctx.mark_done("rack bare")
