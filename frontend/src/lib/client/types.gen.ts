@@ -1379,6 +1379,10 @@ export type LiveState = {
      * Nodes
      */
     nodes?: Array<NodeEntity>;
+    /**
+     * Recent
+     */
+    recent?: Array<LiveEvent>;
 };
 
 /**

@@ -66,6 +66,17 @@ def events_after(session: Session, run_id: str, after_seq: int, until_tick: int 
     return session.exec(statement.order_by(col(Event.seq))).all()
 
 
+def public_events_before(session: Session, run_id: str, until_seq: int, limit: int) -> Sequence[Event]:
+    """The latest `limit` public events (no tick summaries) up to `until_seq`, newest first."""
+    statement = select(Event).where(
+        Event.run_id == run_id,
+        Event.seq <= until_seq,
+        Event.visibility == "public",
+        Event.type != "tick_summary",
+    )
+    return session.exec(statement.order_by(col(Event.seq).desc()).limit(limit)).all()
+
+
 def event_id_at(session: Session, run_id: str, seq: int) -> str | None:
     return session.exec(select(Event.id).where(Event.run_id == run_id, Event.seq == seq)).first()
 

@@ -11,18 +11,20 @@ LISTENs on that channel, keeps a replayed state per followed run (latest snapsho
                                               ◀── one "tick" message per tick (citizens, animals, fires)
 ```
 
-On connect a client gets a `snapshot` message; when the clock's speed or pause changes without a tick, a `tick`
-message with the same tick says so. Clients are closed (code 1012) to reconnect and resync from a fresh snapshot when
-a newer run starts (those following the latest run) or when their run's history past its latest snapshot was rewritten
-(an engine resumed after an unclean stop or a lost connection drops that tail and simulates it again; its events get
-new ids, and new code can make them come out differently).
+On connect a client gets a `snapshot` message (with the last events worth telling, so its feed doesn't open empty);
+when the clock's speed or pause changes without a tick, a `tick` message with the same tick says so. Clients are
+closed (code 1012) to reconnect and resync from a fresh snapshot when a newer run starts (those following the latest
+run) or when their run's history past its latest snapshot was rewritten (an engine resumed after an unclean stop or a
+lost connection drops that tail and simulates it again; its events get new ids, and new code can make them come out
+differently).
 """
 
 import asyncio
 import json
 import logging
 import threading
-from collections.abc import Iterator
+from collections import deque
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
@@ -35,7 +37,14 @@ from sqlmodel import Session
 from app.db.models import Event, Run
 from app.observability.lines import Importance, Names, Resident, Told, namer, tell
 from app.observability.replay import ReplayEvent, ReplayState, apply_event, replay
-from app.observability.store import EVENTS_CHANNEL, event_id_at, events_after, latest_run, latest_snapshot
+from app.observability.store import (
+    EVENTS_CHANNEL,
+    event_id_at,
+    events_after,
+    latest_run,
+    latest_snapshot,
+    public_events_before,
+)
 from app.services.entities import (
     AnimalEntity,
     CitizenEntity,
@@ -58,6 +67,8 @@ log = logging.getLogger("pebble.live")
 LIVE_EVENT_TYPES = frozenset({"said", "died", "action_started", "action_finished", "node_changed"})
 LISTEN_TIMEOUT_S = 1.0  # how often the listener looks at the clock while no ticks arrive (pause, speed changes)
 RESYNC = None  # queued to clients that must reconnect for a fresh snapshot (a newer run, a rewritten history)
+RECENT_KEEP = 60  # events worth telling a snapshot carries (as many as a client's feed keeps)
+RECENT_SCAN = 2000  # public events read back for them when a run's feed is first loaded
 
 
 class NodeEntity(NodeView):
@@ -83,6 +94,9 @@ class LiveState(BaseModel):
     # every node that differs from full (10-world-v1 §1.1: a picked bush, a stump, a paddy short of ripe), in
     # `snapshot` messages only; after it each change comes as a `node_changed` event (its `stage` and `after`)
     nodes: list[NodeEntity] = []
+    # the last RECENT_KEEP events worth telling (importance 1-3) up to now, oldest first, in `snapshot` messages only:
+    # a page opened mid-run shows what just happened instead of an empty feed
+    recent: list["LiveEvent"] = []
 
 
 class LiveEventDetail(BaseModel):
@@ -104,6 +118,7 @@ class LiveEvent(BaseModel):
     event: LiveEventDetail
 
 
+LiveState.model_rebuild()
 LiveMessage = Annotated[LiveState | LiveEvent, Field(discriminator="type")]
 
 
@@ -121,6 +136,7 @@ class RunFeed:
     # the tick's game seconds counted at the speed in force until `counted_at` (reset when a tick is written)
     counted_s: float = 0.0
     counted_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    recent: deque["LiveEvent"] = field(default_factory=lambda: deque(maxlen=RECENT_KEEP))
 
     @property
     def counting(self) -> bool:
@@ -147,6 +163,7 @@ class RunFeed:
             nodes=[NodeEntity(id=node_id, **view.model_dump()) for node_id, view in sorted(self.state.nodes.items())]
             if kind == "snapshot"
             else [],
+            recent=list(self.recent) if kind == "snapshot" else [],
         )
 
     def advance(self, session: Session, run: Run) -> list[LiveMessage] | None:
@@ -178,7 +195,10 @@ class RunFeed:
                 self.counted_s, self.counted_at = 0.0, row.real_time
             detail = self.detail(row) if row.visibility == "public" and row.type != "tick_summary" else None
             if detail is not None and (row.type in LIVE_EVENT_TYPES or detail.importance > 0):
-                messages.append(LiveEvent(type="event", run_id=self.run_id, tick=row.tick, event=detail))
+                event = LiveEvent(type="event", run_id=self.run_id, tick=row.tick, event=detail)
+                messages.append(event)
+                if detail.importance > 0:
+                    self.recent.append(event)
             elif row.type == "tick_summary":
                 messages.append(self.message("tick"))
         if not messages and clock_changed:
@@ -236,7 +256,20 @@ def load_feed(session: Session, run: Run) -> RunFeed:
     written = next((row.real_time for row in reversed(rows) if row.type == "tick_summary"), None)
     if written is not None:
         feed.counted_at = written
+    feed.recent.extend(reversed(_worth_telling(feed, public_events_before(session, run.id, last_seq, RECENT_SCAN))))
     return feed
+
+
+def _worth_telling(feed: RunFeed, rows: Iterable[Event]) -> list[LiveEvent]:
+    """The first RECENT_KEEP of `rows` (public events) whose line is worth telling, as the feed tells them."""
+    told: list[LiveEvent] = []
+    for row in rows:
+        detail = feed.detail(row)
+        if detail.importance > 0:
+            told.append(LiveEvent(type="event", run_id=feed.run_id, tick=row.tick, event=detail))
+            if len(told) == RECENT_KEEP:
+                break
+    return told
 
 
 def _replayable(row: Event) -> ReplayEvent:
