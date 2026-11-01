@@ -155,8 +155,8 @@ const BERRY_PIXELS = `(() => {
   return red;
 })()`;
 
-/** Beside one of the Elder grove's bushes (flora:3941), an oak (flora:3935) 3 m east, on the mock feed. */
-const BY_THE_BUSH = '?mockLive=1&at=11.53,6.215,0';
+/** 4 m south-east of one of the Elder grove's bushes (flora:3945), facing it, an oak (flora:3928) 2 m past it, on the mock feed. */
+const BY_THE_BUSH = '?mockLive=1&at=11.3839,6.4071,315';
 
 type Sender = {
   __pebbleMockLive: {
@@ -192,7 +192,7 @@ test('a picked bush loses its fruit on screen, a felled tree is a stump within 3
       [type, payload] as const,
     );
   await expect
-    .poll(async () => (await drawnOf('flora:3941')).length, { timeout: 30_000 })
+    .poll(async () => (await drawnOf('flora:3945')).length, { timeout: 30_000 })
     .toBe(1);
   await page.waitForTimeout(1000);
   const full = await page.evaluate<number>(BERRY_PIXELS);
@@ -201,7 +201,7 @@ test('a picked bush loses its fruit on screen, a felled tree is a stump within 3
   /** The bush at `after` of 12 berries, once drawn: its fruit pieces and the berry-red pixels on screen. */
   const picked = async (after: number) => {
     await send('node_changed', {
-      node: 'flora:3941',
+      node: 'flora:3945',
       kind: 'berry_bush',
       item: 'berries',
       before: 12,
@@ -213,7 +213,7 @@ test('a picked bush loses its fruit on screen, a felled tree is a stump within 3
       .poll(
         async () =>
           (
-            (await drawnOf('flora:3941'))[0] as unknown as {
+            (await drawnOf('flora:3945'))[0] as unknown as {
               stage: { pieces: number };
             }
           ).stage.pieces,
@@ -232,10 +232,10 @@ test('a picked bush loses its fruit on screen, a felled tree is a stump within 3
   expect(more / full).toBeLessThan(0.72);
   expect(await picked(0)).toBeLessThan(full / 3);
 
-  await send('tree_felled', { node: 'flora:3935', yaw_deg: 90, logs: 10 });
+  await send('tree_felled', { node: 'flora:3928', yaw_deg: 90, logs: 10 });
   const felled = Date.now();
   await expect
-    .poll(async () => (await drawnOf('flora:3935')).map((n) => n.look).sort(), {
+    .poll(async () => (await drawnOf('flora:3928')).map((n) => n.look).sort(), {
       intervals: [100],
       timeout: 5000,
     })

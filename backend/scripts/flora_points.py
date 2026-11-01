@@ -16,7 +16,7 @@ from app.world.flora import generate_flora
 from app.world.spec import load_world_spec
 from app.world.view import WorldView
 
-SPOTS_DEG = {"elder_grove_bush": (11.53, 6.215)}  # lat, lon: where `nodes.spec.ts` stands
+SPOTS_DEG = {"elder_grove_bush": (11.3839, 6.4071)}  # lat, lon: where `nodes.spec.ts` stands
 RADIUS_M = 300.0
 STRIDE = 499
 

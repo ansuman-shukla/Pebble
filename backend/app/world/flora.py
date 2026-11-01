@@ -22,7 +22,9 @@ Placement:
    bushes stay DEN_NEAREST_BUSH_M off a grove's den);
 3. each camp's home ring holds exactly `home_ring_flora` (natural flora of those kinds stays out; counts of a
    home-ring hotspot count toward it; no other hotspot's counted flora falls inside);
-4. nothing in water, on cliffs, on rivers, roads, paths, site props, camp grounds or the town chart.
+4. nothing in water (a lake's drawn water reaches up its banks: reed beds may stand in it), on cliffs, on rivers,
+   roads and paths as they are drawn (centripetal Catmull-Rom curves through their cells, ground-marks.ts), site
+   props, camp grounds, a waterhole's drawn pool and bank, or the town chart.
 """
 
 import hashlib
@@ -34,13 +36,13 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
-from app.world.biomes import BIOME_IDS, mean_spacing_m
+from app.world.biomes import BIOME_IDS, WATER_BIOMES, mean_spacing_m
 from app.world.grid import Grid, IntArray
 from app.world.spec import BIOME_NAMES, CAMPS, FloraNode, FloraSpec, HotspotsSpec, WorldSpec
 from app.world.sphere import FloatArray, angle_between, tangent_frame, tangent_frames
 from app.world.surface import Surface, surface_from_view
 from app.world.terrain import BoolArray
-from app.world.view import Feature, Hotspot, Road, WorldView
+from app.world.view import POOL_BANK_M, Feature, Hotspot, Road, WorldView
 
 OFFSET_STEP_M = 0.2  # i8 offsets reach ±25.4 m, past the farthest point of any cell (D120)
 SCALE_STEP = 0.01
@@ -50,10 +52,15 @@ MAX_SLOPE_DEG = 40.0  # nothing grows on steeper ground (cliffs)
 SHORE_MIN_HEIGHT_M = 0.3  # above the drawn sea level
 RIVER_CLEARANCE_M = 6.0  # from a river's centre line (the drawn rivers are up to 13 m wide)
 REED_RIVER_CLEARANCE_M = 3.0  # reeds stand at the water's edge
-ROAD_CLEARANCE_M = {"road": 2.5, "path": 1.75}  # half the width + 1 m
+ROAD_CLEARANCE_M = {"road": 2.5, "path": 1.75}  # half the width + 1 m, from the drawn middle line
+ROUTE_SAMPLE_M = 0.5  # the drawn middle line is followed in steps this long
+LAKE_LIFT_M = 0.25  # the client draws a lake's water this far above its bed (water-mesh.ts LAKE_LIFT)
+LAKE_CLEARANCE_M = 0.3  # flora stands at least this far above the drawn water (the drawn ground curves a little)
+WATER_SURFACE_M = 0.2  # the drawn sea level (globe.ts WATER_SURFACE): water cells above it are lakes
 CAMP_CLEARING_M = 12.0  # a camp's worn ground
 PROP_CLEARANCE_M = 1.0  # beyond a site prop's footprint
 FEATURE_CLEARANCE_M = 3.0
+POOL_CLEARANCE_M = POOL_BANK_M + 1.0  # from a waterhole's drawn pool
 COUNTED_SPACING_M = 2.0  # counted items of one hotspot or ring keep this far apart
 DEN_FIRST_BUSH_M = 36.0  # from an edge den to its grove's first berry bush
 DEN_NEAREST_BUSH_M = 30.0  # no natural berry bush grows nearer a grove's den (10 §1.2: 30-50 m to the nearest)
@@ -398,12 +405,16 @@ class _FloraPlacer:
         by_sea = surface.ocean[corners].any(axis=1)
         ok &= ~(by_sea & (height < SHORE_MIN_HEIGHT_M)) & (tilt_deg <= MAX_SLOPE_DEG)
         reeds = self.node_of[items.kind] == "reed_bed"
+        # a lake's water lies over its whole grid triangles, up the bank to the bed's height + LAKE_LIFT_M
+        lake_level = np.where(self.lakes[corners], surface.heights[corners], np.inf).min(axis=1)
+        under_lake = np.isfinite(lake_level) & (height < lake_level + LAKE_LIFT_M + LAKE_CLEARANCE_M)
+        ok &= reeds | ~under_lake
         clearance = np.where(reeds, REED_RIVER_CLEARANCE_M, RIVER_CLEARANCE_M)
         index = _CellIndex(owner, surface.padded_neighbours)
         for river in surface.rivers:
             ok &= ~index.near_polyline(units, river.cells, self.grid, surface.radius_m, clearance)
-        for road in self.roads:
-            ok &= ~index.near_polyline(units, road.cells, self.grid, surface.radius_m, ROAD_CLEARANCE_M[road.kind])
+        for line, cells, kind in self.drawn_routes:
+            ok &= ~index.near_samples(units, line, cells, surface.radius_m, ROAD_CLEARANCE_M[kind])
         for point, clear in self.obstacles:
             ok &= ~index.near_point(units, point, self.grid, surface.radius_m, clear)
         return ok
@@ -421,8 +432,41 @@ class _FloraPlacer:
                 v = up * (self.surface.radius_m + anchor.height_m) + east * placement.x - north * placement.z
                 half = 0.5 * float(np.hypot(placement.footprint.x, placement.footprint.z))
                 obstacles.append((v / np.linalg.norm(v), half + PROP_CLEARANCE_M))
-        obstacles += [(np.array(feature.position), FEATURE_CLEARANCE_M) for feature in self.features]
+        obstacles += [
+            (np.array(feature.position), POOL_CLEARANCE_M if feature.pool else FEATURE_CLEARANCE_M)
+            for feature in self.features
+        ]
         return obstacles
+
+    @cached_property
+    def lakes(self) -> BoolArray:
+        """The cells the client draws lake water over (globe.ts / water-mesh.ts `isLake`)."""
+        surface = self.surface
+        return np.isin(surface.biomes, list(WATER_BIOMES)) & (surface.heights > WATER_SURFACE_M)
+
+    @cached_property
+    def drawn_routes(self) -> list[tuple[list[FloatArray], list[list[int]], str]]:
+        """The network's middle lines as the client draws them (ground-marks.ts `planetMarks`): each chain of
+        cell steps between junctions and each gate's lead as a centripetal Catmull-Rom curve. Per curve: the samples
+        of each span, the cells near that span, and the kind."""
+        radius = self.surface.radius_m
+        routes: list[tuple[list[FloatArray], list[list[int]], str]] = []
+        for chain in route_chains(self.roads):
+            points = self.grid.positions[chain.cells]
+            spans = catmull_rom_spans(points, chain.closed, radius)
+            ends = [*chain.cells, chain.cells[0]] if chain.closed else chain.cells
+            near = [[ends[min(i, len(ends) - 2)], ends[min(i + 1, len(ends) - 1)]] for i in range(len(spans))]
+            routes.append((spans, near, chain.kind))
+        leads: set[tuple[tuple[float, ...], ...]] = set()
+        for road in self.roads:
+            key = tuple(tuple(point) for point in road.lead)
+            if not road.lead or key in leads:
+                continue
+            leads.add(key)
+            points = np.array([*road.lead, self.grid.positions[road.cells[0]]])
+            spans = catmull_rom_spans(points, False, radius)
+            routes.append((spans, [[road.cells[0]]] * len(spans), road.kind))
+        return routes
 
 
 def _steps(metres: FloatArray) -> IntArray:
@@ -533,6 +577,26 @@ class _CellIndex:
             near[items[distance < limits[items]]] = True
         return near
 
+    def near_samples(
+        self, units: FloatArray, spans: list[FloatArray], cells: list[list[int]], radius_m: float, clearance: float
+    ) -> BoolArray:
+        """Items within clearance of a sampled line: each span's samples (unit vectors) and the cells it passes."""
+        near = np.zeros(len(units), dtype=bool)
+        for samples, span_cells in zip(spans, cells, strict=True):
+            items = self.items_near(span_cells)
+            if len(items) == 0 or len(samples) < 2:
+                continue
+            a, b = samples[:-1], samples[1:]
+            ab = b - a
+            p = units[items]
+            t = np.clip(
+                np.einsum("ikj,kj->ik", p[:, None, :] - a[None], ab) / np.maximum((ab * ab).sum(1), 1e-18), 0, 1
+            )
+            closest = a[None] + t[..., None] * ab[None]
+            distance = np.linalg.norm(p[:, None, :] - closest, axis=2).min(axis=1) * radius_m
+            near[items[distance < clearance]] = True
+        return near
+
     def near_point(
         self, units: FloatArray, point: FloatArray, grid: Grid, radius_m: float, clearance: float
     ) -> BoolArray:
@@ -542,3 +606,94 @@ class _CellIndex:
             distance = np.linalg.norm(units[items] - point, axis=1) * radius_m
             near[items[distance < clearance]] = True
         return near
+
+
+@dataclass(frozen=True)
+class RouteChain:
+    """Cell steps of the network between junctions, drawn as one curve (ground-marks.ts `routeChains`)."""
+
+    cells: list[int]
+    closed: bool
+    kind: str
+
+
+def route_chains(roads: Sequence[Road]) -> list[RouteChain]:
+    """Each cell-to-cell step once (a road wins over a path); a chain breaks where a cell has other than two
+    neighbours or its two steps differ in kind (the client's `routeChains`, step for step)."""
+    rank = {"road": 2, "path": 1}
+    steps: dict[tuple[int, int], str] = {}
+    links: dict[int, list[int]] = {}
+
+    def key(a: int, b: int) -> tuple[int, int]:
+        return (a, b) if a < b else (b, a)
+
+    for road in roads:
+        for a, b in zip(road.cells, road.cells[1:], strict=False):
+            if a == b:
+                continue
+            old = steps.get(key(a, b))
+            if old is None or rank[road.kind] > rank[old]:
+                steps[key(a, b)] = road.kind
+            for x, y in ((a, b), (b, a)):
+                if y not in links.setdefault(x, []):
+                    links[x].append(y)
+
+    def breaks(cell: int) -> bool:
+        near = links[cell]
+        return len(near) != 2 or steps[key(cell, near[0])] != steps[key(cell, near[1])]
+
+    seen: set[tuple[int, int]] = set()
+
+    def walk(start: int, after: int) -> RouteChain:
+        cells, kind = [start, after], steps[key(start, after)]
+        seen.add(key(start, after))
+        previous, here = start, after
+        while here != start and not breaks(here):
+            following = next(cell for cell in links[here] if cell != previous)
+            seen.add(key(here, following))
+            cells.append(following)
+            previous, here = here, following
+        closed = here == start and not breaks(start)
+        return RouteChain(cells[:-1] if closed else cells, closed, kind)
+
+    chains: list[RouteChain] = []
+    for cell, near in links.items():
+        if breaks(cell):
+            chains += [walk(cell, other) for other in near if key(cell, other) not in seen]
+    for cell, near in links.items():  # loops without a junction
+        for other in near:
+            if key(cell, other) not in seen:
+                chains.append(walk(cell, other))
+    return chains
+
+
+def catmull_rom_spans(directions: FloatArray, closed: bool, radius_m: float) -> list[FloatArray]:
+    """A centripetal Catmull-Rom curve through unit directions on the sphere of radius_m (three.js
+    `CatmullRomCurve3`, as the client samples it): per span between consecutive points, unit directions every
+    ROUTE_SAMPLE_M or so. Points closer than 0.5 m to the one before are dropped first, like the client's."""
+    kept = [directions[0]] + [
+        point
+        for point, before in zip(directions[1:], directions[:-1], strict=True)
+        if float(angle_between(point, before)) * radius_m > 0.5
+    ]
+    if len(kept) < 2:
+        return []
+    points = np.array(kept) * radius_m
+    count = len(points)
+    spans: list[FloatArray] = []
+    for i in range(count if closed else count - 1):
+        p1, p2 = points[i % count], points[(i + 1) % count]
+        p0 = points[(i - 1) % count] if closed or i > 0 else 2 * p1 - p2
+        p3 = points[(i + 2) % count] if closed or i + 2 < count else 2 * p2 - p1
+        dt0, dt1, dt2 = (float(np.sum((q - r) ** 2)) ** 0.25 for q, r in ((p0, p1), (p1, p2), (p2, p3)))
+        dt1 = dt1 if dt1 >= 1e-4 else 1.0
+        dt0 = dt0 if dt0 >= 1e-4 else dt1
+        dt2 = dt2 if dt2 >= 1e-4 else dt1
+        t1 = ((p1 - p0) / dt0 - (p2 - p0) / (dt0 + dt1) + (p2 - p1) / dt1) * dt1
+        t2 = ((p2 - p1) / dt1 - (p3 - p1) / (dt1 + dt2) + (p3 - p2) / dt2) * dt1
+        c2, c3 = -3 * p1 + 3 * p2 - 2 * t1 - t2, 2 * p1 - 2 * p2 + t1 + t2
+        steps = max(2, int(np.ceil(float(np.linalg.norm(p2 - p1)) / ROUTE_SAMPLE_M)) + 1)
+        t = np.linspace(0.0, 1.0, steps)[:, None]
+        curve = p1 + t1 * t + c2 * t**2 + c3 * t**3
+        spans.append(curve / np.linalg.norm(curve, axis=1, keepdims=True))
+    return spans
