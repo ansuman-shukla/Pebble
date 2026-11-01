@@ -198,6 +198,98 @@ test('frames carry the animals and the fires', () => {
   expect(applyMessage(state, frame('tick', 1, []), 0)).toBe(state); // stale
 });
 
+test('a tick keeps what it left unchanged as the objects drawn before, so only what it changed is drawn again', () => {
+  const deer = (id: string): LiveAnimal => ({
+    id,
+    kind: 'deer',
+    group: 'deer-group:1',
+    position: { unit: [AT.x, AT.y, AT.z], height_m: 10, lat: 35, lon: 12 },
+    heading_deg: 90,
+    activity: 'grazing',
+    route: [],
+    speed_mps: 0,
+    gait: 'walk',
+    goal: 'grazing',
+    target: null,
+  });
+  const pit: LiveFire = {
+    id: 'band_a_camp:fire-pit',
+    kind: 'pit',
+    position: deer('x').position,
+    lit: true,
+    strength: 1,
+  };
+  // every message is parsed afresh: equal entities arrive as new objects
+  const parsed = <T>(value: T): T => structuredClone(value);
+  const herd = [deer('deer:1'), deer('deer:2'), deer('deer:3')];
+  const wild = { animals: herd, fires: [pit] };
+  const first = applyMessage(
+    EMPTY_LIVE,
+    frame('snapshot', 1, [entity()], 'run-1', wild),
+    0,
+  );
+  const tick = (
+    from: typeof first,
+    citizens: LiveCitizen[],
+    animals: LiveAnimal[],
+    run = 'run-1',
+  ) =>
+    applyMessage(
+      from,
+      frame('tick', from.tick + 1, parsed(citizens), run, {
+        animals: parsed(animals),
+        fires: parsed([pit]),
+      }),
+      0,
+    );
+
+  // nothing changed: the very same lists
+  const same = tick(first, [entity()], herd);
+  expect(same.citizens).toBe(first.citizens);
+  expect(same.animals).toBe(first.animals);
+  expect(same.fires).toBe(first.fires);
+
+  // one deer walks off (a nested change): a new list, the other two kept
+  const walking: LiveAnimal = {
+    ...deer('deer:2'),
+    route: [{ unit: [AT.x, AT.y, AT.z], height_m: 10, t_s: 0 }],
+  };
+  const moved = tick(same, [entity()], [herd[0], walking, herd[2]]);
+  expect(moved.animals).not.toBe(same.animals);
+  expect(moved.animals[0]).toBe(same.animals[0]);
+  expect(moved.animals[1]).toEqual(walking);
+  expect(moved.animals[1]).not.toBe(same.animals[1]);
+  expect(moved.animals[2]).toBe(same.animals[2]);
+  expect(moved.fires).toBe(same.fires);
+
+  // any difference counts, however deep or small: a need, a null turned into a value, a field more
+  const needs = { hunger: 10, thirst: 10, energy: 90, health: 99 };
+  expect(tick(same, [entity({ needs })], herd).citizens[0]).not.toBe(
+    same.citizens[0],
+  );
+  const target: LiveAnimal = {
+    ...deer('deer:1'),
+    target: { kind: 'animal', id: 'wolf:1', name: 'a wolf' },
+  };
+  expect(
+    tick(same, [entity()], [target, ...herd.slice(1)]).animals[0],
+  ).not.toBe(same.animals[0]);
+  const extra = { ...deer('deer:1'), note: 'x' } as LiveAnimal;
+  expect(tick(same, [entity()], [extra, ...herd.slice(1)]).animals[0]).not.toBe(
+    same.animals[0],
+  );
+
+  // one gone: a new list, the rest kept
+  const fewer = tick(same, [entity()], herd.slice(1));
+  expect(fewer.animals).toHaveLength(2);
+  expect(fewer.animals[0]).toBe(same.animals[1]);
+
+  // another run keeps nothing
+  const other = tick(same, [entity()], herd, 'run-2');
+  expect(other.animals[0]).not.toBe(same.animals[0]);
+  expect(other.animals[0]).toEqual(same.animals[0]);
+});
+
 test('the mock feed has grazing deer, prowling wolves and fires that burn at night', () => {
   const server = new MockLiveServer(createMockWorld());
   const first = server.entities();
