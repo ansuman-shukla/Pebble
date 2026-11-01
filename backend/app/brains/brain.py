@@ -304,6 +304,8 @@ class UtilityBrain:
         starving = needs.hunger >= 3 and not carries(p, "coins") and self.api.notes.get("chest empty") is True
         if starving and self.tempted():  # no food carried, none at home, no coins to buy any
             return self.steal_option(p, score, pace)
+        if self.api.notes.get("chest empty") is True:
+            return None  # nothing at home to walk back for: the routine buys rice or earns the coins for it
         if not at_home(p):  # the household's own rice is in the chest at home
             return option(score - 2, "go eat", lambda: self.api.walk_to_place("home", pace))
         return None if failed else option(score, "eat", lambda: self.api.eat("rice"))

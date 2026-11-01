@@ -8,6 +8,7 @@ import pytest
 
 from app.brains.brain import UtilityBrain
 from app.brains.profile import BrainProfile
+from app.brains.senses import Needs
 from app.engine import citizen_brains
 from app.observability.events import EventDraft, ItemMoved, Stole
 from app.sim import ownership
@@ -267,6 +268,20 @@ def test_a_failed_meal_at_home_tells_the_brain_the_chest_is_empty(new_sim: Calla
     brain.decide()  # eats from the chest: there is none
     brain.decide()
     assert brain.api.notes.get("chest empty") is True
+
+
+def test_a_hungry_townsman_whose_chest_is_empty_does_not_walk_home_to_eat_again(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    sim = _scene(new_sim, ("tetsu", "main-w-3", "store-2"), tetsu={"inventory": {"coins": 3}})
+    sim.citizen("tetsu").body.hunger = 95.0
+    sim.drain()
+    brain = _brain(sim, "tetsu", honesty=1.0)
+    look, needs = brain.api.look_around(), Needs(3, 0, 0)
+    option = brain.hunger_option(look, needs, "midday")
+    assert option is not None and option.name == "go eat"  # nothing known about the chest yet: home to eat
+    brain.api.notes["chest empty"] = True  # the meal at home failed: nothing there today
+    assert brain.hunger_option(look, needs, "midday") is None  # the routine buys rice or earns the coins for it
 
 
 @pytest.mark.parametrize(
