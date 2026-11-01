@@ -26,8 +26,8 @@ from sqlalchemy import Engine as DbEngine
 from sqlalchemy.exc import DBAPIError
 from sqlmodel import Session
 
-from app.brains.profile import BrainProfile, Ground, known_titles
-from app.brains.routines import TRIP_LEGS
+from app.brains.bands import TRIP_LEGS
+from app.brains.profile import BrainProfile, Ground, Spot, known_titles
 from app.brains.runner import CitizenBrains
 from app.core.db import create_db_engine
 from app.db.models import Run
@@ -37,7 +37,7 @@ from app.observability.store import EventStore, create_run, discard_after, lates
 from app.sim import society, tax
 from app.sim.citizens import CITIZENS, load_citizens
 from app.sim.clock import SECONDS_PER_TICK, TICKS_PER_HOUR
-from app.sim.grounds import forage_grounds
+from app.sim.grounds import GROUND_FOOD, forage_grounds, hunting_grounds, known_spots, ring_ways, spot_stock
 from app.sim.navigation import Planner
 from app.sim.ownership import fed_by_granary
 from app.sim.simulation import Simulation
@@ -70,11 +70,12 @@ def citizen_brains(sim: Simulation, seed: int) -> CitizenBrains:
     specs = load_citizens(CITIZENS).citizens
     traits = {spec.id: spec.traits for spec in specs if spec.traits is not None}
     households = town_households(sim.core.citizens(), [spec.id for spec in specs])
+    camps = {region: camp for region, camp in HOME_AREAS.items() if region != "town"}
     grounds = {
         region: tuple(Ground(way, legs) for way, legs in forage_grounds(sim.world, camp, TRIP_LEGS))
-        for region, camp in HOME_AREAS.items()
-        if region != "town"
+        for region, camp in camps.items()
     }
+    rings = {region: ring_ways(sim.world, camp) for region, camp in camps.items()}
     return CitizenBrains(
         (
             (
@@ -98,6 +99,10 @@ def citizen_brains(sim: Simulation, seed: int) -> CitizenBrains:
                     household=households.get(citizen.id, Household()).mouths,
                     paddies=households.get(citizen.id, Household()).paddies,
                     dues=households.get(citizen.id, Household()).dues,
+                    ring_ways=rings.get(citizen.region, ()),
+                    spots=_band_spots(sim, citizen),
+                    hunting_grounds=_hunting_grounds(sim, citizen),
+                    hunt_turn=_hunt_turn(sim, citizen),
                 ),
             )
             for citizen in sim.core.citizens()
@@ -129,6 +134,43 @@ def town_households(citizens: Sequence[Citizen], cast_order: Sequence[str]) -> d
             dues = share + (rest if adults and citizen.id == adults[0] else 0) if citizen.id in adults else 0
             facts[citizen.id] = Household(len(residents), tax.PADDIES.get(home, 0), dues)
     return facts
+
+
+def _band_spots(sim: Simulation, citizen: Citizen) -> tuple[Spot, ...]:
+    """The hotspots a band member knows, nearest to camp first, with what can be taken there."""
+    if citizen.region == "town":
+        return ()
+    world, camp = sim.world, HOME_AREAS[citizen.region]
+    centre = world.places[camp].centre
+    spots: list[Spot] = []
+    for spot in known_spots(world, camp, citizen.places):
+        stock = spot_stock(world, spot.id)
+        food = sum(count for item, count in stock.items() if item in GROUND_FOOD)
+        metres = round(world.distance_m(centre, spot.centre))
+        spots.append(Spot(spot.called, metres, tuple(stock), food, tuple(spot.hunting), spot.claim))
+    return tuple(spots)
+
+
+def _hunters(sim: Simulation, region: str) -> list[str]:
+    return sorted(c.id for c in sim.core.citizens() if c.region == region and "hunting" in c.skills)
+
+
+def _hunt_turn(sim: Simulation, citizen: Citizen) -> tuple[int, int]:
+    """A band hunter's turn among the band's hunters (by id)."""
+    hunters = _hunters(sim, citizen.region)
+    if citizen.region == "town" or citizen.id not in hunters:
+        return (0, 1)
+    return (hunters.index(citizen.id), len(hunters))
+
+
+def _hunting_grounds(sim: Simulation, citizen: Citizen) -> tuple[str, ...]:
+    """A band hunter's hunting grounds in the order they take them: each of the band's hunters (by id) starts at a
+    different one."""
+    if citizen.region == "town" or "hunting" not in citizen.skills:
+        return ()
+    rank = _hunters(sim, citizen.region).index(citizen.id)
+    grounds = hunting_grounds(sim.world, HOME_AREAS[citizen.region], citizen.region, citizen.places, rank)
+    return tuple(spot.called for spot in grounds)
 
 
 def is_connection_loss(error: DBAPIError) -> bool:
