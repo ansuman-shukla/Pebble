@@ -270,6 +270,7 @@ class WorldAt:
     tick: int
     state: ReplayState
     tick_written_at: datetime | None  # when the engine wrote the tick's summary (None: tick 0, or not replayed)
+    snapshot: SimSnapshot  # the one the replay started from
 
 
 def world_at(session: Session, run_id: str | None = None, at: int | None = None) -> WorldAt | None:
@@ -287,8 +288,8 @@ def world_at(session: Session, run_id: str | None = None, at: int | None = None)
     rows = events_after(session, run.id, snapshot_row.last_seq, until_tick=tick)
     events = [ReplayEvent(tick=e.tick, type=e.type, actor_id=e.actor_id, payload=e.payload) for e in rows]
     written = next((e.real_time for e in reversed(rows) if e.type == "tick_summary" and e.tick == tick), None)
-    state = replay(SimSnapshot.model_validate(snapshot_row.state), events)
-    return WorldAt(run=run, tick=tick, state=state, tick_written_at=written)
+    snapshot = SimSnapshot.model_validate(snapshot_row.state)
+    return WorldAt(run=run, tick=tick, state=replay(snapshot, events), tick_written_at=written, snapshot=snapshot)
 
 
 def entities_at(
