@@ -15,6 +15,7 @@ from app.brains.senses import (
     DISTANCE,
     FOOD_VALUE,
     GAME_WORDS,
+    NIGHT_HUNGER,
     Resource,
     at,
     at_home,
@@ -28,6 +29,7 @@ from app.brains.senses import (
     food_value,
     full_load,
     game,
+    harmful_by_morning,
     is_name,
     near,
     prowler,
@@ -140,7 +142,8 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
         ctx.mark_done(style.chore)
     home_area = ctx.profile.home_area
     food = carried_food(p.you)
-    hungry_empty = ctx.needs.hunger >= 2 and not food
+    supper = ctx.phase in ("dusk", "night") and harmful_by_morning(ctx.needs.hunger, NIGHT_HUNGER)  # or sleep hungry
+    hungry_empty = (ctx.needs.hunger >= 2 or supper) and not food
     feeding = _feed_the_starving(ctx, food) or (_eat_at_rack(ctx) if hungry_empty else []) or _tend(ctx)
     if feeding:
         return feeding
