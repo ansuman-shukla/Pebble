@@ -15,6 +15,7 @@ import { Matrix4, Vector3 } from 'three';
 
 import { Button } from '@/components/ui/button';
 import { BiomeScatter } from '@/components/world/globe/biome-scatter';
+import { GoldGlints } from '@/components/world/globe/gold-glints';
 import { GlobeNodes } from '@/components/world/globe/nodes';
 import {
   type DropApi,
@@ -493,6 +494,11 @@ const GlobeScene = memo(function GlobeScene({
           radius={terrain.globe.radius}
         />
       </Suspense>
+      <GoldGlints
+        features={view.places.features}
+        terrain={terrain}
+        stages={nodeStages}
+      />
       <GlobeNpcs
         citizens={live.citizens}
         cues={live.cues}
