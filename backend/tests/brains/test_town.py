@@ -330,3 +330,19 @@ def test_a_day_without_the_farmers_selling_makes_rice_dear_and_the_price_rule_br
             fair_again = sim.tick
     assert peak >= 1.2
     assert fair_again is not None and fair_again - peak_tick <= 3 * DAY_MINUTES
+
+
+def test_a_hotspot_is_a_place_known_by_name_only_to_those_who_know_it(new_sim: Callable[..., Simulation]) -> None:
+    """The digger knows the South marsh (the cast's knowledge) and walks there by name; someone standing in it who
+    was never told its name doesn't learn it from the land."""
+    sim = new_sim()
+    marsh = sim.world.places["south_marsh"]
+    assert (marsh.kind, marsh.name) == ("hotspot", "the South marsh")
+    sim.add_citizen(make_spec("daisuke", knows_places=["town", "south_marsh"]))
+    walk = WorldApi(sim, "daisuke").walk_to_place("the South marsh")
+    assert walk.result is None or walk.result.outcome != "failed"
+    stranger = sim.add_citizen(make_spec("stranger"))
+    sim.core.place_at(stranger, marsh.centre)
+    sim.step()
+    assert "south_marsh" not in sim.citizen("stranger").places
+    assert "south_marsh" in sim.citizen("daisuke").places
