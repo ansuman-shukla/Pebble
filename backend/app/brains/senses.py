@@ -175,15 +175,27 @@ def food_value(food: dict[str, int]) -> float:
 
 THIN = ("a few", "a little", "thin", "picked over")  # a node's words when there's little left on it
 FISHING_SPOT = "a good fishing spot"  # how a fishing spot is told (data/world/node_stages.yaml)
+# a node's words when nothing is left on it (data/world/node_stages.yaml): nothing to gather there
+EMPTY = (
+    "stripped bare",
+    "dug over",
+    "cut to the stubble",
+    "all gathered up",
+    "picked clean",
+    "worked out to rubble",
+    "scraped bare",
+    "once glinted",
+)
 
 
 def resources_in_view(perception: Perception) -> list[Resource]:
-    """Wild plants in view (a plant's words say whether there's plenty: "a berry bush with a few berries left" or "a
-    patch of edible roots, thin and picked over" is not)."""
+    """Wild plants and stones in view with something left on them (a node's words say whether there's plenty: "a
+    berry bush with a few berries left" or "a patch of edible roots, thin and picked over" is not; "a berry bush
+    stripped bare" has nothing)."""
     return [
         Resource(thing.resource, DISTANCE[thing.nearness], not any(w in thing.label for w in THIN), thing.label)
         for thing in perception.things
-        if thing.resource is not None
+        if thing.resource is not None and not thing.label.endswith(EMPTY)
     ]
 
 

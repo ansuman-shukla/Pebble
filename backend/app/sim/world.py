@@ -47,7 +47,11 @@ STRUCTURE_LABELS: dict[str, str] = {  # town placements
     "castle_keep": "the keep",
     "temple_hall": "the temple hall",
 }
-CAMP_STRUCTURE_LABELS: dict[str, str] = {"lean_to": "a lean-to", "fire_pit": "the fire pit"}  # camp placements
+CAMP_STRUCTURE_LABELS: dict[str, str] = {  # camp placements one walks up to by what they are
+    "lean_to": "a lean-to",
+    "fire_pit": "the fire pit",
+    "drying_rack": "the drying rack",
+}
 FIRE_SEATS = 8  # spots round a fire pit, one per member of its band
 FIRE_SEAT_M = 2.0  # from the pit's centre: clear of its stones (and of each other, 1.5 m apart)
 STRUCTURE_NAMES: dict[str, str] = {  # structures with a name of their own (by placement id)
