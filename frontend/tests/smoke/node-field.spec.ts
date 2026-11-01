@@ -22,7 +22,8 @@ import { StageTexture } from '../../src/lib/world/staged-material';
 
 /*
  * The node field without a browser: what each node draws as its stage changes (a picked bush, a chopped tree that
- * shakes, falls along its bearing for 2 s and leaves a stump and logs, a sapling), in which tier, and how far.
+ * shakes, falls along its bearing for 2 s and leaves a stump, a sapling), in which tier, and how far. Its logs are
+ * a ground stack (ground-stacks.spec.ts).
  */
 
 const R = 2000;
@@ -262,31 +263,17 @@ test('a chopped tree shakes, falls along its bearing for 2 s, then lies as logs 
   );
 
   f.frame(FOCUS, false, 2 + FALL_SECONDS);
+  // landed: only its stump stands (its logs are the ground stack the feed sends)
   const after = drawnOf(f, 'flora:9');
-  expect(after.map((n) => [n.look, n.role]).sort()).toEqual([
-    ['fallen_log', 'logs'],
-    ['tree_stump', 'node'],
-  ]);
+  expect(after.map((n) => n.look)).toEqual(['tree_stump']);
   expect(looks.get('oak_tree')!.near[0].visible).toBe(false);
-  const stump = after.find((n) => n.role === 'node')!;
-  expect(new Vector3(...stump.position).distanceTo(oak.position)).toBeLessThan(
-    1e-6,
-  );
-  const logs = after.find((n) => n.role === 'logs')!;
-  const offset = new Vector3(...logs.position).sub(oak.position);
-  expect(offset.dot(fall)).toBeCloseTo(2, 6);
-  expect(offset.length()).toBeCloseTo(2, 6);
-  // the logs lie along the fall, their model x axis pointing the way the tree fell
-  const logsMatrix = looks
-    .get('fallen_log')!
-    .near[0].getMatrixAt(0, new Matrix4());
-  const xAxis = new Vector3().setFromMatrixColumn(logsMatrix, 0).normalize();
-  expect(xAxis.dot(fall)).toBeCloseTo(1, 6);
-  // the logs draw whole
-  expect(looks.get('fallen_log')!.stages!.near.get(0).level).toBe(1);
+  expect(looks.get('fallen_log')!.near[0].visible).toBe(false);
+  expect(
+    new Vector3(...after[0].position).distanceTo(oak.position),
+  ).toBeLessThan(1e-6);
 });
 
-test("a felled tree's logs draw whole, whatever stage their slot held before", () => {
+test('a felled tree draws no logs of its own: a deadwood pile beside it keeps its slot and stage', () => {
   const oak = node('flora:1', 'oak_tree', 'tree', 20, 0);
   const pile = node('flora:2', 'fallen_log', 'deadwood', 25, 0);
   const { field: f, stages, looks } = field([oak, pile]);
@@ -309,13 +296,12 @@ test("a felled tree's logs draw whole, whatever stage their slot held before", (
     1,
   );
   f.frame(FOCUS, false, 1 + FALL_SECONDS);
-  const order = f
+  const logs = f
     .drawn()!
     .nodes.filter((n) => n.look === 'fallen_log')
-    .map((n) => n.role);
-  expect(order).toEqual(['logs', 'node']);
-  expect(rows.get(0).level).toBe(1);
-  expect(rows.get(1).level).toBe(0.5);
+    .map((n) => n.id);
+  expect(logs).toEqual(['flora:2']);
+  expect(rows.get(0).level).toBe(0.5);
 });
 
 test('a felled tree with no heading falls along its table bearing; a sapling is a small tree', () => {

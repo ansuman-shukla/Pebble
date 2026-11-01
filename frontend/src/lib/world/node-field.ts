@@ -2,14 +2,14 @@
  * The nodes around the camera's focus, drawn by stage (10 §1.1, §5.2): the cells within FAR_REACH + REBUILD are
  * gathered when the focus moves more than REBUILD metres; the instances are split into tiers (within SHADOW_REACH
  * the set that casts shadows, then each look's reach) every RESPLIT metres and whenever a node's stage changes.
- * A standing tree shakes while someone chops it, falls FALL_SECONDS along its bearing when felled, then lies as
- * logs beside its stump until it grows back as a sapling; other nodes draw their stock through the staged
- * material (staged-material.ts).
+ * A standing tree shakes while someone chops it, falls FALL_SECONDS along its bearing when felled, then stands as
+ * a stump until it grows back as a sapling (its logs are a ground stack: ground-stacks.ts); other nodes draw their
+ * stock through the staged material (staged-material.ts).
  */
 import { type InstancedMesh, Matrix4, Vector3 } from 'three';
 
 import type { PropKind } from './assets';
-import { LOGS_LOOK, STUMP_LOOK, TREE_NODES } from './biome-props';
+import { STUMP_LOOK, TREE_NODES } from './biome-props';
 import { fillMeshes, hideMeshes } from './instanced-tiers';
 import { isSapling, isStump, type NodeStages } from './node-stages';
 import { type NodeInstance, type Scatter, scatterMatrix } from './scatter';
@@ -50,14 +50,13 @@ export interface NodeLook {
 
 type Motion = 'fall' | 'shake';
 
-/** One thing drawn for a node: the node itself, or a felled tree's logs. */
+/** What a node draws: its look in its stage, standing still or moving. */
 interface Draw {
   node: NodeInstance;
   look: PropKind;
   model: Matrix4;
   stage: Stage | null;
   motion: Motion | null;
-  role: 'node' | 'logs';
 }
 
 /** A drawn instance whose matrix moves every frame. */
@@ -71,7 +70,6 @@ interface Moving {
 export interface DrawnNode {
   id: string;
   look: PropKind;
-  role: 'node' | 'logs';
   /** World metres of the instance's origin. */
   position: [number, number, number];
   stage: Stage | null;
@@ -115,8 +113,8 @@ function tipped(
     .multiply(model);
 }
 
-/** The felled tree's logs: lying along its fall beside the trunk. */
-function logsMatrix(node: NodeInstance) {
+/** A felled tree's logs: lying along its fall beside the trunk (drawn by the ground stacks). */
+export function logsMatrix(node: NodeInstance) {
   up.copy(node.position).normalize();
   fallDirection(node.position, node.bearing, along);
   across.crossVectors(along, up);
@@ -148,7 +146,7 @@ export class NodeField {
     this.looks = new Map(looks.map((look) => [look.kind, look]));
   }
 
-  /** What one node draws now: its look by stage, a falling or shaking tree, a stump and logs, a sapling. */
+  /** What one node draws now: its look by stage, a falling or shaking tree, a stump, a sapling. */
   private drawsOf(node: NodeInstance, model: Matrix4, now: number): Draw[] {
     const state = this.stages.state(node.id);
     if (TREE_NODES.has(node.node)) {
@@ -158,7 +156,7 @@ export class NodeField {
         ...node,
         bearing: this.stages.fallBearing(node.id) ?? node.bearing,
       };
-      const plain = { node, stage: null, motion: null, role: 'node' } as const;
+      const plain = { node, stage: null, motion: null } as const;
       if (fell !== undefined && now - fell < FALL_SECONDS) {
         this.nextLanding = Math.min(this.nextLanding, fell + FALL_SECONDS);
         return [{ ...plain, look: node.kind, model, motion: 'fall' }];
@@ -169,15 +167,7 @@ export class NodeField {
           kind: STUMP_LOOK,
           scale: node.scale * STUMP_SCALE,
         });
-        const draws: Draw[] = [{ ...plain, look: STUMP_LOOK, model: stump }];
-        if (fell !== undefined)
-          draws.push({
-            ...plain,
-            look: LOGS_LOOK,
-            model: logsMatrix(node),
-            role: 'logs',
-          });
-        return draws;
+        return [{ ...plain, look: STUMP_LOOK, model: stump }];
       }
       if (isSapling(state?.stage ?? null))
         return [
@@ -204,7 +194,6 @@ export class NodeField {
       {
         node,
         motion: null,
-        role: 'node',
         look: node.kind,
         model,
         stage: look.stages
@@ -317,10 +306,9 @@ export class NodeField {
     if (!this.splitAt) return null;
     return {
       focus: this.splitAt.toArray(),
-      nodes: this.shown.map(({ node, look, model, stage, motion, role }) => ({
+      nodes: this.shown.map(({ node, look, model, stage, motion }) => ({
         id: node.id,
         look,
-        role,
         position: new Vector3().setFromMatrixPosition(model).toArray(),
         stage,
         motion,
