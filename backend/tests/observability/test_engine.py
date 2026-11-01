@@ -168,10 +168,14 @@ def test_a_new_run_starts_with_the_cast_and_the_stocked_stores(db_session: Sessi
         "castle-keep-chest": {"coins": 2015},  # the treasury
         "farmhouse-1-chest": {"rice": 20},
         "farmhouse-2-chest": {"rice": 20},
+        "band_a_camp:drying-rack": {"dried meat": 6},  # each band's store of strips (BR2)
+        "band_b_camp:drying-rack": {"dried meat": 4},
     }
     events = _events(db_session, loop.run.id)
     stocked = [e for e in events if e.type == "item_moved"]
     assert [(e.payload["source"]["kind"], e.payload["destination"]["id"], e.payload["item"]) for e in stocked] == [
+        ("world", "band_a_camp:drying-rack", "dried meat"),
+        ("world", "band_b_camp:drying-rack", "dried meat"),
         *(("world", "market-stall", item) for item in sorted(stall)),
         ("world", "store-2", "rice"),
         ("world", "store-2", "wood"),

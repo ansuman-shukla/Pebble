@@ -40,7 +40,7 @@ def test_only_predator_kills_cost_a_herd_its_keep_and_only_hunter_kills_its_hunt
     assert pressure.outcome(sim).value <= 1 - 2 / herd.size + 1e-9
 
 
-def test_hunting_pressure_is_pending_and_herds_kept_counts() -> None:
+def test_hunting_pressure_and_herds_kept_count() -> None:
     by_name = {check.name: check for check in CHECKS}
-    assert by_name["a1.hunting_pressure"].pending is not None
+    assert by_name["a1.hunting_pressure"].pending is None  # the band hunters spread over the herds (BR2)
     assert by_name["a1.herds_kept"].pending is None

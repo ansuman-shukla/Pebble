@@ -183,7 +183,6 @@ class Poaching(Check):
     """Poaching deeds (`trespassed` with a take), over the seeds (≥ 1: Kaz's hunts in the Lord's woods, 10 §3.6)."""
 
     name = "t1.poaching"
-    pending = "BR2 Kaz's poaching"
     least = 1
 
     @override
