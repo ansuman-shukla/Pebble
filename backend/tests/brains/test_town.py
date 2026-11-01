@@ -541,15 +541,15 @@ def test_a_household_s_dues_are_shared_by_its_adults_the_first_paying_what_doesn
 def test_the_lord_buys_a_grain_of_gold_a_round_only_while_the_stall_holds_its_fill_and_a_week_s_worth() -> None:
     gold = PriceSeen(item="gold", price="twenty-nine coins each; it pays twenty-one coins", word="dear")
     purse_ = ("two strings of coins",)
-    notes: dict[str, JsonValue] = {"treasury": 1815}  # with his purse: the treasury at its start
+    notes: dict[str, JsonValue] = {"treasury": 1615}  # with his purse: just over the 1 800 he buys gold above
     look = _look(market=(gold,), carrying=purse_, when="early afternoon", day="the first day of the week, market day")
     ctx, api = _ctx(look, MASANORI, Recorder(notes))
     town._market_round(ctx)[0].start()
     assert ("buy", "gold", 1) in api.calls and notes["gold this week"] == 1
     dear = gold.model_copy(update={"price": "thirty-five coins each; it pays twenty-six coins", "word": "dear"})
     short = look.model_copy(update={"market": MarketView(items=[dear])})  # a grain left at most
-    assert [o.name for o in town._market_round(_ctx(short, MASANORI, Recorder({"treasury": 1815}))[0])] != ["buy gold"]
-    notes |= {"gold this week": town.GOLD_A_WEEK, "chores": []}
+    assert [o.name for o in town._market_round(_ctx(short, MASANORI, Recorder({"treasury": 1615}))[0])] != ["buy gold"]
+    notes |= {"gold this week": 2 * town.GOLD_A_WEEK, "chores": []}  # the most a week, however high the treasury
     later = look.model_copy(update={"day_of_week": "the third day of the week"})
     assert [o.name for o in town._market_round(_ctx(later, MASANORI, Recorder(notes))[0])] != ["buy gold"]
 
@@ -561,15 +561,15 @@ def test_every_biome_has_words_for_whoever_stands_on_its_cell() -> None:
 
 def test_the_lord_s_spending_follows_his_treasury_against_where_it_started() -> None:
     """Above its start he buys more gold and sells less granary rice, below it the reverse, within bounds (D180)."""
-    assert [town.treasury_lean(t) for t in (1415, 1865, 2015, 2165, 2615)] == [-1.0, -0.5, 0.0, 0.5, 1.0]
+    assert [town.treasury_lean(t) for t in (1015, 1615, 1815, 2015, 2615)] == [-1.0, -0.5, 0.0, 0.5, 1.0]
     gold = PriceSeen(item="gold", price="twenty coins each; it pays fifteen coins", word="fair")
     look = _look(market=(gold,), carrying=("two strings of coins",), when="early afternoon")
-    ctx, api = _ctx(look, MASANORI, Recorder({"treasury": 2115}))  # 300 above: leaning fully to spend
+    ctx, api = _ctx(look, MASANORI, Recorder({"treasury": 2015}))  # 400 above: leaning fully to spend
     town._market_round(ctx)[0].start()
     assert ("buy", "gold", 3) in api.calls
     rice = (STALL_RICE,)
     fair_day = "the fourth day of the week"
-    for chest, fetch in ((1815, 26), (2115, 0), (1515, 52)):  # with his 200: at the start, 300 above, 300 below
+    for chest, fetch in ((1615, 26), (2015, 13), (1215, 39)):  # with his 200: at his level, 400 above, 400 below
         notes: dict[str, JsonValue] = {"treasury": chest}
         town._market_round(
             _ctx(

@@ -119,8 +119,10 @@ PURSE_HEAVY = 300  # and puts what is over the day's needs into it when his purs
 GOLD = "gold"
 GOLD_TREASURY = 1800  # the lord buys gold for his hoard while the treasury holds more than this (10 §2.2)
 GOLD_A_WEEK = 7  # grains a week, a round's at a time, with the treasury at its start (scaled by `treasury_lean`)
-TREASURY_START = 2015  # the treasury's coins at the start (10 §2.1): the level the lord keeps it at
-TREASURY_SWING = 300  # coins off that level at which his spending leans fully one way
+# the level the lord keeps his treasury (chest and purse) at: its 2 015 at the start (10 §2.1) less the half week's
+# dues it swings by between court days (measured: 1 700-2 100 over a week)
+TREASURY_START = 1815
+TREASURY_SWING = 400  # coins off that level at which his spending leans fully one way
 GOLD_DEAREST = 30  # coins a grain: dearer means the stall holds a grain or none (its price runs 20 at 5 to 40 at 0)
 CLOTH = "cloth"
 CLOTH_DAYS = (1, 5)  # week days the lord buys a length of cloth for the keep (≈ one every 4 days)
@@ -971,7 +973,7 @@ def _market_round(ctx: Context) -> list[Option]:
     if carried_food(p.you).get(RICE) and price is not None and price.word in GRANARY_SALE:
         deals.append(("sell granary rice", partial(ctx.api.sell, RICE, 99)))
     chest = ctx.notes.get("treasury")
-    treasury = purse(p) + (chest if isinstance(chest, int) else TREASURY_START)  # his purse is the treasury's too
+    treasury = purse(p) + chest if isinstance(chest, int) else TREASURY_START  # his purse is the treasury's too
     lean = treasury_lean(treasury)
     if weekday(p) == 1 and not ctx.done_today("a new week"):
         ctx.mark_done("a new week")
@@ -996,7 +998,7 @@ def _market_round(ctx: Context) -> list[Option]:
             return [Option(WORK, name, partial(_once, ctx, name, deal), aim)]
     if price is not None and price.word in GRANARY_SALE and not ctx.done_today("granary rice"):
         due = price.word == "dear" or (weekday(p) or 0) % 2 == 0
-        amount = round(GRANARY_SALE[price.word] * (1 - lean))  # less while the treasury is above its start, more below
+        amount = round(GRANARY_SALE[price.word] * (1 - lean / 2))  # ×0.5-1.5: less while the treasury is high
         ctx.mark_done("granary rice")
         if due and amount >= 2:
             _set(ctx, "fetch rice", amount)
