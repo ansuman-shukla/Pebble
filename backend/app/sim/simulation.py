@@ -18,7 +18,7 @@ from app.observability.events import (
     Perceived,
     TickSummary,
 )
-from app.sim import actions, ecology, feed_animals, feed_citizens, movement, resting, systems
+from app.sim import actions, ecology, feed_animals, feed_citizens, market, movement, resting, systems
 from app.sim.acting import refuse
 from app.sim.bodies import COLLAPSE_WAKE_ENERGY, HOT_BIOMES, Crossing, update_body
 from app.sim.citizens import CitizenSpec, CitizensSpec, store_ids
@@ -242,7 +242,7 @@ class Simulation:
 
     def perceive(self, citizen_id: str) -> Perception:
         citizen = self._actor(citizen_id)
-        perception = perceive(self.core, citizen)
+        perception = perceive(self.core, citizen, market.market_view(self.core, citizen))
         self.core.emit(
             "perceived",
             Perceived(kind="look_around", text=perception.text()),

@@ -40,8 +40,10 @@ def test_the_cast_starts_with_the_whole_money_supply_in_purses_and_the_treasury(
 
 def test_a_purse_is_carried_and_said(new_sim: Callable[..., Simulation]) -> None:
     sim = _town(new_sim)
-    assert "five strings of coins" in WorldApi(sim, "fumiko").check_self().carrying
-    assert "five coins" in WorldApi(sim, "hana").check_self().carrying
+    fumiko, hana = WorldApi(sim, "fumiko").check_self(), WorldApi(sim, "hana").check_self()
+    assert (fumiko.purse, hana.purse) == ("five strings of coins", "five coins")
+    assert not any("coin" in words for words in [*fumiko.carrying, *hana.carrying])  # said once, as the purse
+    assert "You have five coins." in hana.text()
 
 
 def test_only_stores_can_be_stocked(new_sim: Callable[..., Simulation]) -> None:

@@ -163,7 +163,10 @@ def told_full(result: ActionResult | None) -> bool:
 
 
 def carries(perception: Perception, item: str) -> bool:
-    return any(line.endswith(f" {item}") or line.endswith(item.rstrip("s")) for line in perception.you.carrying)
+    """Whether the words for what you carry name the item (coins: your purse)."""
+    you = perception.you
+    lines = [*you.carrying, *([you.purse] if you.purse else [])]
+    return any(line.endswith(f" {item}") or line.endswith(item.rstrip("s")) for line in lines)
 
 
 def food_value(food: dict[str, int]) -> float:
