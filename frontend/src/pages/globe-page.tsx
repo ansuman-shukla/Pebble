@@ -485,6 +485,8 @@ const GlobeScene = memo(function GlobeScene({
           stages={nodeStages}
           focusRef={focusRef}
           radius={terrain.globe.radius}
+          terrain={terrain}
+          town={walkTown}
         />
         <GlobeStacks
           stacks={live.stacks}

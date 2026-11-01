@@ -8,6 +8,7 @@ import {
 } from 'three';
 
 import type { LiveMessage, LiveStack } from '../../src/lib/live/live-contract';
+import { assetSize, PROPS } from '../../src/lib/world/assets';
 import { directionFromLatLon, tangentFrame } from '../../src/lib/world/globe';
 import {
   EASE_SECONDS,
@@ -19,6 +20,7 @@ import {
 import { FALL_SECONDS } from '../../src/lib/world/node-field';
 import { NodeStages } from '../../src/lib/world/node-stages';
 import type { NodeInstance, Scatter } from '../../src/lib/world/scatter';
+import type { PlaceOnGround } from '../../src/lib/world/walk-charts';
 import { DRAW_CALL_BUDGET, openGlobe } from './globe-helpers';
 
 /*
@@ -72,21 +74,41 @@ function stack(
   return { id, item, count, unit: [unit.x, unit.y, unit.z], cell: 0 };
 }
 
-function field(trees: NodeInstance[] = []) {
+/** The drawn ground: a sphere of radius R, or rising `rise` metres a metre eastward of the focus. */
+function ground(rise = 0): PlaceOnGround {
+  return (unit, target) => {
+    const point = target.copy(unit).normalize().multiplyScalar(R);
+    const eastward = point.clone().sub(FOCUS).dot(east);
+    return target
+      .copy(unit)
+      .normalize()
+      .multiplyScalar(R + rise * eastward);
+  };
+}
+
+function field(trees: NodeInstance[] = [], place = ground()) {
   const looks: StackLookMeshes[] = LOOKS.map((look) => ({
     look,
     meshes: [new InstancedMesh(new BoxGeometry(), new MeshBasicMaterial(), 16)],
   }));
+  /** What the field asked of the world: ground samples and tree searches. */
+  const asked = { ground: 0, trees: 0 };
   const scatter = {
-    cellsAround: () => [0],
+    cellsAround: () => {
+      asked.trees += 1;
+      return [0];
+    },
     nodes: () => trees,
   } as unknown as Scatter;
   const stages = new NodeStages();
-  const place = (unit: Vector3, target: Vector3) =>
-    target.copy(unit).normalize().multiplyScalar(R);
+  const counted: PlaceOnGround = (unit, target) => {
+    asked.ground += 1;
+    return place(unit, target);
+  };
   return {
-    field: new StackField(looks, scatter, stages, place),
+    field: new StackField(looks, scatter, stages, counted),
     stages,
+    asked,
     meshes: new Map(looks.map((look) => [look.look, look.meshes[0]])),
   };
 }
@@ -128,13 +150,13 @@ test("a felled tree's logs lie beside its stump along the fall once it lands, sh
   expect(meshes.get('firewood')!.visible).toBe(false); // not as a woodpile too
   const fall = tangentFrame(oak.position).east;
   const offset = new Vector3(...pile.position).sub(oak.position);
-  expect(offset.dot(fall)).toBeCloseTo(2, 6);
-  expect(offset.length()).toBeCloseTo(2, 6);
+  expect(offset.dot(fall)).toBeCloseTo(2, 3);
+  expect(offset.length()).toBeCloseTo(2, 3);
   f.frame(FOCUS, false, 11 + FALL_SECONDS); // grown in
   expect(f.drawn()[0].scale).toBeCloseTo(1, 6);
   const whole = logs.getMatrixAt(0, new Matrix4());
   const along = new Vector3().setFromMatrixColumn(whole, 0);
-  expect(along.clone().normalize().dot(fall)).toBeCloseTo(1, 6);
+  expect(along.clone().normalize().dot(fall)).toBeCloseTo(1, 4);
   expect(along.length()).toBeCloseTo(1, 6);
 
   // four of the ten carried off: the logs shorten (along the fall only) to six tenths
@@ -179,7 +201,7 @@ test("a page opened after the felling draws the logs at once, along the tree's t
   const [pile] = f.drawn();
   expect([pile.look, pile.tree, pile.scale]).toEqual(['fallen_log', oak.id, 1]);
   const offset = new Vector3(...pile.position).sub(oak.position);
-  expect(offset.dot(tangentFrame(oak.position).south)).toBeCloseTo(2, 6);
+  expect(offset.dot(tangentFrame(oak.position).south)).toBeCloseTo(2, 3);
   expect(meshes.get('fallen_log')!.count).toBe(1);
 });
 
@@ -256,6 +278,56 @@ test('nothing is drawn while the camera is too high', () => {
   expect(f.drawn()).toEqual([]);
   f.frame(FOCUS, false, 3 * EASE_SECONDS);
   expect(meshes.get('firewood')!.visible).toBe(true);
+});
+
+test("on a slope a felled tree's logs lie with both ends on the ground", () => {
+  const half = assetSize(PROPS.fallen_log).x / 2;
+  for (const rise of [-0.5, 0.35]) {
+    const place = ground(rise);
+    const oak = { ...tree('flora:40427', 20, 0), bearing: Math.PI / 2 }; // falls east
+    const { field: f, meshes } = field([oak], place);
+    f.set([stack('stack-26', 'wood', 10, oak.position)], 0);
+    f.frame(FOCUS, false, EASE_SECONDS);
+    const matrix = meshes.get('fallen_log')!.getMatrixAt(0, new Matrix4());
+    for (const x of [-half, half]) {
+      const end = new Vector3(x, 0, 0).applyMatrix4(matrix);
+      const under = place(end.clone().normalize(), new Vector3());
+      expect(end.distanceTo(under)).toBeLessThan(0.1);
+    }
+    // the log tilts with the ground: its far end that much higher (lower) over its length along the slope
+    const near = new Vector3(-half, 0, 0).applyMatrix4(matrix);
+    const far = new Vector3(half, 0, 0).applyMatrix4(matrix);
+    expect(far.length() - near.length()).toBeCloseTo(
+      (rise * 2 * half) / Math.hypot(1, rise),
+      2,
+    );
+  }
+});
+
+test('flat looks lie along the slope, models stand up off the planet', () => {
+  const rise = 0.5;
+  const { field: f, meshes } = field([], ground(rise));
+  f.set(
+    [
+      stack('stack-1', 'hide', 1, at(4, 2)),
+      stack('stack-2', 'wood', 12, at(-4, 2)),
+    ],
+    0,
+  );
+  f.frame(FOCUS, false, EASE_SECONDS);
+  const upOf = (look: StackLook) =>
+    new Vector3()
+      .setFromMatrixColumn(meshes.get(look)!.getMatrixAt(0, new Matrix4()), 1)
+      .normalize();
+  const up = tangentFrame(at(4, 2)).up;
+  const slope = up
+    .clone()
+    .addScaledVector(tangentFrame(at(4, 2)).east, -rise)
+    .normalize();
+  expect(upOf('hide').dot(slope)).toBeGreaterThan(0.999);
+  expect(upOf('firewood').dot(tangentFrame(at(-4, 2)).up)).toBeGreaterThan(
+    0.9999,
+  );
 });
 
 type StacksWindow = {

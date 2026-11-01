@@ -23,7 +23,7 @@ import {
 import { tierMeshes } from '@/lib/world/instanced-tiers';
 import type { NodeStages } from '@/lib/world/node-stages';
 import type { Scatter } from '@/lib/world/scatter';
-import { groundUnder, type WalkTown } from '@/lib/world/walk-charts';
+import { groundPlacer, type WalkTown } from '@/lib/world/walk-charts';
 
 /*
  * Everything lying on the ground near the camera's focus, from the live feed's stacks (ground-stacks.ts): logs,
@@ -85,16 +85,11 @@ export function GlobeStacks({
       mesh.receiveShadow = true;
       return { look, meshes: [mesh] };
     });
-    const radius = terrain.globe.radius;
-    const scratch = new Vector3();
     const field = new StackField(
       [...modelLooks, ...drawnLooks],
       scatter,
       stages,
-      (unit, target) =>
-        target
-          .copy(unit)
-          .multiplyScalar(radius + groundUnder(terrain, town, unit, scratch)),
+      groundPlacer(terrain, town),
     );
     return { field, material, drawnLooks };
   }, [models, scatter, stages, terrain, town]);

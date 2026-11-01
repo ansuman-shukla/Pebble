@@ -2,9 +2,10 @@
  * What lies on the ground, as the live feed's `stacks` say (10 §5.2): a felled tree's logs, meat a predator left at
  * the remains, wood brought to a camp, goods put down. Stacks of one item on one spot draw as one pile of their total;
  * a pile's size follows its count (by volume), so taking some shrinks it and taking the last makes it go. Wood lying
- * on a felled tree's trunk is that tree's logs: a fallen log beside the stump along the fall (shorter as logs are
- * carried off), shown once the tree has landed. Piles are drawn within REACH of the camera's focus, instanced per look
- * (one draw call per look part with anything in it); a pile grows in when it appears and shrinks away when it goes.
+ * on a felled tree's trunk is that tree's logs: a fallen log beside the stump along the fall, its ends on the ground
+ * (felled-logs.ts; shorter as logs are carried off), shown once the tree has landed. Piles are drawn within REACH of
+ * the camera's focus, instanced per look (one draw call per look part with anything in it); a pile grows in when it
+ * appears and shrinks away when it goes.
  */
 import { InstancedMesh, Matrix4, Quaternion, Vector3 } from 'three';
 
@@ -12,12 +13,14 @@ import type { LiveStack } from '@/lib/live/live-contract';
 
 import type { PropKind } from './assets';
 import { LOGS_LOOK, TREE_NODES } from './biome-props';
+import { lyingLogs } from './felled-logs';
 import { tangentFrame } from './globe';
 import { DRAWN_STACK_PROPS, type DrawnStackProp } from './ground-stack-props';
 import { fillMeshes, hideMeshes } from './instanced-tiers';
-import { FALL_SECONDS, logsMatrix } from './node-field';
+import { FALL_SECONDS } from './node-field';
 import type { NodeStages } from './node-stages';
 import type { NodeInstance, Scatter } from './scatter';
+import type { PlaceOnGround } from './walk-charts';
 
 export type StackLook = PropKind | DrawnStackProp;
 
@@ -27,6 +30,8 @@ export const REACH = 300;
 const RESPLIT = 20;
 /** Stacks of one item closer than this draw as one pile. */
 const SAME_SPOT_M = 0.3;
+/** A flat look tilts with the ground sampled this far either side of it. */
+const SLOPE_M = 0.4;
 /** Wood within this of a tree's trunk is that tree's logs. */
 const ON_TRUNK_M = 0.5;
 /** A felled tree's logs: the count drawn whole (10 §1.1: a tree gives 10). */
@@ -106,9 +111,6 @@ export interface StackLookMeshes {
   look: StackLook;
   meshes: InstancedMesh[];
 }
-
-/** Where a direction from the planet's centre meets the drawn ground (world metres). */
-export type PlaceOnGround = (unit: Vector3, target: Vector3) => Vector3;
 
 /** What the page's test hooks read of a drawn pile. */
 export interface DrawnStack {
@@ -267,15 +269,16 @@ export class StackField {
     this.dirty = true;
   }
 
-  /** A felled tree's logs beside its stump, along the way it fell. */
+  /** A felled tree's logs on the ground beside its stump, along the way it fell (felled-logs.ts). */
   private logsBase(tree: NodeInstance) {
-    return logsMatrix({
-      ...tree,
-      bearing: this.stages.fallBearing(tree.id) ?? tree.bearing,
-    });
+    const bearing = this.stages.fallBearing(tree.id) ?? tree.bearing;
+    return lyingLogs(tree, bearing, this.place).model;
   }
 
-  /** A pile on the ground at its point (meat beside it), turned its own way about the up direction. */
+  /**
+   * A pile on the ground at its point (meat beside it), turned its own way about its up: the ground's slope for the
+   * flat looks drawn from code (a hide, cloth), the planet's up for the rest.
+   */
   private pileBase(unit: Vector3, look: StackLook, key: string) {
     const turn = hashOf(key) * 2 * Math.PI;
     const { up, east, north } = tangentFrame(unit);
@@ -289,10 +292,30 @@ export class StackField {
       point.addScaledVector(aside, MEAT_ASIDE_M / radius).normalize();
     }
     const position = this.place(point, new Vector3());
+    const standing = isDrawnProp(look) ? this.slopeUp(point, position) : up;
     const rotation = new Quaternion()
-      .setFromUnitVectors(yAxis, up)
+      .setFromUnitVectors(yAxis, standing)
       .multiply(new Quaternion().setFromAxisAngle(yAxis, turn));
     return new Matrix4().compose(position, rotation, new Vector3(1, 1, 1));
+  }
+
+  /** The drawn ground's up at a point: across the ground SLOPE_M east-west and north-south of it. */
+  private slopeUp(unit: Vector3, at: Vector3) {
+    const { east, north } = tangentFrame(unit);
+    const radius = at.length();
+    const ground = (dx: number, dz: number) =>
+      this.place(
+        unit
+          .clone()
+          .addScaledVector(east, dx / radius)
+          .addScaledVector(north, dz / radius)
+          .normalize(),
+        new Vector3(),
+      );
+    const eastward = ground(SLOPE_M, 0).sub(ground(-SLOPE_M, 0));
+    const northward = ground(0, SLOPE_M).sub(ground(0, -SLOPE_M));
+    const normal = new Vector3().crossVectors(eastward, northward).normalize();
+    return normal.dot(at) < 0 ? normal.negate() : normal;
   }
 
   /** A pile's size at client time `now`: easing from where it was to its target. */

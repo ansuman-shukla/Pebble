@@ -16,9 +16,11 @@ import {
   type NodeLook,
   SAPLING_SCALE,
 } from '../../src/lib/world/node-field';
+import { lyingLogs } from '../../src/lib/world/felled-logs';
 import { NodeStages } from '../../src/lib/world/node-stages';
 import type { NodeInstance, Scatter } from '../../src/lib/world/scatter';
 import { StageTexture } from '../../src/lib/world/staged-material';
+import type { PlaceOnGround } from '../../src/lib/world/walk-charts';
 
 /*
  * The node field without a browser: what each node draws as its stage changes (a picked bush, a chopped tree that
@@ -63,7 +65,22 @@ function node(
   };
 }
 
-function field(nodes: NodeInstance[]) {
+/** The drawn ground: a sphere of radius R ... */
+const FLAT: PlaceOnGround = (unit, target) =>
+  target.copy(unit).normalize().multiplyScalar(R);
+/** ... or rising `rise` metres a metre eastward of the focus (falling westward). */
+const sloped =
+  (rise: number): PlaceOnGround =>
+  (unit, target) => {
+    const point = target.copy(unit).normalize().multiplyScalar(R);
+    const eastward = point.clone().sub(FOCUS).dot(east);
+    return target
+      .copy(unit)
+      .normalize()
+      .multiplyScalar(R + rise * eastward);
+  };
+
+function field(nodes: NodeInstance[], place: PlaceOnGround = FLAT) {
   const meshes = (capacity: number) => [
     new InstancedMesh(new BoxGeometry(), new MeshBasicMaterial(), capacity),
   ];
@@ -87,7 +104,7 @@ function field(nodes: NodeInstance[]) {
     0,
   );
   return {
-    field: new NodeField(looks, scatter, stages),
+    field: new NodeField(looks, scatter, stages, place),
     stages,
     looks: new Map(looks.map((l) => [l.kind, l])),
   };
@@ -213,7 +230,7 @@ function topOf(mesh: InstancedMesh, slot: number, base: Vector3) {
   return new Vector3(0, 10, 0).applyMatrix4(matrix).sub(base);
 }
 
-test('a chopped tree shakes, falls along its bearing for 2 s, then lies as logs by its stump', () => {
+test('a chopped tree shakes, falls along its bearing for 2 s, then stands as a stump', () => {
   const oak = node('flora:9', 'oak_tree', 'tree', 20, 0, 0);
   const { field: f, stages, looks } = field([oak]);
   const meshes = looks.get('oak_tree')!.near;
@@ -271,6 +288,26 @@ test('a chopped tree shakes, falls along its bearing for 2 s, then lies as logs 
   expect(
     new Vector3(...after[0].position).distanceTo(oak.position),
   ).toBeLessThan(1e-6);
+});
+
+test('on a slope a felled tree lands along the ground line its logs lie on', () => {
+  for (const rise of [-0.4, 0.3]) {
+    const oak = node('flora:9', 'oak_tree', 'tree', 20, 0, 0);
+    const place = sloped(rise);
+    const { field: f, stages, looks } = field([oak], place);
+    stages.apply(
+      event('tree_felled', { node: 'flora:9', yaw_deg: 90, logs: 10 }),
+      0,
+    ); // falls east: downhill for a negative rise, uphill for a positive one
+    f.frame(FOCUS, false, FALL_SECONDS * 0.9999);
+    const top = topOf(looks.get('oak_tree')!.near[0], 0, oak.position);
+    const { axis } = lyingLogs(oak, Math.PI / 2, place);
+    expect(top.normalize().dot(axis)).toBeGreaterThan(0.9999);
+    const up = oak.position.clone().normalize();
+    // past the horizontal downhill, short of it uphill
+    if (rise < 0) expect(axis.dot(up)).toBeLessThan(-0.3);
+    else expect(axis.dot(up)).toBeGreaterThan(0.25);
+  }
 });
 
 test('a felled tree draws no logs of its own: a deadwood pile beside it keeps its slot and stage', () => {

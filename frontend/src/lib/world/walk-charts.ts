@@ -171,3 +171,20 @@ export function groundUnder(
     ? town.height
     : terrain.heightAt(direction);
 }
+
+/** Where a direction from the planet's centre meets the drawn ground (world metres). */
+export type PlaceOnGround = (unit: Vector3, target: Vector3) => Vector3;
+
+/** Places directions on the drawn ground: the town's disc, else the terrain. */
+export function groundPlacer(
+  terrain: GlobeTerrain,
+  town: WalkTown,
+): PlaceOnGround {
+  const scratch = new Vector3();
+  const radius = terrain.globe.radius;
+  return (unit, target) =>
+    target
+      .copy(unit)
+      .normalize()
+      .multiplyScalar(radius + groundUnder(terrain, town, unit, scratch));
+}

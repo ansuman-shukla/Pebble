@@ -6,6 +6,7 @@ import { type Material, MeshDepthMaterial, type Vector3 } from 'three';
 import { kindModel } from '@/components/world/kind-parts';
 import { assetSize, assetUrl, PROPS, type PropKind } from '@/lib/world/assets';
 import { NODE_LOOK_KINDS, STAGED_LOOKS } from '@/lib/world/biome-props';
+import type { GlobeTerrain } from '@/lib/world/globe';
 import {
   type KindPart,
   type PartLooks,
@@ -21,6 +22,7 @@ import type { NodeStages } from '@/lib/world/node-stages';
 import type { Scatter } from '@/lib/world/scatter';
 import { StageTexture } from '@/lib/world/staged-material';
 import { withChunks } from '@/lib/world/vertex-chunks';
+import { groundPlacer, type WalkTown } from '@/lib/world/walk-charts';
 import { windChunk } from '@/lib/world/wind';
 
 /*
@@ -78,11 +80,16 @@ export function GlobeNodes({
   stages,
   focusRef,
   radius,
+  terrain,
+  town,
 }: {
   scatter: Scatter;
   stages: NodeStages;
   focusRef: RefObject<Vector3>;
   radius: number;
+  /** The drawn ground a falling tree lands on. */
+  terrain: GlobeTerrain;
+  town: WalkTown;
 }) {
   const models = useGLTF(NODE_LOOK_KINDS.map((kind) => assetUrl(PROPS[kind])));
   const { field, made } = useMemo(() => {
@@ -124,8 +131,9 @@ export function GlobeNodes({
         stages: rows,
       };
     });
-    return { field: new NodeField(looks, scatter, stages), made };
-  }, [models, scatter, stages]);
+    const place = groundPlacer(terrain, town);
+    return { field: new NodeField(looks, scatter, stages, place), made };
+  }, [models, scatter, stages, terrain, town]);
   useEffect(
     () => () => {
       field.dispose();

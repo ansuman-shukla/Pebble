@@ -3,8 +3,8 @@
  * gathered when the focus moves more than REBUILD metres; the instances are split into tiers (within SHADOW_REACH
  * the set that casts shadows, then each look's reach) every RESPLIT metres and whenever a node's stage changes.
  * A standing tree shakes while someone chops it, falls FALL_SECONDS along its bearing when felled, then stands as
- * a stump until it grows back as a sapling (its logs are a ground stack: ground-stacks.ts); other nodes draw their
- * stock through the staged material (staged-material.ts).
+ * a stump until it grows back as a sapling (it lands on the ground line its logs lie on, felled-logs.ts; the logs are
+ * a ground stack: ground-stacks.ts); other nodes draw their stock through the staged material (staged-material.ts).
  */
 import { type InstancedMesh, Matrix4, Vector3 } from 'three';
 
@@ -19,7 +19,8 @@ import {
   type Stage,
   type StageTexture,
 } from './staged-material';
-import { tangentFrame } from './globe';
+import { fallDirection, landingAngle } from './felled-logs';
+import type { PlaceOnGround } from './walk-charts';
 
 const SHADOW_REACH = 70;
 const REBUILD = 100;
@@ -34,8 +35,6 @@ const SHAKE_HZ = 3;
 /** A stump is drawn at this share of its tree's scale, a sapling at this one. */
 const STUMP_SCALE = 0.9;
 export const SAPLING_SCALE = 0.3;
-/** The logs lie this far (× the tree's scale) out along the fall from the trunk. */
-const LOGS_OFFSET = 2;
 
 /** One look's instanced meshes (one per merged part) per tier, and its stage rows when it is drawn by stage. */
 export interface NodeLook {
@@ -57,6 +56,8 @@ interface Draw {
   model: Matrix4;
   stage: Stage | null;
   motion: Motion | null;
+  /** A falling tree turns this far (radians) to land on the ground line its logs lie on (felled-logs.ts). */
+  landing?: number;
 }
 
 /** A drawn instance whose matrix moves every frame. */
@@ -79,21 +80,10 @@ export interface DrawnNode {
 const up = new Vector3();
 const along = new Vector3();
 const axis = new Vector3();
-const across = new Vector3();
 const turn = new Matrix4();
 const shift = new Matrix4();
 const back = new Matrix4();
 const moved = new Matrix4();
-const unit = new Vector3();
-
-/** The way a tree at `position` falls: its compass bearing on the tangent plane. */
-function fallDirection(position: Vector3, bearing: number, target: Vector3) {
-  const { east, north } = tangentFrame(position);
-  return target
-    .copy(north)
-    .multiplyScalar(Math.cos(bearing))
-    .addScaledVector(east, Math.sin(bearing));
-}
 
 /** `model` turned `angle` about the horizontal axis through the node's base that tips its top along its fall. */
 function tipped(
@@ -113,18 +103,6 @@ function tipped(
     .multiply(model);
 }
 
-/** A felled tree's logs: lying along its fall beside the trunk (drawn by the ground stacks). */
-export function logsMatrix(node: NodeInstance) {
-  up.copy(node.position).normalize();
-  fallDirection(node.position, node.bearing, along);
-  across.crossVectors(along, up);
-  const model = new Matrix4().makeBasis(along, up, across);
-  model.scale(unit.setScalar(node.scale));
-  return model.setPosition(
-    node.position.clone().addScaledVector(along, LOGS_OFFSET * node.scale),
-  );
-}
-
 export class NodeField {
   private looks: Map<PropKind, NodeLook>;
   private builtAt: Vector3 | null = null;
@@ -142,6 +120,7 @@ export class NodeField {
     looks: readonly NodeLook[],
     private readonly scatter: Scatter,
     private readonly stages: NodeStages,
+    private readonly place: PlaceOnGround,
   ) {
     this.looks = new Map(looks.map((look) => [look.kind, look]));
   }
@@ -159,7 +138,8 @@ export class NodeField {
       const plain = { node, stage: null, motion: null } as const;
       if (fell !== undefined && now - fell < FALL_SECONDS) {
         this.nextLanding = Math.min(this.nextLanding, fell + FALL_SECONDS);
-        return [{ ...plain, look: node.kind, model, motion: 'fall' }];
+        const landing = landingAngle(node, node.bearing, this.place);
+        return [{ ...plain, look: node.kind, model, motion: 'fall', landing }];
       }
       if (fell !== undefined || isStump(state?.stage ?? null)) {
         const stump = scatterMatrix({
@@ -249,7 +229,8 @@ export class NodeField {
       const fell = this.stages.fellAt(draw.node.id);
       const angle =
         draw.motion === 'fall' && fell !== undefined
-          ? (Math.PI / 2) * Math.min((now - fell) / FALL_SECONDS, 1) ** 2
+          ? (draw.landing ?? Math.PI / 2) *
+            Math.min((now - fell) / FALL_SECONDS, 1) ** 2
           : SHAKE_ANGLE * Math.sin(2 * Math.PI * SHAKE_HZ * now);
       tipped(draw.node, draw.model, angle, moved);
       for (const mesh of meshes) {
