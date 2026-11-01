@@ -12,10 +12,10 @@
   or dead: one `released` each time (judged, timeout, seizer_down).
 - **Judge** (15 min, within 4 m): the lord inside the castle walls, or a band leader within 15 m of the band's fire
   pit; the target held or confined; the judge must know a deed of theirs not yet judged or, the lord, their
-  household's overdue tax. A fine takes the purse's coins, then the household chest's, then goods at their town
-  value; those robbed are paid what they lost first, the rest goes to the treasury (in a band: to the leader). A fine
-  not paid in full keeps them in custody and leaves its deeds open to a confinement. Confinement is in the gaol in
-  town, tied at the fire in a band, and never outlasts the custody's 12 h.
+  household's tax overdue 3 days running. A fine takes the purse's coins, then the household chest's, then goods at
+  their town value; those robbed are paid what they lost first, the rest goes to the treasury. A fine not paid in full
+  keeps them in custody and leaves its deeds open to a confinement. Confinement is in the gaol in town, tied at the
+  fire in a band, and never outlasts the custody's 12 h.
 - **Tend** (30 min, reach 2 m, the healing skill): the hurt person gains 3 health an hour while tended (`tended`).
 
 The system `justice` keeps who is in custody, the deeds judged, what each theft or poaching took (from its event, the
@@ -70,6 +70,7 @@ TEND_MINUTES = 30
 TEND_REACH_M = 2.0
 TEND_PER_HOUR = 3.0
 CUSTODY_HOURS = 12  # the gaol has water but no food
+ARREARS_DAYS = 3  # days of `tax_overdue` running before the lord may fine a household's arrears
 HEALING = "healing"
 ARMS = "arms"
 TREASURY = KEEP + CHEST
@@ -537,9 +538,10 @@ def _open_deeds(core: SimCore, judge: Citizen, person: Citizen) -> list[int]:
 
 
 def _overdue(core: SimCore, person: Citizen) -> bool:
-    """Their household owes tax past its time (a `tax_overdue` was told and is still unpaid)."""
+    """Their household has owed tax past its time for ARREARS_DAYS local midnights running (§3.4: 3 days
+    `tax_overdue`), still unpaid."""
     owed = tax.TAX.of(core.state).accounts.get(person.home or "")
-    return owed is not None and owed.days > 0 and bool(owed.rice or owed.arrears)
+    return owed is not None and owed.days >= ARREARS_DAYS and bool(owed.rice or owed.arrears)
 
 
 def _mark_judged(core: SimCore, deeds: list[int]) -> None:

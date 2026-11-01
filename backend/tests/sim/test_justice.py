@@ -271,10 +271,24 @@ def test_nobody_is_judged_without_a_known_deed_or_arrears(
     for sentence in (Fine(mon=5), Confinement(hours=2)):
         refused = _done(sim, lord.judge("Tokuji", sentence), 20)
         assert (refused.outcome, refused.text) == ("failed", "You know of no wrong done by Tokuji.")
-    _arrears(sim, "farmhouse-2", 12, days=1)
+    _arrears(sim, "farmhouse-2", 12, days=justice.ARREARS_DAYS)
     confined = _done(sim, lord.judge("Tokuji", Confinement(hours=2)), 20)
     assert confined.text == "Tax owed is paid in coin or rice, not in confinement."
     assert _of(sim.drain(), Judged) == []
+
+
+@pytest.mark.parametrize(("days", "fined"), [(2, False), (3, True)])
+def test_overdue_tax_is_fined_only_after_three_days(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch, days: int, fined: bool
+) -> None:
+    sim = _court_scene(new_sim)
+    _arrears(sim, "farmhouse-2", 12, days=days)
+    _seize(sim, "kenji", "tokuji", monkeypatch)
+    judged = _done(sim, WorldApi(sim, "masanori").judge("Tokuji", Fine(mon=12)), 20)
+    assert (judged.outcome == "done") == fined
+    assert judged.text == (
+        "You fine Tokuji twelve coins; it is paid." if fined else "You know of no wrong done by Tokuji."
+    )
 
 
 def test_a_judged_deed_is_never_judged_twice(
