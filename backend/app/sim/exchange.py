@@ -7,7 +7,7 @@ from app.sim import ownership, tax
 from app.sim.acting import capital, carried_name, item_amount, item_name, refuse, stack_in_reach
 from app.sim.citizens import store_ids
 from app.sim.core import HEARING_M, KEPT_HEARD, REACH_M, SimCore
-from app.sim.items import ITEMS, amount_words
+from app.sim.items import ITEMS, TOOL_ORDER, TOOL_WORDS, amount_words
 from app.sim.perception import match_person, normalize, person_label
 from app.sim.state import Citizen, Heard
 from app.world_api.models import ActionResult, Drop, Give, PickUp, Say, Stash, Volume
@@ -44,7 +44,7 @@ def say(core: SimCore, citizen: Citizen, action: Say) -> ActionResult:
 
 
 def pick_up(core: SimCore, citizen: Citizen, action: PickUp) -> ActionResult:
-    item = item_name(action.item)
+    item = item_name(action.item) or tool_in_reach(core, citizen, action.item)
     stack_id = stack_in_reach(core, citizen, item) if item else None
     store_id = store_in_reach(core, citizen, item) if item and stack_id is None else None
     if item is None or (stack_id is None and store_id is None):
@@ -68,6 +68,21 @@ def pick_up(core: SimCore, citizen: Citizen, action: PickUp) -> ActionResult:
         ItemLocation(kind="inventory", id=citizen.id),
     )
     return ActionResult(action="pick_up", outcome="done", text=f"You pick up {amount_words(count, ITEMS[item])}.")
+
+
+def tool_in_reach(core: SimCore, citizen: Citizen, words: str) -> str | None:
+    """For a bare tool word ("the spear", "an axe"), the best of that tool lying or stored within reach."""
+    last = normalize(words).split()[-1:]
+    if not last or last[0] not in TOOL_WORDS:
+        return None
+    return next(
+        (
+            item
+            for item in TOOL_ORDER[TOOL_WORDS[last[0]]]
+            if stack_in_reach(core, citizen, item) is not None or store_in_reach(core, citizen, item) is not None
+        ),
+        None,
+    )
 
 
 def _take_from_store(core: SimCore, citizen: Citizen, item: str, store_id: str, wanted: int) -> ActionResult:
