@@ -70,16 +70,18 @@ def test_band_b_deeds_need_six_one_seen_and_judged_and_one_unseen(new_sim: Calla
     from app.observability.events import Judged, Trespassed
 
     sim = new_sim()
-    kaz = _band(sim, "kaz", "band_b")
+    kaz, nim, goro = _band(sim, "kaz", "band_b"), _band(sim, "nim", "band_b"), sim.add_citizen(make_spec("goro")).id
     check = br2.BandBDeeds()
     check.start(sim)
-    seen = Trespassed(kind="walls", owner="town", place="the castle town", witnesses=["goro"])
+    seen = Trespassed(kind="walls", owner="town", place="the castle town", witnesses=[goro])
     unseen = Trespassed(kind="ground", owner="town", place="the Lord's woods")
+    mates = Trespassed(kind="walls", owner="town", place="the castle town", witnesses=[nim])  # only a fellow raider
     check.after_step(sim, [_event(sim, "trespassed", kaz, seen), _event(sim, "trespassed", kaz, unseen)])
+    check.after_step(sim, [_event(sim, "trespassed", kaz, mates)])
     check.after_step(sim, [_event(sim, "judged", "masanori", Judged(person=kaz, sentence="fine", fine_mon=5))])
     one = check.outcome(sim)
-    assert (one.value, one.judged, one.unseen) == (2, 1, 1)
-    assert not br2.BandBDeeds.overall({1: one}).ok  # only 2 deeds
+    assert (one.value, one.judged, one.unseen) == (3, 1, 2)
+    assert not br2.BandBDeeds.overall({1: one}).ok  # only 3 deeds
     assert br2.BandBDeeds.overall({1: one, 7: br2.DeedsSeen(4, True, "", 0, 4)}).ok
     assert not br2.BandBDeeds.overall({1: br2.DeedsSeen(6, True, "", 0, 6)}).ok  # none judged
 

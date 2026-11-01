@@ -125,11 +125,11 @@ class DeedsSeen(Outcome):
 
 
 class BandBDeeds(_OverSeeds):
-    """Band B's deeds (thefts and trespasses) over the seeds: ≥ 6, at least one witnessed and its doer judged after,
-    and at least one nobody saw (10 §3.3, §3.6)."""
+    """Band B's deeds (thefts and trespasses) over the seeds: ≥ 6, at least one witnessed by someone not of band B and
+    its doer judged after, and at least one no outsider saw (10 §3.3, §3.6)."""
 
     name = "br2.deeds"
-    pending = "witnessed-and-judged raid needs Q1 tuning"
+    pending = "raids steal from the racks unseen: Goro looks them over 15 min a round, 20 m night sight, ≥ 37 m off"
     least = 6
 
     @override
@@ -143,7 +143,8 @@ class BandBDeeds(_OverSeeds):
             payload, doer = event.payload, event.actor_id
             if isinstance(payload, Stole | Trespassed) and doer and sim.state.citizens[doer].region == "band_b":
                 self.count += 1
-                if payload.witnesses:
+                citizens = sim.state.citizens
+                if any(citizens[who].region != "band_b" for who in payload.witnesses):  # a raider's mates don't tell
                     self.seen[doer] = self.seen.get(doer, 0) + 1
                 else:
                     self.unseen += 1
