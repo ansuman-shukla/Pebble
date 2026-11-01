@@ -1,6 +1,7 @@
 /*
  * Picking a point on the rendered planet with a ray (a click on the screen): the first point where the ray
- * meets the ground or the sea surface, found by marching along it and refining by bisection.
+ * meets the ground or the sea surface, found by marching along it and refining by bisection. And whether the
+ * ground hides one point from another (a chip behind a hill).
  */
 import { Vector3 } from 'three';
 
@@ -53,4 +54,36 @@ export function pickSurface(
     height = nextHeight;
   }
   return null;
+}
+
+const sight = new Vector3();
+
+/** Hills hide what is behind them only when the line passes this far (m) under their ground (facets, flattened camps). */
+const HIDE_DEPTH = 1;
+/** The line is sampled about this often (m)... */
+const SIGHT_STEP = 25;
+/** ...at most this many times... */
+const SIGHT_SAMPLES = 48;
+/** ...but not within this many metres of the target (it stands on its own ground, maybe a dug-in camp). */
+const SIGHT_NEAR_TARGET = 20;
+
+/**
+ * Whether the ground (height above sea level `floorAt(direction)`) stands between `eye` and `target` on a planet of
+ * `radius`: a hill, or the planet's own bulge past the horizon.
+ */
+export function groundHides(
+  eye: Vector3,
+  target: Vector3,
+  radius: number,
+  floorAt: (direction: Vector3) => number,
+): boolean {
+  const length = eye.distanceTo(target);
+  const reach = length - SIGHT_NEAR_TARGET;
+  if (reach <= 0) return false;
+  const samples = Math.min(Math.ceil(reach / SIGHT_STEP), SIGHT_SAMPLES);
+  for (let k = 1; k <= samples; k++) {
+    sight.lerpVectors(eye, target, ((k / samples) * reach) / length);
+    if (sight.length() < radius + floorAt(sight) - HIDE_DEPTH) return true;
+  }
+  return false;
 }

@@ -68,7 +68,11 @@ import {
 import { TimeLapseTrails } from '@/components/world/globe/time-lapse-trails';
 import { VolcanoSmoke } from '@/components/world/globe/volcano-smoke';
 import { Waterfalls } from '@/components/world/globe/waterfalls';
-import { ChipOverlay, ChipProjector } from '@/components/world/labels';
+import {
+  ChipOverlay,
+  ChipProjector,
+  type Hides,
+} from '@/components/world/labels';
 import { LivingProps, PropHooks } from '@/components/world/living-props';
 import {
   CAMERA_MODES,
@@ -119,6 +123,7 @@ import {
   tangentFrame,
 } from '@/lib/world/globe';
 import { biomeColor } from '@/lib/world/globe-mesh';
+import { groundHides } from '@/lib/world/globe-pick';
 import { clipWater, TOWN_WATER_Y } from '@/lib/world/ground-shape';
 import type { LabelStore, UpAt } from '@/lib/world/label-store';
 import {
@@ -173,6 +178,8 @@ interface Planet {
   rivers: RiverLayout;
   scatter: Scatter;
   volcano: { frame: ReturnType<typeof tangentFrame>; summit: number } | null;
+  /** Whether the ground (the town's plateau, else the terrain) stands between two world points. */
+  hides: Hides;
 }
 
 function buildPlanet(
@@ -194,6 +201,13 @@ function buildPlanet(
     angle: Math.atan(TOWN_GROUND_RADIUS / (globe.radius + height)),
   };
   const mapping = anchorMapping(site.anchor, globe.radius);
+  const local = new Vector3();
+  const floorAt = (point: Vector3) => {
+    mapping.toLocal(point, local);
+    return Math.hypot(local.x, local.z) < TOWN_GROUND_RADIUS
+      ? height
+      : terrain.heightAt(point);
+  };
   return {
     view,
     sites: view.sites.map((candidate) => ({
@@ -239,6 +253,8 @@ function buildPlanet(
           summit: globe.radius + volcano.anchor.height_m,
         }
       : null,
+    hides: (camera, anchor) =>
+      groundHides(camera, anchor, globe.radius, floorAt),
   };
 }
 
@@ -545,7 +561,7 @@ const GlobeScene = memo(function GlobeScene({
         onPlayerMove={onPlayerMove}
         onReady={onWalkReady}
       />
-      <ChipProjector store={labels} pinned={pinned} />
+      <ChipProjector store={labels} pinned={pinned} hides={planet.hides} />
       <CitizenPicker views={npcViews} pickRef={pickRef} />
       <RenderStatsProbe
         key={cameraMode}

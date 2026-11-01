@@ -1,5 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
+import { Vector3 } from 'three';
 
+import type { WorldPlaces, WorldView } from '../../src/lib/client/types.gen';
 import { FULL_M, ICON_M } from '../../src/lib/world/label-layout';
 import {
   cameraOf,
@@ -10,6 +12,7 @@ import {
   openHeld,
   viewOf,
 } from './ui-helpers';
+import { atParam, WORLD_URL } from './globe-helpers';
 
 /* The globe's chips in the browser: tiers by distance, icons, clusters that never cover each other. */
 
@@ -217,5 +220,41 @@ test('a bubble names its speaker when the speaker has no chip of their own under
   const leaderBubble = page.locator(`[data-label="say-${leader}"]`);
   await expect(leaderBubble).toBeVisible();
   await expect(leaderBubble).toHaveText('Good.');
+  expect(errors).toEqual([]);
+});
+
+test('a selected citizen behind a hill gets no chip', async ({ page }) => {
+  const errors: string[] = [];
+  // at the Elder grove, looking down towards the town 900 m off past the hills (the critic's Daisuke)
+  const api = await page.request.get(`${WORLD_URL}/places`);
+  const places = (await api.json()) as WorldPlaces;
+  const grove = new Vector3(
+    ...places.hotspots.find((hotspot) => hotspot.id === 'elder_grove')!.centre,
+  ).normalize();
+  const view = (await (await page.request.get(WORLD_URL)).json()) as WorldView;
+  const town = new Vector3(
+    ...view.sites.find((site) => site.kind === 'town')!.anchor.position,
+  );
+  const facing = town.clone().sub(grove);
+  const world = await openHeld(page, errors, `&at=${atParam(grove, facing)}`);
+  const camera = await viewOf(page, world);
+  const people = await drawn(page);
+  const anchorOf = (at: Vector3) =>
+    at.clone().setLength(at.length() + CHIP_LIFT_M);
+  const [id] = [...people].find(
+    ([, person]) =>
+      person.at.distanceTo(camera.position) > 400 &&
+      person.at.distanceTo(camera.position) < 1500 &&
+      inView(camera, [anchorOf(person.at)]),
+  )!;
+  await page.getByRole('button', { name: 'people', exact: true }).click();
+  await page
+    .locator(`[data-person="${id}"]`)
+    .getByRole('button')
+    .first()
+    .click();
+  await expect(world).toHaveAttribute('data-selected', id);
+  await page.waitForTimeout(500);
+  await expect(page.locator(`[data-label="npc-${id}"]`)).toBeHidden();
   expect(errors).toEqual([]);
 });

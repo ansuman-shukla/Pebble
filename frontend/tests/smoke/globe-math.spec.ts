@@ -15,6 +15,7 @@ import {
   uint32FromBase64,
   uint32ToBase64,
 } from '../../src/lib/world/globe';
+import { groundHides } from '../../src/lib/world/globe-pick';
 import { icosphere } from '../../src/lib/world/icosphere';
 
 /* Pure globe math (no browser): frames, the site mapping, the terrain lookup and the array encodings. */
@@ -303,4 +304,27 @@ test('the refined surface keeps flats flat and meets its neighbour patches witho
   }
   expect(shared).toBe((globe.triangles.length / 2) * (n - 1));
   expect(gap).toBeLessThan(1e-6);
+});
+
+test('the ground hides a point behind a hill or past the horizon, not one in plain sight', () => {
+  const R = 2000;
+  /** A point `metres` along the planet's surface from the north pole, `height` above sea level. */
+  const at = (metres: number, height: number) =>
+    new Vector3(Math.sin(metres / R), Math.cos(metres / R), 0).multiplyScalar(
+      R + height,
+    );
+  const sea = () => 0;
+  expect(groundHides(at(0, 3), at(100, 2), R, sea)).toBe(false);
+  // 300 m off, the planet's bulge (5.6 m) stands between two heads
+  expect(groundHides(at(0, 3), at(300, 2), R, sea)).toBe(true);
+  const hill = (direction: Vector3) => {
+    const metres = Math.atan2(direction.x, direction.y) * R;
+    return metres > 30 && metres < 70 ? 30 : 0;
+  };
+  expect(groundHides(at(0, 3), at(100, 2), R, hill)).toBe(true);
+  // a target on a rise that stands a little over the line near it (its own ground) still shows
+  const rise = (direction: Vector3) =>
+    Math.atan2(direction.x, direction.y) * R > 85 ? 3.5 : 0;
+  expect(groundHides(at(0, 3), at(100, 2), R, rise)).toBe(false);
+  expect(groundHides(at(0, 3), at(15, 2), R, hill)).toBe(false);
 });
