@@ -11,7 +11,7 @@ from app.brains.senses import water_way
 from app.sim import fire as fires
 from app.sim.simulation import Simulation
 from app.sim.state import Fire
-from app.sim.vec import step_towards
+from app.sim.vec import Vec3, bearing_deg, step_towards
 from app.world_api.facade import WorldApi
 from app.world_api.models import Compass
 from tests.sim_helpers import (
@@ -206,8 +206,13 @@ def test_a_forager_with_a_full_load_stops_gathering_until_it_carries_less(
     brain.api.notes["asleep"] = True  # a new day (just woken): it tries once more
     brain.decide()
     assert brain.api.notes["last"] == first  # the child's gather shows the reset; the wood chore comes either way
+    for _ in range(10):  # that try ends (told full) and the brain hears it before the load lightens
+        sim.step()
+        brain.tick()
 
     forager.inventory["dried meat"] = 3  # carrying less now (say some was eaten): room to gather again
+    stand_at_node(sim, forager.id, bush)  # by the bush (wherever the flora puts it, camp may be out of its sight)
+    brain.api.notes["outing"] = 0  # on a fresh outing: its tries at the bush don't send it home first
     lighter = _gathers(sim, brain, 3 * 60)
     assert any(text.startswith("You gather") for text in lighter)
 
@@ -231,7 +236,12 @@ def test_a_forager_walks_to_the_fallen_wood_it_saw_not_the_camp_woodpile(new_sim
     gatherer = sim.add_citizen(
         make_spec("suna", site="band_a_camp", at=(0.0, 1.5), home=HOME_A, region="band_a", inventory={"roots": 30})
     )  # food enough for the outing: only the day's wood chore is left
-    # fallen wood a short way off (the camp's home ring holds six piles); the woodpile by the fire is closer
+    # fallen wood a short way off (the camp's home ring holds six piles, wherever its flora puts them): 100 m out
+    # from the fire towards the nearest pile; the woodpile by the fire is closer than the pile
+    camp = gatherer.position
+    x, y, z = (float(v) for v in sim.world.nodes.units[nearest_node(sim, "deadwood", camp)])
+    pile: Vec3 = (x, y, z)
+    sim.core.place_at(gatherer, step_towards(camp, bearing_deg(camp, pile), 100.0, sim.world.radius_m))
     api = WorldApi(sim, gatherer.id)
     skip_to(sim, gatherer.position, night=False)
     seen = api.look_around().things
