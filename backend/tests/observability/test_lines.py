@@ -210,6 +210,15 @@ BIBLE: list[Case] = [
         "Genzo's house is 1 day behind on tax (8 rice, 0 mon)",
         2,
     ),
+    # 2 too: a shout (a band's call to raid, a witness crying theft) is news for everyone in earshot
+    (
+        "said",
+        {"words": "Kaz stole rice from the racks!", "volume": "shout", "heard_by": ["goro"]},
+        "genzo",
+        "citizen",
+        "Genzo shouts: “Kaz stole rice from the racks!”",
+        2,
+    ),
     # 1: speech, a node emptied, a fire lit, an animal hurt or dead but not by a hunt or a predator, small news
     ("died", {"cause": "attacked by Tek"}, "deer:7", "animal", "A deer dies (attacked by Tek)", 1),
     (
@@ -221,6 +230,7 @@ BIBLE: list[Case] = [
         1,
     ),
     ("said", {"words": "Hello", "volume": "normal", "heard_by": []}, "ama", "citizen", "Ama: “Hello”", 1),
+    ("said", {"words": "Psst", "volume": "whisper", "heard_by": []}, "ama", "citizen", "Ama: “Psst”", 1),
     (
         "node_changed",
         {**V1_SAMPLES["node_changed"], "after": 0},

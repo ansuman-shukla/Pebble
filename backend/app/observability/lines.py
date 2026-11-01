@@ -254,7 +254,11 @@ LINES: dict[str, Line] = {  # by event type
         words={"action": _DOING},
     ),
     "action_interrupted": Line("{actor} stops {action}", 0, words={"action": _DOING}),
-    "said": Line("{actor}: “{words}”", 1),
+    "said": Line(
+        "{actor}: “{words}”",
+        1,
+        (Variant(_field("volume", "shout"), "{actor} shouts: “{words}”", 2),),  # a call to all, a cry of theft
+    ),
     "need_changed": Line("{actor} feels {level}", 0),
     "injured": Line(
         "{actor} is hurt ({cause})",
