@@ -343,6 +343,65 @@ test('the follow camera stays out of the townhouses along the main street', asyn
   expect(errors).toEqual([]);
 });
 
+test('following the merchant at the market stall swings round its awning instead of into his face', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  // from the teahouse side, looking south at Haru behind his stall (the mock's merchant, under its awning at 20, 54):
+  // the boom wants to rise north under the awning, which used to pull the camera in to 0.4 m
+  const element = await openGlobe(
+    page,
+    errors,
+    `?mockLive=1&at=${townAt(20, 64, 0, -1)}&follow=haru`,
+  );
+  await expect(element).toHaveAttribute('data-follow', 'haru');
+  await expect(element).toHaveAttribute('data-camera-flying', 'false');
+  const haru = page.locator('[data-npc="haru"]');
+  // swing the camera round to his north (the teahouse side): 0.005 rad a pixel
+  const lensZ = async () => {
+    const values = (await element.getAttribute('data-camera'))!;
+    const lens = new Vector3(...values.split(',').slice(0, 3).map(Number));
+    return townMapping.toLocal(lens, new Vector3()).z;
+  };
+  if ((await lensZ()) > 54) {
+    await page.mouse.move(300, 450);
+    await page.mouse.down();
+    await page.mouse.move(300 + Math.PI / 0.005, 450, { steps: 20 });
+    await page.mouse.up();
+  }
+  for (let k = 0; k < 10; k++) {
+    await page.waitForTimeout(200);
+    const [values, arm, x, y, z] = await Promise.all([
+      element.getAttribute('data-camera'),
+      element.getAttribute('data-camera-arm'),
+      haru.getAttribute('data-npc-x'),
+      haru.getAttribute('data-npc-y'),
+      haru.getAttribute('data-npc-z'),
+    ]);
+    const feet = new Vector3(Number(x), Number(y), Number(z));
+    const head = townMapping.toLocal(
+      feet.clone().setLength(feet.length() + EYE_HEIGHT),
+      new Vector3(),
+    );
+    const lens = townMapping.toLocal(
+      new Vector3(...values!.split(',').slice(0, 3).map(Number)),
+      new Vector3(),
+    );
+    expect(Math.hypot(head.x - 20, head.z - 54)).toBeLessThan(1);
+    if (k < 5) continue; // the swing eases round
+    // a full boom, with nothing of the town between the camera and his head
+    expect(Number(arm)).toBeGreaterThan(2.5);
+    expect(
+      raycastBlockers(
+        townWorld,
+        [head.x, head.y, head.z],
+        [lens.x, lens.y, lens.z],
+      ),
+    ).toBe(1);
+  }
+  expect(errors).toEqual([]);
+});
+
 /** Walks forward (W) from `?at=` for `ms` and returns the distances to `centre`. */
 async function walkAt(page: Page, query: string, centre: Vector3, ms: number) {
   const errors: string[] = [];
