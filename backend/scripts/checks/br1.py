@@ -36,10 +36,10 @@ WORKPLACES: dict[Routine, tuple[str, ...]] = {
     "samurai": ("main-gate", "west-gate", "castle", "training-ground"),
     "night_watch": ("west-gate", "rice-fields"),
     "merchant": ("market",),
-    "farmer": ("rice-fields",),
-    "weaver": ("home", "rice-fields"),
+    "farmer": ("rice-fields", "storehouses", "market"),  # tending, paying the tax, selling the spare rice
+    "weaver": ("home", "rice-fields", "storehouses", "market"),
     "monk": ("temple", "bell-tower"),
-    "smith": ("forge",),
+    "smith": ("forge", "market"),  # forging, buying his iron sand and wood
     "digger": ("south_marsh", "north_woods", "falls_pool", "market"),
 }
 STARVED = frozenset({"starvation", "dehydration"})

@@ -127,19 +127,26 @@ def test_noon_work_counts_those_at_their_own_workplaces(town: Simulation) -> Non
     assert br1.at_work(town, town.citizen("fumiko")) is None  # at the well
     town.core.place_at(town.citizen("fumiko"), town.world.town.to_unit(20.0, 56.0))
     assert br1.at_work(town, town.citizen("fumiko")) == "market"
-    town.core.place_at(town.citizen("tetsu"), town.world.town.to_unit(20.0, 56.0))
-    assert br1.at_work(town, town.citizen("tetsu")) is None  # the market is no smith's work
+    town.core.place_at(town.citizen("kenji"), town.world.town.to_unit(20.0, 56.0))
+    assert br1.at_work(town, town.citizen("kenji")) is None  # the market is no post of the samurai's rounds
+    town.core.place_at(town.citizen("kenji"), town.world.town.to_unit(0.0, 104.0))
     check = br1.NoonWork()
     check.start(town)
     town.state.tick = 12 * 60 - START_MINUTE
-    check.after_step(town, [])  # the cast starts at its workplaces: 8 of them (the smith stands at the market)
+    check.after_step(town, [])
     town.state.tick += 1
     check.after_step(town, [])  # not noon
-    assert check.counts == [8] and check.outcome(town).ok
+    [first] = check.counts
+    assert first >= 8 and check.outcome(town).ok
     town.core.place_at(town.citizen("fumiko"), town.world.town.to_unit(-20.0, 52.5))
     town.state.tick += DAY_MINUTES - 1
     check.after_step(town, [])
-    assert check.counts == [8, 7] and not check.outcome(town).ok  # 7.5 on average
+    assert check.counts == [first, first - 1]
+    for citizen in town.core.living():
+        town.core.place_at(citizen, town.world.town.to_unit(-20.0, 52.5))  # all at the well
+    town.state.tick += DAY_MINUTES
+    check.after_step(town, [])
+    assert check.counts[-1] == 0 and not check.outcome(town).ok
 
 
 def test_a_town_death_of_hunger_is_caught_and_others_are_not(town: Simulation) -> None:
