@@ -55,7 +55,12 @@ import {
   standsUntilBack,
 } from '@/lib/live/separation';
 import type { ShownDoings } from '@/lib/live/shown-doings';
-import { groundSpeed, headingAt, walking } from '@/lib/live/walk-path';
+import {
+  groundSpeed,
+  headingAt,
+  passedBetween,
+  walking,
+} from '@/lib/live/walk-path';
 import { CITIZEN_LOOKS, type CitizenLook } from '@/lib/world/citizen-looks';
 import { type GameClock, sunDirection } from '@/lib/world/game-clock';
 import { type GlobeTerrain, tangentFrame } from '@/lib/world/globe';
@@ -156,6 +161,8 @@ interface NpcView {
   id: string;
   /** World position of the feet and the facing tangent (the follow camera reads these). */
   pose: GlobePlayerState;
+  /** The route's corners (world, on the ground) the body walked through in the latest frame, oldest first. */
+  walked: readonly Vector3[];
   activity: string;
   /** How the body rests (from the motion shown). */
   posture: BodyPose;
@@ -583,6 +590,7 @@ function placeAlong(
 ) {
   const { terrain, town, scratch, heading, rate, delta } = context;
   const radius = terrain.globe.radius;
+  const before = track.path.time;
   const inLane = keepRight(
     track,
     delta,
@@ -613,6 +621,16 @@ function placeAlong(
     .multiplyScalar(Math.sin(track.yaw))
     .addScaledVector(south, Math.cos(track.yaw));
   view.pose.ground = ground;
+  const corners = passedBetween(track.path, before, track.path.time);
+  view.walked = corners.length
+    ? corners.map((corner) =>
+        corner
+          .clone()
+          .multiplyScalar(
+            radius + groundUnder(terrain, town, corner, scratch.local),
+          ),
+      )
+    : corners;
   body.position.copy(position);
   basis.makeBasis(side.crossVectors(up, facing), up, facing);
   body.quaternion.setFromRotationMatrix(basis);
@@ -637,6 +655,7 @@ function newView(citizen: LiveCitizen): NpcView {
   return {
     id: citizen.id,
     pose: { position: new Vector3(), facing: new Vector3(), ground: 0 },
+    walked: [],
     activity: citizen.activity,
     posture: 'standing',
     motion: 'idle',

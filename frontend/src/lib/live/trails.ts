@@ -1,25 +1,28 @@
 /*
  * Fast-forward trails (10 §4.2.3): above ×10 every walker drags the last TRAIL_S real seconds of its drawn path. Each
- * mover keeps a ring of spots laid down by drawn distance (a new one each `trailStep` metres, so a corner is a corner
- * however fast the clock runs) and its tip, where it is drawn now; `writeTrails` lays all of them out as line
- * segments (one merged mesh, one draw call), from the oldest spot to the tip, fading with age. A leg longer than `gap`
- * metres (a resync that faded the body across) is left out. Pure (no DOM, no React): `time-lapse-trails.tsx` drives
- * it and the tests too.
+ * mover keeps a ring of spots: every corner of its streamed route it walked through (so the trail runs where the
+ * body walked, round the moat and through the gates, however fast the clock runs), and between them one each
+ * `trailStep` drawn metres; then its tip, where it is drawn now. `writeTrails` lays all of them out as line segments
+ * (one merged mesh, one draw call), from the oldest spot to the tip, fading with age. A leg longer than `gap` metres
+ * (a resync that faded the body across) is left out. Pure (no DOM, no React): `time-lapse-trails.tsx` drives it and
+ * the tests too.
  */
 import type { BufferAttribute, Vector3 } from 'three';
 
 /** Real seconds of drawn path a trail shows. */
 export const TRAIL_S = 20;
-/** Spots a trail keeps at most... */
-const SPOTS = 400;
-/** ...laid down at least this far apart (metres)... */
+/** Spots a trail keeps at most: room for STEP_SPOTS laid by distance and the corners walked between them. */
+const SPOTS = 1000;
+/** Spots laid by distance in TRAIL_S of walking... */
+const STEP_SPOTS = 400;
+/** ...at least this far apart (metres)... */
 const MIN_STEP_M = 0.5;
-/** ...and far enough apart that TRAIL_S of walking at this pace (m/s, game time) fits. */
+/** ...at this pace (m/s, game time). */
 const WALK_MPS = 1.4;
 
 /** How far apart (drawn metres) a trail lays down its spots at the clock's `rate` (game seconds per real second). */
 export const trailStep = (rate: number) =>
-  Math.max(MIN_STEP_M, (WALK_MPS * rate * TRAIL_S) / (SPOTS - 1));
+  Math.max(MIN_STEP_M, (WALK_MPS * rate * TRAIL_S) / (STEP_SPOTS - 1));
 
 interface Trail {
   /** SPOTS spots (x, y, z each) in a ring; `head` is where the next one goes. */
@@ -43,8 +46,9 @@ const squared = (
   (a[i] - b[j]) ** 2 + (a[i + 1] - b[j + 1]) ** 2 + (a[i + 2] - b[j + 2]) ** 2;
 
 /**
- * Moves a mover's trail on to where it is drawn (`spot`, copied) at real time `now`: it lays a spot down once it is
- * `step` metres from the last, and forgets spots older than TRAIL_S.
+ * Moves a mover's trail on to where it is drawn (`spot`, copied) at real time `now`, through the route `corners` it
+ * walked since the last call (each laid down as a spot): it lays a spot down once it is `step` metres from the last,
+ * and forgets spots older than TRAIL_S.
  */
 export function sampleTrail(
   trails: Trails,
@@ -52,6 +56,7 @@ export function sampleTrail(
   spot: Vector3,
   now: number,
   step: number,
+  corners: readonly Vector3[] = [],
 ) {
   let trail = trails.get(id);
   if (!trail) {
@@ -70,11 +75,20 @@ export function sampleTrail(
     now - times[(trail.head + SPOTS - trail.count) % SPOTS] > TRAIL_S
   )
     trail.count -= 1;
+  for (const corner of corners) {
+    corner.toArray(tip);
+    lay(trail, now);
+  }
   spot.toArray(tip);
   const last = ((trail.head + SPOTS - 1) % SPOTS) * 3;
   if (trail.count > 0 && squared(spots, last, tip) < step * step) return;
-  spots.set(tip, trail.head * 3);
-  times[trail.head] = now;
+  lay(trail, now);
+}
+
+/** Lays the trail's tip down as its newest spot. */
+function lay(trail: Trail, now: number) {
+  trail.spots.set(trail.tip, trail.head * 3);
+  trail.times[trail.head] = now;
   trail.head = (trail.head + 1) % SPOTS;
   trail.count = Math.min(trail.count + 1, SPOTS);
 }

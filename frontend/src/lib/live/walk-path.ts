@@ -111,6 +111,20 @@ export function advance(path: WalkPath, seconds: number) {
   path.time = Math.min(path.time + seconds, endTime(path));
 }
 
+const NOTHING_PASSED: readonly Vector3[] = [];
+
+/** The points of the path (unit directions) walked through going on from game second `from` to `to`: its corners. */
+export function passedBetween(
+  path: WalkPath,
+  from: number,
+  to: number,
+): readonly Vector3[] {
+  if (to <= from) return NOTHING_PASSED;
+  return path.points.filter(
+    (_, k) => path.times[k] > from && path.times[k] < to,
+  );
+}
+
 /** The leg the walker is on (index of its start point). */
 function legAt(path: WalkPath) {
   let leg = 0;

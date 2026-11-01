@@ -162,3 +162,26 @@ test('only the written vertices are uploaded, and nothing at all when no trail i
   expect(positions.version).toBe(2);
   expect(positions.updateRanges).toEqual([{ start: 0, count: 6 }]);
 });
+
+test('a trail runs through the route corners walked between frames, not straight across them', () => {
+  const trails: Trails = new Map();
+  const at = (x: number, z: number) => new Vector3(x, 1, z);
+  const step = trailStep(600); // 42 m: a frame at ×600 walks round a corner and on
+  sampleTrail(trails, 'kenji', at(0, 0), 0, step);
+  // round the moat's corner: east 30 m, then north 30 m, all in one frame
+  sampleTrail(trails, 'kenji', at(30, 30), 0.1, step, [at(30, 0)]);
+  const { vertices, positions } = write(trails, 0.1);
+  const points = Array.from({ length: vertices }, (_, v) => [
+    positions[v * 3],
+    positions[v * 3 + 2],
+  ]);
+  expect(points).toEqual([
+    [0, 0],
+    [30, 0],
+    [30, 0],
+    [30, 30],
+  ]);
+  // the corner stays in the trail after the walker walks on, before the next spot
+  sampleTrail(trails, 'kenji', at(30, 40), 0.2, step);
+  expect(xs(write(trails, 0.2).positions, 4)).toEqual([0, 30, 30, 30]);
+});
