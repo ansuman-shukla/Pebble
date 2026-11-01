@@ -35,6 +35,9 @@ VERB: dict[str, str] = {
     "feed_fire": "tending the fire",
     "attack": "fighting",
     "craft": "crafting",
+    "seize": "seizing someone",
+    "judge": "judging",
+    "tend": "tending someone",
 }
 
 

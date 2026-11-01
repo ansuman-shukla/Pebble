@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel
 
-from app.sim import crafting, doing, exchange, expression, market, movement, resting, wild, work
+from app.sim import crafting, doing, exchange, expression, justice, market, movement, resting, wild, work
 from app.sim.acting import VERB, refuse, settled
 from app.sim.bodies import COLLAPSE_WAKE_ENERGY, Crossing
 from app.sim.clock import NIGHT_ALTITUDE_DEG, sun_altitude_deg, sun_direction
@@ -22,6 +22,7 @@ from app.sim.perception import WATCHING_M, from_where, person_label, where_words
 from app.sim.state import ActionState, Animal, Citizen
 from app.sim.vec import Vec3, bearing_deg
 from app.world_api.models import (
+    Accuse,
     Action,
     ActionName,
     ActionResult,
@@ -39,14 +40,17 @@ from app.world_api.models import (
     Gesture,
     Give,
     Hunt,
+    Judge,
     MakeFire,
     PickUp,
     Rest,
     Say,
+    Seize,
     Sell,
     SetGoal,
     Sleep,
     Stash,
+    Tend,
     Volume,
     Wait,
     WalkTo,
@@ -96,6 +100,7 @@ INSTANTS: dict[ActionName, Instant] = {
     "stash": handles(Stash, exchange.stash),
     "buy": handles(Buy, market.buy),
     "sell": handles(Sell, market.sell),
+    "accuse": handles(Accuse, justice.accuse),
 }
 STARTS: dict[ActionName, Starter] = {
     "walk_to": handles(WalkTo, movement.start_walk),
@@ -114,6 +119,9 @@ STARTS: dict[ActionName, Starter] = {
     "make_fire": handles(MakeFire, lambda core, citizen, _action: wild.start_make_fire(core, citizen)),
     "feed_fire": handles(FeedFire, lambda core, citizen, _action: wild.start_feed_fire(core, citizen)),
     "craft": handles(Craft, crafting.start_craft),
+    "seize": handles(Seize, justice.start_seize),
+    "judge": handles(Judge, justice.start_judge),
+    "tend": handles(Tend, justice.start_tend),
 }
 ADVANCES: dict[ActionName, Advancer] = {  # actions not listed here wait for their `until_tick`, then finish
     "walk_to": movement.advance_walk,
@@ -122,6 +130,7 @@ ADVANCES: dict[ActionName, Advancer] = {  # actions not listed here wait for the
     "hunt": wild.advance_stalk,
     "attack": wild.advance_stalk,
     "sleep": resting.advance_sleep,
+    "tend": justice.advance_tend,
 }
 FINISHES: dict[ActionName, Finisher] = {
     "gather": doing.finish_gather,
@@ -134,6 +143,8 @@ FINISHES: dict[ActionName, Finisher] = {
     "make_fire": wild.complete,
     "feed_fire": wild.complete,
     "craft": crafting.finish_craft,
+    "seize": justice.finish_seize,
+    "judge": justice.finish_judge,
 }
 _NIGHT_STOPS = frozenset({"walk_to", "follow", "gather", "wait", "rest", "work", "hunt", "fish"})
 _NEED_STOPS = frozenset({"walk_to", "follow", "gather", "wait", "rest", "flee", "work", "hunt", "fish", "craft"})
@@ -147,6 +158,9 @@ def instant(core: SimCore, citizen: Citizen, action: Action) -> ActionResult:
     handler = INSTANTS.get(action.action)
     if handler is None:
         raise ValueError(f"no instant handler for {action.action}")
+    restrained = justice.restraint(core, citizen, action.action)
+    if restrained is not None:  # held or confined (J2)
+        return refuse(core, citizen, action.action, restrained)
     return handler(core, citizen, action)
 
 
@@ -158,6 +172,9 @@ def start(core: SimCore, citizen: Citizen, action: Action) -> int:
     starter = STARTS.get(action.action)
     if starter is None:  # in the contract, not in the world yet: what you are doing goes on
         return settled(core, citizen, action.action, "failed", NOT_YET)
+    restrained = justice.restraint(core, citizen, action.action)
+    if restrained is not None:  # held or confined (J2): what they are doing goes on
+        return settled(core, citizen, action.action, "failed", restrained)
     if current is not None:
         text = "You get up." if current.kind == "sleep" else f"You stop {VERB[current.kind]} to do something else."
         _interrupt(core, citizen, current, text, None)

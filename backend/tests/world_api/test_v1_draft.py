@@ -1,5 +1,5 @@
-"""Contract v1 draft (D96): every new action is reachable through the facade, and until its stream lands the world
-answers it in-world ("You can't do that yet.") without waking a sleeper or stopping what the citizen is doing."""
+"""Contract v1 draft (D96): every new action is reachable through the facade and in the world (each stream's own tests
+cover what it does); the new perception fields are told in words."""
 
 from collections.abc import Callable
 
@@ -22,7 +22,6 @@ from app.world_api.models import (
     Judge,
     Perception,
     Seize,
-    SelfView,
     Sell,
     SetGoal,
     Stash,
@@ -42,9 +41,6 @@ V1_ACTIONS: dict[ActionName, Action] = {
     "gesture": Gesture(kind="wave"),
     "set_goal": SetGoal(text="find something to eat", driver="hunger"),
 }
-NOT_YET_ACTIONS = sorted(name for name in V1_ACTIONS if name not in INSTANTS and name not in STARTS)
-INSTANT_NOT_YET = [name for name in NOT_YET_ACTIONS if name in INSTANT_ACTIONS]
-DURATIVE_NOT_YET = [name for name in NOT_YET_ACTIONS if name not in INSTANT_ACTIONS]
 
 
 def facade_call(me: WorldApi, action: Action) -> ActionResult | ActionHandle:
@@ -73,18 +69,12 @@ def facade_call(me: WorldApi, action: Action) -> ActionResult | ActionHandle:
     raise AssertionError(f"no facade call for {action.action}")
 
 
-def answer(sim: Simulation, outcome: Perception | SelfView | ActionResult | ActionHandle) -> ActionResult:
-    if isinstance(outcome, ActionHandle):
-        return run_until_done(sim, outcome, 1)
-    assert isinstance(outcome, ActionResult)
-    return outcome
-
-
 def test_the_draft_names_every_new_action() -> None:
     assert sorted(V1_ACTIONS) == sorted(
         ["buy", "sell", "stash", "craft", "accuse", "seize", "judge", "tend", "gesture", "set_goal"]
     )
-    assert NOT_YET_ACTIONS, "every v1 action has landed: retire this module's not-yet tests"
+    assert all((name in INSTANTS) == (name in INSTANT_ACTIONS) for name in V1_ACTIONS)
+    assert all(name in INSTANTS or name in STARTS for name in V1_ACTIONS)  # every v1 action is in the world
 
 
 @pytest.mark.parametrize("name", sorted(V1_ACTIONS))
@@ -107,44 +97,6 @@ def test_each_facade_method_sends_its_action_whole(
     monkeypatch.setattr(sim, "start", start)
     facade_call(me, V1_ACTIONS[name])
     assert sent == [V1_ACTIONS[name]]
-
-
-@pytest.mark.parametrize("name", NOT_YET_ACTIONS)
-def test_an_action_not_in_the_world_yet_is_refused_in_world(
-    name: ActionName, new_sim: Callable[..., Simulation]
-) -> None:
-    sim = new_sim()
-    me = WorldApi(sim, sim.add_citizen(make_spec(at=WELL)).id)
-    sim.drain()
-    for outcome in (facade_call(me, V1_ACTIONS[name]), me.do(V1_ACTIONS[name])):
-        assert isinstance(outcome, ActionResult) == (name in INSTANT_ACTIONS)
-        assert answer(sim, outcome) == ActionResult(action=name, outcome="failed", text=NOT_YET)
-    assert sim.citizen(me.citizen_id).action is None
-
-
-@pytest.mark.parametrize("name", DURATIVE_NOT_YET)
-def test_a_durative_action_not_in_the_world_yet_leaves_the_running_one_alone(
-    name: ActionName, new_sim: Callable[..., Simulation]
-) -> None:
-    sim = new_sim()
-    me = WorldApi(sim, sim.add_citizen(make_spec(at=WELL)).id)
-    resting = me.rest(30)
-    assert answer(sim, me.do(V1_ACTIONS[name])).text == NOT_YET
-    action = sim.citizen(me.citizen_id).action
-    assert action is not None and action.number == resting.number and not resting.done
-
-
-@pytest.mark.parametrize("name", INSTANT_NOT_YET)
-def test_an_instant_action_not_in_the_world_yet_wakes_nobody(
-    name: ActionName, new_sim: Callable[..., Simulation]
-) -> None:
-    sim = new_sim()
-    me = WorldApi(sim, sim.add_citizen(make_spec(at=WELL)).id)
-    sim.citizen(me.citizen_id).body.energy = 20.0
-    sleeping = me.sleep()
-    assert sim.citizen(me.citizen_id).body.asleep
-    assert answer(sim, me.do(V1_ACTIONS[name])).text == NOT_YET
-    assert sim.citizen(me.citizen_id).body.asleep and not sleeping.done
 
 
 def test_a_sentence_is_a_fine_in_coins_or_hours_confined() -> None:

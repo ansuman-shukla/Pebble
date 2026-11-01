@@ -5,12 +5,16 @@ per metre); each step leaves a stride (where they went, where they go next and t
 A walk goes at its `pace` (walk, or run), a flee always runs. Running lasts while the run endurance does (the
 `running` system: seconds of run left per citizen, a minute spent by each minute of running, held while jogging,
 coming back at half speed otherwise), then the runner jogs; children, elders and heavy loads jog at most.
+
+Someone held (`justice`) is led along their seizer's steps to a free spot about a metre behind them, and a seizer
+leading someone walks at 0.8× their pace.
 """
 
 from typing import cast
 
 from pydantic import JsonValue
 
+from app.sim import justice, slots
 from app.sim.acting import VERB, begin, settled
 from app.sim.clock import SECONDS_PER_TICK
 from app.sim.core import WALK_AHEAD_TICKS, SimCore, Stride, TimedPoint
@@ -29,6 +33,9 @@ SAME_SPOT_M = 0.001  # spots on a streamed route closer than this are one spot
 FOLLOW_REPLAN_M = 3.0
 FLEE_M = 150.0  # flee() runs this far from the danger
 FLEE_TURNS = (0.0, 45.0, -45.0, 90.0, -90.0, 135.0, -135.0)
+LEAD_PACE = 0.8  # a seizer leading someone walks at this share of their pace (10 §3.4)
+LEAD_RADII_M = (1.0, 1.5, 2.0, 2.5)  # the held walk this far behind their seizer, the first free one
+LEAD_CLOSE_M = 1.5  # a held person this close to a seizer standing still stays where they are
 
 
 def start_walk(core: SimCore, citizen: Citizen, action: WalkTo) -> int:
@@ -120,6 +127,8 @@ def advance_walk(core: SimCore, citizen: Citizen, walk: ActionState) -> None:
         raise ValueError(f"walk {walk.number} of {citizen.id} has no route")
     gait = walk_gait(core, citizen, walk)
     budget = ground_mps(core, citizen, gait) * SECONDS_PER_TICK  # metres of flat ground this minute
+    if justice.leading(core, citizen.id) is not None:
+        budget *= LEAD_PACE
     progress = walk_along(walk.route, walk.leg, walk.along_m, budget, core.world.radius_m)
     core.strides[citizen.id] = _walk_stride(core, citizen, walk, progress, budget, gait)
     walk.leg, walk.along_m = progress.leg, progress.along_m
@@ -147,6 +156,34 @@ def walk_gait(core: SimCore, citizen: Citizen, walk: ActionState) -> Gait:
     """How the walker goes this minute: at its pace, a run turning to a jog once the endurance is spent."""
     pace = cast(Pace, walk.args.get("pace", "walk"))
     return gait_for(pace, top_gait(citizen, load_share(core, citizen)), run_left_s(core, citizen))
+
+
+def lead_held(core: SimCore) -> None:
+    """Tick-end hook (after slots settle): everyone held follows their seizer's step this minute to the first free spot
+    of LEAD_RADII_M behind them, drawn walking at the seizer's times; next to a seizer standing still they stay put.
+    The spot is claimed (a ring spot), so nobody is stepped aside onto it."""
+    for person_id, keeper_id in justice.held_pairs(core):
+        held, keeper = core.state.citizens[person_id], core.state.citizens[keeper_id]
+        stride = core.strides.get(keeper.id)
+        walked = stride.walked if stride is not None else ()
+        if len(walked) < 2 and core.distance_m(held.position, keeper.position) <= LEAD_CLOSE_M:
+            continue
+        behind = walked[-2][0] if len(walked) >= 2 else held.position
+        bearing = bearing_deg(keeper.position, behind)
+        spot = next(
+            (s for r in LEAD_RADII_M if (s := slots.free_round(core, held, keeper.position, r, bearing)) is not None),
+            None,
+        )
+        if spot is None or core.distance_m(held.position, spot) < SAME_SPOT_M:
+            continue
+        end_s = (
+            walked[-1][1] if len(walked) >= 2 else core.distance_m(held.position, spot) / ground_mps(core, held, "walk")
+        )
+        path = [(held.position, 0.0), *walked[1:-1], (spot, max(end_s, slots.MIN_STEP_S))]
+        number = held.action.number if held.action is not None else 0
+        core.strides[held.id] = Stride(number, _distinct(core, path))
+        core.place_at(held, spot)
+        slots.claim(core, held, None, spot)
 
 
 def _dump_running(left: dict[str, float]) -> JsonValue:
