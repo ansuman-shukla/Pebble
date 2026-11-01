@@ -434,8 +434,13 @@ def test_spectators_see_a_walk_to_a_thing_go_to_what_it_is(new_sim: Callable[...
     picker = sim.add_citizen(make_spec("picker", at=(-20.0, 62.0)))
     sim.add_citizen(make_spec("dropper", at=WELL)).inventory["nuts"] = 5
     WorldApi(sim, "dropper").drop("nuts")
-    WorldApi(sim, picker.id).walk_to_thing("nuts")
+    picking = WorldApi(sim, picker.id)
+    assert "a handful of nuts on the ground" in [thing.label for thing in picking.look_around().things]
+    sim.drain()
+    picking.walk_to_thing("a handful of nuts on the ground")  # the stack, as the picker sees it
     assert picker.action is not None and picker.action.label == "the nuts on the ground"
+    started = [e.payload.model_dump() for e in sim.drain() if e.type == "action_started"]
+    assert started[-1]["label"] == "the nuts on the ground"
 
 
 def test_names_are_only_learned_from_someone_you_can_see(new_sim: Callable[..., Simulation]) -> None:
