@@ -55,6 +55,7 @@ import { type GroundQuality, groundLookGlsl } from './ground-shader';
 import { MARK_STYLE } from './ground-style';
 import type { LocalMapping } from './local-mapping';
 import type { RiverLayout } from './river-courses';
+import { WATERHOLE_BANK_M, type WaterholePool } from './waterholes';
 
 type RiverPoint = RiverLayout['runs'][number]['points'][number];
 
@@ -507,7 +508,8 @@ export function planetMarks({
   }
   for (const feature of places.features) {
     const spot = SPOT_MARKS[feature.kind];
-    if (spot)
+    // a waterhole's pool draws its own muddy bank (waterholes.ts)
+    if (spot && !feature.pool)
       patches.push({
         ...spot,
         centre: new Vector3(...feature.position),
@@ -529,10 +531,13 @@ export function planetMarks({
 export function globeMarkGround({
   terrain,
   rivers,
+  pools = [],
   town,
 }: {
   terrain: GlobeTerrain;
   rivers: RiverLayout;
+  /** The waterholes' pools: their water and banks are drawn by themselves (waterholes.ts), unmarked. */
+  pools?: readonly WaterholePool[];
   town: {
     mapping: SiteMapping;
     groundRadius: number;
@@ -553,6 +558,12 @@ export function globeMarkGround({
     radius,
     heightAt(direction) {
       if (water(direction).gap < 0) return null;
+      if (
+        pools.some(
+          ({ up }) => direction.angleTo(up) * radius < WATERHOLE_BANK_M,
+        )
+      )
+        return null;
       town.mapping.toLocal(local.copy(direction).multiplyScalar(radius), local);
       if (Math.hypot(local.x, local.z) >= town.groundRadius)
         return terrain.heightAt(direction);

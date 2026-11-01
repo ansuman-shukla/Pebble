@@ -36,6 +36,7 @@ import { PADDY_KIND, paddyFields, paddyOutline } from '@/lib/world/paddies';
 import { type WildMarks, wildMarks } from '@/lib/world/wild-marks';
 import type { LocalMapping } from '@/lib/world/local-mapping';
 import type { RiverLayout } from '@/lib/world/river-courses';
+import type { WaterholePool } from '@/lib/world/waterholes';
 import { terrainLift } from '@/lib/world/walk-charts';
 
 /*
@@ -124,6 +125,7 @@ export function GlobeTown({
   sites,
   places,
   rivers,
+  pools,
   nodeStages,
   onPlacementsReady,
 }: {
@@ -140,6 +142,8 @@ export function GlobeTown({
   sites: Site[];
   places: WorldPlaces;
   rivers: RiverLayout;
+  /** The waterholes' pools: no ground mark lies on them. */
+  pools: readonly WaterholePool[];
   /** Node stocks from the feed: the paddies are drawn by their stage. */
   nodeStages: NodeStages;
   onPlacementsReady: () => void;
@@ -164,6 +168,7 @@ export function GlobeTown({
     const ground = globeMarkGround({
       terrain,
       rivers,
+      pools,
       town: { mapping, groundRadius, height, water, areas: town.areas },
     });
     const marks = planetMarks({

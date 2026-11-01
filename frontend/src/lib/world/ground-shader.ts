@@ -18,6 +18,7 @@ import {
   type PerspectiveCamera,
   Vector2,
   type Vector3,
+  Vector4,
 } from 'three';
 
 import {
@@ -57,6 +58,8 @@ interface GroundHole {
 export interface GroundMaterialOptions {
   quality?: GroundQuality;
   hole?: GroundHole | null;
+  /** More cones drawing nothing (waterholes' pools, which draw their own banks). */
+  holes?: readonly GroundHole[];
   /** Constant layer weights for a mesh without `ground0`/`ground1` (missing layers are 0; the rest is grass). */
   weights?: GroundWeights;
   /** The grass tint where the mesh has no vertex colours. */
@@ -237,9 +240,8 @@ varying vec4 vGround1;
 uniform float groundFacets;
 uniform vec2 groundFacetsFade;
 uniform float groundPixel;
-#ifdef GROUND_HOLE
-uniform vec3 groundHoleUp;
-uniform float groundHoleCos;
+#ifdef GROUND_HOLES
+uniform vec4 groundHoles[GROUND_HOLES];
 #endif
 `;
 
@@ -429,9 +431,14 @@ const MACRO_END = 1500;
 export function groundMaterial({
   quality = 'full',
   hole = null,
+  holes = [],
   weights,
   tint,
 }: GroundMaterialOptions = {}) {
+  // each cone as (up, cos of its angular radius)
+  const cones = [...(hole ? [hole] : []), ...holes].map(
+    ({ up, cos }) => new Vector4(up.x, up.y, up.z, cos),
+  );
   const material = new MeshStandardMaterial({
     color: tint ?? '#ffffff',
     vertexColors: tint === undefined,
@@ -447,7 +454,7 @@ export function groundMaterial({
   if (quality === 'low') defines.GROUND_LOW = '';
   if (quality === 'full') defines.GROUND_BUMP = '';
   if (weights) defines.GROUND_CONST = '';
-  if (hole) defines.GROUND_HOLE = '';
+  if (cones.length > 0) defines.GROUND_HOLES = String(cones.length);
   material.defines = defines;
   const constant = weightsArray(weights ?? {});
   const chunk = styleChunk(GROUND_STYLE);
@@ -466,10 +473,7 @@ export function groundMaterial({
     shader.uniforms.groundFacetsFade = { value: FACETS_FADE };
     shader.uniforms.groundConst0 = { value: constant.slice(0, 4) };
     shader.uniforms.groundConst1 = { value: constant.slice(4, 8) };
-    if (hole) {
-      shader.uniforms.groundHoleUp = { value: hole.up };
-      shader.uniforms.groundHoleCos = { value: hole.cos };
-    }
+    if (cones.length > 0) shader.uniforms.groundHoles = { value: cones };
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${VERTEX_COMMON}`)
       .replace(
@@ -483,7 +487,7 @@ export function groundMaterial({
       )
       .replace(
         'void main() {',
-        'void main() {\n#ifdef GROUND_HOLE\nif (dot(normalize(vGroundPlanet), groundHoleUp) > groundHoleCos) discard;\n#endif',
+        'void main() {\n#ifdef GROUND_HOLES\nfor (int i = 0; i < GROUND_HOLES; i++)\n  if (dot(normalize(vGroundPlanet), groundHoles[i].xyz) > groundHoles[i].w) discard;\n#endif',
       )
       .replace(
         '#include <color_fragment>',
@@ -503,6 +507,6 @@ export function groundMaterial({
       );
   };
   material.customProgramCacheKey = () =>
-    `ground-${quality}-${weights ? 'const' : 'vertex'}-${hole ? 'hole' : 'whole'}-${tint === undefined}`;
+    `ground-${quality}-${weights ? 'const' : 'vertex'}-holes${cones.length}-${tint === undefined}`;
   return material;
 }
