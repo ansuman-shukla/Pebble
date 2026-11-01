@@ -418,3 +418,13 @@ def test_a_raider_walks_to_the_rice_fields_at_night_and_takes_rice_from_the_rack
     bitten = look.model_copy(update={"you": look.you.model_copy(update={"feeling": ["weak and aching"]})})  # a bite
     assert bands._raid(_ctx(bitten, kaz, hurt)) == []
     assert "raided" in cast(list[str], hurt.notes["chores"])  # no raid that night
+
+
+def test_a_band_healer_tends_a_hurt_bandmate_by_day_but_not_a_stranger_or_in_the_night() -> None:
+    vesa = BrainProfile("vesa", "Vesa", "elder healer", "band_b", "Band B camp", ("gathering", "healing"))
+    hurt = Seen(label="Kaz", where="close by to the east", nearness="close by", doing="sitting, looking hurt")
+    stranger = hurt.model_copy(update={"label": "a young man"})
+    camp = "at your home, at Band B camp"
+    assert _choose(_ctx(_look(camp, "midday", (), people=[hurt]), vesa, _day(1))).name == "go up to Kaz"
+    assert "a young man" not in _choose(_ctx(_look(camp, "midday", (), people=[stranger]), vesa, _day(1))).name
+    assert _choose(_ctx(_look(camp, "night", (), people=[hurt]), vesa, _day(1))).name != "go up to Kaz"

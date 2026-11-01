@@ -20,6 +20,7 @@ from functools import partial
 
 from pydantic import JsonValue
 
+from app.brains.healing import tend_the_hurt
 from app.brains.justice import known_deed
 from app.brains.profile import BrainProfile, Routine
 from app.brains.routines import (
@@ -45,7 +46,6 @@ from app.brains.senses import (
     beside,
     carried_food,
     carries,
-    is_name,
     resources_in_view,
 )
 from app.world_api.facade import ActionHandle
@@ -156,10 +156,8 @@ NUMBERS = {word: n for n, word in enumerate(f"{_ONES} eighteen nineteen".split()
 LEAST = (("a great", 41), ("plenty of", 13), ("a handful of", 4), ("some", 4), ("a few", 2), ("a little", 2))
 WATCH = 72.0  # the night watch outscores sleep (70) for the watchman
 LAW = 60.0  # an officer's seizing and the lord's judging: over the day's work, under hunger
-TEND = WORK + 20  # the monk tends the hurt before his prayers
-LAW_TRIES = 3  # a day: walks after or tries at someone to seize, judge or tend before leaving them be
+LAW_TRIES = 3  # a day: walks after or tries at someone to seize or judge before leaving them be
 GAOL = "the gaol"
-HURT_LOOKS = ("looking hurt", "looking near death")
 # the lord's table (10 §3.4) by the deed's words: theft 2× its value (a few measures: ~20 mon), poaching 1× (~10), a
 # night in the walls confined till dawn, a blow 12 h; a fine they can't pay: confined 6 h
 SENTENCES: tuple[tuple[str, Verdict], ...] = (
@@ -924,24 +922,6 @@ def _judge(ctx: Context) -> list[Option]:
     return []
 
 
-def _tend(ctx: Context) -> list[Option]:
-    """The monk tends anyone in view who looks hurt (10 §3.4: +3 health an hour), walking up to them first."""
-    if "healing" not in ctx.profile.skills:
-        return []
-    for person in ctx.perception.people:
-        looks = person.doing or ""
-        if not any(words in looks for words in HURT_LOOKS) or DISTANCE[person.nearness] == "far":
-            continue
-        if _count_today(ctx, f"tending {person.label}") >= 2 * LAW_TRIES:
-            continue
-        aim = f"Tend {person.label}, who is hurt" if is_name(person.label) else "Tend a stranger who is hurt"  # ≤ 80
-        if person.nearness != "right beside you":
-            return [Option(TEND, f"go up to {person.label}", partial(ctx.api.walk_to_person, person.label), aim)]
-        tend = _then(partial(ctx.mark_done, f"tending {person.label}"), partial(ctx.api.tend, person.label))
-        return [Option(TEND, "tend", tend, aim)]
-    return []
-
-
 # --- the castle ---
 
 
@@ -1216,7 +1196,7 @@ def monk(ctx: Context) -> list[Option]:
         ctx.mark_done(bell)
     if bell is not None and not ctx.done_today(bell):
         return [_ring(ctx, bell)]
-    tending = _tend(ctx) if ctx.phase != "night" else []
+    tending = tend_the_hurt(ctx)
     if tending or not _daytime(ctx):
         return tending
     return [_work_at(ctx, TEMPLE, "pray", aim="Pray at the temple")]

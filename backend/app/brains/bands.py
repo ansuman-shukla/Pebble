@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import partial
 
+from app.brains.healing import tend_the_hurt
 from app.brains.justice import known_deed
 from app.brains.profile import Routine, Spot
 from app.brains.routines import COMPASS, WORK, Context, Option, _count_today, _daytime, _refused, _set, _then
@@ -37,7 +38,6 @@ from app.brains.senses import (
     resources_in_view,
     wood_at_hand,
 )
-from app.brains.town import _tend
 from app.world_api.facade import ActionHandle
 from app.world_api.models import ActionResult, Compass, Driver, Fine, Perception, RoughDistance, Seen
 
@@ -151,7 +151,9 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
         and not food
     )
     feeding = (  # at supper a strip rather than sleep hungry, but no search in the dark for a little hunger
-        _feed_the_starving(ctx, food) or (_eat_at_rack(ctx) if hungry_empty or supper else []) or _tend(ctx)
+        _feed_the_starving(ctx, food)
+        or (_eat_at_rack(ctx) if hungry_empty or supper else [])
+        or tend_the_hurt(ctx, strangers=False)
     )
     if feeding:
         return feeding

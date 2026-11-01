@@ -9,6 +9,7 @@ import pytest
 from pydantic import JsonValue
 
 from app.brains import town
+from app.brains.healing import TEND, tend_the_hurt
 from app.brains.profile import BrainProfile, known_titles
 from app.brains.routines import WORK, Context
 from app.brains.senses import Needs, Phase
@@ -522,7 +523,7 @@ def test_the_monk_tends_whoever_looks_hurt() -> None:
     ctx, api = _ctx(_look(people=(beside,)), ENNEN)
     [tend] = town.monk(ctx)
     tend.start()
-    assert (tend.score, ("tend", "Lia") in api.calls) == (town.TEND, True)
+    assert (tend.score, ("tend", "Lia") in api.calls) == (TEND, True)
     well = beside.model_copy(update={"doing": "walking"})
     assert [o.name for o in town.monk(_ctx(_look(people=(well,)), ENNEN)[0])] != ["tend"]
 
@@ -545,7 +546,7 @@ def test_a_fine_paid_leaves_a_clean_slate_and_a_second_wrong_gets_its_own_senten
 
 def test_the_monk_leaves_someone_hurt_far_away_be() -> None:
     far = Seen(label="Lia", where="far away to the east", nearness="far away", doing="walking, looking hurt")
-    assert town._tend(_ctx(_look(people=(far,)), ENNEN)[0]) == []
+    assert tend_the_hurt(_ctx(_look(people=(far,)), ENNEN)[0]) == []
 
 
 def test_a_household_s_dues_are_shared_by_its_adults_the_first_paying_what_doesn_t_divide(
