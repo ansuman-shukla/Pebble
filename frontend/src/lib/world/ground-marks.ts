@@ -39,6 +39,7 @@ import {
   buildWalkWorld,
   isWater,
   type Point,
+  pointInPolygon,
   type WalkWater,
 } from './collision';
 import {
@@ -810,9 +811,15 @@ function splitArea(triangle: AreaVertex[], out: AreaVertex[][]) {
 
 /**
  * A town area: its polygon with a ragged band along the border (edge 0 → 1 over `band` metres) round an inner
- * polygon, `across` measured from the line along its longest side through its middle, mapped onto the world.
+ * polygon, `across` measured from the line along its longest side through its middle, mapped onto the world. The
+ * `holes` inside the inner polygon are cut out of it (what lies on the ground there draws its own: the paddies).
  */
-function areaMark(mesh: MarkMesh, area: TownArea, mapping: LocalMapping) {
+function areaMark(
+  mesh: MarkMesh,
+  area: TownArea,
+  mapping: LocalMapping,
+  holes: readonly Point[][],
+) {
   const { kind, band } = AREA_MARKS[area.kind];
   const outline = area.polygon;
   const longest = outline
@@ -836,12 +843,16 @@ function areaMark(mesh: MarkMesh, area: TownArea, mapping: LocalMapping) {
     splitArea([a, b, c], triangles);
     splitArea([a, c, d], triangles);
   });
+  const cut = holes.filter((hole) =>
+    hole.every((point) => pointInPolygon(point, inner)),
+  );
+  const corners = [inner, ...cut].flat();
   for (const [a, b, c] of ShapeUtils.triangulateShape(
     inner.map(([x, z]) => new Vector2(x, z)),
-    [],
+    cut.map((hole) => hole.map(([x, z]) => new Vector2(x, z))),
   ))
     splitArea(
-      [vertex(inner[a], 1), vertex(inner[b], 1), vertex(inner[c], 1)],
+      [vertex(corners[a], 1), vertex(corners[b], 1), vertex(corners[c], 1)],
       triangles,
     );
   const position = new Vector3();
@@ -868,11 +879,13 @@ export function buildMarks({
   areas,
   planet,
 }: {
-  areas?: { areas: TownArea[]; mapping: LocalMapping };
+  /** `holes`: polygons cut out of any area they lie inside. */
+  areas?: { areas: TownArea[]; mapping: LocalMapping; holes?: Point[][] };
   planet?: { marks: PlanetMarks; ground: MarkGround };
 }) {
   const mesh = new MarkMesh();
-  for (const area of areas?.areas ?? []) areaMark(mesh, area, areas!.mapping);
+  for (const area of areas?.areas ?? [])
+    areaMark(mesh, area, areas!.mapping, areas!.holes ?? []);
   if (planet) {
     for (const ribbon of planet.marks.ribbons)
       drapeRibbon(mesh, ribbon, planet.ground);

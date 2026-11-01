@@ -91,6 +91,8 @@ type TownGroundProps = {
   grass?: string;
   /** Marks beyond the areas, already draped on the ground (ground-marks.ts), merged into the areas' mesh. */
   marks?: BufferGeometry;
+  /** Polygons cut out of the areas' marks, where something lying on the ground draws its own (the paddies). */
+  holes?: Point[][];
 };
 
 export function TownGround({
@@ -101,6 +103,7 @@ export function TownGround({
   skirt = 0,
   grass: grassColor = GRASS,
   marks,
+  holes,
 }: TownGroundProps) {
   const [grass, surface, banks] = useDisposed(
     useMemo(() => {
@@ -155,12 +158,12 @@ export function TownGround({
 
   const [markGeometry] = useDisposed(
     useMemo(() => {
-      const own = buildMarks({ areas: { areas, mapping } });
+      const own = buildMarks({ areas: { areas, mapping, holes } });
       if (!marks) return [own];
       const merged = mergeGeometries([own, marks]);
       own.dispose();
       return [merged];
-    }, [areas, mapping, marks]),
+    }, [areas, mapping, marks, holes]),
   );
   const markLook = useMemo(
     () => markMaterial(groundQuality(window.location.search)),
