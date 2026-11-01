@@ -465,13 +465,14 @@ def finish_judge(core: SimCore, judge: Citizen, action: ActionState) -> None:
         core.end_action(judge, "done", f"{fined}; it is paid.")
         return
     custody = JUSTICE.of(core.state).custody[person.id]
+    if custody.keeper is not None and court == "town" and not _into_gaol(core, person):
+        core.end_action(judge, "failed", f"You can't get {label} into the gaol.")  # a seat free, but no way to it
+        return
     judged = Judged(person=person.id, sentence="confine", confine_h=float(sentence.hours), deeds=deeds)
     seq = core.emit("judged", judged, actor=judge)
     _mark_judged(core, deeds)
     custody.until, custody.judgement = core.state.tick + sentence.hours * TICKS_PER_HOUR, seq
     if custody.keeper is not None:
-        if court == "town":
-            _into_gaol(core, person)  # free: checked above
         custody.keeper, custody.place = None, "gaol" if court == "town" else "fire"
         confined = Confined(place=PLACE_WORDS[custody.place], until_tick=custody_ends(custody), by=judge.id)
         core.emit("confined", confined, actor=person, cause_seq=seq)

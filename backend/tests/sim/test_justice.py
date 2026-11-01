@@ -815,6 +815,24 @@ def test_a_full_gaol_takes_nobody(new_sim: Callable[..., Simulation], monkeypatc
     assert _done(sim, lord.judge("Kaz", Confinement(hours=3)), 20).text == "The gaol is full."
 
 
+def test_a_confinement_with_no_way_into_the_gaol_is_no_judgement(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sim = _theft_scene(new_sim)
+    sim.citizen("masanori").in_view.add("kaz")
+    WorldApi(sim, "kaz").pick_up("5 rice")
+    _seize(sim, "goro", "kaz", monkeypatch)
+    sim.core.place_at(sim.citizen("goro"), sim.world.town.to_unit(-8.0, -13.0))  # brought before the lord
+    sim.core.place_at(sim.citizen("kaz"), sim.world.town.to_unit(-8.0, -14.5))
+    monkeypatch.setattr(slots, "take_first_free", lambda *_: None)  # both seats free, but no path to either
+    sim.drain()
+    refused = _done(sim, WorldApi(sim, "masanori").judge("Kaz", Confinement(hours=3)), 20)
+    assert (refused.outcome, refused.text) == ("failed", "You can't get Kaz into the gaol.")
+    assert _of(sim.drain(), Judged) == []
+    custody = justice.custody_of(sim.core, "kaz")
+    assert custody is not None and custody.keeper == "goro" and custody.judgement is None
+
+
 def test_the_judge_must_be_within_four_metres(
     new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
 ) -> None:
