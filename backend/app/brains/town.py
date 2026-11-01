@@ -363,15 +363,23 @@ def _paid_by_lord(ctx: Context, chore: str, words: str, aim: str, score: float) 
 
 
 def _payments(ctx: Context) -> list[Option]:
-    """The lord pays what he is asked for by those he owes: the watchman's wage at dusk, the smith's order when the
-    tool is handed over (heard: "my wage", "as you ordered"); someone who has gone before he pays asks again."""
-    p = ctx.perception
-    owing = ctx.notes.setdefault("to pay", [])
+    """The lord pays what he owes when asked by someone beside him: the day's wage to the one he knows holds the
+    watch (`ashigaru`, heard "my wage"), once a day; an order (heard "as you ordered") only when he has just been
+    handed a tool (he carries one more of it than at his last look). Someone who has gone before he pays asks again."""
+    p, notes = ctx.perception, ctx.notes
+    owing = notes.setdefault("to pay", [])
     if not isinstance(owing, list):
         raise TypeError("to pay must be a list")
+    before = notes.get("tools")
+    tools: dict[str, JsonValue] = {tool: carrying(p, tool) for tool in TOOLS}
+    handed = isinstance(before, dict) and any(int(str(tools[t])) > int(str(before.get(t, 0))) for t in TOOLS)
+    notes["tools"] = tools
+    titled = dict(ctx.profile.titled)
     for heard in p.heard:
-        for words in (WAGE_WORDS, ORDER_WORDS):
-            if words in heard.words and [heard.who, words] not in owing:
+        wage = WAGE_WORDS in heard.words and titled.get(heard.who) == "ashigaru" and not ctx.done_today("wage paid")
+        order = ORDER_WORDS in heard.words and handed
+        for words, asked in ((WAGE_WORDS, wage), (ORDER_WORDS, order)):
+            if asked and [heard.who, words] not in owing:
                 owing.append([heard.who, words])
     owing[:] = [entry for entry in owing if isinstance(entry, list) and _person(p, str(entry[0])) is not None]
     first = owing[0] if owing else None
@@ -385,12 +393,11 @@ def _payments(ctx: Context) -> list[Option]:
 
     def pay() -> ActionHandle:
         owing.pop(0)
-        if why == WAGE_WORDS:
-            ctx.api.give(f"{WAGE} coins", who)
-            ctx.api.say(f"Here is your wage, {who}.")
-        else:
-            ctx.api.give(f"{ORDER} coins", who)
-            ctx.api.say(f"Sixty coins for it, {who}. Good work.")
+        wage = why == WAGE_WORDS
+        if ctx.api.give(f"{WAGE if wage else ORDER} coins", who).outcome == "done":
+            if wage:
+                ctx.mark_done("wage paid")
+            ctx.api.say(f"Here is your wage, {who}." if wage else f"Sixty coins for it, {who}. Good work.")
         return ctx.api.wait(2)
 
     return [Option(PAY, "pay", pay, aim)]

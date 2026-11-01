@@ -220,22 +220,56 @@ def test_dues_fall_due_each_new_day_and_are_paid_to_the_lord_on_court_day() -> N
     assert [o.name for o in town._pay_dues(ctx)] == ["go to the castle"]
 
 
-def test_the_lord_pays_the_wage_and_the_order_he_is_asked_for_by_those_beside_him() -> None:
+LORD_OF_TOWN = BrainProfile(
+    "masanori",
+    "Masanori",
+    "lord of the castle",
+    "town",
+    "The castle town",
+    titled=known_titles([("Goro", ["ashigaru"])]),
+    titles=("lord",),
+)
+
+
+def _asks(who: str, words: str) -> tuple[HeardWords, ...]:
+    return (HeardWords(who=who, words=words, volume="normal"),)
+
+
+def test_the_lord_pays_the_watchman_his_wage_once_a_day_and_nobody_else() -> None:
     notes: dict[str, JsonValue] = {}
-    asked = (HeardWords(who="Goro", words="Good evening, my lord. I've come for my wage.", volume="normal"),)
-    ctx, api = _ctx(_look(people=(_beside("Goro"),), heard=asked), MASANORI, Recorder(notes), phase="dusk")
+    wage = "Good evening, my lord. I've come for my wage."
+    look = _look(people=(_beside("Goro"),), heard=_asks("Goro", wage))
+    ctx, api = _ctx(look, LORD_OF_TOWN, Recorder(notes), phase="dusk")
     [pay] = town.lord(ctx)
     pay.start()
-    assert ("give", "25 coins", "Goro") in api.calls and notes["to pay"] == []
-    order = (HeardWords(who="Tetsu", words="Your sickle, my lord, as you ordered.", volume="normal"),)
-    away = Seen(label="Tetsu", where="a few paces to the west", nearness="a few paces")
-    ctx, api = _ctx(_look(people=(away,), heard=order), MASANORI, Recorder(notes))
-    assert [o.name for o in town.lord(ctx)] == ["go up to Tetsu"]
-    ctx, api = _ctx(_look(people=(_beside("Tetsu"),)), MASANORI, Recorder(notes))
-    town.lord(ctx)[0].start()
+    assert ("give", "25 coins", "Goro") in api.calls and ("say", "Here is your wage, Goro.") in api.calls
+    again, _ = _ctx(look, LORD_OF_TOWN, Recorder(notes), phase="dusk")
+    assert town._payments(again) == []  # paid today already
+    stranger = _look(people=(_beside("Tetsu"),), heard=_asks("Tetsu", wage))
+    assert town._payments(_ctx(stranger, LORD_OF_TOWN, Recorder({}), phase="dusk")[0]) == []  # holds no watch
+    refused: dict[str, JsonValue] = {}
+    ctx, api = _ctx(look, LORD_OF_TOWN, Recorder(refused, refuse="give"), phase="dusk")
+    town._payments(ctx)[0].start()
+    assert not [call for call in api.calls if call[0] == "say"]  # the coins didn't change hands: no thanks
+    assert town._payments(_ctx(look, LORD_OF_TOWN, Recorder(refused), phase="dusk")[0])  # he'll pay when asked again
+
+
+def test_the_lord_pays_for_an_order_only_when_he_was_handed_the_tool() -> None:
+    order = _asks("Tetsu", "Your sickle, my lord, as you ordered.")
+    notes: dict[str, JsonValue] = {}
+    town._payments(_ctx(_look(carrying=("a short string of coins",)), LORD_OF_TOWN, Recorder(notes))[0])
+    empty_handed = _look(people=(_beside("Tetsu"),), heard=order, carrying=("a short string of coins",))
+    assert town._payments(_ctx(empty_handed, LORD_OF_TOWN, Recorder(notes))[0]) == []  # no tool came
+    handed = _look(people=(_beside("Tetsu"),), heard=order, carrying=("a short string of coins", "a sickle"))
+    ctx, api = _ctx(handed, LORD_OF_TOWN, Recorder(notes))
+    town._payments(ctx)[0].start()
     assert ("give", "60 coins", "Tetsu") in api.calls
-    ctx, _ = _ctx(_look(people=(), heard=order), MASANORI, Recorder(notes))
-    assert "to pay" in notes and town._payments(ctx) == []  # gone before he paid: they'll ask again
+    assert town._payments(_ctx(handed, LORD_OF_TOWN, Recorder(notes))[0]) == []  # said again: no new tool
+    away = Seen(label="Tetsu", where="a few paces to the west", nearness="a few paces")
+    notes["tools"] = {}
+    look = _look(people=(away,), heard=order, carrying=("a sickle",))
+    assert [o.name for o in town._payments(_ctx(look, LORD_OF_TOWN, Recorder(notes))[0])] == ["go up to Tetsu"]
+    assert town._payments(_ctx(_look(), LORD_OF_TOWN, Recorder(notes))[0]) == []  # gone before he paid
 
 
 @pytest.mark.parametrize(
