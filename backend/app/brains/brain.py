@@ -240,8 +240,10 @@ class UtilityBrain:
         notes = self.api.notes
         if water_in_view(p) or at_home(p):
             notes.pop("dry", None)
-        elif notes.get("failed") == "go drink":
-            notes["dry"] = True  # no water to be seen out here (issue #114): make for camp, the water lies by it
+        elif notes.get("failed") == "go drink" or notes.get("last") == "go drink":
+            # the walk found no water, or only the sea, and none fresh in view (issue #114): make for camp, the water
+            # lies by it
+            notes["dry"] = True
         way = compass_word(self.api.notes.get("water_way"))
         on_the_way = self.api.notes.get("last") == "go towards the water" and near(p, self.profile.home_area)
         if way is not None and not water_in_view(p) and (at_home(p) or on_the_way):

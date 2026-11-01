@@ -312,6 +312,12 @@ def test_a_thirsty_forager_who_found_no_water_out_here_makes_for_camp_not_anothe
     water = Seen(label="a river", where="close by to the east", nearness="close by", kind="water")
     seen = brain.thirst_option(look.model_copy(update={"things": [water]}), needs, "day")
     assert seen is not None and seen.name == "go drink" and "dry" not in api.notes
+    api.notes.update(failed=None, last="go drink")  # the walk "to the water" reached the sea: no fresh water in view
+    sea = brain.thirst_option(look, needs, "day")
+    assert sea is not None and sea.name == "go home"
+    api.notes.update(last="go home")  # cut short by ducks coming into view (Lia looped sea and home for an hour)
+    again = brain.thirst_option(look, needs, "day")
+    assert again is not None and again.name == "go home"
 
 
 def test_the_home_ring_is_looked_over_the_ways_its_food_lies_first() -> None:
