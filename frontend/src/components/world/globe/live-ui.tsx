@@ -1,4 +1,5 @@
 import {
+  memo,
   type RefObject,
   useEffect,
   useMemo,
@@ -239,16 +240,29 @@ export function CitizenLabels({
 
 const fixed = (value: number) => value.toFixed(2);
 
-/** Hidden: the drawn citizens as data attributes for the browser tests, refreshed ten times a second. */
-export function NpcHooks({
-  citizens,
-  views,
-  focusRef,
-}: {
+type NpcHooksProps = {
   citizens: LiveCitizen[];
   views: NpcViews;
   focusRef: RefObject<Vector3>;
-}) {
+};
+
+/** The hooks list each citizen's id and action label: every tick brings new citizen objects, seldom new labels. */
+const sameHooks = (before: NpcHooksProps, after: NpcHooksProps) =>
+  before.views === after.views &&
+  before.focusRef === after.focusRef &&
+  before.citizens.length === after.citizens.length &&
+  before.citizens.every(
+    ({ id, action_label }, index) =>
+      id === after.citizens[index].id &&
+      action_label === after.citizens[index].action_label,
+  );
+
+/** Hidden: the drawn citizens as data attributes for the browser tests, refreshed ten times a second. */
+export const NpcHooks = memo(function NpcHooks({
+  citizens,
+  views,
+  focusRef,
+}: NpcHooksProps) {
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -298,4 +312,4 @@ export function NpcHooks({
       ))}
     </div>
   );
-}
+}, sameHooks);

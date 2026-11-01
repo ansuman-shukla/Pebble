@@ -1,5 +1,6 @@
 import { useFrame } from '@react-three/fiber';
 import {
+  memo,
   type RefObject,
   useEffect,
   useEffectEvent,
@@ -301,7 +302,8 @@ function useHeldProp(character: Object3D, held: HeldProp | null) {
   return propRef;
 }
 
-function NpcModel({
+// memo: a tick brings a new citizen object every time, but the model only changes with what the body is shown doing
+const NpcModel = memo(function NpcModel({
   look,
   shown,
   cue,
@@ -542,7 +544,7 @@ function NpcModel({
       </group>
     </group>
   );
-}
+});
 
 interface PlaceContext {
   terrain: GlobeTerrain;
