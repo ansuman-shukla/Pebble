@@ -285,6 +285,13 @@ export interface PropWorld {
   people: ReadonlyMap<string, Vector3>;
   /** The live fires as drawn, by id: lit or not, and where (world metres). */
   fires: ReadonlyMap<string, { lit: boolean; position: Vector3 }>;
+  /** The citizens shown crafting now (at the anvil, the loom...), by id: their feet are in `people`. */
+  crafters: ReadonlySet<string>;
+  /**
+   * The hearths' chimneys (a forge's), by `placement:chimney`: whether the hearth burns, how hot (1 worked … 0 cold)
+   * and the chimney's top (world metres), for the smoke. Written by the hearths themselves (living-kind.ts).
+   */
+  chimneys: Map<string, { lit: boolean; strength: number; position: Vector3 }>;
   /** `placement:node` → whether a dressing part shows (a stall's `crates`, …); unlisted parts show. */
   dressing: Map<string, boolean>;
   /** "Up" where the camera is, for the wind to blow across (null: a flat page, +y). */
@@ -300,6 +307,8 @@ export const propWorld: PropWorld = {
   windTime: 0,
   people: new Map(),
   fires: new Map(),
+  crafters: new Set(),
+  chimneys: new Map(),
   dressing: new Map(),
   up: null,
   elapsed: Number.NaN,
@@ -339,6 +348,8 @@ export const propViews = {
   openDoors: new Set<string>(),
   /** `placement:node` of the parts hidden now (a cold fire's `flame`). */
   hidden: new Set<string>(),
+  /** Placement id → how hot its hearth is now (1 worked … 0 cold), for the hearths drawn. */
+  hearths: new Map<string, number>(),
   /** Smoke puffs and sparks drawn now. */
   puffs: 0,
   sparks: 0,

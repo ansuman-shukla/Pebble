@@ -6,7 +6,11 @@ import { type AnimationClip, Matrix4, type Object3D, Vector3 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 import { kindModel } from '../../src/components/world/kind-parts';
-import { LivingKind } from '../../src/components/world/living-kind';
+import {
+  EMBERS,
+  hearthHeat,
+  LivingKind,
+} from '../../src/components/world/living-kind';
 import type { TownPlacement } from '../../src/lib/client/types.gen';
 import { PROPS } from '../../src/lib/world/assets';
 import { FLAT_MAPPING } from '../../src/lib/world/local-mapping';
@@ -22,25 +26,51 @@ import {
 /*
  * Placements of one kind living (no browser, real GLBs on the flat town mapping): loops play for the nearest
  * instances within the budget and the mill wheel always, doors swing for people passing, cold fires and turned-off
- * dressing hide their parts.
+ * dressing hide their parts, the forge burns while the smith works at it and cools after.
  */
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 
+/**
+ * A GLB without its image textures (the forge's fire has one, which the loader can't decode outside a browser): the
+ * same nodes and meshes, each material in its own colours.
+ */
+function withoutImages(glb: Buffer): Buffer {
+  const jsonLength = glb.readUInt32LE(12);
+  const json = JSON.parse(glb.subarray(20, 20 + jsonLength).toString()) as {
+    images?: unknown;
+    textures?: unknown;
+    samplers?: unknown;
+    materials?: { pbrMetallicRoughness?: { baseColorTexture?: unknown } }[];
+  };
+  if (!json.images) return glb;
+  delete json.images;
+  delete json.textures;
+  delete json.samplers;
+  for (const material of json.materials ?? [])
+    delete material.pbrMetallicRoughness?.baseColorTexture;
+  let text = JSON.stringify(json);
+  text += ' '.repeat((4 - (text.length % 4)) % 4);
+  const chunk = Buffer.from(text);
+  const header = Buffer.alloc(20);
+  header.write('glTF', 0);
+  header.writeUInt32LE(2, 4);
+  const rest = glb.subarray(20 + jsonLength);
+  header.writeUInt32LE(20 + chunk.length + rest.length, 8);
+  header.writeUInt32LE(chunk.length, 12);
+  header.writeUInt32LE(0x4e4f534a, 16);
+  return Buffer.concat([header, chunk, rest]);
+}
+
 async function load(id: string) {
-  const file = readFileSync(
-    path.join(ROOT, 'public/assets/polyfork', id, `${id}.glb`),
+  const file = withoutImages(
+    readFileSync(path.join(ROOT, 'public/assets/polyfork', id, `${id}.glb`)),
   );
   const gltf = await new Promise<{
     scene: Object3D;
     animations: AnimationClip[];
   }>((resolve, reject) =>
-    new GLTFLoader().parse(
-      file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength),
-      '',
-      resolve,
-      reject,
-    ),
+    new GLTFLoader().parse(new Uint8Array(file).buffer, '', resolve, reject),
   );
   return kindModel(gltf.scene, id, gltf.animations);
 }
@@ -96,7 +126,9 @@ test.beforeEach(() => {
   propWorld.elapsed = Number.NaN;
   propWorld.rate = 1;
   propWorld.people = new Map();
+  propWorld.crafters = new Set();
   propWorld.fires = new Map();
+  propWorld.chimneys = new Map();
   propWorld.dressing = new Map();
 });
 
@@ -272,4 +304,65 @@ test('loops play for the nearest 64 within 120 m; the mill wheel turns wherever 
   fence.dispose();
   wheel.dispose();
   expect(propViews.playing.has('test-bamboo_fence')).toBe(false);
+});
+
+test('a hearth is 1 while worked, its embers cooling to 0 over 30 game minutes; cold if never worked', () => {
+  expect(EMBERS).toBe(30);
+  expect(hearthHeat(600, 600)).toBe(1);
+  expect(hearthHeat(600, 615)).toBeCloseTo(0.5, 6);
+  expect(hearthHeat(600, 629.9)).toBeGreaterThan(0);
+  expect(hearthHeat(600, 630)).toBe(0);
+  expect(hearthHeat(-Infinity, 600)).toBe(0);
+  // a clock gone back before the work (a replay scrubbed earlier) knows nothing of it
+  expect(hearthHeat(600, 590)).toBe(0);
+});
+
+test('the forge burns while the smith crafts at its anvil, its fire dying down after, and smokes from its chimney', async () => {
+  const forges = await living('forge', [['forge', 0, 0]]);
+  const fire = () => {
+    const slot = forges.moves.findIndex((moves) => moves.parts > 0);
+    return forges.moves[slot].get(0, 0, new Matrix4());
+  };
+  const chimney = () => propWorld.chimneys.get('forge:chimney')!;
+  const smith = new Vector3(0.8, 0, 2.8);
+  propWorld.people = new Map([
+    ['tetsu', smith],
+    ['aiko', new Vector3(9, 0, 0)],
+  ]);
+  propWorld.minutes = 600;
+  // nobody works it (the weaver crafts at her loom 9 m off): cold, its fire gone, no smoke
+  propWorld.crafters = new Set(['aiko']);
+  run([forges], 0.5);
+  expect(isHidden(fire())).toBe(true);
+  expect(propViews.hearths.get('forge')).toBe(0);
+  expect(chimney().lit).toBe(false);
+  // the smith hammers at the anvil: it burns, its fire as made, smoke from the chimney's top
+  propWorld.crafters = new Set(['aiko', 'tetsu']);
+  run([forges], 0.5);
+  expect(isRest(fire())).toBe(true);
+  expect(propViews.hearths.get('forge')).toBe(1);
+  expect(chimney()).toMatchObject({ lit: true, strength: 1 });
+  expect(
+    chimney().position.distanceTo(new Vector3(-1.5, 3.96, -1)),
+  ).toBeLessThan(0.01);
+  // he stops: the embers cool, the fire shrinks about its base (still in the hearth), the smoke thins
+  propWorld.crafters = new Set(['aiko']);
+  propWorld.minutes += 15;
+  run([forges], 0.5);
+  const cooling = fire();
+  expect(isRest(cooling) || isHidden(cooling)).toBe(false);
+  const base = new Vector3(-1.45, 0.55, -0.45);
+  expect(base.clone().applyMatrix4(cooling).distanceTo(base)).toBeLessThan(
+    1e-4,
+  );
+  expect(new Vector3().setFromMatrixScale(cooling).x).toBeCloseTo(0.675, 1);
+  expect(chimney().strength).toBeCloseTo(0.5, 1);
+  // half an hour after: out
+  propWorld.minutes += 16;
+  run([forges], 0.5);
+  expect(isHidden(fire())).toBe(true);
+  expect(chimney().lit).toBe(false);
+  forges.dispose();
+  expect(propWorld.chimneys.has('forge:chimney')).toBe(false);
+  expect(propViews.hearths.has('forge')).toBe(false);
 });
