@@ -161,7 +161,7 @@ def test_a_citizen_s_row_is_their_wealth_flow_health_duty_status_and_ties(sim_wo
     assert (ama.wealth_mon, ama.titles, ama.rank, ama.skill_hours) == (5 + 6, ["leader"], 4, {"gathering": 0.5})
     assert (ama.wellbeing_24h, ama.tax_owed.coins, ama.trade_partners_7d) == (None, 0, 1)  # no samples, no dues
     assert (ama.standing, ama.standing_word) == (76, "honoured")  # with her own band
-    assert rows["dead"].alive is False
+    assert (rows["dead"].alive, rows["dead"].wealth_mon) == (False, 7)  # the dead hold no share of the chest
 
 
 def test_groups_money_supply_and_the_stall(sim_world: SimWorld) -> None:

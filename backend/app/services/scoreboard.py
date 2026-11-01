@@ -27,7 +27,7 @@ from app.sim.clock import DAY_MINUTES, town_clock
 from app.sim.crafting import load_recipes, stations
 from app.sim.economy import load_economy
 from app.sim.market import STALL_KIND, pays_for, price_word, sell_price, stall_goods, stall_lot
-from app.sim.ownership import CHEST, owner_of
+from app.sim.ownership import CHEST, owner_of, owns
 from app.sim.society import GROUPS, SOCIETY, standing_word
 from app.sim.state import Region
 from app.sim.tax import chest_share, wealth_mon
@@ -166,7 +166,7 @@ def score_board(
     `SKILLED` actions) and the bodies of the last day's sampled tick summaries."""
     state = facts.state
     shares = _chest_shares(state)
-    wealth = {c.id: wealth_mon(c.inventory, c.region, shares.get(c.home or "", 0.0)) for c in state.citizens.values()}
+    wealth = {c.id: wealth_mon(c.inventory, c.region, _share(c, shares)) for c in state.citizens.values()}
     income, spent = _coin_flow(facts, world)
     partners = _partners(facts)
     owed, paid = _accounts(facts)
@@ -219,6 +219,11 @@ def _chest_shares(state: ReplayState) -> dict[str, float]:
     return {home: chest_share(state.stores.get(home + CHEST, {}), count) for home, count in residents.items()}
 
 
+def _share(citizen: ReplayCitizen, shares: Mapping[str, float]) -> float:
+    """Their share of the household chest: the living residents share it, the dead hold none (the ledger's rule)."""
+    return shares.get(citizen.home or "", 0.0) if citizen.alive else 0.0
+
+
 def _coin_flow(facts: Facts, world: SimWorld) -> tuple[dict[str, int], dict[str, int]]:
     """Citizen -> coins in, coins out over the last day; coins put in or taken from their own household's (or
     band's) store stay theirs (the tax books' rule)."""
@@ -231,15 +236,10 @@ def _coin_flow(facts: Facts, world: SimWorld) -> tuple[dict[str, int], dict[str,
         source, destination = moved["source"], moved["destination"]
         for tally, side, other in ((spent, source, destination), (income, destination, source)):
             holder = facts.state.citizens.get(side.get("id") or "") if side["kind"] == "inventory" else None
-            if holder is None or (other["kind"] == "store" and _owns(world, holder, str(other.get("id")))):
+            if holder is None or (other["kind"] == "store" and owns(world, holder, str(other.get("id")))):
                 continue
             tally[holder.id] = tally.get(holder.id, 0) + int(moved["count"])
     return income, spent
-
-
-def _owns(world: SimWorld, citizen: ReplayCitizen, store_id: str) -> bool:
-    owner = owner_of(world, store_id)
-    return owner is not None and owner in (citizen.home, citizen.region)
 
 
 def _partners(facts: Facts) -> dict[str, set[str]]:
