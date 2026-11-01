@@ -393,6 +393,30 @@ def test_a_fine_paid_short_keeps_them_held_and_leaves_the_deed_open_to_confineme
     assert verdict.sentence == "confine" and len(verdict.deeds) == 1
 
 
+def test_a_victim_paid_in_part_is_paid_only_the_rest_by_the_next_fine(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sim = _theft_scene(new_sim)
+    sim.citizen("masanori").in_view.add("kaz")
+    WorldApi(sim, "kaz").pick_up("5 rice")  # ten mon of rice from farmhouse-1's rack
+    kaz = sim.citizen("kaz")
+    kaz.inventory = {"coins": 6}
+    _seize(sim, "goro", "kaz", monkeypatch)
+    _lead_to_gaol(sim, "goro", "kaz")
+    lord = WorldApi(sim, "masanori")
+    assert _done(sim, lord.walk_to_place("gaol")).outcome == "done"
+
+    def coins(store: str) -> int:
+        return sim.state.stores.get(store, {}).get("coins", 0)
+
+    chest, treasury = coins("farmhouse-1-chest"), coins("castle-keep-chest")
+    assert _done(sim, lord.judge("Kaz", Fine(mon=50)), 20).text.endswith("they can pay only six coins.")
+    assert (coins("farmhouse-1-chest") - chest, coins("castle-keep-chest") - treasury) == (6, 0)
+    kaz.inventory["coins"] = 20
+    assert _done(sim, lord.judge("Kaz", Fine(mon=20)), 20).text.endswith("it is paid.")
+    assert (coins("farmhouse-1-chest") - chest, coins("castle-keep-chest") - treasury) == (10, 16)
+
+
 def test_a_fine_takes_the_purse_then_the_household_chest_then_goods(
     new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
 ) -> None:

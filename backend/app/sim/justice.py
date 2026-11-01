@@ -24,7 +24,7 @@ The system `justice` keeps who is in custody, the deeds judged, what each theft 
 
 import math
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import cache
 from typing import Literal, cast
 
@@ -452,7 +452,9 @@ def finish_judge(core: SimCore, judge: Citizen, action: ActionState) -> None:
     if isinstance(sentence, Fine):
         judged = Judged(person=person.id, sentence="fine", fine_mon=sentence.mon, deeds=deeds, arrears=not deeds)
         seq = core.emit("judged", judged, actor=judge)
-        paid = _collect(core, person, sentence.mon, _payees(core, court, judge, person, deeds), seq)
+        payees = _payees(core, court, judge, person, deeds)
+        paid = _collect(core, person, sentence.mon, list(payees), seq)
+        _repaid(core, payees)
         if not deeds and person.home is not None:
             tax.pay_by_fine(core, person, person.home, paid, seq)
         fined = f"You fine {label} {price_words(sentence.mon)}"
@@ -558,6 +560,7 @@ def _mark_judged(core: SimCore, deeds: list[int]) -> None:
 class _Payee:
     where: ItemLocation
     share: float  # mon still owed to them
+    deed: int | None = None  # the theft or poaching they are paid back for
 
 
 def _payees(core: SimCore, court: Court, judge: Citizen, person: Citizen, deeds: list[int]) -> list[_Payee]:
@@ -565,7 +568,7 @@ def _payees(core: SimCore, court: Court, judge: Citizen, person: Citizen, deeds:
     town, the victim in a band (`_band_victim`)."""
     losses = JUSTICE.of(core.state).losses
     payees = [
-        _Payee(where, losses[seq].mon)
+        _Payee(where, losses[seq].mon, seq)
         for seq in deeds
         if seq in losses and (where := _victim(core, losses[seq].owner)) is not None
     ]
@@ -587,6 +590,15 @@ def _band_victim(core: SimCore, judge: Citizen, person: Citizen, deeds: list[int
         if (where := _victim(core, deed.group)) is not None:
             return where
     return ItemLocation(kind="inventory", id=judge.id)
+
+
+def _repaid(core: SimCore, payees: list[_Payee]) -> None:
+    """What each robbed payee was paid comes off the loss, so a fine paid short and judged again (a fine left open)
+    never pays anyone back twice."""
+    losses = JUSTICE.of(core.state).losses
+    for payee in payees:
+        if payee.deed is not None:
+            losses[payee.deed] = replace(losses[payee.deed], mon=max(0.0, payee.share))
 
 
 def _victim(core: SimCore, owner: str) -> ItemLocation | None:
