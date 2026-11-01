@@ -523,6 +523,32 @@ def test_the_held_go_free_when_the_seizer_is_down(
     assert not justice.in_custody(sim.core, "kaz")
 
 
+def test_a_seizer_seized_lets_their_prisoner_go(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sim = _scene(
+        new_sim,
+        goro={**ASHIGARU, "at": (-30.0, 50.0)},
+        kaz={**CAMP_B, "at": (-31.0, 50.0)},
+        barro={**CAMP_B, "at": (-29.0, 50.0)},
+    )
+    _seize(sim, "goro", "kaz", monkeypatch)
+    sim.drain()
+    sim.core.place_at(sim.citizen("barro"), sim.world.town.to_unit(-29.5, 51.0))
+    _seize(sim, "barro", "goro", monkeypatch)
+    assert _of(sim.drain(), Released) == [("kaz", Released(cause="seizer_down", by="goro"))]
+    assert not justice.in_custody(sim.core, "kaz") and justice.in_custody(sim.core, "goro")
+
+
+def test_a_seizer_in_custody_holds_nobody(new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch) -> None:
+    sim = _scene(new_sim, goro={**ASHIGARU, "at": (-30.0, 50.0)}, kaz={**CAMP_B, "at": (-31.0, 50.0)})
+    _seize(sim, "goro", "kaz", monkeypatch)
+    JUSTICE.of(sim.state).custody["goro"] = justice.Custody(since=sim.tick, keeper=None, place="gaol")
+    sim.drain()
+    justice.keep_custody(sim.core)
+    assert ("kaz", Released(cause="seizer_down", by="goro")) in _of(sim.drain(), Released)
+
+
 def test_a_death_in_custody_ends_it_with_one_release(
     new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
 ) -> None:

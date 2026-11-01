@@ -270,6 +270,9 @@ def finish_seize(core: SimCore, citizen: Citizen, action: ActionState) -> None:
         _stop(core, person, f"{seizer} tries to seize you!", seq)
         core.end_action(citizen, "failed", f"{capital(label)} twists free of your grip.")
         return
+    prisoner = leading(core, person.id)
+    if prisoner is not None:  # a seizer seized lets go of whoever they held
+        _release(core, core.state.citizens[prisoner], "seizer_down", person.id, seq)
     JUSTICE.of(core.state).custody[person.id] = Custody(since=core.state.tick, keeper=citizen.id)
     slots.release(core, person)
     _stop(core, person, f"{seizer} seizes you; you are held fast.", seq)
@@ -343,9 +346,9 @@ def custody_ends(custody: Custody) -> int:
 
 
 def keep_custody(core: SimCore) -> None:
-    """Every-tick hook: custody ends when they die (`released` died), when the seizer is hurt, asleep or dead
-    (seizer_down), when a confinement sentence is served (`sentence_served`, then `released` judged), or after its
-    12 h (timeout)."""
+    """Every-tick hook: custody ends when they die (`released` died), when the seizer is hurt, asleep, dead or in
+    custody themselves (seizer_down), when a confinement sentence is served (`sentence_served`, then `released`
+    judged), or after its 12 h (timeout)."""
     justice = JUSTICE.of(core.state)
     for person_id, custody in sorted(justice.custody.items()):
         person = core.state.citizens[person_id]
@@ -354,7 +357,7 @@ def keep_custody(core: SimCore) -> None:
             continue
         if custody.keeper is not None:
             keeper = core.state.citizens[custody.keeper]
-            if not keeper.body.alive or keeper.body.asleep or keeper.id in core.hurt:
+            if not keeper.body.alive or keeper.body.asleep or keeper.id in core.hurt or in_custody(core, keeper.id):
                 _release(core, person, "seizer_down", keeper.id)
                 continue
         if core.state.tick < custody_ends(custody):
