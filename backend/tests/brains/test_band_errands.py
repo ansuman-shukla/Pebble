@@ -10,6 +10,7 @@ from pydantic import JsonValue
 from app.brains.bands import (
     FLINT_TRIES,
     KEEP_STRIPS,
+    NIGHT_SHARE,
     RACK,
     RICE_BOUGHT,
     STALL_WAITS,
@@ -341,6 +342,12 @@ def test_hungry_at_camp_with_nothing_carried_eats_from_the_rack_until_it_is_bare
         supper = _ctx(_camp("dusk", (), RACK_NEAR), _band("bo", "toolmaker and hunter"), FakeApi(_day(1)))
         supper.needs = Needs(hunger=level, thirst=0, tiredness=0)
         assert (_choose(supper).name == "go to the drying rack") is eats, level
+    shared: dict[str, JsonValue] = {**_day(1), "chores": ["fished", NIGHT_SHARE]}  # band B took its night strip
+    band_b = _ctx(
+        _look("at your home, at Band B camp", "dusk", (), things=[RACK_NEAR]), _band("suna", "x", "band_b"), shared
+    )
+    band_b.needs = Needs(hunger=1, thirst=0, tiredness=0)
+    assert _choose(band_b).driver != "hunger"  # its supper is that strip, a little hunger doesn't eat the store
     bare = _ctx(_camp("night", ()), _band("ama", "band leader"), FakeApi(_day(1)))  # no strips to be had
     bare.needs = Needs(hunger=1, thirst=0, tiredness=0)
     assert _choose(bare).driver != "hunger"  # a little hunger isn't worth a search in the dark
