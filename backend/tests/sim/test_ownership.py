@@ -339,3 +339,18 @@ def test_out_at_the_gate_no_store_is_in_reach(new_sim: Callable[..., Simulation]
     sim = without_animals(new_sim(seed=5))
     sim.add_citizen(make_spec("goro", at=GATE))
     assert store_in_reach(sim.core, sim.citizen("goro")) is None
+
+
+def test_a_storehouse_and_a_chest_are_reached_at_a_door_and_a_rack_where_it_stands(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    from app.sim.ownership import reach_point
+    from app.sim.wear import store_spot
+
+    sim = new_sim(seed=5)
+    world = sim.world
+    assert reach_point(sim.core, "store-2") == world.structures["store-2"].door
+    assert reach_point(sim.core, "farmhouse-1-chest") == world.structures["farmhouse-1"].door
+    for rack in ("field-rack-1", "band_b_camp:drying-rack"):  # racks are structures too, but have no door to use
+        assert reach_point(sim.core, rack) == store_spot(world, rack)
+    assert world.distance_m(reach_point(sim.core, "field-rack-1"), world.structures["field-rack-1"].centre) < 0.5
