@@ -275,13 +275,13 @@ def test_town_folk_sleep_at_home_and_work_their_roles(life: Life) -> None:
 
 
 def test_the_farmers_rice_tax_fills_the_granary(life: Life) -> None:
-    """The granary gets 40 % of each harvest and feeds seven (10-world-v1 §2.6-2.7): it ends above its start and is
-    never drawn down more than 30. 5-seed sweep (N1's tuned paddies, D152, 10 days): +37, +78, +30, +75, +74, never
-    below the start. The bar asks for no more while D156's rations for four households (~63 a day out against ~48-60
-    of tax in) last: raise it again when BR1 removes them (the stall feeds those households)."""
+    """The granary gets 40 % of each harvest and feeds the keep and the temple (10-world-v1 §2.6-2.7), and the lord
+    sells it at the stall only while rice is dear or fair: it ends 10 days more than 50 above its start and is never
+    drawn down more than 30. 5-seed sweep (BR1: the D156 rations gone, the bible's paddies, D180; seeds 20261028, 7,
+    1, 2, 3): +104, +125, +127, +123, +103, lowest dip −21."""
     rice = life.rice
     assert len(rice) == DAYS + 1
-    assert rice[-1] > rice[0]
+    assert rice[-1] > rice[0] + 50
     assert min(rice) >= rice[0] - 30  # never drawn down
 
 
