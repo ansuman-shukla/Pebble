@@ -129,15 +129,15 @@ def test_the_words_for_coins_and_days_are_read_at_their_least() -> None:
 
 
 def test_a_farm_household_spares_what_its_paddies_give_past_the_tax_and_its_mouths() -> None:
-    """10 §1.4: Genzo's household keeps 48 a day and eats 30 (sells 18), Tokuji keeps 24 and eats 10 (sells 14)."""
-    assert town._surplus(GENZO) == pytest.approx(18 / 48)
-    assert town._surplus(TOKUJI) == pytest.approx(14 / 24)
+    """10 §1.4: Genzo's household keeps 48 a day, Tokuji 24; at 11 a mouth (D180) Genzo's spares 15, Tokuji 13."""
+    assert town._surplus(GENZO) == pytest.approx(15 / 48)  # reckoning 11 a mouth (D180)
+    assert town._surplus(TOKUJI) == pytest.approx(13 / 24)
     assert town._surplus(GORO) == 0.0
 
 
-@pytest.mark.parametrize(("word", "sold"), [("dear", 17), ("fair", 11), ("cheap", 6)])
+@pytest.mark.parametrize(("word", "sold"), [("dear", 14), ("fair", 9), ("cheap", 5)])
 def test_farmers_sell_their_spare_rice_by_the_price_rule(word: PriceWord, sold: int) -> None:
-    """Fifty harvested: 30 kept after the tax, 11 of them spare for Genzo's household; ×1.5 dear, ×0.5 cheap (with a
+    """Fifty harvested: 30 kept after the tax, 9.4 of them spare for Genzo's household; ×1.5 dear, ×0.5 cheap (with a
     great deal of rice put by at home)."""
     price = STALL_RICE.model_copy(update={"word": word})
     notes: dict[str, JsonValue] = {"taxed": True, "harvested": 50, "chest rice": town.A_GREAT_DEAL}
@@ -158,7 +158,7 @@ def test_a_household_with_little_rice_put_by_keeps_its_own_first() -> None:
     assert notes["chest rice"] == town.PLENTY
     ctx, api = _ctx(_look(market=dear, carrying=("plenty of rice",)), GENZO, Recorder(notes))
     town._farm(ctx)[0].start()
-    assert ("sell", "rice", 11) in api.calls
+    assert ("sell", "rice", 9) in api.calls
     notes |= {"harvested": 50, "chest rice": 4}
     [option] = town._farm(_ctx(_look(market=dear, carrying=("plenty of rice",)), GENZO, Recorder(notes))[0])
     assert option.name == "go home" and notes["harvested"] == 0

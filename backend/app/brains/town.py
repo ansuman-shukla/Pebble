@@ -87,11 +87,12 @@ HUNGRY_BUY = {2: 86.0, 3: 106.0}  # buying rice when hungry with none carried: a
 # the price rule (10 §1.4): farmers sell their surplus ×1.5 while rice is dear at the stall, ×0.5 while cheap
 SELL_FACTOR: dict[PriceWord, float] = {"dear": 1.5, "fair": 1.0, "cheap": 0.5}
 # a farmer's reckoning of the household's rice (10 §1.4): a paddy gives 60 measures every 3 days, 40 % goes in tax,
-# everyone eats 10 a day; what is left over is sold at the stall
+# everyone eats about 10 a day (reckoned 11: a household selling at 10 ran its chest down ~4 a day, D180); what is
+# left over is sold at the stall
 PADDY_RICE = 60
 PADDY_DAYS = 3
 RICE_TAX = 0.4
-EATS = 10
+EATS = 11
 HARVEST = 10  # measures a harvest session takes from a ripe paddy (15 with a sickle, counted as 10)
 PLENTY = 13  # "plenty of rice" in the chest at the least: a household with less sells none of its own
 A_GREAT_DEAL = 41  # "a great deal of rice": only then a dear price draws out more than the spare share
@@ -394,7 +395,8 @@ def _collect_wage(ctx: Context) -> list[Option]:
 
 def _surplus(profile: BrainProfile) -> float:
     """The share of the rice a farm household brings home that it can spare for the stall: what its paddies give
-    after the tax, less what its mouths eat (10 §1.4: Genzo's household 18 of 48 a day, Tokuji 14 of 24)."""
+    after the tax, less what its mouths eat (10 §1.4 at 10 a mouth: Genzo's household 18 of 48 a day, Tokuji 14 of
+    24; reckoned at 11, 15 and 13)."""
     kept = profile.paddies * PADDY_RICE / PADDY_DAYS * (1 - RICE_TAX)
     return max(0.0, 1 - profile.household * EATS / kept) if kept else 0.0
 
@@ -813,7 +815,7 @@ def _market_round(ctx: Context) -> list[Option]:
     chest = ctx.notes.get("treasury")
     treasury = purse(p) + (chest if isinstance(chest, int) else GOLD_TREASURY)  # his purse is the treasury's too
     if _on_sale(p, GOLD) and purse(p) >= PURSE_LOW and treasury > GOLD_TREASURY:
-        deals.append(("buy gold", partial(ctx.api.buy, GOLD, 1)))
+        deals.append(("buy gold", partial(ctx.api.buy, GOLD, GOLD_LOAD)))  # what the digger brought
     if weekday(p) in CLOTH_DAYS and _on_sale(p, CLOTH) and purse(p) >= PURSE_LOW:
         deals.append(("buy cloth", partial(ctx.api.buy, CLOTH, 1)))
     for name, deal in deals:
