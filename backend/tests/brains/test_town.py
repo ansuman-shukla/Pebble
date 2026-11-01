@@ -414,6 +414,20 @@ def test_a_good_cheap_at_the_stall_is_kept_for_another_day() -> None:
     assert ("sell", "iron sand", 99) in api.calls
 
 
+@pytest.mark.parametrize(("item", "word"), [("iron sand", "cheap"), ("gold", "fair")])
+def test_a_hungry_seller_with_nothing_to_eat_takes_what_the_stall_pays(item: str, word: PriceWord) -> None:
+    digger = _profile("Daisuke", "iron-sand digger", dues=5)
+    seen = PriceSeen(item=item, price="three coins each; it pays two coins", word=word)
+    carrying = ("three coins", f"some {item}")
+    ctx, _ = _ctx(_look(market=(seen,), carrying=carrying), digger, hunger=1)
+    assert town._sell(ctx, item, "Sell it") == []  # peckish: kept for another day
+    ctx, api = _ctx(_look(market=(seen,), carrying=carrying), digger, api=Recorder(ctx.notes), hunger=2)
+    town._sell(ctx, item, "Sell it")[0].start()  # hungry with nothing to eat, though held earlier today
+    assert ("sell", item, 99) in api.calls
+    fed = _look(market=(seen,), carrying=(*carrying, "a little rice"))
+    assert town._sell(_ctx(fed, digger, hunger=2)[0], item, "Sell it") == []  # food in hand: it can wait
+
+
 def test_the_weaver_fetches_reeds_on_reed_days_and_makes_a_pack_from_two_hides() -> None:
     aiko = _profile("Aiko", "weaver, the farmer's wife", household=3, paddies=4, dues=12)
     home = "at your home, in The castle town"

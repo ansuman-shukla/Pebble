@@ -620,13 +620,16 @@ def _gather_at(ctx: Context, place: str, resource: str, aim: str, score: float =
 
 def _sell(ctx: Context, item: str, aim: str, score: float = WORK + 1) -> list[Option]:
     """Sell what you carry of a good at the stall (as much as it takes, in its lots) while it is kept; while it is
-    cheap there (the stall holds more than it wants) it is kept for another day."""
+    cheap there (the stall holds more than it wants) it is kept for another day, unless the seller is hungry with
+    nothing to eat: then what the stall pays will do."""
     p = ctx.perception
     lot, price = LOTS.get(item, 1), _price(p, item)
+    needy = ctx.needs.hunger >= 2 and not carried_food(p.you)
     short_only = item == GOLD  # only while the stall runs short of it, so its till doesn't lurch
-    if price is not None and (price.word == "cheap" or (short_only and price.word != "dear")):
+    if not needy and price is not None and (price.word == "cheap" or (short_only and price.word != "dear")):
         ctx.mark_done(f"failed sell {item}")
-    if carrying(p, item) < lot or p.time_of_day not in STALL_TIMES or ctx.done_today(f"failed sell {item}"):
+    held = ctx.done_today(f"failed sell {item}") and not needy
+    if carrying(p, item) < lot or p.time_of_day not in STALL_TIMES or held or _refused(ctx, f"sell {item}"):
         return []
     option = _at_stall(ctx, score, f"sell {item}", aim, partial(ctx.api.sell, item, 99))
     return [option] if option is not None else []
