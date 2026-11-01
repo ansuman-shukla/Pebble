@@ -959,7 +959,7 @@ def _judge_at_fire(ctx: Context) -> list[Option]:
         if deed is None or not is_name(person.label) or DISTANCE[person.nearness] == "far":
             continue
         aim = f"Judge {person.label} at the fire for what they did"
-        held = f"held by {ctx.profile.name}" in (person.doing or "") or "held by you" in (person.doing or "")
+        held = (person.doing or "").startswith("held by")  # seized (as the town's law reads it too)
         if not beside(person):
             return [Option(JUDGE, f"go up to {person.label}", partial(api.walk_to_person, person.label), aim)]
         if not held:

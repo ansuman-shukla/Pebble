@@ -19,6 +19,7 @@ from app.brains.bands import (
     _raid,
 )
 from app.brains.profile import BrainProfile, Spot
+from app.brains.routines import Context
 from app.brains.senses import Needs
 from app.core.rng import Rng
 from app.sim.simulation import Simulation
@@ -557,3 +558,43 @@ def test_a_raider_who_sees_no_rack_at_the_fields_looks_a_few_steps_each_way_roun
     assert _choose(_ctx(_look("at the rice fields", "night", (), things=[HUNG]), kaz, found)).name == (
         "go to a rice rack hung with rice"
     )
+
+
+def test_band_b_s_leader_judges_a_wrong_against_the_band_at_the_fire_not_one_against_the_town(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    from app.brains import bands
+    from app.brains.senses import phase
+    from app.observability.events import Stole
+    from app.sim.custody import CUSTODY, Custody
+    from app.world_api.models import Fine
+
+    sim = without_animals(new_sim())
+    camp: dict[str, Any] = {"site": "band_b_camp", "home": "band_b_camp:shelter-n", "region": "band_b"}
+    sim.add_citizen(make_spec("barro", name="Barro", knows_people=["kaz"], at=(0.0, 6.0), **camp))
+    sim.add_citizen(make_spec("kaz", name="Kaz", knows_people=["barro"], at=(1.0, 6.0), **camp))
+    sim.drain()
+    barro = _band("barro", "band leader", "band_b")
+
+    def judging() -> list[tuple[str, tuple[Any, ...]]]:
+        look = WorldApi(sim, "barro").look_around()
+        api = FakeApi({"night": False, "days": 5, "chores": []})
+        ctx = Context(cast(WorldApi, api), barro, look, Needs(0, 0, 0), phase(look), lambda _p: False, lambda _n: 0)
+        for option in bands._judge_at_fire(ctx):
+            option.start()
+        return api.calls
+
+    town = Stole(owner="farmhouse-1", store="field-rack-1", item="rice", count=5, witnesses=["barro"])
+    sim.core.emit("stole", town, actor=sim.citizen("kaz"))  # a raid they went on together
+    assert judging() == []  # none of the band's business
+    band = Stole(owner="band_b", store="band_b_camp:drying-rack", item="dried meat", count=2, witnesses=["barro"])
+    sim.core.emit("stole", band, actor=sim.citizen("kaz"))
+    assert judging() == [("seize", ("Kaz",))]
+    CUSTODY.of(sim.state)["kaz"] = Custody(since=sim.tick, keeper="barro")  # seized
+    assert judging() == [("judge", ("Kaz", Fine(mon=bands.BAND_FINE)))]
+    member = _band("barro", "young hunter", "band_b")  # only the leader judges
+    look = WorldApi(sim, "barro").look_around()
+    ctx = Context(
+        cast(WorldApi, FakeApi({})), member, look, Needs(0, 0, 0), phase(look), lambda _p: False, lambda _n: 0
+    )
+    assert bands._judge_at_fire(ctx) == []
