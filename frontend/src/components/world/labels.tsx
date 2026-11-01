@@ -25,6 +25,7 @@ import {
   type ChipAnchor,
   type ChipView,
   clusterFace,
+  ICON_M,
   type LabelBox,
   layoutBubbles,
   layoutChips,
@@ -185,15 +186,29 @@ const CHIP_ICONS: Record<ChipIcon, LucideIcon> = {
   people: Users,
 };
 
-/** Projects `subject`'s anchor: its screen spot (CSS px) and distance, or null when it has none or is off screen. */
+/** Whether something (a hill) stands between the camera and an anchor (both world points). */
+export type Hides = (camera: Vector3, anchor: Vector3) => boolean;
+
+/**
+ * Projects `subject`'s anchor: its screen spot (CSS px) and distance, or null when it has none, is off screen or is
+ * hidden (`hides`) where a chip of it could show (`pinned` ones at any distance, others within ICON_M).
+ */
 function onScreen(
   store: LabelStore,
   subject: string,
   camera: Camera,
   size: { width: number; height: number },
+  pinned: boolean,
+  hides: Hides | null,
 ) {
   if (!store.anchorPosition(subject, projected)) return null;
   const distance = projected.distanceTo(camera.position);
+  if (
+    hides &&
+    (pinned || distance <= ICON_M) &&
+    hides(camera.position, projected)
+  )
+    return null;
   projected.project(camera);
   if (
     projected.z >= 1 ||
@@ -224,9 +239,12 @@ const setText = (element: Element | null, text: string) => {
 export function ChipProjector({
   store,
   pinned,
+  hides = null,
 }: {
   store: LabelStore;
   pinned: readonly string[];
+  /** What hides an anchor from the camera (the planet's hills); nothing when null. */
+  hides?: Hides | null;
 }) {
   // each element's last measured size in a view, with the text it said then
   const sizes = useRef(new Map<string, MeasuredSize>());
@@ -239,13 +257,9 @@ export function ChipProjector({
     const spots = new Map<string, ChipAnchor>();
     const spotOf = (subject: string) => {
       if (!spots.has(subject)) {
-        const spot = onScreen(store, subject, camera, size);
-        if (spot)
-          spots.set(subject, {
-            id: subject,
-            ...spot,
-            pinned: pinned.includes(subject),
-          });
+        const whole = pinned.includes(subject);
+        const spot = onScreen(store, subject, camera, size, whole, hides);
+        if (spot) spots.set(subject, { id: subject, ...spot, pinned: whole });
       }
       return spots.get(subject);
     };

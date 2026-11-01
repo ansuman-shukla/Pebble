@@ -7,6 +7,7 @@ import {
   groundSpeed,
   headingAt,
   joinAt,
+  passedBetween,
   pointAt,
   snapMetres,
   walking,
@@ -53,6 +54,23 @@ test('a walker moves along the route by its times, round the corner, and stops a
     expect.closeTo(30, 2),
     expect.closeTo(40, 2),
   ]);
+});
+
+test('a frame that walks round the corner passes it: the corners walked between two moments', () => {
+  const path = walkPath(L, L_TIMES, R);
+  const corners = (from: number, to: number) =>
+    passedBetween(path, from, to).map((unit) =>
+      local(unit).map((metres) => Math.round(metres)),
+    );
+  expect(corners(10, 50)).toEqual([[30, 0]]); // round the corner
+  expect(corners(0, 30)).toEqual([]); // up to it: the body is there, not past it
+  expect(corners(30, 70)).toEqual([]); // from it on to the end
+  expect(corners(-1, 71)).toEqual([
+    [0, 0],
+    [30, 0],
+    [30, 40],
+  ]);
+  expect(corners(50, 50)).toEqual([]); // standing
 });
 
 test('the ground speed is the leg being walked: slower where the times say so, 0 once there', () => {

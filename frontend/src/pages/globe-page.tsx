@@ -68,7 +68,11 @@ import {
 import { TimeLapseTrails } from '@/components/world/globe/time-lapse-trails';
 import { VolcanoSmoke } from '@/components/world/globe/volcano-smoke';
 import { Waterfalls } from '@/components/world/globe/waterfalls';
-import { ChipOverlay, ChipProjector } from '@/components/world/labels';
+import {
+  ChipOverlay,
+  ChipProjector,
+  type Hides,
+} from '@/components/world/labels';
 import { LivingProps, PropHooks } from '@/components/world/living-props';
 import {
   CAMERA_MODES,
@@ -116,10 +120,13 @@ import {
   type GlobeTerrain,
   latLonFromDirection,
   type SiteMapping,
+  siteMapping,
   tangentFrame,
 } from '@/lib/world/globe';
 import { biomeColor } from '@/lib/world/globe-mesh';
+import { groundHides } from '@/lib/world/globe-pick';
 import { clipWater, TOWN_WATER_Y } from '@/lib/world/ground-shape';
+import type { MapArea, MapNode } from '@/lib/world/minimap';
 import type { LabelStore, UpAt } from '@/lib/world/label-store';
 import {
   type RiverLayout,
@@ -173,6 +180,8 @@ interface Planet {
   rivers: RiverLayout;
   scatter: Scatter;
   volcano: { frame: ReturnType<typeof tangentFrame>; summit: number } | null;
+  /** Whether the ground (the town's plateau, else the terrain) stands between two world points. */
+  hides: Hides;
 }
 
 function buildPlanet(
@@ -194,6 +203,13 @@ function buildPlanet(
     angle: Math.atan(TOWN_GROUND_RADIUS / (globe.radius + height)),
   };
   const mapping = anchorMapping(site.anchor, globe.radius);
+  const local = new Vector3();
+  const floorAt = (point: Vector3) => {
+    mapping.toLocal(point, local);
+    return Math.hypot(local.x, local.z) < TOWN_GROUND_RADIUS
+      ? height
+      : terrain.heightAt(point);
+  };
   return {
     view,
     sites: view.sites.map((candidate) => ({
@@ -239,6 +255,8 @@ function buildPlanet(
           summit: globe.radius + volcano.anchor.height_m,
         }
       : null,
+    hides: (camera, anchor) =>
+      groundHides(camera, anchor, globe.radius, floorAt),
   };
 }
 
@@ -545,7 +563,7 @@ const GlobeScene = memo(function GlobeScene({
         onPlayerMove={onPlayerMove}
         onReady={onWalkReady}
       />
-      <ChipProjector store={labels} pinned={pinned} />
+      <ChipProjector store={labels} pinned={pinned} hides={planet.hides} />
       <CitizenPicker views={npcViews} pickRef={pickRef} />
       <RenderStatsProbe
         key={cameraMode}
@@ -558,15 +576,91 @@ const GlobeScene = memo(function GlobeScene({
 
 const round = (value: number) => value.toFixed(2);
 
-/** The "Go to" sites: the town at its spawn by the main gate, then every camp and landmark. */
+/** The "Go to" places: the town at its spawn by the main gate, every camp and landmark, then every hotspot. */
 function goToSites(planet: Planet, town: TownView): GoToSite[] {
   const radius = planet.terrain.globe.radius;
-  return planet.view.sites.map((site) => ({
-    id: site.id,
-    name: site.name,
-    mapping: anchorMapping(site.anchor, radius),
-    spawn: site.kind === 'town' ? startFor(planet, town, null) : null,
+  return [
+    ...planet.view.sites.map((site) => ({
+      id: site.id,
+      name: site.name,
+      mapping: anchorMapping(site.anchor, radius),
+      spawn: site.kind === 'town' ? startFor(planet, town, null) : null,
+      group: 'site' as const,
+    })),
+    ...planet.view.places.hotspots.map((hotspot) => ({
+      id: hotspot.id,
+      name: hotspot.name,
+      mapping: siteMapping(
+        tangentFrame(new Vector3(...hotspot.centre).normalize()),
+        radius,
+      ),
+      spawn: null,
+      group: 'hotspot' as const,
+    })),
+  ];
+}
+
+/**
+ * Where the minimap centres: the sites within their reach (the town on its ground disc, so the hotspots just outside
+ * its walls are theirs), then the hotspots.
+ */
+function minimapAreas(planet: Planet): MapArea[] {
+  const radius = planet.terrain.globe.radius;
+  return [
+    ...planet.view.sites.map((site) => ({
+      id: site.id,
+      name: site.name,
+      mapping: anchorMapping(site.anchor, radius),
+      reach:
+        site.kind === 'town'
+          ? TOWN_GROUND_RADIUS
+          : planet.sites.find((one) => one.id === site.id)!.reach,
+    })),
+    ...planet.view.places.hotspots.map((hotspot) => ({
+      id: hotspot.id,
+      name: hotspot.name,
+      mapping: siteMapping(
+        tangentFrame(new Vector3(...hotspot.centre).normalize()),
+        radius,
+      ),
+      reach: hotspot.radius_m,
+    })),
+  ];
+}
+
+/** The nodes near a direction for the minimap: the flora and fixed features, and the town's rice paddies. */
+function minimapNodes(planet: Planet, town: TownView) {
+  const { scatter, terrain } = planet;
+  const radius = terrain.globe.radius;
+  // a paddy (`paddy-N`) is drawn as many tiles (`paddy-N-k`): it sits at their middle
+  const tiles = new Map<string, { x: number; z: number; count: number }>();
+  for (const placement of town.placements) {
+    if (placement.kind !== 'rice_paddy') continue;
+    const id = placement.id.split('-').slice(0, 2).join('-');
+    const sum = tiles.get(id) ?? { x: 0, z: 0, count: 0 };
+    tiles.set(id, {
+      x: sum.x + placement.x,
+      z: sum.z + placement.z,
+      count: sum.count + 1,
+    });
+  }
+  const paddies: MapNode[] = [...tiles].map(([id, { x, z, count }]) => ({
+    id,
+    direction: planet.town.mapping
+      .toWorld(x / count, 0, z / count, new Vector3())
+      .normalize(),
   }));
+  return (direction: Vector3, metres: number): MapNode[] => [
+    ...scatter.cellsAround(direction, metres).flatMap((cell) =>
+      scatter.nodes(cell).map((node) => ({
+        id: node.id,
+        direction: node.position.clone().normalize(),
+      })),
+    ),
+    ...paddies.filter(
+      (paddy) => paddy.direction.angleTo(direction) * radius < metres,
+    ),
+  ];
 }
 
 const DROP_MESSAGES: Record<
@@ -647,6 +741,8 @@ function GlobeWorld({
     [planet, town, townWater],
   );
   const goTo = useMemo(() => goToSites(planet, town), [planet, town]);
+  const mapAreas = useMemo(() => minimapAreas(planet), [planet]);
+  const nodesNear = useMemo(() => minimapNodes(planet, town), [planet, town]);
   const dropRef = useRef<DropApi | null>(null);
   const [dropping, setDropping] = useState(false);
   // the toolbar wraps onto more lines in narrow windows (and with the drop hint): panels hang below its real end
@@ -671,8 +767,11 @@ function GlobeWorld({
     return () => window.clearTimeout(timer);
   }, [message]);
 
-  /** Shows the outcome of a drop; a successful one goes into `?at=` so the spot can be shared. */
-  const settle = useCallback((result: DropResult) => {
+  /**
+   * Shows the outcome of a drop; a successful one goes into `?at=` so the spot can be shared (and, having `letGo` of
+   * whoever was followed, out of `?follow=`).
+   */
+  const settle = useCallback((result: DropResult, letGo = false) => {
     if (!result.ok) {
       setMessage(DROP_MESSAGES[result.reason]);
       return;
@@ -680,11 +779,16 @@ function GlobeWorld({
     setMessage(null);
     setDropping(false);
     setHover(null);
-    // replace the URL in place (commas kept readable); `?at=` is only read on load
+    // replace the URL in place (commas kept readable), no navigation; `?at=` and `?follow=` are only read on load
     const rest = window.location.search
       .slice(1)
       .split('&')
-      .filter((part) => part && !part.startsWith('at='))
+      .filter(
+        (part) =>
+          part &&
+          !part.startsWith('at=') &&
+          !(letGo && part.startsWith('follow=')),
+      )
       .join('&');
     const spot = [
       result.lat.toFixed(5),
@@ -821,7 +925,7 @@ function GlobeWorld({
     (id: string) => {
       const api = dropRef.current;
       setFollowId(null);
-      settle(api ? api.goTo(id) : { ok: false, reason: 'loading' });
+      settle(api ? api.goTo(id) : { ok: false, reason: 'loading' }, true);
     },
     [settle],
   );
@@ -830,7 +934,10 @@ function GlobeWorld({
     (direction: Vector3) => {
       const api = dropRef.current;
       setFollowId(null);
-      settle(api ? api.goNear(direction) : { ok: false, reason: 'loading' });
+      settle(
+        api ? api.goNear(direction) : { ok: false, reason: 'loading' },
+        true,
+      );
     },
     [settle],
   );
@@ -1212,10 +1319,12 @@ function GlobeWorld({
         <div className="pointer-events-none! mt-auto flex shrink-0 flex-col items-end gap-2 *:pointer-events-auto">
           {minimapOpen && ready && (
             <Minimap
-              sites={goTo}
+              areas={mapAreas}
               terrain={planet.terrain}
               biomeNames={view.biome_names}
               town={minimapTown}
+              nodesNear={nodesNear}
+              stages={nodeStages}
               citizens={live.citizens}
               animals={live.animals}
               fires={live.fires}

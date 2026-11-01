@@ -264,7 +264,10 @@ test('"Go to" drops the player at every named site', async ({ page }) => {
   const town = world.site('town');
   await page.getByRole('button', { name: /go to/ }).click();
   const items = page.getByRole('menuitem');
-  await expect(items).toHaveText(world.view.sites.map((site) => site.name));
+  await expect(items).toHaveText([
+    ...world.view.sites.map((site) => site.name),
+    ...world.view.places.hotspots.map((hotspot) => hotspot.name),
+  ]);
   await page.keyboard.press('Escape');
   for (const site of [...world.view.sites.slice(1), town]) {
     await page.getByRole('button', { name: /go to/ }).click();
@@ -289,6 +292,39 @@ test('"Go to" drops the player at every named site', async ({ page }) => {
       directionFromLatLon(at[0], at[1]).angleTo(directionOf(here)) * world.R,
     ).toBeLessThan(1);
   }
+  expect(errors).toEqual([]);
+});
+
+test('"Go to" drops the player in every hotspot, in place (no reload), letting go of whoever was followed', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  const element = await openGlobe(page, errors, '?mockLive=1&follow=genzo');
+  await expect(element).toHaveAttribute('data-follow', 'genzo');
+  await page.evaluate(() => {
+    (globalThis as unknown as { kept: boolean }).kept = true;
+  });
+  for (const hotspot of world.view.places.hotspots) {
+    await page.getByRole('button', { name: /go to/ }).click();
+    await page
+      .getByRole('menuitem', { name: hotspot.name, exact: true })
+      .click();
+    await expectFlight(element);
+    await expect(element).not.toHaveAttribute('data-follow');
+    const here = await sample(element);
+    const centre = new Vector3(...hotspot.centre).normalize();
+    expect(metresTo(here, centre), hotspot.name).toBeLessThan(hotspot.radius_m);
+    // where it went is shareable; who was followed (only read on load) is let go of
+    const url = new URL(page.url());
+    expect(url.searchParams.get('at')).not.toBeNull();
+    expect(url.searchParams.has('follow')).toBe(false);
+  }
+  // the same page all along: the go-tos moved the camera, they never navigated
+  expect(
+    await page.evaluate(
+      () => (globalThis as unknown as { kept?: boolean }).kept,
+    ),
+  ).toBe(true);
   expect(errors).toEqual([]);
 });
 
@@ -340,6 +376,65 @@ test('the follow camera stays out of the townhouses along the main street', asyn
   expect(Math.min(...arms)).toBeLessThan(4.5);
   // ...and the gaps between them let it out again
   expect(Math.max(...arms)).toBeGreaterThan(5);
+  expect(errors).toEqual([]);
+});
+
+test('following the merchant at the market stall swings round its awning instead of into his face', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  // from the teahouse side, looking south at Haru behind his stall (the mock's merchant, under its awning at 20, 54):
+  // the boom wants to rise north under the awning, which used to pull the camera in to 0.4 m
+  const element = await openGlobe(
+    page,
+    errors,
+    `?mockLive=1&at=${townAt(20, 64, 0, -1)}&follow=haru`,
+  );
+  await expect(element).toHaveAttribute('data-follow', 'haru');
+  await expect(element).toHaveAttribute('data-camera-flying', 'false');
+  const haru = page.locator('[data-npc="haru"]');
+  // swing the camera round to his north (the teahouse side): 0.005 rad a pixel
+  const lensZ = async () => {
+    const values = (await element.getAttribute('data-camera'))!;
+    const lens = new Vector3(...values.split(',').slice(0, 3).map(Number));
+    return townMapping.toLocal(lens, new Vector3()).z;
+  };
+  if ((await lensZ()) > 54) {
+    await page.mouse.move(300, 450);
+    await page.mouse.down();
+    await page.mouse.move(300 + Math.PI / 0.005, 450, { steps: 20 });
+    await page.mouse.up();
+  }
+  for (let k = 0; k < 10; k++) {
+    await page.waitForTimeout(200);
+    const [values, arm, x, y, z] = await Promise.all([
+      element.getAttribute('data-camera'),
+      element.getAttribute('data-camera-arm'),
+      haru.getAttribute('data-npc-x'),
+      haru.getAttribute('data-npc-y'),
+      haru.getAttribute('data-npc-z'),
+    ]);
+    const feet = new Vector3(Number(x), Number(y), Number(z));
+    const head = townMapping.toLocal(
+      feet.clone().setLength(feet.length() + EYE_HEIGHT),
+      new Vector3(),
+    );
+    const lens = townMapping.toLocal(
+      new Vector3(...values!.split(',').slice(0, 3).map(Number)),
+      new Vector3(),
+    );
+    expect(Math.hypot(head.x - 20, head.z - 54)).toBeLessThan(1);
+    if (k < 5) continue; // the swing eases round
+    // a full boom, with nothing of the town between the camera and his head
+    expect(Number(arm)).toBeGreaterThan(2.5);
+    expect(
+      raycastBlockers(
+        townWorld,
+        [head.x, head.y, head.z],
+        [lens.x, lens.y, lens.z],
+      ),
+    ).toBe(1);
+  }
   expect(errors).toEqual([]);
 });
 

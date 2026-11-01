@@ -14,7 +14,8 @@ import {
 
 /*
  * The event feed over the globe (10-world-v1 §5.4): what just happened, newest first, one line per event with its
- * importance, repeats merged, filters All/People/Danger/Economy, and ▶ to fly there. Collapsible (key L).
+ * importance, repeats merged, filters All/People/Danger/Economy, and ▶ to fly there; it opens with what was told
+ * before the page opened (the snapshot's `recent`). Collapsible (key L).
  */
 
 const IMPORTANCE_CLASS: Record<number, string> = {
@@ -50,9 +51,17 @@ export function EventFeed({
   useEffect(
     () =>
       listen((message) => {
-        if (message.type !== 'event') return;
-        const entry = feedEntry(message, subjectsRef.current);
-        if (entry) setEntries((current) => addEntry(current, entry));
+        // a snapshot brings what was told before the page opened (a reconnect's repeats merge away)
+        const told =
+          message.type === 'event'
+            ? [message]
+            : message.type === 'snapshot'
+              ? (message.recent ?? [])
+              : [];
+        for (const event of told) {
+          const entry = feedEntry(event, subjectsRef.current);
+          if (entry) setEntries((current) => addEntry(current, entry));
+        }
       }),
     [listen],
   );

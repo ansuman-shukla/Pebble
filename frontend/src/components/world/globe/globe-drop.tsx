@@ -19,7 +19,7 @@ import type { GlobeWalk } from '@/lib/world/globe-walk';
 /*
  * Dropping the player anywhere (Street View's pegman): a point picked on the screen is traced onto the
  * rendered planet; on land the player is put there, facing where the camera looked, and the camera flies down
- * into the follow view; water is refused. "Go to" drops the player at a named site or next to a citizen.
+ * into the follow view; water is refused. "Go to" drops the player at a named site or hotspot, or next to a citizen.
  */
 
 /** Where a drop put the player, or why it didn't. */
@@ -48,10 +48,12 @@ export interface GoToSite {
   mapping: SiteMapping;
   /** A fixed spawn (the town's, by its main gate); without one a free spot near the anchor is found. */
   spawn: { position: Vector3; facing: Vector3 } | null;
+  /** A settlement or landmark, or a hotspot (a named cluster of nodes). */
+  group: 'site' | 'hotspot';
 }
 
-/** Rings (metres from the anchor) searched for a free spot to stand at a site... */
-const SITE_RINGS = [6, 8, 10, 12, 15, 18, 22, 26, 30];
+/** Rings (metres from the anchor) searched for a free spot to stand at a site (out to a hotspot's edge round its pool)... */
+const SITE_RINGS = [6, 8, 10, 12, 15, 18, 22, 26, 30, 40, 55, 70, 90, 120];
 /** ...and next to a citizen. */
 const PERSON_RINGS = [1.5, 2, 3, 4, 6, 8];
 const RING_POINTS = 16;

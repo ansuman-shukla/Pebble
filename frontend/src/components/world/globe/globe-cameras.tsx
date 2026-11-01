@@ -2,6 +2,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { type RefObject, useCallback, useEffect, useRef } from 'react';
 import { Matrix4, type PerspectiveCamera, Quaternion, Vector3 } from 'three';
 
+import { DODGE_ARM, dodgeFor, type Swing } from './camera-dodge';
 import {
   easeInOut,
   FLIGHT_SECONDS,
@@ -53,6 +54,8 @@ const up = new Vector3();
 const eye = new Vector3();
 const offset = new Vector3();
 const wanted = new Vector3();
+const probe = new Vector3();
+const probeEnd = new Vector3();
 const turnTo = new Quaternion();
 const looking = new Matrix4();
 
@@ -78,12 +81,28 @@ const CAMERA_CLEARANCE = 0.25;
 const EYE_SMOOTHING = 12;
 /** ...but jumps when the player is moved (a drop). */
 const EYE_JUMP = 3;
+/** Swinging round what cuts the boom (camera-dodge.ts): it looks again this often (s) while swung or cut short... */
+const DODGE_SEARCH_S = 0.25;
+/** ...and eases round at this rate (1/s). */
+const DODGE_RATE = 4;
+
+const wrapAngle = (angle: number) =>
+  Math.atan2(Math.sin(angle), Math.cos(angle));
+
+/** The swing the boom eases to, where it is now, and the seconds until the next search. */
+interface Dodging extends Swing {
+  shownYaw: number;
+  shownPitch: number;
+  wait: number;
+}
+
 export function GlobeFollowCamera({
   terrain,
   playerRef,
   rigRef,
   walkRef,
   focusRef,
+  dodge = false,
 }: {
   terrain: GlobeTerrain;
   playerRef: RefObject<GlobePlayerState>;
@@ -91,10 +110,19 @@ export function GlobeFollowCamera({
   /** The walk's collisions for the spring arm (null until it is built). */
   walkRef: RefObject<GlobeWalk | null>;
   focusRef: RefObject<Vector3>;
+  /** Swing round what cuts the boom short instead of pulling in to the face (following a citizen, not steering). */
+  dodge?: boolean;
 }) {
   const radius = terrain.globe.radius;
   const camera = useThree((state) => state.camera);
   const eyeHeight = useRef<number | null>(null);
+  const swing = useRef<Dodging>({
+    yaw: 0,
+    pitch: 0,
+    shownYaw: 0,
+    shownPitch: 0,
+    wait: 0,
+  });
 
   useEffect(() => {
     const rig = rigRef.current;
@@ -151,9 +179,11 @@ export function GlobeFollowCamera({
     eye.copy(up).multiplyScalar(smoothed);
     // a slope behind the player tilts the camera up over it rather than pulling it in to the head
     let pitch = rig.pitch;
-    const aim = (angle: number) =>
-      offset
+    const shown = swing.current;
+    const aim = (angle: number, yaw = shown.shownYaw, out = offset) =>
+      out
         .copy(rig.heading)
+        .applyAxisAngle(up, yaw)
         .multiplyScalar(-Math.cos(angle))
         .addScaledVector(up, Math.sin(angle));
     while (
@@ -171,7 +201,35 @@ export function GlobeFollowCamera({
     rig.lift +=
       (lift - rig.lift) *
       (rig.settled ? smoothing(lifted ? LIFT_RISE : LIFT_FALL, delta) : 1);
-    aim(rig.pitch + rig.lift);
+    const wantedPitch = rig.pitch + rig.lift;
+    if (dodge && walk) {
+      const reach = (yaw: number, angle: number) =>
+        walk.cameraReach(
+          eye,
+          probeEnd
+            .copy(eye)
+            .addScaledVector(aim(angle, yaw, probe), rig.distance),
+          FOLLOW_CLEARANCE,
+        ) * rig.distance;
+      const good = Math.min(rig.distance, DODGE_ARM);
+      shown.wait -= delta;
+      const swung = shown.yaw !== 0 || shown.pitch !== 0;
+      if (
+        shown.wait <= 0 &&
+        (swung || reach(shown.yaw, wantedPitch + shown.pitch) < good)
+      ) {
+        Object.assign(shown, dodgeFor(wantedPitch, good, reach));
+        shown.wait = DODGE_SEARCH_S;
+      }
+      const ease = rig.settled ? smoothing(DODGE_RATE, delta) : 1;
+      shown.shownYaw = wrapAngle(
+        shown.shownYaw + wrapAngle(shown.yaw - shown.shownYaw) * ease,
+      );
+      shown.shownPitch += (shown.pitch - shown.shownPitch) * ease;
+    }
+    aim(
+      clamp(wantedPitch + shown.shownPitch, FOLLOW_PITCH[0], FOLLOW_PITCH[1]),
+    );
     wanted.copy(eye).addScaledVector(offset, rig.distance);
     const reach = walk ? walk.cameraReach(eye, wanted, FOLLOW_CLEARANCE) : 1;
     const clear =

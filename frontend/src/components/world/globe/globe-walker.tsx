@@ -145,7 +145,12 @@ function SubjectCamera({
     rig.flight = null;
   }, [rigRef, subjectRef, camera]);
   return (
-    <GlobeFollowCamera playerRef={subjectRef} rigRef={rigRef} {...props} />
+    <GlobeFollowCamera
+      playerRef={subjectRef}
+      rigRef={rigRef}
+      dodge
+      {...props}
+    />
   );
 }
 

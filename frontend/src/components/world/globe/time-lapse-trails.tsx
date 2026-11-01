@@ -23,8 +23,8 @@ import { isTimeLapse } from '@/lib/world/visual-rate';
 
 /*
  * Fast-forward trails (10 §4.2.3): in time-lapse (above ×10) every drawn citizen drags the last 20 real seconds of
- * its drawn path as a fading line ending at its body, all in one LineSegments. At ×10 and below, or paused, there are
- * none.
+ * its drawn path (through the route corners it walked) as a fading line ending at its body, all in one LineSegments.
+ * At ×10 and below, or paused, there are none.
  */
 
 /** Trails for at most this many citizens. */
@@ -95,7 +95,18 @@ export function TimeLapseTrails({
       if (position.lengthSq() === 0) continue; // not placed yet
       drawn.add(view.id);
       lifted.copy(position).setLength(position.length() + LIFT_M);
-      sampleTrail(trails.current, view.id, lifted, now, step);
+      const corners = view.walked.map((corner) =>
+        corner.clone().setLength(corner.length() + LIFT_M),
+      );
+      sampleTrail(
+        trails.current,
+        view.id,
+        lifted,
+        now,
+        step,
+        corners,
+        view.jumped,
+      );
     }
     pruneTrails(trails.current, drawn);
     const { position: positions, color: colors } = mesh.geometry.attributes;

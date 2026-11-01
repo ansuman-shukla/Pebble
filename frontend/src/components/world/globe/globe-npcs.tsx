@@ -24,6 +24,7 @@ import { MAX_FRAME, smoothing } from '@/components/world/player/motion';
 import type { LiveCitizen } from '@/lib/live/live-contract';
 import { type Cue, type TickClock, tickElapsed } from '@/lib/live/live-state';
 import {
+  FADE_S,
   follow,
   keepRight,
   moveOn,
@@ -55,7 +56,12 @@ import {
   standsUntilBack,
 } from '@/lib/live/separation';
 import type { ShownDoings } from '@/lib/live/shown-doings';
-import { groundSpeed, headingAt, walking } from '@/lib/live/walk-path';
+import {
+  groundSpeed,
+  headingAt,
+  passedBetween,
+  walking,
+} from '@/lib/live/walk-path';
 import { CITIZEN_LOOKS, type CitizenLook } from '@/lib/world/citizen-looks';
 import { type GameClock, sunDirection } from '@/lib/world/game-clock';
 import { type GlobeTerrain, tangentFrame } from '@/lib/world/globe';
@@ -156,6 +162,10 @@ interface NpcView {
   id: string;
   /** World position of the feet and the facing tangent (the follow camera reads these). */
   pose: GlobePlayerState;
+  /** The route's corners (world, on the ground) the body walked through in the latest frame, oldest first... */
+  walked: readonly Vector3[];
+  /** ...or whether it faded across to where it is in the latest frame (a resync), not walking. */
+  jumped: boolean;
   activity: string;
   /** How the body rests (from the motion shown). */
   posture: BodyPose;
@@ -583,6 +593,8 @@ function placeAlong(
 ) {
   const { terrain, town, scratch, heading, rate, delta } = context;
   const radius = terrain.globe.radius;
+  const before = track.path.time;
+  const fadingFrom = track.fade !== null && track.fade.elapsed < FADE_S / 2;
   const inLane = keepRight(
     track,
     delta,
@@ -613,6 +625,19 @@ function placeAlong(
     .multiplyScalar(Math.sin(track.yaw))
     .addScaledVector(south, Math.cos(track.yaw));
   view.pose.ground = ground;
+  const corners = passedBetween(track.path, before, track.path.time);
+  view.walked = corners.length
+    ? corners.map((corner) =>
+        corner
+          .clone()
+          .multiplyScalar(
+            radius + groundUnder(terrain, town, corner, scratch.local),
+          ),
+      )
+    : corners;
+  // a resync draws the body where it was for half the fade, then where it is
+  view.jumped =
+    fadingFrom && (track.fade === null || track.fade.elapsed >= FADE_S / 2);
   body.position.copy(position);
   basis.makeBasis(side.crossVectors(up, facing), up, facing);
   body.quaternion.setFromRotationMatrix(basis);
@@ -637,6 +662,8 @@ function newView(citizen: LiveCitizen): NpcView {
   return {
     id: citizen.id,
     pose: { position: new Vector3(), facing: new Vector3(), ground: 0 },
+    walked: [],
+    jumped: false,
     activity: citizen.activity,
     posture: 'standing',
     motion: 'idle',

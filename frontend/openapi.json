@@ -3760,6 +3760,14 @@
             "type": "array",
             "title": "Nodes",
             "default": []
+          },
+          "recent": {
+            "items": {
+              "$ref": "#/components/schemas/LiveEvent"
+            },
+            "type": "array",
+            "title": "Recent",
+            "default": []
           }
         },
         "type": "object",

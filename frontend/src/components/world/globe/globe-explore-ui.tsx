@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import type { DropTarget, GoToSite } from './globe-drop';
 
 /*
  * The exploring controls over the globe: the pegman (click it, then click the planet; or drag it onto the
- * planet) and the "Go to" menu of named sites.
+ * planet) and the "Go to" menu of named sites and hotspots.
  */
 
 /** Drag data type of the pegman, so the page only accepts drops that carry it. */
@@ -99,7 +99,7 @@ export function Pegman({
   );
 }
 
-/** A button opening the list of named sites; picking one drops the player there. */
+/** A button opening the list of named sites, then hotspots; picking one drops the player there. */
 export function GoToMenu({
   sites,
   onPick,
@@ -150,20 +150,30 @@ export function GoToMenu({
           aria-label="Go to"
           className="absolute top-full left-0 z-10 mt-1 flex min-w-44 flex-col rounded-lg bg-white p-1 shadow-lg"
         >
-          {sites.map((site) => (
-            <button
-              key={site.id}
-              type="button"
-              role="menuitem"
-              className="rounded-md px-2 py-1 text-left text-sm hover:bg-black/5"
-              onClick={(event) => {
-                setOpen(false);
-                event.currentTarget.blur();
-                onPick(site.id);
-              }}
-            >
-              {site.name}
-            </button>
+          {sites.map((site, index) => (
+            <Fragment key={site.id}>
+              {site.group === 'hotspot' &&
+                sites[index - 1]?.group !== 'hotspot' && (
+                  <span
+                    role="separator"
+                    className="text-muted-foreground mt-1 border-t px-2 pt-1 text-xs"
+                  >
+                    hotspots
+                  </span>
+                )}
+              <button
+                type="button"
+                role="menuitem"
+                className="rounded-md px-2 py-1 text-left text-sm hover:bg-black/5"
+                onClick={(event) => {
+                  setOpen(false);
+                  event.currentTarget.blur();
+                  onPick(site.id);
+                }}
+              >
+                {site.name}
+              </button>
+            </Fragment>
           ))}
         </div>
       )}

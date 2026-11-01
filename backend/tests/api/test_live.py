@@ -23,7 +23,7 @@ from app.engine import Clock, EngineLoop, open_loop, resume_run
 from app.lib.ulid import UlidFactory
 from app.observability.events import GoalSet, NodeChanged, Stole, Traded
 from app.observability.store import queue_command
-from app.services.live import LIVE_EVENT_TYPES, LiveEvent, LiveState
+from app.services.live import LIVE_EVENT_TYPES, RECENT_KEEP, LiveEvent, LiveState
 from app.sim import nodes
 from app.sim.citizens import CITIZENS
 from app.sim.world import SimWorld
@@ -192,6 +192,37 @@ def test_the_feed_sends_public_events_worth_telling_and_names_animals_and_househ
         0,
         "half",
     )
+
+
+def test_the_snapshot_carries_the_last_events_worth_telling(client: TestClient, committed_run: EngineLoop) -> None:
+    loop = committed_run
+    core = loop.sim.core
+    genzo, kaz = loop.sim.citizen("genzo"), loop.sim.citizen("kaz")
+    core.emit("goal_set", GoalSet(text="sell rice", driver="ambition"), actor=genzo)  # importance 0: never told
+    for count in range(1, RECENT_KEEP + 6):
+        sale = {"item": "rice", "count": count, "lots": 1, "coins": 8, "stall": "stall", "merchant": "fumiko"}
+        core.emit("bought", Traded.model_validate(sale), actor=genzo)
+    loop.run_ticks(1, headless=True)
+    with client.websocket_connect(f"{API}/live?run_id={loop.run.id}") as ws:
+        # a page opened now: the feed's history is read back from the store
+        first = LiveState.model_validate(_receive(ws))
+        assert len(first.recent) == RECENT_KEEP
+        assert [e.event.line for e in first.recent[:1] + first.recent[-1:]] == [
+            "Genzo buys 6 rice for 8 mon",
+            f"Genzo buys {RECENT_KEEP + 5} rice for 8 mon",
+        ]  # the newest, oldest first
+        # told at the tick they happened (between ticks 0 and 1: tick 0), of this run, worth telling
+        assert all(e.event.importance > 0 and e.tick == 0 and e.run_id == loop.run.id for e in first.recent)
+        # while it is watched, what happens joins it
+        core.emit("stole", Stole(owner="farmhouse-1", store="rack-1", item="rice", count=5), actor=kaz)
+        loop.run_ticks(1, headless=True)
+        ticked = _until_tick(ws, 2)
+        with client.websocket_connect(f"{API}/live?run_id={loop.run.id}") as later:
+            second = LiveState.model_validate(_receive(later))
+    assert len(second.recent) == RECENT_KEEP
+    assert (second.recent[-1].tick, second.recent[-1].event.line) == (1, "Kaz steals 5 rice from Genzo's house")
+    assert second.recent[-2].event.line == f"Genzo buys {RECENT_KEEP + 5} rice for 8 mon"
+    assert [m["recent"] for m in ticked if m["type"] == "tick"] == [[]]  # snapshots only
 
 
 def test_the_snapshot_carries_every_node_that_differs_from_full(client: TestClient, committed_run: EngineLoop) -> None:
