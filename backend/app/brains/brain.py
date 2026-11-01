@@ -25,6 +25,7 @@ from app.brains.profile import BrainProfile
 from app.brains.routines import Context, Option
 from app.brains.senses import (
     DISTANCE,
+    HURT,
     NIGHT_HUNGER,
     NIGHT_THIRST,
     Needs,
@@ -57,7 +58,6 @@ STOREHOUSES = "the storehouses"
 WELL = "the well"
 FIRE = "the fire pit"
 DRIVABLE = ("wolf", "wolves", "bear")  # predators a spear carrier stands up to (a pride of lions is run from)
-HURT = ("weak and aching", "close to death")  # how a body that has lost half its health feels
 CHAT_CHANCE = 0.3  # with someone greeted already in earshot and nothing pressing, a word in passing this often
 EAT_ORDER = ("berries", "nuts", "roots", "rice", "dried meat")  # what spoils first goes first; dried meat keeps
 MOVING = frozenset({"walk_to", "follow", "flee", "hunt", "attack", "rest", "sleep"})  # they move the body

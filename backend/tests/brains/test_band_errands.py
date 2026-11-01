@@ -424,3 +424,8 @@ def test_a_raider_walks_to_the_rice_fields_at_night_and_takes_rice_from_the_rack
     _start(ctx, take)
     assert api.calls[-2:] == [("pick_up", ("5 rice",)), ("walk_to_place", ("home", "walk"))]
     assert _choose(_ctx(_look("at the rice fields", "night", ()), kaz, api)).name != "take rice from the racks"
+    hurt = FakeApi({"night": False, "days": 5, "chores": [], "lean": 2})
+    look = _look("not far from Band B camp", "night", ())
+    bitten = look.model_copy(update={"you": look.you.model_copy(update={"feeling": ["weak and aching"]})})  # a bite
+    assert bands._raid(_ctx(bitten, kaz, hurt)) == []
+    assert "raided" in cast(list[str], hurt.notes["chores"])  # no raid that night

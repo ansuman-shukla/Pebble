@@ -15,6 +15,7 @@ from app.brains.senses import (
     DISTANCE,
     FOOD_VALUE,
     GAME_WORDS,
+    HURT,
     NIGHT_HUNGER,
     Resource,
     at,
@@ -833,6 +834,9 @@ def _raid(ctx: Context) -> list[Option]:
     if ctx.profile.citizen_id not in RAIDERS or _hungry_choice(ctx) != "raid" or ctx.done_today("raided"):
         return []
     if ctx.phase not in ("dusk", "night") or p.time_of_day == "pre-dawn":
+        return []
+    if any(word in p.you.feeling for word in HURT):  # badly hurt on the way: no raid tonight, home
+        ctx.mark_done("raided")
         return []
     aim = "Take rice from the town's racks"
     rack = next((t for t in p.things if "rice rack" in t.label and DISTANCE[t.nearness] != "far"), None)

@@ -98,6 +98,7 @@ def harmful_by_morning(level: int, night_rise: float) -> bool:
     return NEED_TOP[level] + night_rise >= HARMFUL_NEED
 
 
+HURT = ("weak and aching", "close to death")  # how a body that has lost half its health feels
 DANGER_WORDS = ("wolf", "wolves", "bear", "lion", "shark")  # animals everyone knows can kill
 THREAT_DOING = frozenset({"coming at you", "watching you"})
 GAME_WORDS: tuple[tuple[str, str], ...] = (  # (word in what is seen, what a hunter calls it)
