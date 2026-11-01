@@ -80,7 +80,7 @@ export interface FeedEntry {
   count: number;
   /** Whose chatter it is (greetings, gestures, small talk: speech and gestures of importance 1), else null. */
   chatter: Region | null;
-  /** A fold of chatter (type `chatter`): what each folded event said, newest first; else empty. */
+  /** A fold of chatter (type `chatter`): what its FOLD_KEEP newest events said, newest first; else empty. */
   folded: readonly { type: string; line: string }[];
 }
 
@@ -92,6 +92,8 @@ const MERGE_WITHIN = 6;
 const FOLD_WITHIN = 8;
 /** ...said at most this many ticks (game minutes) before. */
 export const FOLD_TICKS = 20;
+/** A fold keeps this many of its newest lines and ids (its count keeps them all), so all-day chatter stays cheap. */
+export const FOLD_KEEP = 20;
 /** The routine social events: a fold of them stands for the lot, so a band waking up doesn't bury the feed. */
 const CHATTER: ReadonlySet<string> = new Set(['said', 'gestured']);
 const FOLKS: Record<Region, string> = {
@@ -153,13 +155,16 @@ export const foldDetail = (entry: FeedEntry) =>
   (entry.folded.find(({ type }) => type === 'said') ?? entry.folded[0])?.line ??
   null;
 
-/** `entry` (chatter of `old`'s group) folded into `old`. */
+/** `entry` (chatter of `old`'s group) folded into `old`; its line says what the newest FOLD_KEEP do. */
 function fold(old: FeedEntry, entry: FeedEntry): FeedEntry {
   const before = old.folded.length > 0 ? old.folded : [old];
-  const folded = [{ type: entry.type, line: entry.line }, ...before];
+  const folded = [{ type: entry.type, line: entry.line }, ...before].slice(
+    0,
+    FOLD_KEEP,
+  );
   return {
     ...entry,
-    ids: [...old.ids, entry.id],
+    ids: [...old.ids, entry.id].slice(-FOLD_KEEP),
     type: 'chatter',
     line: foldLine(entry.chatter!, folded),
     count: old.count + 1,

@@ -5,6 +5,7 @@ import type { LiveEventMessage } from '../../src/lib/live/live-contract';
 import {
   addEntry,
   FEED_KEEP,
+  FOLD_KEEP,
   FOLD_TICKS,
   type FeedEntry,
   feedEntry,
@@ -245,6 +246,53 @@ test('a band’s greetings and small talk fold into one line; what matters stays
   // the fold is People news
   expect(shows(band, 'people')).toBe(true);
   expect(shows(band, 'danger')).toBe(false);
+});
+
+test('a shout between a band’s chatter keeps its own line (importance 2, as the backend tells it)', () => {
+  let feed: FeedEntry[] = [];
+  const add = (one: FeedEntry) => (feed = addEntry(feed, one));
+  add(waved('nim', 'Nim', 'Pip', 1200));
+  add(spoke('pip', 'Pip', 'Evening, Nim.', 1201));
+  const call = 'Tonight we take rice from the town’s racks.';
+  const shout = grouped(
+    event(
+      'said',
+      'vesa',
+      { line: `Vesa shouts: “${call}”`, importance: 2 },
+      { words: call, volume: 'shout' },
+      1202,
+    ),
+  );
+  expect(shout.chatter).toBeNull();
+  add(shout);
+  add(spoke('nim', 'Nim', 'Yes!', 1203));
+  expect(shown(feed)).toEqual([
+    'Band B greet each other and chat ×3 · Nim: “Yes!”',
+    `Vesa shouts: “${call}”`,
+  ]);
+});
+
+test('a fold keeps its 20 newest lines and ids; its count keeps them all', () => {
+  let feed: FeedEntry[] = [];
+  const all: FeedEntry[] = [];
+  for (let k = 0; k < 50; k++) {
+    const one = spoke(
+      k % 2 ? 'nim' : 'pip',
+      k % 2 ? 'Nim' : 'Pip',
+      `w${k}`,
+      900 + k,
+    );
+    all.push(one);
+    feed = addEntry(feed, one);
+  }
+  expect(feed).toHaveLength(1);
+  const [band] = feed;
+  expect(band.count).toBe(50);
+  expect(band.folded).toHaveLength(FOLD_KEEP);
+  expect(band.folded[0].line).toBe('Nim: “w49”');
+  expect(band.folded.at(-1)!.line).toBe('Pip: “w30”');
+  expect(band.ids).toEqual(all.slice(-FOLD_KEEP).map(({ id }) => id));
+  expect(addEntry(feed, all[49])).toEqual(feed); // a resend of a kept one adds nothing
 });
 
 test('chatter folds only with its own group’s recent chatter; gestures alone greet, speech alone chats', () => {
