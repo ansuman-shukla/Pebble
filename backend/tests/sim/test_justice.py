@@ -588,6 +588,17 @@ def test_a_band_leader_judges_by_the_fire_and_the_fine_goes_to_the_band(
     assert coins_held(sim.state) == money
 
 
+def test_a_band_court_pays_the_whole_fine_to_the_victim(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sim = _camp_scene(new_sim)
+    sim.core.injure(sim.citizen("nim"), 5.0, "violence", "Tek strikes you", attacker="tek")  # seen by Barro
+    _seize(sim, "barro", "tek", monkeypatch)
+    fined = _done(sim, WorldApi(sim, "barro").judge("Tek", Fine(mon=10)), 20)
+    assert fined.text == "You fine Tek ten coins; it is paid."
+    assert sim.citizen("nim").inventory.get("coins") == 10 and "coins" not in sim.citizen("barro").inventory
+
+
 def test_a_band_confines_by_tying_them_at_the_fire(
     new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
 ) -> None:

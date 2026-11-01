@@ -451,7 +451,7 @@ def finish_judge(core: SimCore, judge: Citizen, action: ActionState) -> None:
     if isinstance(sentence, Fine):
         judged = Judged(person=person.id, sentence="fine", fine_mon=sentence.mon, deeds=deeds, arrears=not deeds)
         seq = core.emit("judged", judged, actor=judge)
-        paid = _collect(core, person, sentence.mon, _payees(core, court, judge, deeds), seq)
+        paid = _collect(core, person, sentence.mon, _payees(core, court, judge, person, deeds), seq)
         if not deeds and person.home is not None:
             tax.pay_by_fine(core, person, person.home, paid, seq)
         fined = f"You fine {label} {price_words(sentence.mon)}"
@@ -558,17 +558,33 @@ class _Payee:
     share: float  # mon still owed to them
 
 
-def _payees(core: SimCore, court: Court, judge: Citizen, deeds: list[int]) -> list[_Payee]:
-    """Who a fine pays, in order: those the judged deeds robbed (what each took), then the treasury (a band's
-    leader)."""
+def _payees(core: SimCore, court: Court, judge: Citizen, person: Citizen, deeds: list[int]) -> list[_Payee]:
+    """Who a fine pays, in order: those the judged deeds robbed (what each took), then the rest: the treasury in
+    town, the victim in a band (`_band_victim`)."""
     losses = JUSTICE.of(core.state).losses
     payees = [
         _Payee(where, losses[seq].mon)
         for seq in deeds
         if seq in losses and (where := _victim(core, losses[seq].owner)) is not None
     ]
-    rest = _store(TREASURY) if court == "town" else ItemLocation(kind="inventory", id=judge.id)
+    if court == "town":
+        rest = _store(TREASURY)
+    else:
+        rest = payees[0].where if payees else _band_victim(core, judge, person, deeds)
     return [*payees, _Payee(rest, math.inf)]
+
+
+def _band_victim(core: SimCore, judge: Citizen, person: Citizen, deeds: list[int]) -> ItemLocation:
+    """Who a band court's fine goes to when nothing was taken (§3.4: in bands, to the victim): the one struck, if
+    alive, else the wronged group (a band's leader, the town's treasury), else the judge."""
+    judged = [deed for deed in society.deeds_by(core, person.id) if deed.seq in deeds]
+    for deed in judged:
+        if deed.victim is not None and core.state.citizens[deed.victim].body.alive:
+            return ItemLocation(kind="inventory", id=deed.victim)
+    for deed in judged:
+        if (where := _victim(core, deed.group)) is not None:
+            return where
+    return ItemLocation(kind="inventory", id=judge.id)
 
 
 def _victim(core: SimCore, owner: str) -> ItemLocation | None:
