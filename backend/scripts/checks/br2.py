@@ -1,11 +1,12 @@
 """BR2's run checks (the plan's BR2 acceptance, both seeds together): the bands go out to their hotspots, band A's
-trading trips sell, and nobody in a band starves. Band B's deeds (raids, judged at the fire) and gold trips wait for
-the band-B hunger choice."""
+trading trips sell, nobody in a band starves, band B's deeds happen (some seen and judged, some not) and band B pans
+gold when hunger chooses it."""
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import ClassVar, override
 
-from app.observability.events import Died, EventDraft
+from app.observability.events import Died, EventDraft, ItemMoved, Judged, Stole, Trespassed
 from app.sim.clock import DAY_MINUTES
 from app.sim.simulation import Simulation
 from app.sim.vec import Vec3, as_vec
@@ -105,4 +106,90 @@ class BandHunger(Check):
         return Outcome(len(self.dead), not self.dead, ", ".join(self.dead) or "none")
 
 
-CHECKS: tuple[type[Check], ...] = (Outings, TradeTrips, BandHunger)
+class _OverSeeds(Check):
+    """A count over the seeds that must reach `least`."""
+
+    least: ClassVar[int]
+
+    @classmethod
+    @override
+    def overall(cls, outcomes: Mapping[int, Outcome]) -> Outcome:
+        total = sum(outcome.value for outcome in outcomes.values())
+        return Outcome(total, total >= cls.least, f"{total:.0f} over the seeds (≥ {cls.least})")
+
+
+@dataclass(frozen=True)
+class DeedsSeen(Outcome):
+    judged: int = 0  # witnessed deeds whose doer was judged after
+    unseen: int = 0  # deeds nobody saw
+
+
+class BandBDeeds(_OverSeeds):
+    """Band B's deeds (thefts and trespasses) over the seeds: ≥ 6, at least one witnessed and its doer judged after,
+    and at least one nobody saw (10 §3.3, §3.6)."""
+
+    name = "br2.deeds"
+    pending = "BR2 follow-up: raids seen by the watch and judged (the racks hold no rice yet)"
+    least = 6
+
+    @override
+    def start(self, sim: Simulation) -> None:
+        self.seen: dict[str, int] = {}  # doer -> witnessed deeds not yet judged
+        self.count = self.judged = self.unseen = 0
+
+    @override
+    def after_step(self, sim: Simulation, events: list[EventDraft]) -> None:
+        for event in events:
+            payload, doer = event.payload, event.actor_id
+            if isinstance(payload, Stole | Trespassed) and doer and sim.state.citizens[doer].region == "band_b":
+                self.count += 1
+                if payload.witnesses:
+                    self.seen[doer] = self.seen.get(doer, 0) + 1
+                else:
+                    self.unseen += 1
+            elif isinstance(payload, Judged) and self.seen.get(payload.person):
+                self.judged += self.seen.pop(payload.person)
+
+    @override
+    def outcome(self, sim: Simulation) -> DeedsSeen:
+        words = f"{self.count} deeds, {self.judged} seen and judged, {self.unseen} unseen"
+        return DeedsSeen(self.count, True, words, self.judged, self.unseen)
+
+    @classmethod
+    @override
+    def overall(cls, outcomes: Mapping[int, Outcome]) -> Outcome:
+        total = sum(outcome.value for outcome in outcomes.values())
+        judged = sum(o.judged for o in outcomes.values() if isinstance(o, DeedsSeen))
+        unseen = sum(o.unseen for o in outcomes.values() if isinstance(o, DeedsSeen))
+        ok = total >= cls.least and judged >= 1 and unseen >= 1
+        return Outcome(total, ok, f"{total:.0f} deeds ({judged} seen and judged, {unseen} unseen) over the seeds")
+
+
+class GoldTrips(_OverSeeds):
+    """Days band B took gold from the falls pool or sold it at the stall, over the seeds (≥ 2)."""
+
+    name = "br2.gold_trips"
+    pending = "BR2 follow-up: band B rarely goes hungry two days running now that the rack feeds it"
+    least = 2
+
+    @override
+    def start(self, sim: Simulation) -> None:
+        self.days: set[int] = set()
+
+    @override
+    def after_step(self, sim: Simulation, events: list[EventDraft]) -> None:
+        for event in events:
+            doer = event.actor_id
+            if doer is None or doer not in sim.state.citizens or sim.state.citizens[doer].region != "band_b":
+                continue
+            moved = isinstance(event.payload, ItemMoved) and event.payload.item == "gold"
+            sold = event.type == "sold" and getattr(event.payload, "item", None) == "gold"
+            if moved or sold:
+                self.days.add(sim.tick // DAY_MINUTES)
+
+    @override
+    def outcome(self, sim: Simulation) -> Outcome:
+        return Outcome(len(self.days), True, f"{len(self.days)} days")
+
+
+CHECKS: tuple[type[Check], ...] = (Outings, TradeTrips, BandHunger, BandBDeeds, GoldTrips)

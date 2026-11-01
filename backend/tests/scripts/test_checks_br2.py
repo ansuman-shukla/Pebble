@@ -64,3 +64,21 @@ def test_a_day_with_nobody_out_at_a_far_hotspot_counts_against_the_band(new_sim:
     check.after_step(sim, [])
     assert check.outcome(sim).value == 1  # band A was
     assert {c.name for c in CHECKS} >= {"br2.outings", "br2.trade_trips", "br2.band_hunger"}
+
+
+def test_band_b_deeds_need_six_one_seen_and_judged_and_one_unseen(new_sim: Callable[..., Simulation]) -> None:
+    from app.observability.events import Judged, Trespassed
+
+    sim = new_sim()
+    kaz = _band(sim, "kaz", "band_b")
+    check = br2.BandBDeeds()
+    check.start(sim)
+    seen = Trespassed(kind="walls", owner="town", place="the castle town", witnesses=["goro"])
+    unseen = Trespassed(kind="ground", owner="town", place="the Lord's woods")
+    check.after_step(sim, [_event(sim, "trespassed", kaz, seen), _event(sim, "trespassed", kaz, unseen)])
+    check.after_step(sim, [_event(sim, "judged", "masanori", Judged(person=kaz, sentence="fine", fine_mon=5))])
+    one = check.outcome(sim)
+    assert (one.value, one.judged, one.unseen) == (2, 1, 1)
+    assert not br2.BandBDeeds.overall({1: one}).ok  # only 2 deeds
+    assert br2.BandBDeeds.overall({1: one, 7: br2.DeedsSeen(4, True, "", 0, 4)}).ok
+    assert not br2.BandBDeeds.overall({1: br2.DeedsSeen(6, True, "", 0, 6)}).ok  # none judged

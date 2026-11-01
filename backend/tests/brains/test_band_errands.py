@@ -348,3 +348,44 @@ def test_kaz_is_tempted_with_one_minus_his_honesty_rolled_once_a_day() -> None:
         ctx.chance = roll
         assert _choose(ctx).name == "go to the Lord's woods"
     assert rolls == [0.7]  # p = 1 - honesty, once a day
+
+
+# --- band B's hunger choice, the healers and the fire ---
+
+
+def test_two_lean_days_running_make_band_b_choose_a_raid_or_gold_alike_for_all() -> None:
+    from app.brains import bands
+
+    barro = _band("barro", "band leader", "band_b")
+    notes: dict[str, JsonValue] = {"night": False, "days": 5, "chores": [], "lean": 1}
+    dusk = _look("at your home, at Band B camp", "dusk", ())  # nothing carried: a lean day
+    bands._reckon_lean(_ctx(dusk, barro, notes), {})
+    assert notes["lean"] == 2
+    choices = {bands._hungry_choice(_ctx(dusk, _band(who, "x", "band_b"), dict(notes))) for who in ("barro", "nim")}
+    assert len(choices) == 1 and choices <= {"raid", "gold"}  # one choice for the band that day
+    fed: dict[str, JsonValue] = {"night": False, "days": 5, "chores": [], "lean": 1}
+    bands._reckon_lean(
+        _ctx(_look("at your home, at Band B camp", "dusk", ("plenty of roots",)), barro, fed), {"roots": 25}
+    )
+    assert fed["lean"] == 0
+    town = _band("ama", "band leader")  # band A never raids
+    assert bands._hungry_choice(_ctx(dusk, town, {"lean": 5})) is None
+
+
+def test_a_raider_walks_to_the_rice_fields_at_night_and_takes_rice_from_the_racks(
+    monkeypatch: Any,
+) -> None:
+    from app.brains import bands
+
+    monkeypatch.setattr(bands, "_hungry_choice", lambda _ctx: "raid")
+    kaz = _band("kaz", "young hunter", "band_b")
+    api = FakeApi({"night": False, "days": 5, "chores": [], "lean": 2})
+    ctx = _ctx(_look("at your home, at Band B camp", "dusk", ()), kaz, api)
+    go = _choose(ctx)
+    assert go.name == "go to the rice fields" and go.score > 70.0  # over sleep
+    ctx = _ctx(_look("at the rice fields", "night", ()), kaz, api)
+    take = _choose(ctx)
+    assert take.name == "take rice from the racks"
+    _start(ctx, take)
+    assert api.calls[-2:] == [("pick_up", ("5 rice",)), ("walk_to_place", ("home", "walk"))]
+    assert _choose(_ctx(_look("at the rice fields", "night", ()), kaz, api)).name != "take rice from the racks"

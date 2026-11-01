@@ -3,10 +3,12 @@ are taken care of: forage around camp in outings and come back, hunt, scavenge, 
 on the camp's rack, knap spears and axes, fell trees, and take the band's goods to the town's stall.
 """
 
+import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import partial
 
+from app.brains.justice import known_deed
 from app.brains.profile import Routine, Spot
 from app.brains.routines import COMPASS, WORK, Context, Option, _count_today, _daytime, _refused, _set, _then
 from app.brains.senses import (
@@ -31,8 +33,9 @@ from app.brains.senses import (
     resources_in_view,
     wood_at_hand,
 )
+from app.brains.town import _tend
 from app.world_api.facade import ActionHandle
-from app.world_api.models import Compass, Driver, Perception, RoughDistance, Seen
+from app.world_api.models import Compass, Driver, Fine, Perception, RoughDistance, Seen
 
 FOODS = ("roots", "nuts", "berries")  # wild food, most filling first
 OUTING_FOOD = 150.0  # bands head back to camp carrying about this much (a day and a half of food)
@@ -84,6 +87,19 @@ SPEAR_STONES = ("obsidian", "flint")  # what a spear is knapped from, the best f
 POACHERS = frozenset({"kaz"})  # hunts in the Lord's woods when band B's grass is empty (10 §3.6)
 POACH_AFTER = 2  # searches of the band's own ground without game before he is tempted
 FLINT_TRIES = 3  # flint mined (one nodule each) before knapping
+# band B's hunger choice (10 §3.6): two lean days running (less than a day's food carried at dusk), then a raid or gold
+LEAN_FOOD = 60.0
+LEAN_DAYS = 2
+RAIDERS = frozenset({"barro", "kaz", "nim"})
+PANNERS = frozenset({"barro", "nim", "kaz"})  # Barro and Nim pan (10 §3.6), Kaz goes along when he is the lean one
+RAID_CHANCE = 0.6  # Barro's boldness and temper (10 §3.1)
+COUNSEL = 0.3  # Vesa counsels against raids (10 §3.1: −0.3)
+RAID = 75.0  # the night's raid: over sleep (70), under danger and real need
+FIELDS = "the rice fields"
+PANS = 3  # pans at the falls pool a trip (each finds a grain half the time)
+JUDGE = 60.0  # a leader's justice at the fire: over the day's work
+JUDGE_TRIES = 4  # seizing and judging tries a day
+BAND_FINE = 5  # mon a band leader fines a wrong
 
 
 @dataclass(frozen=True)
@@ -121,9 +137,13 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
     home_area = ctx.profile.home_area
     food = carried_food(p.you)
     hungry_empty = ctx.needs.hunger >= 2 and not food
-    feeding = _feed_the_starving(ctx, food) or (_eat_at_rack(ctx) if hungry_empty else [])
+    feeding = _feed_the_starving(ctx, food) or (_eat_at_rack(ctx) if hungry_empty else []) or _tend(ctx)
     if feeding:
         return feeding
+    _reckon_lean(ctx, food)
+    hunger_choice = _raid(ctx) or _judge_at_fire(ctx)
+    if hunger_choice:
+        return hunger_choice
     if ctx.phase == "dusk":
         return _evening_chores(ctx) + _keep_fire(ctx, 48.0)
     if not _daytime(ctx) and not hungry_empty:
@@ -144,7 +164,7 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
     if scavenging:
         return scavenging
     if not hungry_empty:
-        for errand in (_trade, _trek, _share_meat, _dry_meat, _knap, _logs):
+        for errand in (_trade, _trek, _gold_trip, _share_meat, _dry_meat, _knap, _logs):
             options = errand(ctx)
             if options:
                 return options
@@ -718,6 +738,110 @@ def _trek(ctx: Context) -> list[Option]:
         return [Option(ERRAND, "go to the obsidian", partial(api.walk_to_thing, seen[0].label), aim)]
     ctx.notes["trading"] = True  # none left to mine: off to the stall with what there is
     return [Option(ERRAND, f"go to {MARKET}", _walk_to(ctx, MARKET), aim)]
+
+
+def _reckon_lean(ctx: Context, food: dict[str, int]) -> None:
+    """At dusk each band member reckons the day: hungry at some point of it, or carrying less than a day's food, makes
+    it a lean one (`lean`: lean days running; the camp's food ran short)."""
+    if ctx.needs.hunger >= 2 and not ctx.done_today("went hungry"):
+        ctx.mark_done("went hungry")
+    if ctx.phase != "dusk" or ctx.done_today("reckoned"):
+        return
+    ctx.mark_done("reckoned")
+    lean = ctx.done_today("went hungry") or food_value(food) < LEAN_FOOD
+    _set(ctx, "lean", ctx.counter("lean") + 1 if lean else 0)
+
+
+def _hungry_choice(ctx: Context) -> str | None:
+    """Band B's hunger choice (10 §3.6) after two lean days running: a raid on the town's racks at night, or a gold
+    trip to buy rice; the band decides it together at the fire (one roll a day for all of them: p of a raid =
+    `RAID_CHANCE` less Vesa's counsel)."""
+    if ctx.profile.region != "band_b" or ctx.counter("lean") < LEAN_DAYS:
+        return None
+    roll = _band_roll(f"{ctx.profile.region}:hunger:{_today(ctx)}")
+    return "raid" if roll < RAID_CHANCE - COUNSEL else "gold"
+
+
+def _band_roll(words: str) -> float:
+    """A roll every member of a band makes alike (what they agree at the fire): a stable hash of the words, 0-1."""
+    digest = hashlib.sha256(words.encode()).digest()
+    return int.from_bytes(digest[:8], "big") / 2**64
+
+
+def _raid(ctx: Context) -> list[Option]:
+    """The raiders go to the rice fields in band B's evening (the town's night) and take rice from the racks, then
+    home (a theft, and a night trespass inside the walls: Goro's watch may catch them)."""
+    p, api = ctx.perception, ctx.api
+    if ctx.profile.citizen_id not in RAIDERS or _hungry_choice(ctx) != "raid" or ctx.done_today("raided"):
+        return []
+    if ctx.phase not in ("dusk", "night") or p.time_of_day == "pre-dawn":
+        return []
+    aim = "Take rice from the town's racks"
+    if at(p, FIELDS) or ctx.finished(f"go to {FIELDS}"):
+
+        def take() -> ActionHandle:
+            ctx.mark_done("raided")
+            api.pick_up("5 rice")
+            return api.walk_to_place("home", ctx.pace)
+
+        return [Option(RAID, "take rice from the racks", take, aim, "hunger")]
+    if _refused(ctx, f"go to {FIELDS}"):
+        ctx.mark_done("raided")
+        return []
+    return [Option(RAID, f"go to {FIELDS}", _walk_to(ctx, FIELDS), aim, "hunger")]
+
+
+def _gold_trip(ctx: Context) -> list[Option]:
+    """The other way out of hunger (10 §3.6): Barro and Nim pan the falls pool in the morning and sell the gold at the
+    stall for rice; once the pool is panned out, there's no gold to find and they come home."""
+    p, api = ctx.perception, ctx.api
+    if ctx.profile.citizen_id not in PANNERS or _hungry_choice(ctx) != "gold" or ctx.done_today("traded"):
+        return _back_from_town(ctx) if ctx.done_today("traded") and ctx.profile.citizen_id in PANNERS else []
+    pool = next((s.name for s in ctx.profile.spots if "gold" in s.goods), None)
+    aim = "Pan gold to buy rice"
+    going = ctx.notes.get("trading") is True
+    if at(p, MARKET):
+        return [_at_stall(ctx, aim, (("gold", 99),))]
+    if going:
+        return [Option(ERRAND, f"go to {MARKET}", _walk_to(ctx, MARKET), aim)]
+    if pool is None:
+        return []
+    if not at(p, pool):
+        if ctx.done_today("panned") or p.time_of_day not in TRIP_TIMES:
+            return []
+        return [Option(ERRAND, f"go to {pool}", _then(lambda: ctx.mark_done("panned"), _walk_to(ctx, pool)), aim)]
+    seen = [r for r in resources_in_view(p) if r.kind == "gold"]
+    if _count_today(ctx, "pan") < PANS and seen:
+        if seen[0].distance == "here":
+            return [Option(ERRAND, "pan gold", _then(lambda: ctx.mark_done("pan"), lambda: api.gather("gold")), aim)]
+        if not _refused(ctx, "go to the gold"):
+            return [Option(ERRAND, "go to the gold", partial(api.walk_to_thing, seen[0].label), aim)]
+    ctx.notes["trading"] = True  # panned (or nothing left to pan): to the stall with what there is
+    return [Option(ERRAND, f"go to {MARKET}", _walk_to(ctx, MARKET), aim)]
+
+
+def _judge_at_fire(ctx: Context) -> list[Option]:
+    """A band leader seizes someone at camp known for a wrong and judges them at the fire (10 §3.4: a fine; in a
+    band it goes to the one wronged)."""
+    p, api = ctx.perception, ctx.api
+    if "leader" not in ctx.profile.role.lower() or not (at_home(p) or at(p, ctx.profile.home_area)):
+        return []
+    if _count_today(ctx, "judging") >= JUDGE_TRIES:
+        return []
+    for person in p.people:
+        deed = known_deed(person)
+        if deed is None or not is_name(person.label) or DISTANCE[person.nearness] == "far":
+            continue
+        aim = f"Judge {person.label} at the fire for what they did"
+        held = f"held by {ctx.profile.name}" in (person.doing or "") or "held by you" in (person.doing or "")
+        if not beside(person):
+            return [Option(JUDGE, f"go up to {person.label}", partial(api.walk_to_person, person.label), aim)]
+        if not held:
+            seize = _then(lambda: ctx.mark_done("judging"), partial(api.seize, person.label))
+            return [Option(JUDGE, f"seize {person.label}", seize, aim, "duty")]
+        judge = _then(lambda: ctx.mark_done("judging"), partial(api.judge, person.label, Fine(mon=BAND_FINE)))
+        return [Option(JUDGE, f"judge {person.label}", judge, aim, "duty")]
+    return []
 
 
 def _knap(ctx: Context) -> list[Option]:
