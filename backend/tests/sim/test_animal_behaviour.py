@@ -12,7 +12,7 @@ from app.sim import animals as animal_life
 from app.sim import hunt
 from app.sim.animals import WILDLIFE
 from app.sim.clock import DAY_MINUTES, SECONDS_PER_TICK
-from app.sim.fauna import SPECIES, den_of, terrain, waterhole_of
+from app.sim.fauna import SPECIES, den_of, range_m, terrain, waterhole_of
 from app.sim.simulation import Simulation
 from app.sim.snapshot import restore, state_hash, take_snapshot
 from app.sim.state import Animal, AnimalGroup
@@ -395,6 +395,85 @@ def test_a_person_near_a_kill_drives_off_a_lone_feeder_but_not_a_pack(
         assert sim.world.distance_m(pack[0].position, centre) > animal_life.CARCASS_THREAT_M
     else:
         assert all(w.target == deer.id for w in pack) and not dropped
+
+
+# --- herds: wandering ---
+
+
+def _wandering(sim: Simulation, centre: Vec3, activity: str) -> tuple[AnimalGroup, list[Animal]]:
+    """A deer herd standing about its range's centre, due to pick its next goal now."""
+    herd = _herd(sim, "deer", [centre, *(step_towards(centre, b, 6.0, R) for b in (0, 120, 240))], activity=activity)
+    group = sim.state.groups[herd[0].group]
+    group.goal, group.next_move = centre, 0
+    return group, herd
+
+
+def test_a_herd_drifts_through_its_range_at_a_walk_by_day(new_sim: Callable[..., Simulation]) -> None:
+    """Regression: a herd's next goal lay anywhere in its range (up to 900 m off), so every few minutes its members,
+    grazing a moment before, trotted 300 m a tick to it, one by one."""
+    sim, centre = _open_ground(new_sim, night=False)
+    group, herd = _wandering(sim, centre, "grazing")
+    goals, gaits, moved = [centre], set(), 0.0
+    for _ in range(6 * 60):
+        before = [deer.position for deer in herd]
+        summary = _summary(_step(sim))
+        if group.goal is not None and group.goal != goals[-1]:
+            goals.append(group.goal)
+        gaits |= {summary.animals[deer.id].gait for deer in herd if deer.id in summary.animals}
+        moved += sum(sim.world.distance_m(a, deer.position) for a, deer in zip(before, herd, strict=True))
+    legs = [sim.world.distance_m(a, b) for a, b in zip(goals, goals[1:], strict=False)]
+    assert len(legs) >= 8 and moved > 200.0  # it does wander, every 20-60 min (40-150 min: 6 legs)
+    assert max(legs) <= animal_life.WANDER_LEG_M + 10.0  # a short way at a time (10 m: the goal's jitter)
+    assert gaits == {"walk"}
+
+
+def test_a_herd_sleeps_where_the_night_finds_it(new_sim: Callable[..., Simulation]) -> None:
+    """Regression: herds picked new goals by night too, so sleepers woke, trotted a few hundred metres and lay down
+    again (shown sleeping at both ends of a 300 m tick)."""
+    sim, centre = _open_ground(new_sim, night=True)
+    group, herd = _wandering(sim, centre, "sleeping")
+    starts = {deer.id: deer.position for deer in herd}
+    for _ in range(90):
+        sim.step()
+    assert group.goal == centre
+    assert all(deer.position == starts[deer.id] and deer.activity == "sleeping" for deer in herd)
+
+
+def test_a_herd_on_the_move_walks_together_and_a_straggler_trots_after_it(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    sim, centre = _open_ground(new_sim, night=False)
+    far = step_towards(centre, 90.0, 300.0, R)
+    group, herd = _wandering(sim, far, "grazing")
+    group.goal, group.next_move = centre, 10**9  # the whole herd 300 m from where it heads
+    summary = _summary(_step(sim))
+    assert {summary.animals[deer.id].gait for deer in herd} == {"walk"}
+    assert all(deer.activity == "walking" for deer in herd)
+    for place, deer in enumerate(herd[1:], start=1):  # all but one get there
+        deer.position = step_towards(centre, 0.0, 5.0 * place, R)
+        deer.cell = sim.world.nearest_cell(deer.position)
+        WILDLIFE.of(sim.state).courses.pop(deer.id)
+        deer.activity, deer.until = "grazing", 10**9
+    straggler = herd[0]
+    WILDLIFE.of(sim.state).courses.pop(straggler.id)
+    straggler.until = 0
+    pose = _summary(_step(sim)).animals[straggler.id]
+    assert pose.gait == "trot" and pose.speed_mps == pytest.approx(SPECIES["deer"].trot_mps, rel=1e-3)
+    for _ in range(3):
+        sim.step()
+    assert sim.world.distance_m(straggler.position, centre) <= animal_life.SPREAD_M + 1e-6
+    assert straggler.activity == "idle"  # it catches its breath before it grazes (a trot never ends at rest)
+
+
+def test_a_herd_out_of_its_range_heads_back_into_it(new_sim: Callable[..., Simulation]) -> None:
+    sim, centre = _open_ground(new_sim, night=True)
+    group, herd = _wandering(sim, centre, "sleeping")
+    home = step_towards(centre, 180.0, range_m(sim.world, group) + 400.0, R)
+    group.home = sim.world.nearest_cell(home)  # its range lies 400 m off: as after a drink at a far waterhole
+    sim.step()
+    assert group.goal is not None
+    assert sim.world.distance_m(group.goal, home) <= range_m(sim.world, group) + 60.0  # into it, by night
+    assert {WILDLIFE.of(sim.state).courses[deer.id].gait for deer in herd} == {"walk"}
 
 
 # --- waterholes ---
