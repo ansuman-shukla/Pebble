@@ -257,10 +257,12 @@ def test_the_ledger_tells_coins_wealth_flows_and_debts_at_midnight(new_sim: Call
     assert again["hana"].income_24h == 0  # counted afresh after each ledger
 
 
+@pytest.mark.parametrize("site", ["town", "band_a_camp", "band_b_camp"])  # clocks up to hours off the town's
 def test_someone_walking_east_across_their_midnight_still_gets_the_day_s_ledger(
-    new_sim: Callable[..., Simulation],
+    new_sim: Callable[..., Simulation], site: str
 ) -> None:
-    sim = _scene(new_sim, ("genzo", "farmhouse-1", "farmhouse-1"))
+    home = "farmhouse-1" if site == "town" else f"{site}:shelter-e"
+    sim = _scene(new_sim, ("genzo", home, home), genzo={"site": site})
     sim.drain()
     _, lon = lat_lon_deg(sim.citizen("genzo").position)
     sim.state.tick = round(DAY_MINUTES - 1 - local_minute(0, sim.world.town_lon_deg, lon)) % DAY_MINUTES
