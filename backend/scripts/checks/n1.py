@@ -164,7 +164,6 @@ class HomeRing(Check):
     40 % at each camp (10 §1.2: the home ring runs thin on day 3-4 and foragers go farther)."""
 
     name = "n1.home_ring"
-    pending = "BR2 band trips"
 
     @override
     def start(self, sim: Simulation) -> None:

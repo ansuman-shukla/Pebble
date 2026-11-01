@@ -164,6 +164,7 @@ STRUCTURE_KEYWORDS: dict[str, frozenset[str]] = {
     "temple_hall": frozenset({"temple", "hall"}),
     "lean_to": frozenset({"lean-to", "shelter"}),
     "fire_pit": frozenset({"fire", "pit", "firepit"}),
+    "drying_rack": frozenset({"rack", "drying"}),
 }
 DAY_WORDS = ("first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth")
 GROUP_WORDS: dict[Region, str] = {"town": "the castle town", "band_a": "band A", "band_b": "band B"}

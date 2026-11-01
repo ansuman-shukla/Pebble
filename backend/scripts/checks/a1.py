@@ -183,7 +183,6 @@ class HuntingPressure(_HerdLosses):
     members people brought down count as lost."""
 
     name = "a1.hunting_pressure"
-    pending = "BR2 spreading hunters over the herds"
 
     @override
     def _taken_by(self, sim: Simulation, attacker: str) -> bool:

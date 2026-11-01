@@ -20,8 +20,9 @@ from functools import partial
 from pydantic import JsonValue
 
 from app.brains import justice
+from app.brains.bands import BAND_ROUTINES
 from app.brains.profile import BrainProfile
-from app.brains.routines import ROUTINES, Context, Option
+from app.brains.routines import Context, Option
 from app.brains.senses import (
     DISTANCE,
     NIGHT_HUNGER,
@@ -55,6 +56,7 @@ from app.world_api.models import GestureKind, Pace, Perception
 STOREHOUSES = "the storehouses"
 WELL = "the well"
 FIRE = "the fire pit"
+DRIVABLE = ("wolf", "wolves", "bear")  # predators a spear carrier stands up to (a pride of lions is run from)
 HURT = ("weak and aching", "close to death")  # how a body that has lost half its health feels
 CHAT_CHANCE = 0.3  # with someone greeted already in earshot and nothing pressing, a word in passing this often
 EAT_ORDER = ("berries", "nuts", "roots", "rice", "dried meat")  # what spoils first goes first; dried meat keeps
@@ -200,7 +202,9 @@ class UtilityBrain:
         threat = danger(p)
         if threat is not None and not behind_walls and fire_here(p) not in ("burning", "low"):  # fire too
             hurt = any(word in p.you.feeling for word in HURT)  # bitten badly already: no more fighting, run
-            if carries(p, "spear") and not hurt and DISTANCE[threat.nearness] in ("here", "near", "close"):
+            # a spear drives off wolves and a bear; lions are run from (a pride bit hunters at dawn to half health, BR2)
+            drivable = any(word in threat.label for word in DRIVABLE)
+            if carries(p, "spear") and drivable and not hurt and DISTANCE[threat.nearness] in ("here", "near", "close"):
                 aim = f"Drive off {threat.label}"
                 options.append(Option(200, "fight off", partial(self.api.attack, threat.label), aim, "danger"))
             else:
@@ -210,7 +214,7 @@ class UtilityBrain:
             if need is not None:
                 options.append(self.before_bed(need, needs, now))
         options += self.rest_options(p, needs, now, pace)
-        routine = TOWN_ROUTINES.get(self.profile.routine) or ROUTINES[self.profile.routine]
+        routine = (TOWN_ROUTINES | BAND_ROUTINES)[self.profile.routine]
         options += routine(ctx)
         return options
 
@@ -236,12 +240,21 @@ class UtilityBrain:
             return option(score, "drink", self.api.drink)
         if self.profile.region == "town":
             return option(score, "go drink", lambda: self.api.walk_to_place(WELL, pace))
+        notes = self.api.notes
+        if water_in_view(p) or at_home(p):
+            notes.pop("dry", None)
+        elif notes.get("failed") == "go drink" or notes.get("last") == "go drink":
+            # the walk found no water, or only the sea, and none fresh in view (issue #114): make for camp, the water
+            # lies by it
+            notes["dry"] = True
         way = compass_word(self.api.notes.get("water_way"))
         on_the_way = self.api.notes.get("last") == "go towards the water" and near(p, self.profile.home_area)
         if way is not None and not water_in_view(p) and (at_home(p) or on_the_way):
             # the camp's water out of sight (dark falls early under trees): set out from home the way it lies from
             # there, a few steps at a time, until it comes into view
             return option(score, "go towards the water", lambda: self.api.walk_towards(way, "a few steps", pace))
+        if notes.get("dry"):
+            return option(score, "go home", lambda: self.api.walk_to_place("home", pace))
         if water_in_view(p) or self.api.notes.get("last") != "go drink":
             # the water may be in sight without being among the things noticed first; if not, the walk fails
             return option(score, "go drink", lambda: self.api.walk_to_thing("water", pace))

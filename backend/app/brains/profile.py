@@ -65,6 +65,20 @@ class Ground:
 
 
 @dataclass(frozen=True)
+class Spot:
+    """A named place out in the band's land they know (a hotspot, 10 §1.2): how far it lies from camp, what can be
+    taken there (its nodes' items, most first: "berries", "fish", "flint"), how much wild food it holds when full
+    (berries, nuts and roots, pieces), the game whose hunting ground it is, and whose ground it is if claimed."""
+
+    name: str  # as said mid-sentence and walked to ("the River marsh")
+    metres: float
+    goods: tuple[str, ...] = ()
+    food: int = 0
+    game: tuple[str, ...] = ()
+    claim: Literal["town", "band_a", "band_b"] | None = None
+
+
+@dataclass(frozen=True)
 class BrainProfile:
     citizen_id: str
     name: str
@@ -83,6 +97,14 @@ class BrainProfile:
     household: int = 1
     paddies: int = 0
     dues: int = 0
+    spots: tuple[Spot, ...] = ()  # bands: the hotspots they know, nearest first
+    ring_ways: tuple[Compass, ...] = ()  # bands: the ways from camp the home ring's food lies, most first
+    # band hunters: the hunting grounds they know in the order they take them, day by day (each hunter of a band
+    # starts at a different one, so they spread over the herds)
+    hunting_grounds: tuple[str, ...] = ()
+    # band hunters with no ground of their own but the grass round camp: their turn among the band's hunters (turn,
+    # of), so one hunts it a day and its one herd isn't taken down
+    hunt_turn: tuple[int, int] = (0, 1)
 
     def bows_to(self, name: str) -> bool:
         """They hold a title bowed to (lord, samurai, band leader) that outranks yours."""

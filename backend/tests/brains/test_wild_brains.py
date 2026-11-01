@@ -107,7 +107,17 @@ def test_a_hunter_stalks_the_game_in_view(new_sim: Callable[..., Simulation]) ->
         make_spec("tek", site="band_a_camp", at=(0.0, 30.0), home=None, region="band_a", skills=["hunting"])
     )
     skip_to(sim, hunter.position, night=False)  # the sun well up: daytime
-    add_animal(sim, "deer", step_towards(hunter.position, 45.0, 35.0, sim.world.radius_m), until=10**9)
+    herd = sim.state.groups[
+        add_animal(sim, "deer", step_towards(hunter.position, 45.0, 35.0, sim.world.radius_m)).group
+    ]
+    for metres in (37.0, 39.0):  # a herd of three (one or two left in sight are spared, BR2)
+        deer = add_animal(sim, "deer", step_towards(hunter.position, 45.0, metres, sim.world.radius_m))
+        del sim.state.groups[deer.group]
+        deer.group = herd.id
+        herd.members.append(deer.id)
+    herd.size = len(herd.members)
+    for member in herd.members:
+        sim.state.animals[member].until = 10**9
     _brain(sim, hunter.id).decide()
     action = sim.citizen(hunter.id).action
     assert action is not None and action.kind == "hunt" and action.label == "a deer"
@@ -160,16 +170,29 @@ def _gathers(sim: Simulation, brain: UtilityBrain, minutes: int) -> list[str]:
 
 
 @pytest.mark.parametrize(
-    ("role", "age", "meat", "node", "first"),  # 5 and 25 kg: all they can carry; a gatherer starts with its wood chore
-    [("child", 9, 10, "berry_bush", "gather berries"), ("gatherer", 30, 50, "deadwood", "gather wood")],
+    (
+        "role",
+        "age",
+        "strips",
+        "node",
+        "first",
+    ),  # 5 and 25 kg: all they can carry; a gatherer starts with its wood chore
+    # (dried meat, not raw: raw meat at camp goes on the drying rack first, BR2)
+    [("child", 9, 50, "berry_bush", "gather berries"), ("gatherer", 30, 250, "deadwood", "gather wood")],
 )
 def test_a_forager_with_a_full_load_stops_gathering_until_it_carries_less(
-    new_sim: Callable[..., Simulation], role: str, age: int, meat: int, node: str, first: str
+    new_sim: Callable[..., Simulation], role: str, age: int, strips: int, node: str, first: str
 ) -> None:
     sim = without_animals(new_sim())
     forager = sim.add_citizen(
         make_spec(
-            "pip", age=age, site="band_a_camp", at=(0.0, 30.0), home=HOME_A, region="band_a", inventory={"meat": meat}
+            "pip",
+            age=age,
+            site="band_a_camp",
+            at=(0.0, 30.0),
+            home=HOME_A,
+            region="band_a",
+            inventory={"dried meat": strips},
         )
     )
     bush = nearest_node(sim, node, forager.position)
@@ -184,7 +207,7 @@ def test_a_forager_with_a_full_load_stops_gathering_until_it_carries_less(
     brain.decide()
     assert brain.api.notes["last"] == first  # the child's gather shows the reset; the wood chore comes either way
 
-    forager.inventory["meat"] = 3  # carrying less now ("a little meat", say some was eaten): room to gather again
+    forager.inventory["dried meat"] = 3  # carrying less now (say some was eaten): room to gather again
     lighter = _gathers(sim, brain, 3 * 60)
     assert any(text.startswith("You gather") for text in lighter)
 
@@ -317,7 +340,9 @@ def test_a_full_forager_at_camp_looks_around_after_one_rest(
 ) -> None:
     sim = without_animals(new_sim())
     child = sim.add_citizen(
-        make_spec("pip", age=9, site="band_a_camp", at=(0.0, 1.5), home=HOME_A, region="band_a", inventory={"meat": 10})
+        make_spec(
+            "pip", age=9, site="band_a_camp", at=(0.0, 1.5), home=HOME_A, region="band_a", inventory={"dried meat": 50}
+        )
     )
     skip_to(sim, child.position, night=False)
     brain = _brain(sim, child.id, role="child")

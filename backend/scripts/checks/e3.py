@@ -26,7 +26,6 @@ MAX_DEAR_DAYS = 3.0  # and fair again within this
 MIN_FAIR_SHARE = 0.8  # of days 4-14 on which rice is mostly fair
 FAIR_FROM_DAY = 4
 SHOCK = "BR2 raids on the racks: the shock"  # until then the check only reports
-BAND_CRAFTS = "BR2 band crafts"
 RECIPES = get_args(RecipeName)
 
 
@@ -107,7 +106,6 @@ class Recipes(Check):
     """Recipes crafted (each counted once); over all seeds every recipe must have been made."""
 
     name = "e3.recipes"
-    pending = BAND_CRAFTS
 
     @override
     def start(self, sim: Simulation) -> None:

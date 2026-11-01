@@ -117,10 +117,9 @@ def test_the_threat_checks_wait_for_the_exposure_schedules() -> None:
     assert "a1.kills" not in pending and "a1.herds_kept" not in pending
 
 
-def test_the_home_ring_check_waits_for_band_trips_and_the_node_checks_count() -> None:
+def test_the_node_checks_and_the_home_ring_count() -> None:
     pending = {check.name: check.pending for check in CHECKS if check.pending is not None}
-    assert pending["n1.home_ring"] == "BR2 band trips"
-    assert not {"n1.reach", "n1.in_paddies", "n1.regrowing"} & pending.keys()
+    assert not {"n1.reach", "n1.in_paddies", "n1.regrowing", "n1.home_ring"} & pending.keys()  # bands go out (BR2)
 
 
 def test_a_death_fails_the_deaths_check(new_sim: Callable[..., Simulation]) -> None:

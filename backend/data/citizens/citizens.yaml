@@ -21,6 +21,8 @@
 
 stores:
   store-2: {rice: 400, wood: 300} # the granary's stand: about six days of rice, firewood for the gate baskets
+  band_a_camp:drying-rack: {dried meat: 6} # each camp's rack: the band's store of strips and hides (BR2)
+  band_b_camp:drying-rack: {dried meat: 4}
   market-stall: # every good it trades at its target stock (data/economy.yaml), so prices open at the values; gold
     # is finite (the falls pool's 40 grains), so the stall starts with none
     {rice: 120, dried meat: 20, wood: 40, hide: 6, obsidian: 6, iron sand: 20, cloth: 6, pack: 3, iron spear: 2, iron axe: 2, sickle: 2}
@@ -331,7 +333,7 @@ citizens:
     site: band_a_camp
     at: [1.5, 3]
     home: band_a_camp:shelter-n
-    knows_places: [band_a_camp]
+    knows_places: [band_a_camp, a_savanna, river_marsh, bridge_meadows, painted_cave_flint, eastern_wall_scar, town, market]
     knows_people: [bo, oru, tek, lia, suna]
     inventory: {dried meat: 8}
     rank: 4
@@ -357,7 +359,7 @@ citizens:
     site: band_a_camp
     at: [-0.5, 4]
     home: band_a_camp:shelter-n
-    knows_places: [band_a_camp]
+    knows_places: [band_a_camp, a_savanna, river_marsh, bridge_meadows, painted_cave_flint, eastern_wall_scar, town, market]
     knows_people: [ama, oru, tek, lia, suna]
     inventory: {dried meat: 8, flint spear: 1}
     traits: {honesty: 0.7, generosity: 0.5, boldness: 0.5, temper: 0.4}
@@ -380,7 +382,7 @@ citizens:
     site: band_a_camp
     at: [-3, 2.5]
     home: band_a_camp:shelter-w
-    knows_places: [band_a_camp]
+    knows_places: [band_a_camp, a_savanna, river_marsh, bridge_meadows, painted_cave_flint, eastern_wall_scar]
     knows_people: [ama, bo, tek, lia, suna]
     inventory: {dried meat: 6}
     rank: 3
@@ -403,7 +405,7 @@ citizens:
     site: band_a_camp
     at: [3.5, 1]
     home: band_a_camp:shelter-e
-    knows_places: [band_a_camp]
+    knows_places: [band_a_camp, a_savanna, river_marsh, bridge_meadows, painted_cave_flint, eastern_wall_scar]
     knows_people: [ama, bo, oru, lia, suna]
     inventory: {dried meat: 10, flint spear: 1}
     traits: {honesty: 0.6, generosity: 0.5, boldness: 0.9, temper: 0.7}
@@ -426,7 +428,7 @@ citizens:
     site: band_a_camp
     at: [-1, -3]
     home: band_a_camp:shelter-n
-    knows_places: [band_a_camp]
+    knows_places: [band_a_camp, a_savanna, river_marsh, bridge_meadows, painted_cave_flint, eastern_wall_scar]
     knows_people: [ama, bo, oru, tek, suna]
     inventory: {dried meat: 6}
     traits: {honesty: 0.8, generosity: 0.7, boldness: 0.6, temper: 0.2}
@@ -450,7 +452,7 @@ citizens:
     site: band_a_camp
     at: [2, -1.5]
     home: band_a_camp:shelter-e
-    knows_places: [band_a_camp]
+    knows_places: [band_a_camp, a_savanna, river_marsh, bridge_meadows, painted_cave_flint, eastern_wall_scar]
     knows_people: [ama, bo, oru, tek, lia]
     inventory: {dried meat: 8}
     traits: {honesty: 0.8, generosity: 0.7, boldness: 0.4, temper: 0.2}
@@ -474,7 +476,7 @@ citizens:
     site: band_b_camp
     at: [1.5, 3]
     home: band_b_camp:shelter-n
-    knows_places: [band_b_camp]
+    knows_places: [band_b_camp, b_wood, b_shore, obsidian_field, lords_woods, falls_pool, town, market, rice-fields]
     knows_people: [nim, kaz, pip, vesa]
     inventory: {dried meat: 8}
     rank: 4
@@ -499,7 +501,7 @@ citizens:
     site: band_b_camp
     at: [-3, 2.5]
     home: band_b_camp:shelter-n
-    knows_places: [band_b_camp]
+    knows_places: [band_b_camp, b_wood, b_shore, obsidian_field, falls_pool, town, market, rice-fields]
     knows_people: [barro, kaz, pip, vesa]
     inventory: {dried meat: 8}
     traits: {honesty: 0.8, generosity: 0.6, boldness: 0.4, temper: 0.3}
@@ -522,7 +524,7 @@ citizens:
     site: band_b_camp
     at: [3.5, 1]
     home: band_b_camp:shelter-e
-    knows_places: [band_b_camp]
+    knows_places: [band_b_camp, b_wood, b_shore, obsidian_field, lords_woods, rice-fields]
     knows_people: [barro, nim, pip, vesa]
     inventory: {dried meat: 10, obsidian spear: 1}
     traits: {honesty: 0.3, generosity: 0.5, boldness: 0.95, temper: 0.8}
@@ -545,7 +547,7 @@ citizens:
     site: band_b_camp
     at: [-1, -3]
     home: band_b_camp:shelter-n
-    knows_places: [band_b_camp]
+    knows_places: [band_b_camp, b_wood, b_shore, obsidian_field]
     knows_people: [barro, nim, kaz, vesa]
     inventory: {dried meat: 4}
     rank: 1
@@ -568,7 +570,7 @@ citizens:
     site: band_b_camp
     at: [-1.3, -1.2]
     home: band_b_camp:shelter-w
-    knows_places: [band_b_camp]
+    knows_places: [band_b_camp, b_wood, b_shore, obsidian_field]
     knows_people: [barro, nim, kaz, pip]
     inventory: {dried meat: 6}
     rank: 3
