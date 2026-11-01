@@ -349,7 +349,7 @@ def _payments(ctx: Context) -> list[Option]:
         raise TypeError("to pay must be a list")
     for heard in p.heard:
         for words in (WAGE_WORDS, ORDER_WORDS):
-            if words in heard.words and _person(p, heard.who) is not None and [heard.who, words] not in owing:
+            if words in heard.words and [heard.who, words] not in owing:
                 owing.append([heard.who, words])
     owing[:] = [entry for entry in owing if isinstance(entry, list) and _person(p, str(entry[0])) is not None]
     first = owing[0] if owing else None
@@ -454,9 +454,10 @@ def _buy_sickle(ctx: Context) -> list[Option]:
     return [option] if option is not None and not ctx.done_today("failed buy a sickle") else []
 
 
-def _farm(ctx: Context) -> list[Option]:
+def _keep_farm_books(ctx: Context) -> None:
+    """What the last choice told a farmer, noted before anything else is chosen (the next choice forgets it): the
+    chest's rice when at it, the tax paid, a harvest session's rice."""
     p = ctx.perception
-    rice = carried_food(p.you).get(RICE, 0)
     if p.chest is not None:  # at the chest: how much rice the household has put by
         ctx.notes["chest rice"] = least(p.chest.holds, RICE)
     if ctx.notes.get("last") == "store food" and ctx.notes.get("failed") != "store food":  # the tax is paid
@@ -464,6 +465,12 @@ def _farm(ctx: Context) -> list[Option]:
     result = _result(ctx)
     if ctx.finished("farm") and result is not None and result.text.startswith("You harvest"):
         ctx.notes["harvested"] = ctx.counter("harvested") + HARVEST
+
+
+def _farm(ctx: Context) -> list[Option]:
+    p = ctx.perception
+    rice = carried_food(p.you).get(RICE, 0)
+    _keep_farm_books(ctx)
     dues = _pay_dues(ctx)
     if dues:
         return dues
@@ -539,13 +546,14 @@ def weaver(ctx: Context) -> list[Option]:
     marsh twice a week (the loom is mended on the other mornings), sells the cloth and helps in the fields in the
     afternoon; on market day she buys hides for a pack."""
     p = ctx.perception
+    _keep_farm_books(ctx)
+    if ctx.finished(f"gather {REEDS}"):
+        ctx.mark_done(REEDS)  # one trip a reed day: a reed bed gives five to eight, two to four lengths of cloth
     dues = _pay_dues(ctx)
     if dues:
         return dues
     if not (_daytime(ctx) and not afternoon(p)):
         return _sell(ctx, CLOTH, "Sell my cloth at the stall") or _farm(ctx)
-    if ctx.finished(f"gather {REEDS}"):
-        ctx.mark_done(REEDS)  # one trip a reed day: a reed bed gives five to eight, two to four lengths of cloth
     if weekday(p) in REED_DAYS and carrying(p, REEDS) < 2 and not ctx.done_today(REEDS):
         fetching = _gather_at(ctx, SOUTH_MARSH, REEDS, "Fetch reeds for the loom")
         if fetching:
@@ -839,6 +847,12 @@ def smith(ctx: Context) -> list[Option]:
     """Forges an iron tool a day at the forge from midday (10 §3.1): an axe, a sickle and a spear in turn, from
     iron sand and wood bought at the stall (each iron craft burns 2 wood besides); every second tool goes to the lord's
     armoury (he pays for it), the rest to the stall; while two tools go unsold he forges no more."""
+    if ctx.finished("forge"):  # counted before anything else is chosen: the next choice forgets the last
+        ctx.mark_done("forge")  # a tool a day: an axe or a sickle is two hours at the anvil
+        made = ctx.counter("forged")
+        ctx.notes["forged"] = made + 1
+        if made % 2 == 0:
+            ctx.notes["order"] = TOOLS[made % len(TOOLS)]
     dues = _pay_dues(ctx)
     if dues:
         return dues
@@ -846,12 +860,6 @@ def smith(ctx: Context) -> list[Option]:
     if food or not _daytime(ctx):
         return food
     p = ctx.perception
-    if ctx.finished("forge"):
-        ctx.mark_done("forge")  # a tool a day: an axe or a sickle is two hours at the anvil
-        made = ctx.counter("forged")
-        ctx.notes["forged"] = made + 1
-        if made % 2 == 0:
-            ctx.notes["order"] = TOOLS[made % len(TOOLS)]
     order = _deliver_order(ctx)
     if order:
         return order
