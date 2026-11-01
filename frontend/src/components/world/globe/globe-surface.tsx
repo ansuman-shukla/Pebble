@@ -7,11 +7,17 @@ import { groundMaterial, groundQuality } from '@/lib/world/ground-shader';
 import type { RiverLayout } from '@/lib/world/river-courses';
 import { riverGeometry, stillWaterGeometry } from '@/lib/world/water-mesh';
 import { waterMaterial } from '@/lib/world/water-material';
+import {
+  poolGeometry,
+  poolHoles,
+  type WaterholePool,
+} from '@/lib/world/waterholes';
 
 /*
  * The planet surface: the refined terrain mesh on the ground shader (with a round hole where the town's own
- * ground lies; `?ground=flat|low` picks its quality), the sea and the lakes (one water surface that knows the
- * depth under it: clear at the shore, deep blue offshore) and the rivers (flowing ribbons).
+ * ground lies and one where each waterhole's pool lies; `?ground=flat|low` picks its quality), the sea and the lakes
+ * (one water surface that knows the depth under it: clear at the shore, deep blue offshore), the rivers (flowing
+ * ribbons) and the waterholes' pools (a level pool in a muddy bowl, waterholes.ts).
  */
 
 /** A cone of directions where the terrain is not drawn because a site lays its own ground there. */
@@ -32,11 +38,13 @@ export function GlobeSurface({
   biomeNames,
   rivers,
   hole,
+  pools,
 }: {
   terrain: Terrain;
   biomeNames: readonly string[];
   rivers: RiverLayout;
   hole: TerrainHole | null;
+  pools: readonly WaterholePool[];
 }) {
   const { globe } = terrain;
   const land = useMemo(
@@ -51,8 +59,17 @@ export function GlobeSurface({
           up: hole.up,
           cos: Math.cos(hole.angle - HOLE_MARGIN / globe.radius),
         },
+        holes: poolHoles(pools, globe.radius),
       }),
-    [hole, globe],
+    [hole, pools, globe],
+  );
+  const bowls = useMemo(
+    () => poolGeometry(pools, terrain, biomeNames),
+    [pools, terrain, biomeNames],
+  );
+  const bankMaterial = useMemo(
+    () => groundMaterial({ quality: groundQuality(window.location.search) }),
+    [],
   );
   const still = useMemo(() => stillWaterGeometry(terrain), [terrain]);
   const stillMaterial = useMemo(() => waterMaterial('still'), []);
@@ -67,6 +84,14 @@ export function GlobeSurface({
   useEffect(() => () => stillMaterial.dispose(), [stillMaterial]);
   useEffect(() => () => flowing.dispose(), [flowing]);
   useEffect(() => () => flowingMaterial.dispose(), [flowingMaterial]);
+  useEffect(
+    () => () => {
+      bowls.bank.dispose();
+      bowls.water.dispose();
+    },
+    [bowls],
+  );
+  useEffect(() => () => bankMaterial.dispose(), [bankMaterial]);
 
   return (
     <>
@@ -81,6 +106,13 @@ export function GlobeSurface({
         geometry={flowing}
         material={flowingMaterial}
         renderOrder={2}
+        receiveShadow
+      />
+      <mesh geometry={bowls.bank} material={bankMaterial} receiveShadow />
+      <mesh
+        geometry={bowls.water}
+        material={stillMaterial}
+        renderOrder={1}
         receiveShadow
       />
     </>

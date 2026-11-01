@@ -244,7 +244,7 @@ export const blocksBody = (shape: Shape, groundY: number) =>
   shape.maxY > groundY + BODY_BAND[0] && shape.minY < groundY + BODY_BAND[1];
 
 /** Even-odd point in polygon test (any simple polygon). */
-function pointInPolygon([x, z]: Point, polygon: Point[]) {
+export function pointInPolygon([x, z]: Point, polygon: Point[]) {
   let inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
     const [xi, zi] = polygon[i];

@@ -39,6 +39,7 @@ import {
   buildWalkWorld,
   isWater,
   type Point,
+  pointInPolygon,
   type WalkWater,
 } from './collision';
 import {
@@ -54,6 +55,7 @@ import { type GroundQuality, groundLookGlsl } from './ground-shader';
 import { MARK_STYLE } from './ground-style';
 import type { LocalMapping } from './local-mapping';
 import type { RiverLayout } from './river-courses';
+import { WATERHOLE_BANK_M, type WaterholePool } from './waterholes';
 
 type RiverPoint = RiverLayout['runs'][number]['points'][number];
 
@@ -411,6 +413,42 @@ export function bridgeSpans(
   return spans;
 }
 
+/**
+ * The network's middle lines as drawn: each chain of cell steps (routeChains) and each gate's lead (shared by
+ * every road leaving that gate: from the gate to the road's first cell) as a centripetal Catmull-Rom curve sampled
+ * every STEP metres. Decor keeps off them, and the backend's flora off the same curves.
+ */
+export function routeLines(
+  globe: Globe,
+  roads: Pick<Road, 'kind' | 'cells' | 'lead'>[],
+) {
+  const { radius } = globe;
+  const cell = (index: number) => cellDirection(globe, index, new Vector3());
+  const { chains, ends } = routeChains(roads);
+  const lines = chains.map((chain) => ({
+    kind: chain.kind,
+    points: sampleCurve(chain.cells.map(cell), chain.closed, radius),
+    closed: chain.closed,
+  }));
+  const leads = new Set<string>();
+  for (const road of roads) {
+    const lead = road.lead ?? [];
+    const key = JSON.stringify(lead);
+    if (lead.length === 0 || leads.has(key)) continue;
+    leads.add(key);
+    const points = [
+      ...lead.map((point) => new Vector3(...point)),
+      cell(road.cells[0]),
+    ];
+    lines.push({
+      kind: road.kind,
+      points: sampleCurve(points, false, radius),
+      closed: false,
+    });
+  }
+  return { lines, ends };
+}
+
 /** The marks the world view lays outside the town's areas (directions only: draping happens in `buildMarks`). */
 export function planetMarks({
   globe,
@@ -450,34 +488,15 @@ export function planetMarks({
     );
   };
   const cell = (index: number) => cellDirection(globe, index, new Vector3());
-  const { chains, ends } = routeChains(places.roads);
+  const { lines, ends } = routeLines(globe, places.roads);
   const ribbon = (
     kind: RouteKind,
     points: Vector3[],
     { width = ROUTE_WIDTH[kind], closed = false } = {},
   ): Ribbon => ({ kind, width, points, closed });
-  const ribbons: Ribbon[] = chains.map((chain) =>
-    ribbon(
-      chain.kind,
-      sampleCurve(chain.cells.map(cell), chain.closed, radius),
-      {
-        closed: chain.closed,
-      },
-    ),
+  const ribbons: Ribbon[] = lines.map(({ kind, points, closed }) =>
+    ribbon(kind, points, { closed }),
   );
-  // a gate's lead (shared by every road leaving that gate) runs from the gate to the road's first cell
-  const leads = new Map<string, Ribbon>();
-  for (const road of places.roads) {
-    const lead = road.lead ?? [];
-    const key = JSON.stringify(lead);
-    if (lead.length === 0 || leads.has(key)) continue;
-    const points = [
-      ...lead.map((point) => new Vector3(...point)),
-      cell(road.cells[0]),
-    ];
-    leads.set(key, ribbon(road.kind, sampleCurve(points, false, radius)));
-  }
-  ribbons.push(...leads.values());
   const patches: Patch[] = [...ends].map(([index, kind]) => ({
     kind,
     centre: cell(index),
@@ -506,7 +525,8 @@ export function planetMarks({
   }
   for (const feature of places.features) {
     const spot = SPOT_MARKS[feature.kind];
-    if (spot)
+    // a waterhole's pool draws its own muddy bank (waterholes.ts)
+    if (spot && !feature.pool)
       patches.push({
         ...spot,
         centre: new Vector3(...feature.position),
@@ -528,10 +548,13 @@ export function planetMarks({
 export function globeMarkGround({
   terrain,
   rivers,
+  pools = [],
   town,
 }: {
   terrain: GlobeTerrain;
   rivers: RiverLayout;
+  /** The waterholes' pools: their water and banks are drawn by themselves (waterholes.ts), unmarked. */
+  pools?: readonly WaterholePool[];
   town: {
     mapping: SiteMapping;
     groundRadius: number;
@@ -552,6 +575,12 @@ export function globeMarkGround({
     radius,
     heightAt(direction) {
       if (water(direction).gap < 0) return null;
+      if (
+        pools.some(
+          ({ up }) => direction.angleTo(up) * radius < WATERHOLE_BANK_M,
+        )
+      )
+        return null;
       town.mapping.toLocal(local.copy(direction).multiplyScalar(radius), local);
       if (Math.hypot(local.x, local.z) >= town.groundRadius)
         return terrain.heightAt(direction);
@@ -810,9 +839,15 @@ function splitArea(triangle: AreaVertex[], out: AreaVertex[][]) {
 
 /**
  * A town area: its polygon with a ragged band along the border (edge 0 → 1 over `band` metres) round an inner
- * polygon, `across` measured from the line along its longest side through its middle, mapped onto the world.
+ * polygon, `across` measured from the line along its longest side through its middle, mapped onto the world. The
+ * `holes` inside the inner polygon are cut out of it (what lies on the ground there draws its own: the paddies).
  */
-function areaMark(mesh: MarkMesh, area: TownArea, mapping: LocalMapping) {
+function areaMark(
+  mesh: MarkMesh,
+  area: TownArea,
+  mapping: LocalMapping,
+  holes: readonly Point[][],
+) {
   const { kind, band } = AREA_MARKS[area.kind];
   const outline = area.polygon;
   const longest = outline
@@ -836,12 +871,16 @@ function areaMark(mesh: MarkMesh, area: TownArea, mapping: LocalMapping) {
     splitArea([a, b, c], triangles);
     splitArea([a, c, d], triangles);
   });
+  const cut = holes.filter((hole) =>
+    hole.every((point) => pointInPolygon(point, inner)),
+  );
+  const corners = [inner, ...cut].flat();
   for (const [a, b, c] of ShapeUtils.triangulateShape(
     inner.map(([x, z]) => new Vector2(x, z)),
-    [],
+    cut.map((hole) => hole.map(([x, z]) => new Vector2(x, z))),
   ))
     splitArea(
-      [vertex(inner[a], 1), vertex(inner[b], 1), vertex(inner[c], 1)],
+      [vertex(corners[a], 1), vertex(corners[b], 1), vertex(corners[c], 1)],
       triangles,
     );
   const position = new Vector3();
@@ -868,11 +907,13 @@ export function buildMarks({
   areas,
   planet,
 }: {
-  areas?: { areas: TownArea[]; mapping: LocalMapping };
+  /** `holes`: polygons cut out of any area they lie inside. */
+  areas?: { areas: TownArea[]; mapping: LocalMapping; holes?: Point[][] };
   planet?: { marks: PlanetMarks; ground: MarkGround };
 }) {
   const mesh = new MarkMesh();
-  for (const area of areas?.areas ?? []) areaMark(mesh, area, areas!.mapping);
+  for (const area of areas?.areas ?? [])
+    areaMark(mesh, area, areas!.mapping, areas!.holes ?? []);
   if (planet) {
     for (const ribbon of planet.marks.ribbons)
       drapeRibbon(mesh, ribbon, planet.ground);

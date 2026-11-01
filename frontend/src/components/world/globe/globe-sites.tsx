@@ -2,6 +2,7 @@ import { Suspense, useMemo } from 'react';
 import type { BufferGeometry, Matrix4 } from 'three';
 
 import { useFixedInstances } from '@/components/world/globe/fixed-instances';
+import { GlobePaddies } from '@/components/world/globe/paddies';
 import { GlobeWildMarks } from '@/components/world/globe/wild-marks';
 import { TownGround } from '@/components/world/town/town-ground';
 import {
@@ -30,9 +31,12 @@ import {
   signpostMatrices,
 } from '@/lib/world/ground-marks';
 import { discOutline } from '@/lib/world/ground-shape';
+import type { NodeStages } from '@/lib/world/node-stages';
+import { PADDY_KIND, paddyFields, paddyOutline } from '@/lib/world/paddies';
 import { type WildMarks, wildMarks } from '@/lib/world/wild-marks';
 import type { LocalMapping } from '@/lib/world/local-mapping';
 import type { RiverLayout } from '@/lib/world/river-courses';
+import type { WaterholePool } from '@/lib/world/waterholes';
 import { terrainLift } from '@/lib/world/walk-charts';
 
 /*
@@ -50,6 +54,8 @@ import { terrainLift } from '@/lib/world/walk-charts';
 const DISC_SEGMENTS = 96;
 /** Wall hanging from the disc's edge down to the terrain. */
 const DISC_SKIRT = 4;
+/** The field's marks stop this far (metres) inside a paddy's rim, under its bund, so no grass shows between. */
+const PADDY_MARK_OVERLAP = 0.25;
 interface WorldMarks {
   /** The marks draped on the ground (owned here: kept for the world's lifetime). */
   geometry: BufferGeometry;
@@ -119,6 +125,8 @@ export function GlobeTown({
   sites,
   places,
   rivers,
+  pools,
+  nodeStages,
   onPlacementsReady,
 }: {
   town: TownView;
@@ -134,18 +142,33 @@ export function GlobeTown({
   sites: Site[];
   places: WorldPlaces;
   rivers: RiverLayout;
+  /** The waterholes' pools: no ground mark lies on them. */
+  pools: readonly WaterholePool[];
+  /** Node stocks from the feed: the paddies are drawn by their stage. */
+  nodeStages: NodeStages;
   onPlacementsReady: () => void;
 }) {
   const outline = useMemo(
     () => discOutline(groundRadius, DISC_SEGMENTS),
     [groundRadius],
   );
+  const { paddies, placements, holes } = useMemo(() => {
+    const paddies = paddyFields(town.placements);
+    return {
+      paddies,
+      placements: town.placements.filter(
+        (placement) => placement.kind !== PADDY_KIND,
+      ),
+      holes: paddies.map((paddy) => paddyOutline(paddy, PADDY_MARK_OVERLAP)),
+    };
+  }, [town.placements]);
   let world = worldMarks.get(terrain);
   if (!world) {
     const height = sites.find((site) => site.kind === 'town')!.anchor.height_m;
     const ground = globeMarkGround({
       terrain,
       rivers,
+      pools,
       town: { mapping, groundRadius, height, water, areas: town.areas },
     });
     const marks = planetMarks({
@@ -182,12 +205,14 @@ export function GlobeTown({
         skirt={DISC_SKIRT}
         grass={grass}
         marks={world.geometry}
+        holes={holes}
       />
       <TownPlacements
-        placements={town.placements}
+        placements={placements}
         mapping={mapping}
         onReady={onPlacementsReady}
       />
+      <GlobePaddies fields={paddies} mapping={mapping} stages={nodeStages} />
       <SiteFurniture furniture={furniture} site="town" mapping={mapping} />
       <RoadFurniture bridges={world.bridges} signposts={world.signposts} />
       <GlobeWildMarks marks={world.wild} />

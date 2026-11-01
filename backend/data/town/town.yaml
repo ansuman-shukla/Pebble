@@ -211,7 +211,7 @@ placements:
   - {id: field-rack-1, kind: drying_rack, at: [-111, 36], rotation_deg: 90}
   - {id: field-rack-2, kind: drying_rack, at: [-111, 42], rotation_deg: 90}
   - {id: ox-cart, kind: ox_cart, at: [-111, 88]}
-  - {id: water-wheel, kind: water_wheel, at: [-152, 40], rotation_deg: 90} # the mill, at the stream's edge
+  - {id: water-wheel, kind: water_wheel, at: [-153.1, 40], rotation_deg: 90} # the mill: its plinth on the stream bed against the bank, the wheel in the water
   - {id: river-boat, kind: river_boat, at: [-156, 0]}
   - {id: stream-reeds-1, kind: reeds, at: [-155, -40]}
   - {id: stream-reeds-2, kind: reeds, at: [-157, 60]}

@@ -5,15 +5,27 @@ from collections import Counter
 import numpy as np
 import pytest
 
-from app.world.biomes import BIOME_IDS, mean_spacing_m
-from app.world.flora import BYTES_PER_ITEM, OFFSET_STEP_M, SPREAD, Flora, generate_flora
+from app.world.biomes import BIOME_IDS, WATER_BIOMES, mean_spacing_m
+from app.world.flora import (
+    BYTES_PER_ITEM,
+    LAKE_CLEARANCE_M,
+    LAKE_LIFT_M,
+    OFFSET_STEP_M,
+    POOL_CLEARANCE_M,
+    ROAD_CLEARANCE_M,
+    SPREAD,
+    WATER_SURFACE_M,
+    Flora,
+    catmull_rom_spans,
+    generate_flora,
+    route_chains,
+)
 from app.world.generate import GeneratedWorld, generate_world
-from app.world.hotspots import road_distance_m
 from app.world.spec import BIOME_NAMES, CAMPS, WorldSpec, load_site_kinds, load_world_spec
 from app.world.sphere import angle_between, bearing_deg, destination, tangent_frame
 from app.world.surface import Surface, surface_from_view
 from app.world.terrain import polyline_distance
-from app.world.view import WorldView, decode_array, encode_array
+from app.world.view import Road, WorldView, decode_array, encode_array
 
 
 @pytest.fixture(scope="module")
@@ -162,10 +174,6 @@ def test_nothing_grows_in_water_the_town_camps_props_rivers_or_roads(
     for camp in CAMPS:
         assert _metres(surface, flora, surface.site_unit(camp)).min() >= 12
     reeds = _nodes(view, flora) == "reed_bed"
-    for road in view.places.roads:
-        clearance = 2.5 if road.kind == "road" else 1.75
-        near = road_distance_m(units, [road], surface) < clearance - 0.05
-        assert not near.any(), road.id
     for river in surface.rivers:
         points = [surface.cell_unit(cell) for cell in river.cells]
         if len(points) < 2:
@@ -173,7 +181,104 @@ def test_nothing_grows_in_water_the_town_camps_props_rivers_or_roads(
         distance = polyline_distance(units, points, [1.0] * len(points), closed=False) * surface.radius_m
         assert (distance[~reeds] >= 6 - 0.05).all() and (distance[reeds] >= 3 - 0.05).all(), river.id
     for feature in view.places.features:
-        assert _metres(surface, flora, np.array(feature.position)).min() >= 3 - 0.05, feature.id
+        clearance = POOL_CLEARANCE_M if feature.pool else 3
+        assert _metres(surface, flora, np.array(feature.position)).min() >= clearance - 0.05, feature.id
+
+
+def _drawn_lines(view: WorldView, surface: Surface) -> list[tuple[np.ndarray, str]]:
+    """Every road and path as drawn (the client's ribbons): each chain and lead, sampled."""
+    lines = [
+        (catmull_rom_spans(surface.grid.positions[chain.cells], chain.closed, surface.radius_m), chain.kind)
+        for chain in route_chains(view.places.roads)
+    ]
+    leads = {tuple(map(tuple, road.lead)): road for road in view.places.roads if road.lead}
+    for road in leads.values():
+        points = np.array([*road.lead, surface.grid.positions[road.cells[0]]])
+        lines.append((catmull_rom_spans(points, False, surface.radius_m), road.kind))
+    return [(np.concatenate(spans), kind) for spans, kind in lines if spans]
+
+
+def test_nothing_grows_on_a_road_or_path_as_it_is_drawn(view: WorldView, flora: Flora, surface: Surface) -> None:
+    """Roads are drawn as curves through their cells, not the straight steps between them (critic round 1: trees
+    on the North woods road and on a bridge)."""
+    units = flora.units
+    for samples, kind in _drawn_lines(view, surface):
+        centre = samples.mean(axis=0) / np.linalg.norm(samples.mean(axis=0))
+        reach = float(angle_between(samples, centre).max()) * surface.radius_m + 3
+        near = np.flatnonzero(angle_between(units, centre) * surface.radius_m < reach)
+        if len(near) == 0:
+            continue
+        gaps = np.array([angle_between(samples, units[i]).min() for i in near]) * surface.radius_m
+        assert (gaps >= ROAD_CLEARANCE_M[kind] - 0.3).all(), (kind, near[gaps < ROAD_CLEARANCE_M[kind] - 0.3][:5])
+
+
+def test_nothing_but_reeds_stands_in_a_lake_s_drawn_water(view: WorldView, flora: Flora, surface: Surface) -> None:
+    """A lake's water is drawn over its whole grid triangles, up the bank to its bed + LAKE_LIFT_M (the falls pool:
+    oaks stood in it)."""
+    lakes = np.isin(surface.biomes, list(WATER_BIOMES)) & (surface.heights > WATER_SURFACE_M)
+    owners = _owners(surface, flora)
+    reeds = _nodes(view, flora) == "reed_bed"
+    triangles = surface.grid.triangles
+    shore = np.flatnonzero(~reeds & np.append(lakes, False)[surface.padded_neighbours[owners]].any(axis=1))
+    for index in shore.tolist():
+        point, owner = flora.units[index], int(owners[index])
+        for corners in triangles[(triangles == owner).any(axis=1)]:
+            a, b, c = surface.grid.positions[corners]
+            normal = np.cross(b - a, c - a)
+            hit = point * (a @ normal) / (point @ normal)
+            wa = float(np.cross(c - b, hit - b) @ normal / (normal @ normal))
+            wb = float(np.cross(a - c, hit - c) @ normal / (normal @ normal))
+            weights = np.array([wa, wb, 1 - wa - wb])
+            if weights.min() >= -1e-9:
+                if lakes[corners].any():
+                    level = surface.heights[corners][lakes[corners]].min() + LAKE_LIFT_M
+                    assert float(weights @ surface.heights[corners]) >= level + LAKE_CLEARANCE_M - 1e-6, index
+                break
+    assert len(shore) > 100
+
+
+def test_drawn_route_chains_break_at_junctions_and_where_the_kind_changes() -> None:
+    def road(kind: str, cells: list[int]) -> Road:
+        return Road(id=f"{kind}{cells}", kind=kind, name="", stops=[], cells=cells)
+
+    chains = route_chains([road("road", [1, 2, 3, 4]), road("path", [3, 5, 6]), road("path", [4, 7])])
+    assert sorted((c.kind, c.cells, c.closed) for c in chains) == [
+        ("path", [3, 5, 6], False),
+        ("path", [4, 7], False),
+        ("road", [1, 2, 3], False),
+        ("road", [3, 4], False),
+    ]
+    (loop,) = route_chains([road("path", [1, 2, 3, 1])])
+    assert loop.closed and sorted(loop.cells) == [1, 2, 3]
+
+
+def test_drawn_routes_follow_three_js_centripetal_catmull_rom_curves() -> None:
+    """The curve the client's ribbons follow (three.js CatmullRomCurve3, 'centripetal'): its middle points, by
+    three.js itself, for an open and a closed curve through four points 10 m apart."""
+    radius = 1000.0
+    points = np.array([[0, 0, radius], [10, 0, radius], [16, 8, radius], [16, 18, radius]], dtype=float)
+    directions = points / np.linalg.norm(points, axis=1, keepdims=True)
+    three = {
+        False: [
+            [0.005249870052, -0.000499971677, 0.99998609435],
+            [0.013623554724, 0.003374577826, 0.99990150064],
+            [0.016371473241, 0.01287197338, 0.999783120064],
+        ],
+        True: [
+            [0.004255041258, -0.001068039389, 0.999990376912],
+            [0.013623554724, 0.003374577826, 0.99990150064],
+            [0.016876097733, 0.013929458602, 0.999760555087],
+        ],
+    }
+    for closed, middles in three.items():
+        spans = catmull_rom_spans(directions, closed, radius)
+        assert len(spans) == (4 if closed else 3)
+        for span, middle, (start, end) in zip(
+            spans, middles, zip(directions, np.roll(directions, -1, 0), strict=True), strict=False
+        ):
+            assert len(span) == 21  # every half metre over 10 m
+            assert np.allclose(span[0], start) and np.allclose(span[-1], end)
+            assert np.allclose(span[10], middle, atol=1e-9)
 
 
 def _owners(surface: Surface, flora: Flora) -> np.ndarray:

@@ -15,6 +15,7 @@ import { Matrix4, Vector3 } from 'three';
 
 import { Button } from '@/components/ui/button';
 import { BiomeScatter } from '@/components/world/globe/biome-scatter';
+import { GoldGlints } from '@/components/world/globe/gold-glints';
 import { GlobeNodes } from '@/components/world/globe/nodes';
 import {
   type DropApi,
@@ -98,6 +99,7 @@ import { ShownDoings } from '@/lib/live/shown-doings';
 import { BIOME_PROPS } from '@/lib/world/biome-props';
 import type { FloraTable } from '@/lib/world/flora';
 import { NodeStages } from '@/lib/world/node-stages';
+import { type WaterholePool, waterholePools } from '@/lib/world/waterholes';
 import {
   FAST_RATE,
   formatTime,
@@ -170,6 +172,8 @@ interface Planet {
   terrain: GlobeTerrain;
   town: { mapping: SiteMapping; height: number; lon: number; grass: string };
   hole: TerrainHole;
+  /** The waterholes' pools (waterholes.ts). */
+  pools: WaterholePool[];
   rivers: RiverLayout;
   scatter: Scatter;
   volcano: { frame: ReturnType<typeof tangentFrame>; summit: number } | null;
@@ -210,6 +214,7 @@ function buildPlanet(
       grass: biomeColor(view.biome_names[globe.biomes[site.cell]]),
     },
     hole,
+    pools: waterholePools(view.places.features, terrain),
     // the town lays its own ground and water: a river passing it runs through its stream, others stop at it
     rivers: riverLayout(
       terrain,
@@ -443,6 +448,7 @@ const GlobeScene = memo(function GlobeScene({
         biomeNames={view.biome_names}
         rivers={planet.rivers}
         hole={planet.hole}
+        pools={planet.pools}
       />
       <Waterfalls
         terrain={terrain}
@@ -467,6 +473,8 @@ const GlobeScene = memo(function GlobeScene({
           sites={view.sites}
           places={view.places}
           rivers={planet.rivers}
+          pools={planet.pools}
+          nodeStages={nodeStages}
           onPlacementsReady={onPlacementsReady}
         />
         <GlobeSites
@@ -486,6 +494,11 @@ const GlobeScene = memo(function GlobeScene({
           radius={terrain.globe.radius}
         />
       </Suspense>
+      <GoldGlints
+        features={view.places.features}
+        terrain={terrain}
+        stages={nodeStages}
+      />
       <GlobeNpcs
         citizens={live.citizens}
         cues={live.cues}

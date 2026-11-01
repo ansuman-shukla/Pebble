@@ -3,7 +3,8 @@
  * it, from the flora table and the fixed mineral features, never cleared around sites. Decor (10 §5.2): biome
  * props nobody can use, deterministic per cell (a random stream seeded from the world seed and the cell index, so
  * a cell always grows the same instances whenever and from wherever it is scattered); decor keeps off sites,
- * rivers, roads and paths, nodes and their work spots, fixed features, rock ground, and mineral hotspots (rocks).
+ * rivers, roads and paths (their drawn middle lines), lake water (as drawn), nodes and their work spots, fixed
+ * features (a waterhole's pool and bank), rock ground, and mineral hotspots (rocks).
  */
 import { Matrix4, Quaternion, Vector3 } from 'three';
 
@@ -30,7 +31,10 @@ import {
   WATER_BIOMES,
 } from './globe';
 import { biomeGroundClaims, groundWeights } from './globe-mesh';
+import { routeLines } from './ground-marks';
 import { GROUND_LAYERS } from './ground-shader';
+import { lakeSurface } from './water-mesh';
+import { WATERHOLE_BANK_M } from './waterholes';
 import type { WorldPlaces } from '@/lib/client/types.gen';
 
 export interface ScatterInstance {
@@ -101,13 +105,17 @@ export interface ScatterOptions {
 
 /** How far decor keeps from a river's centre line, metres. */
 const RIVER_CLEARANCE = 6;
-/** ... from a road's or path's centre line: half its width + 1 m (the backend's flora keeps the same). */
+/** ... from a road's or path's drawn middle line: half its width + 1 m (the backend's flora keeps the same). */
 export const ROAD_CLEARANCE: Record<string, number> = { road: 2.5, path: 1.75 };
+/** ... above a lake's drawn water (metres; the backend's flora keeps the same). */
+const LAKE_CLEARANCE = 0.3;
 /** ... from a node's footprint: its work spots lie within SPOT_REACH of it, and decor keeps 1.2 m off a spot. */
 const SPOT_REACH = 1;
 export const NODE_CLEARANCE = SPOT_REACH + 1.2;
 /** ... from a fixed feature that isn't drawn as a node (fishing spot, waterhole, den, signpost, marker). */
 const FEATURE_CLEARANCE = 3;
+/** ... from a waterhole's drawn pool (the backend's flora keeps the same). */
+const POOL_CLEARANCE = WATERHOLE_BANK_M + 1;
 /** No decor where the ground is mostly rock (10 §5.2). */
 const MAX_DECOR_ROCK = 0.5;
 /** Hotspots with these features are mineral hotspots: no decor rocks inside. */
@@ -150,7 +158,7 @@ function distanceToSegment(p: Vector3, a: Vector3, b: Vector3) {
   return p.distanceTo(a.clone().addScaledVector(ab, t));
 }
 
-/** Polylines through cell centres (rivers, roads), indexed by cell, each link with its clearance. */
+/** Polylines through cell centres (rivers), indexed by cell, each link with its clearance. */
 function cellLinks(lines: { cells: number[]; clearance: number }[]) {
   const links = new Map<number, [number, number][]>();
   for (const { cells, clearance } of lines)
@@ -179,13 +187,23 @@ export function createScatter({
   /** Mean distance between neighbouring cells. */
   const spacing = (radius * 1.11) / frequency;
   const density = (REFERENCE_FREQUENCY / frequency) ** 2;
-  const lines = cellLinks([
-    ...rivers.map((cells) => ({ cells, clearance: RIVER_CLEARANCE })),
-    ...(places?.roads ?? []).map((road) => ({
-      cells: road.cells,
-      clearance: ROAD_CLEARANCE[road.kind],
-    })),
-  ]);
+  const lines = cellLinks(
+    rivers.map((cells) => ({ cells, clearance: RIVER_CLEARANCE })),
+  );
+  // the roads' and paths' drawn middle lines in steps, by the cell nearest each step's end
+  const routeSteps = new Map<number, [Vector3, Vector3, number][]>();
+  let hint: number | undefined;
+  for (const { kind, points } of routeLines(globe, places?.roads ?? []).lines)
+    for (let i = 1; i < points.length; i++) {
+      hint = terrain.nearestCell(points[i], hint);
+      const steps = routeSteps.get(hint) ?? [];
+      steps.push([
+        points[i - 1].clone().multiplyScalar(radius),
+        points[i].clone().multiplyScalar(radius),
+        ROAD_CLEARANCE[kind],
+      ]);
+      routeSteps.set(hint, steps);
+    }
   const claims = biomeNames.map(biomeGroundClaims);
   const weights = new Float64Array(GROUND_LAYERS.length);
   const rows = flora ? floraRows(flora, globe.cellCount) : null;
@@ -215,7 +233,7 @@ export function createScatter({
     } else
       featureMarks.set(feature.cell, [
         ...(featureMarks.get(feature.cell) ?? []),
-        { direction, clear: FEATURE_CLEARANCE },
+        { direction, clear: feature.pool ? POOL_CLEARANCE : FEATURE_CLEARANCE },
       ]);
   }
   const mineralHotspots = (places?.hotspots ?? [])
@@ -290,6 +308,8 @@ export function createScatter({
         cellDirection(globe, other, b).multiplyScalar(radius);
         if (distanceToSegment(unit, a, b) < clearance) return true;
       }
+      for (const [from, to, clearance] of routeSteps.get(owner) ?? [])
+        if (distanceToSegment(unit, from, to) < clearance) return true;
     }
     return false;
   }
@@ -349,6 +369,8 @@ export function createScatter({
           continue;
         const hit = terrain.locate(direction, index);
         if (hit.tilt > MAX_TILT) continue;
+        if (hit.height < lakeSurface(globe, hit.triangle) + LAKE_CLEARANCE)
+          continue;
         groundWeights(
           {
             claims: claims[globe.biomes[hit.cell]],

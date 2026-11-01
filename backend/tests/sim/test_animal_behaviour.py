@@ -17,6 +17,7 @@ from app.sim.simulation import Simulation
 from app.sim.snapshot import restore, state_hash, take_snapshot
 from app.sim.state import Animal, AnimalGroup
 from app.sim.vec import Vec3, bearing_deg, step_towards
+from app.world.view import POOL_RADIUS_M
 from app.world_api.facade import WorldApi
 from tests.sim_helpers import drawn_on, make_spec, put_in_the_wild, skip_to, wild_cell, without_animals
 
@@ -420,6 +421,42 @@ def test_a_herd_drinks_at_its_waterhole_at_dawn(new_sim: Callable[..., Simulatio
             break
     assert drank
     assert sim.core.altitude(hole) > -3.0  # at dawn, not in the night
+
+
+def test_a_herd_drinks_round_the_edge_of_a_pool_facing_the_water(new_sim: Callable[..., Simulation]) -> None:
+    """A pool waterhole is drawn as water POOL_RADIUS_M round it (waterholes.ts): drinkers stand at its edge,
+    heads to the water, never in it or out on the grass."""
+    sim = new_sim()
+    pools = [f.position for f in sim.world.features if f.kind == "waterhole" and f.pool]
+    group = next(
+        g for g in sorted(sim.state.groups.values(), key=lambda g: g.id)
+        if not SPECIES[g.kind].predator and waterhole_of(sim.world, g) in pools
+    )  # fmt: skip
+    hole = waterhole_of(sim.world, group)
+    assert hole is not None
+    sim.state.animals = {m: sim.state.animals[m] for m in group.members}  # nothing to scare it off
+    sim.state.groups = {group.id: group}
+    skip_to(sim, hole, night=True)
+    seen: dict[str, tuple[float, float]] = {}
+    placed = False
+    for _ in range(14 * 60):
+        sim.step()
+        if not placed and group.id in WILDLIFE.of(sim.state).drinks:  # the drink begins: some stand in the water
+            placed = True
+            for n, member in enumerate(sim.state.animals.values()):
+                WILDLIFE.of(sim.state).courses.pop(member.id, None)
+                animal_life._place(sim.core, member, step_towards(hole, 40.0 * n, 0.0 if n % 2 else 10.0, R))
+            continue
+        for member in (sim.state.animals[m] for m in group.members):
+            if member.alive and member.activity == "drinking" and member.id not in seen:
+                facing = abs((180.0 - bearing_deg(member.position, hole) - member.heading_deg + 180.0) % 360.0 - 180.0)
+                seen[member.id] = (sim.world.distance_m(member.position, hole), facing)
+        if len(seen) == len(group.members):
+            break
+    assert len(seen) >= 2
+    for gap, facing in seen.values():
+        assert POOL_RADIUS_M <= gap <= POOL_RADIUS_M + 2.0 + 0.01
+        assert facing < 1.0
 
 
 # --- the stream ---

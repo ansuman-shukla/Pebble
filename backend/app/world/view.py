@@ -79,6 +79,10 @@ FeatureKind = Literal[
 ]
 
 
+POOL_RADIUS_M = 3.0  # a waterhole's drawn pool: its water (the client's WATERHOLE_POOL_M) ...
+POOL_BANK_M = 7.0  # ... and its muddy bank out to where it meets the ground (WATERHOLE_BANK_M)
+
+
 class Feature(BaseModel):
     """A fixed thing in the wild: a node (seam, fishing spot, waterhole...), a den, a signpost or a claim marker."""
 

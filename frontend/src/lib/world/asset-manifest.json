@@ -18,6 +18,14 @@
       "path": "src/vendor/polyfork/clips.mjs",
       "sha256": "45bd336f360d8387158267bf412a6d6f6401588edbda60d06672a9bdf7d73f0c",
       "bytes": 7544
+    },
+    {
+      "name": "rice-paddy",
+      "from": "rice-paddy-tile-dc727e",
+      "url": "https://polyfork.dev/cdn/rice-paddy-tile-dc727e.mjs",
+      "path": "src/vendor/polyfork/rice-paddy.mjs",
+      "sha256": "4ea956110db9fc5de87cdb27f42031a0144a02ea81117e5ca519b13eab3a449d",
+      "bytes": 35162
     }
   ],
   "assets": [

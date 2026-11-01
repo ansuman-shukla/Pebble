@@ -378,7 +378,11 @@ export const collidersUrl = (id: string) =>
  * Assets built to stand below the town ground. The moat bridge stands on the moat floor and its walked lips sit
  * pierHeight (1.6 m) + the apron (0.1 m) above it, so it is lowered until the lips (1.68-1.70 m) meet the ground at y = 0.
  */
-const BASE_Y: Record<string, number> = { 'moat-bridge-4fbcd9': -1.68 };
+const BASE_Y: Record<string, number> = {
+  'moat-bridge-4fbcd9': -1.68,
+  // the mill's plinth stands on the stream's bed (its banks reach 0.8 m down), so the wheel dips into the water
+  'stream-water-wheel-ea2d68': -0.8,
+};
 
 /** Height at which to place an asset in a flat town (0 for everything that rests on the ground). */
 export const assetBaseY = (id: string) => BASE_Y[id] ?? 0;

@@ -50,6 +50,7 @@ from app.sim.fire import FEAR_M, SAFE_M, lit_fires, near_lit_fire
 from app.sim.state import Animal, AnimalActivity, AnimalGroup, Citizen, Fire, System
 from app.sim.vec import Vec3, angle, bearing_deg, step_towards
 from app.sim.world import SimWorld
+from app.world.view import POOL_RADIUS_M
 
 DUSK_ALTITUDE_DEG = 4.0  # predators hunt while the sun is lower than this (dusk, night, dawn)
 HUNGRY = 50.0
@@ -64,6 +65,7 @@ IDLE_TICKS = (4, 10)  # an awake predator looks about this long before it moves 
 WANDER_TICKS = (40, 150)  # a group picks its next goal after this long
 AMBUSH_TICKS = (60, 120)  # a predator group waits by the waterhole this long from dusk
 DRINK_TICKS = 30  # a herd drinks this long at its waterhole (10 §4.6)
+DRINK_EDGE_M = (0.6, 2.0)  # round a drawn pool, members drink standing this far out from the water's edge
 SPREAD_M = 15.0  # members gather this close around their group's goal
 SPACING_M = 2.0  # and keep this far from each other's spots
 REJOIN_M = 30.0  # a member further than this from its group's goal walks back
@@ -333,11 +335,13 @@ def _herbivore(core: SimCore, animal: Animal, threat: Threat | None, life: Wildl
         return
     rng = core.state.rng("animals.graze")
     if drinking and group.goal is not None:
-        if core.distance_m(animal.position, group.goal) > SPREAD_M:
-            spot = _spot(core, animal, group.goal, SPREAD_M * 0.5, rng)
+        pool = _pool(core.world, group.goal)
+        if not _at_drink(core, animal.position, group.goal, pool):
+            spot = _drink_spot(core, animal, group.goal, pool, rng)
             _walk(core, animal, spot, species.walk_mps, "walk", "drinking", start)
         else:
             animal.activity, animal.until = "drinking", life.drinks[group.id]
+            _face_pool(core, animal)
         return
     night = core.altitude(animal.position) < NIGHT_ALTITUDE_DEG and not species.swims
     if group.goal is not None and core.distance_m(animal.position, group.goal) > REJOIN_M:  # back to the herd
@@ -383,6 +387,51 @@ def _spot(core: SimCore, animal: Animal, centre: Vec3, radius_m: float, rng: Rng
         if all(core.distance_m(spot, other) >= SPACING_M for other in taken):
             break
         spot = jitter(core.world, centre, radius_m, rng)
+    return spot
+
+
+def _pool(world: SimWorld, hole: Vec3) -> bool:
+    """Whether the waterhole at `hole` is a drawn pool (no river or lake at hand)."""
+    cache = world_cache(world)
+    if "pools" not in cache:
+        cache["pools"] = [f.position for f in world.features if f.kind == "waterhole" and f.pool]
+    return hole in cache["pools"]
+
+
+def _at_drink(core: SimCore, at: Vec3, hole: Vec3, pool: bool) -> bool:
+    """Close enough to drink: round a pool's water (its edge within reach), else near the waterhole."""
+    gap = core.distance_m(at, hole)
+    if pool:
+        return POOL_RADIUS_M <= gap <= POOL_RADIUS_M + DRINK_EDGE_M[1]
+    return gap <= SPREAD_M
+
+
+def _face_pool(core: SimCore, animal: Animal) -> None:
+    """A member drinking at a pool turns its head to the water."""
+    hole = core.state.groups[animal.group].goal
+    if hole is not None and _pool(core.world, hole):
+        animal.heading_deg = _heading(animal.position, hole, animal.heading_deg)
+
+
+def _drink_spot(core: SimCore, animal: Animal, hole: Vec3, pool: bool, rng: Rng) -> Vec3:
+    """Where a member goes to drink: a free spot round a pool's water's edge, else near the waterhole."""
+    if not pool:
+        return _spot(core, animal, hole, SPREAD_M * 0.5, rng)
+    taken = [
+        _heading_to(core, core.state.animals[member_id])
+        for member_id in core.state.groups[animal.group].members
+        if member_id != animal.id
+    ]
+
+    def edge() -> Vec3:
+        out = POOL_RADIUS_M + DRINK_EDGE_M[0] + rng.random() * (DRINK_EDGE_M[1] - DRINK_EDGE_M[0])
+        return step_towards(hole, rng.random() * 360.0, out, core.world.radius_m)
+
+    spot = edge()
+    for _ in range(SPOT_TRIES):
+        if all(core.distance_m(spot, other) >= SPACING_M for other in taken):
+            break
+        spot = edge()
     return spot
 
 
@@ -1322,6 +1371,7 @@ def _arrive(core: SimCore, animal: Animal, activity: AnimalActivity) -> None:
     if activity == "drinking":
         animal.activity = "drinking"
         animal.until = WILDLIFE.of(core.state).drinks.get(animal.group, tick + DRINK_TICKS)
+        _face_pool(core, animal)
         return
     if activity in ("grazing", "floating") and not SPECIES[animal.kind].predator:
         activity = _resting(core, animal)
