@@ -728,6 +728,7 @@ def test_an_accusation_needs_a_known_deed_and_an_awake_listener_in_earshot(new_s
 def test_the_one_accused_before_hears_it_and_stops_what_they_do(new_sim: Callable[..., Simulation]) -> None:
     sim = _theft_scene(new_sim)
     WorldApi(sim, "kaz").pick_up("5 rice")
+    sim.step()  # the theft is old news by the time he sits down
     resting = WorldApi(sim, "goro").rest(30)
     sim.step()
     WorldApi(sim, "genzo").accuse("Kaz", "Goro")

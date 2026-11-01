@@ -15,6 +15,7 @@ from app.sim.navigation import Planner
 from app.sim.simulation import Simulation
 from app.sim.slots import SLOTS
 from app.sim.snapshot import SNAPSHOT_VERSION, canonical_json, restore, resumable, state_hash, take_snapshot
+from app.sim.society import SOCIETY
 from app.sim.state import Citizen, System
 from app.sim.systems import REGISTRY, LocalTest, Registry
 from app.sim.vec import lat_lon_deg
@@ -137,7 +138,8 @@ def test_hooks_run_after_bodies_and_before_interrupts_in_list_order(sim_world: S
     def local(name: str) -> Callable[[SimCore, LocalTest], None]:
         return lambda _core, _now: calls.append(name)
 
-    systems = (SLOTS, CUSTODY)  # resting takes a seat (slots); every action asks whether its actor is held (custody)
+    # resting takes a seat (slots); every action asks whether its actor is held (custody); a wrong seen interrupts
+    systems = (SLOTS, CUSTODY, SOCIETY)
     hooks = Registry(systems=systems, every_tick=(bite,), at_dawn=(local("dawn"),), at_midnight=(local("mid"),))
     sim = _sim(sim_world, planner, hooks)
     api = WorldApi(sim, "ann")

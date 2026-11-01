@@ -257,7 +257,7 @@ def interrupt(
     for deed in reversed(society.known_deeds(core, citizen.id)):  # a wrong seen (or told) just now: newest first
         if deed.tick < core.state.tick - 1:
             break
-        if deed.doer in (citizen.id, action.target_id):
+        if deed.doer in (citizen.id, action.target_id) or deed.tick <= action.started_tick:  # done before they began
             continue
         doer = person_label(citizen, core.state.citizens[deed.doer])
         _interrupt(core, citizen, action, f"{stop}: {doer} {deed_words(core, citizen, deed)}!", deed.seq)

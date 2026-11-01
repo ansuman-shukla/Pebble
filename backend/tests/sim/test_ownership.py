@@ -113,6 +113,7 @@ def test_owners_notice_what_went_missing_when_they_eat_or_store_food_there(new_s
     sim.stock_store("store-2", "wood", 20)
     WorldApi(sim, "goro").pick_up("2 rice")
     WorldApi(sim, "tokuji").pick_up("2 wood")
+    sim.step()  # the thefts are a minute old: what the owners find is what went missing, not who took it
     sim.citizen("genzo").body.hunger = 30.0
     eaten = run_until_done(sim, WorldApi(sim, "genzo").eat("rice"), 10)
     assert eaten.text.endswith(" Some of your rice is gone.")
