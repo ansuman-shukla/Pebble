@@ -598,3 +598,36 @@ def test_band_b_s_leader_judges_a_wrong_against_the_band_at_the_fire_not_one_aga
         cast(WorldApi, FakeApi({})), member, look, Needs(0, 0, 0), phase(look), lambda _p: False, lambda _n: 0
     )
     assert bands._judge_at_fire(ctx) == []
+
+
+POOL = Spot("the Falls pool", 400, ("gold",))
+
+
+def test_band_b_s_gold_trip_pans_the_falls_pool_then_sells_the_gold_for_rice() -> None:
+    from app.brains import bands
+
+    nim = _band("nim", "mother", "band_b", spots=(POOL,))
+    api = FakeApi({"night": False, "days": 5, "chores": ["fished"], "hunger choice": ["gold", 5]})
+    ctx = _ctx(_look(B_CAMP, "early morning", ()), nim, api)
+    assert _start(ctx, _choose(ctx)) == ("walk_to_place", ("the Falls pool", "walk"))
+    gold = Seen(
+        label="a pool, gold in its gravel", where="right beside you", nearness="right beside you", resource="gold"
+    )
+    for _ in range(bands.PANS):
+        ctx = _ctx(_look("at the Falls pool", "early morning", (), things=[gold]), nim, api)
+        assert _start(ctx, _choose(ctx)) == ("gather", ("gold",))
+    ctx = _ctx(_look("at the Falls pool", "mid-morning", ("a grain of gold",), things=[gold]), nim, api)
+    assert _start(ctx, _choose(ctx)) == ("walk_to_place", ("the market", "walk"))  # panned: to the stall
+    ctx = _ctx(_look("at the market, in The castle town", "mid-morning", ("a grain of gold",), market=OPEN), nim, api)
+    deal = _choose(ctx)
+    assert deal.name == "trade at the stall"
+    _start(ctx, deal)
+    assert api.calls[-3:] == [
+        ("sell", ("gold", 99)),
+        ("buy", ("rice", bands.GOLD_RICE)),
+        ("walk_to_place", ("home", "walk")),
+    ]
+    kaz = FakeApi({"night": False, "days": 5, "chores": ["fished"], "hunger choice": ["gold", 5]})
+    lords = Spot("the Falls pool", 400, ("gold",))
+    hunter = _band("kaz", "young hunter", "band_b", spots=(lords,))
+    assert _choose(_ctx(_look(B_CAMP, "early morning", ()), hunter, kaz)).name != "go to the Falls pool"  # not a panner
