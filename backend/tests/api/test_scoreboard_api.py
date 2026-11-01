@@ -1,4 +1,4 @@
-"""`GET /scoreboard` and the citizen profile's score (10-world-v1 §7) on the real cast's first 70 minutes."""
+"""`GET /scoreboard` (10-world-v1 §7) on the real cast's first 70 minutes."""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -38,11 +38,3 @@ def test_the_board_reads_the_run_now_and_at_a_past_tick(client: TestClient, cast
     first = client.get(f"{API}/scoreboard", params={"at": 0}).json()
     assert first["tick"] == 0 and all(row["income_24h"] == 0 for row in first["citizens"])
     assert client.get(f"{API}/scoreboard", params={"at": 71}).status_code == 404
-
-
-@pytest.mark.usefixtures("cast")
-def test_the_profile_carries_the_citizen_s_row(client: TestClient) -> None:
-    board = {row["id"]: row for row in client.get(f"{API}/scoreboard").json()["citizens"]}
-    profile = client.get(f"{API}/citizens/genzo").json()
-    assert profile["score"] == board["genzo"]
-    assert profile["score"]["ambition"]["text"] == "200 rice in the household chest and no tax owed"

@@ -390,7 +390,6 @@ export type CitizenProfile = {
      * Recent
      */
     recent: Array<TimelineEntry>;
-    score: CitizenScore;
 };
 
 /**

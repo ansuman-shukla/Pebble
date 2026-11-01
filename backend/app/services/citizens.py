@@ -34,7 +34,6 @@ from app.observability.lines import Names, Resident, Told, namer, tell
 from app.services.clock import run_or_latest
 from app.services.entities import Activity, Position, citizen_entity, world_at
 from app.services.places import PlaceIndex, PlaceRef
-from app.services.scoreboard import CitizenScore, board_at
 from app.sim.bodies import LEVEL_WORDS, NEEDS, Need, need_level
 from app.sim.citizens import CITIZENS, DEV_CITIZENS, CitizenSpec, load_citizens
 from app.sim.clock import town_clock
@@ -160,7 +159,6 @@ class CitizenProfile(BaseModel):
     known_places: list[KnownPlace]
     known_people: list[PersonRef]
     recent: list[TimelineEntry]  # newest first
-    score: CitizenScore  # the spectator scoreboard's row (10 §7; never shown to minds)
 
 
 class TimelinePage(BaseModel):
@@ -303,7 +301,6 @@ def citizen_profile(
             for person_id in sorted(citizen.people)
         ],
         recent=recent.entries if recent is not None else [],
-        score=next(row for row in board_at(session, places, world).citizens if row.id == citizen.id),
     )
 
 

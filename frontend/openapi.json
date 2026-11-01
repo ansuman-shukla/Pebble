@@ -2077,9 +2077,6 @@
             },
             "type": "array",
             "title": "Recent"
-          },
-          "score": {
-            "$ref": "#/components/schemas/CitizenScore"
           }
         },
         "type": "object",
@@ -2113,8 +2110,7 @@
           "inventory",
           "known_places",
           "known_people",
-          "recent",
-          "score"
+          "recent"
         ],
         "title": "CitizenProfile"
       },
