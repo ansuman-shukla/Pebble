@@ -47,7 +47,7 @@ from app.observability.events import (
     Trespassed,
 )
 from app.sim.bodies import THRESHOLDS
-from app.sim.citizens import Title
+from app.sim.citizens import Kin, Title
 from app.sim.clock import DAY_MINUTES, game_minute
 from app.sim.core import SimCore
 from app.sim.items import ITEMS
@@ -193,6 +193,7 @@ class Member:
     home: str | None
     base_rank: int  # their rank without titles (§3.2)
     titles: list[Title] = field(default_factory=list)
+    family: dict[str, Kin] = field(default_factory=dict)  # kin by citizen id: what that person is to them
 
     @property
     def rank(self) -> int:
@@ -218,6 +219,9 @@ class Deed:
     owner: str | None = None  # a theft's robbed household or group
     victim: str | None = None  # violence's victim
     blow: int | None = None  # a killing's killing blow (its `injured`, an assault deed)
+    item: str | None = None  # what a theft or poaching took
+    store: str | None = None  # the store a theft took it from
+    place: str | None = None  # a trespass's or poaching's place, in words ("the castle town", "the Lord's woods")
 
 
 @dataclass(frozen=True)
@@ -239,6 +243,7 @@ class Society:
     accusations: list[Accusation] = field(default_factory=list)
     judgements: dict[int, Region] = field(default_factory=dict)  # `judged` seq -> the judge's group
     credited: dict[str, list[int]] = field(default_factory=dict)  # accuser -> deeds their accusations proved (sorted)
+    settled: list[int] = field(default_factory=list)  # deeds a judgement named (sorted): nobody wants their doer now
     day: int = 0  # the town day the gift caps count
     gift_standing: dict[str, int] = field(default_factory=dict)  # giver -> standing their gifts raised today
     gift_bonds: dict[str, int] = field(default_factory=dict)  # pair -> bond their gifts raised today
@@ -315,6 +320,22 @@ def deeds_by(core: SimCore, doer: str) -> list[Deed]:
     return [deed for _, deed in sorted(society.deeds.items()) if deed.doer == doer]
 
 
+def wanted_for(core: SimCore, citizen_id: str) -> list[Deed]:
+    """The deeds this citizen is wanted for, oldest first: those a member of the wronged group knows of (seen or told)
+    that no judgement has named yet. Children can't be judged (§3.3), so nobody wants them."""
+    society = SOCIETY.of(core.state)
+    if age_group(society.members[citizen_id].age) == "child":
+        return []
+    settled = set(society.settled)
+    known = {
+        (seq, society.members[knower].group)
+        for knower, seqs in society.known.items()
+        if knower != citizen_id
+        for seq in seqs
+    }
+    return [deed for deed in deeds_by(core, citizen_id) if deed.seq not in settled and (deed.seq, deed.group) in known]
+
+
 def witnesses(core: SimCore, doer: str) -> list[str]:
     """Who sees the doer now: the living who had them in view at the end of the last tick (§3.3)."""
     return sorted(citizen.id for citizen in core.living() if citizen.id != doer and doer in citizen.in_view)
@@ -349,6 +370,7 @@ def _enrol(_core: SimCore, society: Society, event: EventDraft) -> None:
         home=spawned.home,
         base_rank=_untitled_rank(spawned.age) if titled else spawned.rank,
         titles=list(spawned.titles),
+        family=cast(dict[str, Kin], dict(spawned.family)),
     )
     society.members[spawned.id] = member
     society.standing[spawned.id] = {group: _start(member, group) for group in GROUPS}
@@ -374,13 +396,16 @@ def _start(member: Member, group: Region) -> int:
 def _stole(core: SimCore, society: Society, event: EventDraft) -> None:
     stole = cast(Stole, event.payload)
     group = _owner_group(society, stole.owner)
-    _log(core, society, event, "theft", str(event.actor_id), group, stole.witnesses, owner=stole.owner)
+    doer, item, store = str(event.actor_id), stole.item, stole.store
+    _log(core, society, event, "theft", doer, group, stole.witnesses, owner=stole.owner, item=item, store=store)
 
 
 def _trespassed(core: SimCore, society: Society, event: EventDraft) -> None:
     trespass = cast(Trespassed, event.payload)
     kind: DeedKind = "poaching" if trespass.took is not None else "trespass"
-    _log(core, society, event, kind, str(event.actor_id), cast(Region, trespass.owner), trespass.witnesses)
+    item = trespass.took.item if trespass.took is not None else None
+    group, seen = cast(Region, trespass.owner), trespass.witnesses
+    _log(core, society, event, kind, str(event.actor_id), group, seen, item=item, place=trespass.place)
 
 
 def _injured(core: SimCore, society: Society, event: EventDraft) -> None:
@@ -432,6 +457,7 @@ def _judged(core: SimCore, society: Society, event: EventDraft) -> None:
     judged, judge = cast(Judged, event.payload), str(event.actor_id)
     group = society.members[judge].group
     society.judgements[event.seq] = group
+    society.settled = sorted(set(society.settled) | set(judged.deeds))
     proved: dict[str, set[int]] = {}  # accuser -> the judged deeds they had told this judge of
     for accusation in society.accusations:
         if accusation.person == judged.person and accusation.to == judge:
@@ -542,8 +568,11 @@ def _log(
     owner: str | None = None,
     victim: str | None = None,
     blow: int | None = None,
+    item: str | None = None,
+    store: str | None = None,
+    place: str | None = None,
 ) -> None:
-    society.deeds[event.seq] = Deed(event.seq, event.tick, kind, doer, group, owner, victim, blow)
+    society.deeds[event.seq] = Deed(event.seq, event.tick, kind, doer, group, owner, victim, blow, item, store, place)
     for witness in seen:
         _learn(core, society, witness, (event.seq,))
 
