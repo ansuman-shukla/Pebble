@@ -122,6 +122,8 @@ def test_seizures_guilty_counts_their_seizures_followed_by_a_judgement() -> None
         (400, "judged", "masanori", {"person": "b", "sentence": "fine"}),  # Kenji's seizure, not Goro's
         (500, "seized", "kenji", {"person": "c", "held": True}),
         (600, "judged", "masanori", {"person": "c", "sentence": "confine"}),  # not his
+        (650, "seized", "goro", {"person": "e", "held": False}),  # e twisted free: no seizure
+        (660, "judged", "masanori", {"person": "e", "sentence": "fine"}),
         (700, "seized", "goro", {"person": "d", "held": True}),  # not judged yet
     ]
     assert check(facts([goro], events), "goro", "seizures_guilty", count=3) == (False, 33)

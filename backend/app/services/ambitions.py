@@ -193,11 +193,11 @@ def deeds_judged(facts: Facts, _me: ReplayCitizen, args: Args) -> _Reading:
 
 
 def seizures_guilty(facts: Facts, me: ReplayCitizen, args: Args) -> _Reading:
-    """Their seizures followed by a judgement of the person seized (before anyone seized them again)."""
+    """Their seizures that held the person, followed by a judgement of them (before anyone seized them again)."""
     guilty = 0
     hold_and_judge = facts.of("seized", "judged")
     for index, record in enumerate(hold_and_judge):
-        if record.type != "seized" or record.actor != me.id:
+        if record.type != "seized" or record.actor != me.id or not record.payload["held"]:
             continue
         person = record.payload["person"]
         after = (r for r in hold_and_judge[index + 1 :] if r.payload.get("person") == person)
