@@ -13,9 +13,9 @@
 - **Judge** (15 min, within 4 m): the lord inside the castle walls, or a band leader within 15 m of the band's fire
   pit; the target held or confined; the judge must know a deed of theirs not yet judged or, the lord, their
   household's tax overdue 3 days running. A fine takes the purse's coins, then the household chest's, then goods at
-  their town value; those robbed are paid what they lost first, the rest goes to the treasury. A fine not paid in full
-  keeps them in custody and leaves its deeds open to a confinement. Confinement is in the gaol in town, tied at the
-  fire in a band, and never outlasts the custody's 12 h.
+  their town value; those robbed are paid what they lost first, the rest goes to the treasury (in a band: to the
+  victim). A fine not paid in full keeps them in custody and leaves its deeds open to a confinement. Confinement is
+  in the gaol in town, tied at the fire in a band, and never outlasts the custody's 12 h.
 - **Tend** (30 min, reach 2 m, the healing skill): the hurt person gains 3 health an hour while tended (`tended`).
 
 The system `justice` keeps who is in custody, the deeds judged, what each theft or poaching took (from its event, the
