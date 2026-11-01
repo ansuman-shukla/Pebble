@@ -12,7 +12,7 @@ from app.brains import town
 from app.brains.profile import BrainProfile, known_titles
 from app.brains.routines import WORK, Context
 from app.brains.senses import Needs, Phase
-from app.engine import citizen_brains
+from app.engine import citizen_brains, town_households
 from app.sim.citizens import CITIZENS, load_citizens
 from app.sim.clock import DAY_MINUTES
 from app.sim.market import factor, price_word, stall_lot, stalls, stock_of
@@ -522,3 +522,15 @@ def test_a_fine_paid_leaves_a_clean_slate_and_a_second_wrong_gets_its_own_senten
 def test_the_monk_leaves_someone_hurt_far_away_be() -> None:
     far = Seen(label="Lia", where="far away to the east", nearness="far away", doing="walking, looking hurt")
     assert town._tend(_ctx(_look(people=(far,)), ENNEN)[0]) == []
+
+
+def test_a_household_s_dues_are_shared_by_its_adults_the_first_paying_what_doesn_t_divide(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    """farmhouse-2 owes 12 a day (two paddies): five adults pay 2 each, the first in the cast's order 2 more."""
+    sim = new_sim()
+    for who, age in (("ann", 30), ("bo", 40), ("cy", 50), ("dee", 35), ("eve", 60), ("kid", 8)):
+        sim.add_citizen(make_spec(who, home="farmhouse-2", age=age))
+    facts = town_households(sim.core.citizens(), ["cy", "ann", "bo", "dee", "eve", "kid"])
+    assert {who: facts[who].dues for who in facts} == {"cy": 4, "ann": 2, "bo": 2, "dee": 2, "eve": 2, "kid": 0}
+    assert {facts[who].mouths for who in facts} == {6} and {facts[who].paddies for who in facts} == {2}
