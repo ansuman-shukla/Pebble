@@ -111,12 +111,16 @@ WAGE_WORDS = "my wage"
 ORDER_WORDS = "as you ordered"
 PAY = 48.0  # the lord pays what he owes before his evening at home (40) and his work
 PAY_WAITS = 3  # waits for the lord to pay (or to be seen at the castle) before giving up for the day
-GRANARY_SALE: dict[PriceWord, int] = {"dear": 40, "fair": 26}  # the lord sells granary rice while dear or fair
+# the lord sells granary rice while dear or fair: the bible's 26 every second day at fair halved while the bands'
+# purchases (7 a day of the stall's balance, BR2) aren't there, else the stall's till ran down ~12 a day into the
+# treasury (D180)
+GRANARY_SALE: dict[PriceWord, int] = {"dear": 40, "fair": 13}
 PURSE_LOW = 100  # the lord takes coins from the treasury when his purse holds less
 PURSE_TOP_UP = 150
 PURSE_HEAVY = 300  # and puts what is over the day's needs into it when his purse holds this much
 GOLD = "gold"
 GOLD_TREASURY = 1800  # the lord buys gold for his hoard while the treasury holds more than this (10 §2.2)
+GOLD_A_WEEK = 4  # grains at most, one a round (the bible's ≈ 0.6 a day), so the treasury's coins don't swing
 CLOTH = "cloth"
 CLOTH_DAYS = (1, 5)  # week days the lord buys a length of cloth for the keep (≈ one every 4 days)
 GOLD_DAYS = (2, 6)  # week days the digger pans gold at the Falls pool (10 §3.1)
@@ -961,8 +965,20 @@ def _market_round(ctx: Context) -> list[Option]:
         deals.append(("sell granary rice", partial(ctx.api.sell, RICE, 99)))
     chest = ctx.notes.get("treasury")
     treasury = purse(p) + (chest if isinstance(chest, int) else GOLD_TREASURY)  # his purse is the treasury's too
-    if _on_sale(p, GOLD) and purse(p) >= PURSE_LOW and treasury > GOLD_TREASURY:
-        deals.append(("buy gold", partial(ctx.api.buy, GOLD, GOLD_LOAD)))  # what the digger brought
+    if weekday(p) == 1 and not ctx.done_today("a new week"):
+        ctx.mark_done("a new week")
+        ctx.notes["gold this week"] = 0
+    gold, bought = _price(p, GOLD), ctx.counter("gold this week")
+    stocked = gold is not None and gold.word != "dear"  # the stall holds its fill (not while it runs short)
+    if stocked and purse(p) >= PURSE_LOW and treasury > GOLD_TREASURY and bought < GOLD_A_WEEK:
+
+        def buy_gold() -> ActionResult:
+            result = ctx.api.buy(GOLD, 1)
+            if result.outcome == "done":
+                ctx.notes["gold this week"] = bought + 1
+            return result
+
+        deals.append(("buy gold", buy_gold))
     if weekday(p) in CLOTH_DAYS and _on_sale(p, CLOTH) and purse(p) >= PURSE_LOW:
         deals.append(("buy cloth", partial(ctx.api.buy, CLOTH, 1)))
     for name, deal in deals:

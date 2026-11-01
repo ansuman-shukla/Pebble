@@ -16,7 +16,9 @@ from app.engine import citizen_brains, town_households
 from app.sim.citizens import CITIZENS, load_citizens
 from app.sim.clock import DAY_MINUTES
 from app.sim.market import factor, price_word, stall_lot, stalls, stock_of
+from app.sim.perception import BIOME_WORDS
 from app.sim.simulation import Simulation
+from app.world.biomes import BIOME_IDS
 from app.world_api.facade import WorldApi
 from app.world_api.models import (
     ActionResult,
@@ -274,7 +276,7 @@ def test_the_lord_pays_for_an_order_only_when_he_was_handed_the_tool() -> None:
 
 @pytest.mark.parametrize(
     ("word", "day", "fetch"),
-    [("dear", "third", 40), ("fair", "fourth", 26), ("fair", "third", 0), ("cheap", "fourth", 0)],
+    [("dear", "third", 40), ("fair", "fourth", 13), ("fair", "third", 0), ("cheap", "fourth", 0)],
 )
 def test_the_lord_sells_granary_rice_only_while_rice_is_dear_or_fair(word: PriceWord, day: str, fetch: int) -> None:
     """Dear: every day; fair: every second day; cheap: the rice stays in the granary (10 §1.4)."""
@@ -534,3 +536,23 @@ def test_a_household_s_dues_are_shared_by_its_adults_the_first_paying_what_doesn
     facts = town_households(sim.core.citizens(), ["cy", "ann", "bo", "dee", "eve", "kid"])
     assert {who: facts[who].dues for who in facts} == {"cy": 4, "ann": 2, "bo": 2, "dee": 2, "eve": 2, "kid": 0}
     assert {facts[who].mouths for who in facts} == {6} and {facts[who].paddies for who in facts} == {2}
+
+
+def test_the_lord_buys_a_grain_of_gold_a_round_only_while_the_stall_holds_its_fill_and_four_a_week() -> None:
+    gold = PriceSeen(item="gold", price="twenty coins each; it pays fifteen coins", word="fair")
+    purse_ = ("two strings of coins",)
+    notes: dict[str, JsonValue] = {"treasury": 1900}
+    look = _look(market=(gold,), carrying=purse_, when="early afternoon", day="the first day of the week, market day")
+    ctx, api = _ctx(look, MASANORI, Recorder(notes))
+    town._market_round(ctx)[0].start()
+    assert ("buy", "gold", 1) in api.calls and notes["gold this week"] == 1
+    short = look.model_copy(update={"market": MarketView(items=[gold.model_copy(update={"word": "dear"})])})
+    assert [o.name for o in town._market_round(_ctx(short, MASANORI, Recorder({"treasury": 1900}))[0])] != ["buy gold"]
+    notes |= {"gold this week": 4, "chores": []}
+    later = look.model_copy(update={"day_of_week": "the third day of the week"})
+    assert [o.name for o in town._market_round(_ctx(later, MASANORI, Recorder(notes))[0])] != ["buy gold"]
+
+
+def test_every_biome_has_words_for_whoever_stands_on_its_cell() -> None:
+    """Regression (seed 3: the digger panning at the Falls pool stood on a lake cell and the look raised KeyError)."""
+    assert set(BIOME_IDS) <= set(BIOME_WORDS)
