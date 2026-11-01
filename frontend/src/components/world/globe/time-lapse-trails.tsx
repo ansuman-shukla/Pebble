@@ -98,7 +98,15 @@ export function TimeLapseTrails({
       const corners = view.walked.map((corner) =>
         corner.clone().setLength(corner.length() + LIFT_M),
       );
-      sampleTrail(trails.current, view.id, lifted, now, step, corners);
+      sampleTrail(
+        trails.current,
+        view.id,
+        lifted,
+        now,
+        step,
+        corners,
+        view.jumped,
+      );
     }
     pruneTrails(trails.current, drawn);
     const { position: positions, color: colors } = mesh.geometry.attributes;

@@ -185,3 +185,26 @@ test('a trail runs through the route corners walked between frames, not straight
   sampleTrail(trails, 'kenji', at(30, 40), 0.2, step);
   expect(xs(write(trails, 0.2).positions, 4)).toEqual([0, 30, 30, 30]);
 });
+
+test('a walker that faded across (a resync) starts a new line where it came back, however short the hop', () => {
+  const trails: Trails = new Map();
+  walk(trails, 'kenji', 0, 0);
+  walk(trails, 'kenji', 10, 1);
+  sampleTrail(trails, 'kenji', new Vector3(20, 1, 2), 1.1, 1, [], true);
+  walk(trails, 'kenji', 30, 2);
+  // 0-10 walked, 10-20 faded across (not drawn), 20-30 walked
+  expect(xs(write(trails, 2).positions, 4)).toEqual([0, 10, 20, 30]);
+  expect(write(trails, 2).vertices).toBe(4);
+  // a jump through a corner breaks before the corner, not after it
+  sampleTrail(
+    trails,
+    'kenji',
+    new Vector3(50, 1, 2),
+    2.1,
+    1,
+    [new Vector3(40, 1, 2)],
+    true,
+  );
+  const { vertices, positions } = write(trails, 2.1);
+  expect(xs(positions, vertices)).toEqual([0, 10, 20, 30, 40, 50]);
+});
