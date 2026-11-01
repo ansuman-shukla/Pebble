@@ -7,9 +7,9 @@ from dataclasses import replace
 
 import pytest
 
+from app.brains.bands import RING_SEARCHES, TRIP_LEGS, TRIP_TIMES
 from app.brains.brain import UtilityBrain
 from app.brains.profile import BrainProfile, Ground
-from app.brains.routines import TRIP_LEGS, TRIP_TIMES
 from app.sim import grounds, nodes
 from app.sim.destinations import COMPASS_BEARING, ROUGH_DISTANCE_M
 from app.sim.grounds import DEN_CLEAR_M, GROUND_FOOD, GROUNDS_M, STOP_CLEAR_M, WAYS
@@ -36,7 +36,9 @@ def _brain(sim: Simulation, citizen_id: str, ways: tuple[Compass, ...], legs: in
         skills=citizen.skills,
         grounds=tuple(Ground(way, legs) for way in ways),
     )
-    return UtilityBrain(WorldApi(sim, citizen_id), profile, seed=1)
+    brain = UtilityBrain(WorldApi(sim, citizen_id), profile, seed=1)
+    brain.api.notes["chores"] = ["ring search"] * RING_SEARCHES  # the home ring looked over today (BR2): on out
+    return brain
 
 
 def _strip_food_near(sim: Simulation, centre: Vec3, metres: float, left: int = 0) -> None:

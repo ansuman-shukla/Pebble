@@ -70,6 +70,16 @@ def test_water_fire_and_plants_are_read_from_their_kinds_not_their_words() -> No
         Resource("roots", "here", False, "a few edible roots"),
         Resource("wood", "far", True, "tall grass"),
     ]
+    picked = _seeing(  # nothing left on them: nothing to gather (a forager looped on a dug-over patch, BR2)
+        _thing("a patch of edible roots, dug over", "right beside you", "node", "roots"),
+        _thing("a berry bush stripped bare", "close by", "node", "berries"),
+        _thing("an oak dropping nuts, the ground beneath picked clean", "close by", "node", "nuts"),
+        _thing("some fallen wood, all gathered up", "close by", "node", "wood"),
+        _thing("a patch of edible roots, thin and picked over", "close by", "node", "roots"),
+    )
+    assert resources_in_view(picked) == [
+        Resource("roots", "close", False, "a patch of edible roots, thin and picked over"),
+    ]
 
 
 def test_the_way_to_the_water_is_its_compass_word() -> None:

@@ -9,9 +9,10 @@ from typing import cast
 import pytest
 from pydantic import JsonValue
 
+from app.brains.bands import BAND_ROUTINES, _scavenge
 from app.brains.brain import UtilityBrain
 from app.brains.profile import BrainProfile, known_titles
-from app.brains.routines import ROUTINES, Context, _scavenge
+from app.brains.routines import Context
 from app.brains.senses import Needs
 from app.observability.events import Gestured, GoalSet, Said
 from app.sim import fire as fires
@@ -219,7 +220,7 @@ def test_a_forager_at_ease_keeps_one_goal_while_it_rests_looks_about_and_heads_b
             ("stroll", _forager_ctx(at_home, chance=True, notes=dict(full))),
             ("back", _forager_ctx(out, chance=False, notes=dict(full))),
         )
-        for option in ROUTINES["gatherer"](ctx)
+        for option in BAND_ROUTINES["gatherer"](ctx)
     }
     assert {name: step for name, (step, _, _) in picked.items()} == {
         "rest": "rest at camp", "stroll": "stroll", "back": "go home",
