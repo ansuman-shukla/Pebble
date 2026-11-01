@@ -389,3 +389,16 @@ def test_the_weaver_fetches_reeds_on_reed_days_and_makes_a_pack_from_two_hides()
     ctx, api = _ctx(hides, aiko, Recorder(notes))
     town.weaver(ctx)[0].start()
     assert ("craft", "pack") in api.calls
+
+
+def test_a_child_tagging_along_stops_when_the_one_followed_lies_down_to_sleep(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    """Regression (seed 7: Hana followed the watchman home and stood at his door 6 h while he slept)."""
+    sim = new_sim()
+    sim.add_citizen(make_spec("hana", name="Hana", knows_people=["goro"]))
+    goro = sim.add_citizen(make_spec("goro", name="Goro", knows_people=["hana"], at=(-20.0, 60.0)))
+    follow = WorldApi(sim, "hana").follow("Goro")
+    goro.body.asleep = True
+    sim.step()
+    assert follow.result is not None and follow.result.text == "Goro lies down to sleep."
