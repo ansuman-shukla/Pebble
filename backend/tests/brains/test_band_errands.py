@@ -304,8 +304,8 @@ def test_kaz_poaches_in_the_lord_s_woods_when_band_b_s_grass_is_empty_and_tempta
 
 def test_hungry_at_camp_with_nothing_carried_eats_from_the_rack_until_it_is_bare() -> None:
     api = FakeApi(_day(1))
-    oru = _band("oru", "elder healer")
-    hungry = _camp("mid-morning", (), RACK_NEAR)
+    oru = _band("vesa", "elder healer", "band_b")  # band B's rack is its food store (band A's its trading stock)
+    hungry = _look("at your home, at Band B camp", "mid-morning", (), things=[RACK_NEAR])
 
     def ctx(look: Perception) -> Any:
         made = _ctx(look, oru, api)
@@ -330,6 +330,9 @@ def test_hungry_at_camp_with_nothing_carried_eats_from_the_rack_until_it_is_bare
     assert "rack bare" in cast(list[str], api.notes["chores"])
     fed = _ctx(hungry, oru, FakeApi(_day(1)))  # not hungry: no reason to eat the band's store
     assert _choose(fed).name not in ("eat at the rack", "go to the drying rack")
+    band_a = _ctx(_camp("mid-morning", (), RACK_NEAR), _band("oru", "elder healer"), FakeApi(_day(1)))
+    band_a.needs = Needs(hunger=2, thirst=0, tiredness=0)
+    assert _choose(band_a).name != "go to the drying rack" or band_a.needs.hunger >= 3  # band A keeps its stock
 
 
 def test_kaz_is_tempted_with_one_minus_his_honesty_rolled_once_a_day() -> None:
