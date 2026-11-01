@@ -414,8 +414,10 @@ def test_a_good_cheap_at_the_stall_is_kept_for_another_day() -> None:
     assert ("sell", "iron sand", 99) in api.calls
 
 
-@pytest.mark.parametrize(("item", "word"), [("iron sand", "cheap"), ("gold", "fair")])
-def test_a_hungry_seller_with_nothing_to_eat_takes_what_the_stall_pays(item: str, word: PriceWord) -> None:
+@pytest.mark.parametrize(("item", "word", "wanted"), [("iron sand", "cheap", "fair"), ("gold", "fair", "dear")])
+def test_a_hungry_seller_with_nothing_to_eat_takes_what_the_stall_pays(
+    item: str, word: PriceWord, wanted: PriceWord
+) -> None:
     digger = _profile("Daisuke", "iron-sand digger", dues=5)
     seen = PriceSeen(item=item, price="three coins each; it pays two coins", word=word)
     carrying = ("three coins", f"some {item}")
@@ -426,6 +428,12 @@ def test_a_hungry_seller_with_nothing_to_eat_takes_what_the_stall_pays(item: str
     assert ("sell", item, 99) in api.calls
     fed = _look(market=(seen,), carrying=(*carrying, "a little rice"))
     assert town._sell(_ctx(fed, digger, hunger=2)[0], item, "Sell it") == []  # food in hand: it can wait
+    ctx, api = _ctx(_look(market=(seen,), carrying=carrying), digger, hunger=2)
+    town._sell(ctx, item, "Sell it")[0].start()  # sold hungry, so not held for the rest of the day
+    better = PriceSeen(item=item, price="three coins each; it pays three coins", word=wanted)
+    ctx, api = _ctx(_look(market=(better,), carrying=carrying), digger, api=Recorder(ctx.notes))
+    town._sell(ctx, item, "Sell it")[0].start()
+    assert ("sell", item, 99) in api.calls
 
 
 def test_the_weaver_fetches_reeds_on_reed_days_and_makes_a_pack_from_two_hides() -> None:
