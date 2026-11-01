@@ -342,6 +342,9 @@ def test_hungry_at_camp_with_nothing_carried_eats_from_the_rack_until_it_is_bare
         supper = _ctx(_camp("dusk", (), RACK_NEAR), _band("bo", "toolmaker and hunter"), FakeApi(_day(1)))
         supper.needs = Needs(hunger=level, thirst=0, tiredness=0)
         assert (_choose(supper).name == "go to the drying rack") is eats, level
+    bare = _ctx(_camp("night", ()), _band("ama", "band leader"), FakeApi(_day(1)))  # no strips to be had
+    bare.needs = Needs(hunger=1, thirst=0, tiredness=0)
+    assert _choose(bare).driver != "hunger"  # a little hunger isn't worth a search in the dark
     midday = _ctx(_camp("midday", (), RACK_NEAR), _band("bo", "toolmaker and hunter"), FakeApi(_day(1)))
     midday.needs = Needs(hunger=1, thirst=0, tiredness=0)
     assert _choose(midday).name != "go to the drying rack"  # by day a little hunger forages

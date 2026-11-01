@@ -143,9 +143,16 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
         ctx.mark_done(style.chore)
     home_area = ctx.profile.home_area
     food = carried_food(p.you)
-    supper = ctx.phase in ("dusk", "night") and harmful_by_morning(ctx.needs.hunger, NIGHT_HUNGER)  # or sleep hungry
-    hungry_empty = (ctx.needs.hunger >= 2 or supper) and not food
-    feeding = _feed_the_starving(ctx, food) or (_eat_at_rack(ctx) if hungry_empty else []) or _tend(ctx)
+    hungry_empty = ctx.needs.hunger >= 2 and not food
+    supper = (  # band A's strips are trading stock it may yet eat at supper; band B takes its night strip anyway
+        ctx.profile.region == "band_a"
+        and ctx.phase in ("dusk", "night")
+        and harmful_by_morning(ctx.needs.hunger, NIGHT_HUNGER)
+        and not food
+    )
+    feeding = (  # at supper a strip rather than sleep hungry, but no search in the dark for a little hunger
+        _feed_the_starving(ctx, food) or (_eat_at_rack(ctx) if hungry_empty or supper else []) or _tend(ctx)
+    )
     if feeding:
         return feeding
     _reckon_lean(ctx, food)
