@@ -264,9 +264,7 @@ def test_someone_walking_east_across_their_midnight_still_gets_the_day_s_ledger(
     sim.drain()
     tax.ledger_at_midnight(sim.core, lambda _unit: True)
     assert [e.actor_id for e in sim.drain() if isinstance(e.payload, Ledger)] == ["genzo"]
-    sim.state.tick += (
-        DAY_MINUTES + 5
-    )  # walking east, their next midnight fell on no tick of theirs
+    sim.state.tick += DAY_MINUTES + 5  # walking east, their next midnight fell on no tick of theirs
     tax.ledger_at_midnight(sim.core, lambda _unit: False)
     assert [e.actor_id for e in sim.drain() if isinstance(e.payload, Ledger)] == ["genzo"]
     sim.state.tick += 60
