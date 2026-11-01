@@ -114,7 +114,7 @@ CLOTH = "cloth"
 CLOTH_DAYS = (1, 5)  # week days the lord buys a length of cloth for the keep (≈ one every 4 days)
 GOLD_DAYS = (2, 6)  # week days the digger pans gold at the Falls pool (10 §3.1)
 GOLD_LOAD = 4  # grains ("some") he pans before heading back: two hours' luck at the pool
-DIG_LOAD = 4  # measures of iron sand ("some") the digger brings in a day: about what the forge burns
+DIG_LOAD = 13  # iron sand ("plenty") he digs at most in a morning at the bar; what the stall takes is sold
 DIG_TIMES: frozenset[TimeOfDay] = frozenset({"dawn", "early morning", "mid-morning", "midday"})  # 7-11, at the bar
 WOOD_TIMES: frozenset[TimeOfDay] = frozenset({"late afternoon", "sunset"})  # back from the woods at dusk
 IRON_SAND = "iron sand"
@@ -139,6 +139,7 @@ NUMBERS = {word: n for n, word in enumerate(f"{_ONES} eighteen nineteen".split()
 # what the words for an amount carried mean at the least (`items.amount_words`); anything else is one
 LEAST = (("a great", 41), ("plenty of", 13), ("a handful of", 4), ("some", 4), ("a few", 2), ("a little", 2))
 WATCH = 72.0  # the night watch outscores sleep (70) for the watchman
+EXHAUSTED = 91.0  # over sleeping where he stands (90): the watchman worn out goes home to bed
 STORE_RICE = "Bring the rice into the storehouse"
 TAKE_RICE_HOME = "Take the rice home to the chest"
 SELL_RICE = "Sell our spare rice at the stall"
@@ -680,6 +681,11 @@ def night_watch(ctx: Context) -> list[Option]:
     """The ashigaru keeps the night watch (10 §3.1): his wage from the lord at dusk, then the west gate and the field
     racks in turn till dawn; he sleeps the morning away at home and buys his rice in the afternoon."""
     p = ctx.perception
+    if ctx.needs.tiredness >= 3:  # worn out (the first night, before any day's sleep): home to bed, not on the stand
+        aim = "Sleep off the weariness at home"
+        if at_home(p):
+            return [Option(EXHAUSTED, "sleep", ctx.api.sleep, aim, "rest")]
+        return [Option(EXHAUSTED, "go home", lambda: ctx.api.walk_to_place("home"), aim, "rest")]
     if ctx.phase == "night":
         ctx.notes["kept watch"] = True
         return _watch(ctx, WATCH)
@@ -687,7 +693,7 @@ def night_watch(ctx: Context) -> list[Option]:
         wage = _collect_wage(ctx)
         if wage or ctx.phase == "dusk":
             return wage or _watch(ctx, 45.0)
-    if not afternoon(p) and ctx.notes.get("kept watch"):  # a night on watch: the morning in bed
+    if not afternoon(p) and (ctx.notes.get("kept watch") or ctx.needs.tiredness):  # the morning after, in bed
         aim = "Sleep after the night watch"
         if at_home(p):
             return [Option(WATCH, "sleep", _then(lambda: _set(ctx, "kept watch", False), ctx.api.sleep), aim, "rest")]

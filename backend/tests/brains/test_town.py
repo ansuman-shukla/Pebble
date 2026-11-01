@@ -264,6 +264,9 @@ def test_the_watchman_keeps_the_west_gate_and_the_racks_in_turn_through_the_nigh
     assert not notes["kept watch"]
     rested = [o.name for o in town.night_watch(_ctx(home, GORO, Recorder(notes))[0])]
     assert rested and "sleep" not in rested
+    worn = _ctx(at_gate, GORO, Recorder(notes), phase="night")[0]
+    worn.needs = Needs(0, 0, 3)
+    assert [(o.name, o.score) for o in town.night_watch(worn)] == [("go home", town.EXHAUSTED)]  # not on the stand
 
 
 def test_the_smith_buys_his_supplies_forges_and_brings_every_second_tool_to_the_lord() -> None:
