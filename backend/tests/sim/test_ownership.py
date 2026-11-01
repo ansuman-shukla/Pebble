@@ -314,15 +314,8 @@ def test_the_engine_tells_each_brain_whether_the_granary_feeds_them_and_how_hone
     sim = new_sim()
     sim.add_cast(load_citizens(CITIZENS))
     profiles = {citizen_id: brain.profile for citizen_id, brain in citizen_brains(sim, 1).brains.items()}
-    assert {citizen_id for citizen_id, profile in profiles.items() if profile.granary} == {
-        "masanori",
-        "kenji",
-        "ennen",
-        "goro",
-        "fumiko",
-        "tetsu",
-        "daisuke",
-    }
+    # the keep and the temple's grant; everyone else buys their food at the stall or farms it (D156, BR1)
+    assert {citizen_id for citizen_id, profile in profiles.items() if profile.granary} == {"masanori", "kenji", "ennen"}
     kaz = next(spec.traits for spec in load_citizens(CITIZENS).citizens if spec.id == "kaz")
     assert kaz is not None and profiles["kaz"].honesty == kaz.honesty
 

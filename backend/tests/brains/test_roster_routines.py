@@ -14,14 +14,14 @@ from tests.sim_helpers import make_spec, without_animals
 ROUTINES: dict[str, Routine] = {
     "masanori": "lord",
     "kenji": "samurai",
-    "goro": "samurai",  # the ashigaru walks the samurai's rounds until the night watch
+    "goro": "night_watch",
     "fumiko": "merchant",
     "genzo": "farmer",
     "aiko": "weaver",
     "hana": "town_child",
     "tokuji": "farmer",
-    "tetsu": "townsperson",
-    "daisuke": "townsperson",
+    "tetsu": "smith",
+    "daisuke": "digger",
     "ennen": "monk",
     "ama": "band_leader",
     "bo": "hunter",
