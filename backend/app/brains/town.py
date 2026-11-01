@@ -175,6 +175,7 @@ TAKE_RICE_HOME = "Take the rice home to the chest"
 RACK_RICE = "Leave rice on the rack to dry"
 TAKE_IN_RICE = "Take in the rice from the rack"
 RICE_RACK = "a rice rack"
+BUY_TRIES = 3  # refused rice buys a day before giving up till tomorrow (Daisuke went hungry after one, seed 7)
 RACK_SHARE = 0.5  # of the day's rice (after tax) left on the rack overnight
 SELL_RICE = "Sell our spare rice at the stall"
 
@@ -301,7 +302,7 @@ def _buy_rice(ctx: Context) -> list[Option]:
     low = NIGHT_RICE if p.time_of_day == "late afternoon" else LOW_RICE  # before the stall shuts: enough for the night
     if carrying(p, RICE) >= low or p.time_of_day not in STALL_TIMES or not carries(p, COINS):
         return []
-    if ctx.done_today("failed buy rice"):
+    if _count_today(ctx, "failed buy rice") >= BUY_TRIES:  # a refused buy is tried again later that day
         return []
     hungry = None if food else HUNGRY_BUY.get(ctx.needs.hunger)
     buy = partial(ctx.api.buy, RICE, BUY_RICE)
@@ -810,8 +811,12 @@ def _watch(ctx: Context, score: float) -> list[Option]:
             return [_go(ctx, WEST_GATE, score, aim)]
         watch = _then(lambda: _set(ctx, "beat", "racks"), lambda: ctx.api.work("guard"))
         return [Option(score, "guard", watch, aim)]
-    if not (at(p, FIELDS) and _on_spot(ctx, f"go to {FIELDS}")):
+    rack = next((t for t in p.things if "rice rack" in t.label and DISTANCE[t.nearness] != "far"), None)
+    if rack is None:  # the racks stand by the paddies, out of sight from the gate: to the fields first
         return [_go(ctx, FIELDS, score, aim)]
+    near_rack = rack.nearness == "right beside you" or ctx.finished(f"go to {RICE_RACK}")
+    if not near_rack and not _refused(ctx, f"go to {RICE_RACK}"):  # night sight is 20 m: stand by the racks
+        return [Option(score, f"go to {RICE_RACK}", partial(ctx.api.walk_to_thing, "rack"), aim)]
     look = _then(lambda: _set(ctx, "beat", "gate"), lambda: ctx.api.wait(15))
     return [Option(score, "look over the racks", look, aim)]
 

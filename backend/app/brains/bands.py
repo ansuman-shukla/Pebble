@@ -80,6 +80,7 @@ TREK_TIMES = frozenset({"dawn", "early morning", "mid-morning"})  # band B's mor
 TREK_SHARDS = 4  # shards she mines (one each) before taking them to the stall
 STALL_WAITS = 6  # quarter hours a trader waits at a shut stall before heading home
 STALL_LATE = frozenset({"late afternoon", "sunset", "dusk", "night", "pre-dawn"})  # too late to wait for the stall
+GOLD_RICE = 6  # measures each panner buys with the gold
 RICE_BOUGHT = 10  # measures each trader buys a trip (10 §2.7: band A ~24 mon of rice every 4 days, band B ~8 a day)
 TOOLMAKERS = frozenset({"bo"})  # knaps a stone axe too, and fells trees with it
 TOOL_ENDS = ("spear", "spears", "axe", "axes", "sickle", "sickles")
@@ -675,12 +676,14 @@ def _at_stall(ctx: Context, aim: str, goods: tuple[tuple[str, int], ...]) -> Opt
             ERRAND, "wait for the stall", _then(lambda: ctx.mark_done("stall wait"), lambda: api.wait(15)), aim
         )
 
+    gold = any(item == "gold" for item, _ in goods)  # a gold trip buys less: band B mustn't empty the stall
+
     def deal() -> ActionHandle:
         for item, most in goods:
             api.sell(item, most)
         if ctx.profile.citizen_id in TOOLMAKERS:
             api.buy("obsidian", 1)
-        api.buy("rice", RICE_BOUGHT)  # or as much as the coins pay for
+        api.buy("rice", GOLD_RICE if gold else RICE_BOUGHT)  # or as much as the coins pay for
         _done_trading(ctx)
         return api.walk_to_place("home", ctx.pace)
 
