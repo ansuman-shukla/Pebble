@@ -25,6 +25,7 @@ from app.observability.events import (
 from app.observability.lines import Resident, Told, namer, tell
 from app.sim import justice, slots, society, tax
 from app.sim.clock import START_MINUTE, TICKS_PER_HOUR, sun_altitude_deg, sun_direction
+from app.sim.coins import number_words
 from app.sim.economy import coins_held
 from app.sim.justice import JUSTICE
 from app.sim.simulation import Simulation
@@ -204,7 +205,7 @@ def test_night_trespass_seize_confine_and_served_at_dawn(
     dawn = next(t for t in range(sim.tick, sim.tick + 12 * TICKS_PER_HOUR) if _sun(sim, t))
     hours = -(-(dawn - sim.tick - justice.JUDGE_MINUTES) // TICKS_PER_HOUR)
     sentence = _done(sim, lord.judge("Kaz", Confinement(hours=hours)), 20)
-    assert sentence.text == f"You sentence Kaz to {hours} hours confined."
+    assert sentence.text == f"You sentence Kaz to {number_words(hours)} hours confined."  # words, never digits
     custody = justice.custody_of(sim.core, "kaz")
     assert custody is not None and custody.place == "gaol" and custody.judgement is not None
     events = []
@@ -387,7 +388,7 @@ def test_a_fine_paid_short_keeps_them_held_and_leaves_the_deed_open_to_confineme
     events = sim.drain()
     assert _of(events, SentenceServed) == [] and _of(events, Released) == []
     assert justice.in_custody(sim.core, "kaz")
-    assert _done(sim, lord.judge("Kaz", Confinement(hours=6)), 20).outcome == "done"
+    assert _done(sim, lord.judge("Kaz", Confinement(hours=6)), 20).text == "You sentence Kaz to six hours confined."
     [(_, verdict)] = _of(sim.drain(), Judged)
     assert verdict.sentence == "confine" and len(verdict.deeds) == 1
 
@@ -606,7 +607,10 @@ def test_a_band_confines_by_tying_them_at_the_fire(
     WorldApi(sim, "tek").pick_up("2 dried meat")
     _seize(sim, "barro", "tek", monkeypatch)
     sim.drain()
-    assert _done(sim, WorldApi(sim, "barro").judge("Tek", Confinement(hours=1)), 20).outcome == "done"
+    assert (
+        _done(sim, WorldApi(sim, "barro").judge("Tek", Confinement(hours=1)), 20).text
+        == "You sentence Tek to an hour confined."
+    )
     [(_, confined)] = _of(sim.drain(), Confined)
     assert confined.place == "the band's fire" and confined.by == "barro"
     assert _done(sim, WorldApi(sim, "tek").walk_to_place("band_b_camp")).text == "You are tied at the fire."

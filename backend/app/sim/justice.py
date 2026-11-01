@@ -48,7 +48,7 @@ from app.sim import slots, society, tax
 from app.sim.acting import begin, capital, refuse, settled
 from app.sim.citizens import store_ids
 from app.sim.clock import TICKS_PER_HOUR
-from app.sim.coins import price_words
+from app.sim.coins import number_words, price_words
 from app.sim.core import HEARING_M, KEPT_HEARD, SimCore
 from app.sim.doing import apply_partial
 from app.sim.economy import value_of
@@ -474,7 +474,7 @@ def finish_judge(core: SimCore, judge: Citizen, action: ActionState) -> None:
         custody.keeper, custody.place = None, "gaol" if court == "town" else "fire"
         confined = Confined(place=PLACE_WORDS[custody.place], until_tick=custody_ends(custody), by=judge.id)
         core.emit("confined", confined, actor=person, cause_seq=seq)
-    hours = "an hour" if sentence.hours == 1 else f"{sentence.hours} hours"
+    hours = "an hour" if sentence.hours == 1 else f"{number_words(sentence.hours)} hours"
     core.end_action(judge, "done", f"You sentence {label} to {hours} confined.")
 
 
