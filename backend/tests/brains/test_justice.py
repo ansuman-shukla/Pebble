@@ -117,3 +117,11 @@ def test_someone_wanted_runs_home_when_an_officer_comes_into_view() -> None:
 def test_someone_wanted_runs_rather_than_bring_a_wrong_to_an_officer() -> None:
     look = _look(_person("Kaz", regard=THIEF), _person("Kenji"), wanted="You are wanted in the castle town for theft.")
     assert _one(justice.options(_ctx(look)[0])).name == "run home"
+
+
+def test_a_victim_shouts_the_wrong_done_to_them_in_the_first_person() -> None:
+    """Regression (K1): the look says "who struck you"; shouted out it is "Kaz struck me!", not "Kaz struck you!"."""
+    ctx, api = _ctx(_look(_person("Kaz", regard="who struck you and stole rice from your chest")))
+    _one(justice.options(ctx)).start()
+    assert ("say", "Kaz struck me and stole rice from my chest!", "shout") in api.calls
+    assert justice.first_person("stole rice from the racks") == "stole rice from the racks"

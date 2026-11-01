@@ -31,6 +31,12 @@ def known_deed(person: Seen) -> str | None:
     return regard[start + len("who ") :] if start >= 0 else None
 
 
+def first_person(deed: str) -> str:
+    """A wrong done to the one who shouts it, as they shout it ("struck you" -> "struck me", "your chest" -> "my
+    chest"): the words a look gives are said to the looker."""
+    return " ".join({"you": "me", "your": "my"}.get(word, word) for word in deed.split(" "))
+
+
 def options(ctx: Context) -> list[Option]:
     return _culprit(ctx) or _witness(ctx)
 
@@ -70,7 +76,7 @@ def _witness(ctx: Context) -> list[Option]:
             def shout(entry: list[JsonValue] = seen) -> ActionHandle:
                 known.append(entry)
                 pending.append(entry)
-                ctx.api.say(f"{entry[0]} {entry[1]}!", "shout")
+                ctx.api.say(f"{entry[0]} {first_person(str(entry[1]))}!", "shout")
                 return ctx.api.wait(1)
 
             return [Option(WITNESS, f"shout about {person.label}", shout, f"Make known what {person.label} did")]
