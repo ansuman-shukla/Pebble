@@ -907,8 +907,9 @@ function GlobeWorld({
   const feedSubjects = useMemo(
     () => ({
       animals: new Map(animals.map((animal) => [animal.id, animal.kind])),
+      groups: new Map(citizens.map((citizen) => [citizen.id, citizen.region])),
     }),
-    [animals],
+    [animals, citizens],
   );
   // an entry flies to where it happened, else to its actor as drawn: a citizen or an animal
   const canFly = useCallback(

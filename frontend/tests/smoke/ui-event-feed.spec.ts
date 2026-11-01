@@ -5,10 +5,12 @@ import type { LiveEventMessage } from '../../src/lib/live/live-contract';
 import {
   addEntry,
   FEED_KEEP,
+  FOLD_TICKS,
   type FeedEntry,
   feedEntry,
   type FeedSubjects,
   flightTarget,
+  foldDetail,
   shows,
 } from '../../src/lib/live/event-feed';
 import { cameraOf, landed, type MockLiveWindow, openHeld } from './ui-helpers';
@@ -20,6 +22,7 @@ const SUBJECTS: FeedSubjects = {
     ['boar:35', 'boar'],
     ['elk:2', 'elk'],
   ]),
+  groups: new Map(),
 };
 
 type Told = Pick<LiveEventMessage['event'], 'line' | 'importance'> &
@@ -154,6 +157,131 @@ test('a repeat older than the six newest entries starts a new one; the feed keep
   expect(feed[0].line).toBe('Pip: “x79”');
 });
 
+/* Band B wakes up on day 6 (09:05-09:18 in a seeded run): every one of them waves and greets every other. */
+const GROUPS: FeedSubjects = {
+  ...SUBJECTS,
+  groups: new Map([
+    ['nim', 'band_b'],
+    ['pip', 'band_b'],
+    ['vesa', 'band_b'],
+    ['daisuke', 'town'],
+    ['tetsu', 'town'],
+  ]),
+};
+const grouped = (message: LiveEventMessage) => feedEntry(message, GROUPS)!;
+const waved = (actor: string, name: string, to: string, tick: number) =>
+  grouped(
+    event(
+      'gestured',
+      actor,
+      { line: `${name} waves to ${to}`, importance: 1 },
+      { kind: 'wave', to },
+      tick,
+    ),
+  );
+const spoke = (actor: string, name: string, words: string, tick: number) =>
+  grouped(
+    event(
+      'said',
+      actor,
+      { line: `${name}: “${words}”`, importance: 1 },
+      { words },
+      tick,
+    ),
+  );
+const shown = (feed: FeedEntry[]) =>
+  feed.map((one) =>
+    one.folded.length > 0
+      ? `${one.line} ×${one.count} · ${foldDetail(one)}`
+      : one.line,
+  );
+
+test('a band’s greetings and small talk fold into one line; what matters stays on its own', () => {
+  let feed: FeedEntry[] = [];
+  const add = (one: FeedEntry) => (feed = addEntry(feed, one));
+  add(waved('nim', 'Nim', 'Pip', 905));
+  expect(shown(feed)).toEqual(['Nim waves to Pip']); // one alone reads as itself
+  expect(feed[0]).toMatchObject({ chatter: 'band_b', type: 'gestured' });
+  add(spoke('nim', 'Nim', 'Pip! You’re up.', 905));
+  add(
+    grouped(event('died', 'pip', { line: 'Pip dies (a fall)', importance: 3 })),
+  );
+  add(spoke('daisuke', 'Daisuke', 'Have you eaten, Tetsu?', 910));
+  add(waved('vesa', 'Vesa', 'Nim', 910));
+  for (let tick = 911; tick < 918; tick++) {
+    add(waved('pip', 'Pip', 'Vesa', tick));
+    add(spoke('vesa', 'Vesa', `Morning ${tick}`, tick));
+  }
+  add(spoke('tetsu', 'Tetsu', 'Well enough, Daisuke.', 918));
+  add(waved('pip', 'Pip', 'Nim', 918));
+  expect(shown(feed)).toEqual([
+    'Band B greet each other and chat ×18 · Vesa: “Morning 917”',
+    'Townsfolk chat ×2 · Tetsu: “Well enough, Daisuke.”',
+    'Pip dies (a fall)',
+  ]);
+  const [band] = feed;
+  expect(band).toMatchObject({
+    type: 'chatter',
+    actorId: 'pip',
+    tick: 918,
+    importance: 1,
+  });
+  expect(band.ids).toHaveLength(18);
+  expect(band.folded.map(({ line }) => line).slice(0, 3)).toEqual([
+    'Pip waves to Nim',
+    'Vesa: “Morning 917”',
+    'Pip waves to Vesa',
+  ]);
+  expect(band.folded.at(-1)!.line).toBe('Nim waves to Pip');
+  // a resend of any folded event adds nothing
+  const first = feed[0].ids[0];
+  expect(
+    addEntry(feed, {
+      ...waved('nim', 'Nim', 'Pip', 905),
+      id: first,
+      ids: [first],
+    }),
+  ).toEqual(feed);
+  // the fold is People news
+  expect(shows(band, 'people')).toBe(true);
+  expect(shows(band, 'danger')).toBe(false);
+});
+
+test('chatter folds only with its own group’s recent chatter; gestures alone greet, speech alone chats', () => {
+  let feed = addEntry([], waved('nim', 'Nim', 'Pip', 900));
+  feed = addEntry(feed, waved('pip', 'Pip', 'Nim', 900 + FOLD_TICKS));
+  expect(shown(feed)).toEqual([
+    'Band B greet each other ×2 · Pip waves to Nim',
+  ]);
+  // later than FOLD_TICKS after the fold's newest: a new story
+  feed = addEntry(feed, spoke('vesa', 'Vesa', 'Hi', 901 + 2 * FOLD_TICKS));
+  expect(shown(feed)).toEqual([
+    'Vesa: “Hi”',
+    'Band B greet each other ×2 · Pip waves to Nim',
+  ]);
+  feed = addEntry(feed, spoke('nim', 'Nim', 'Ho', 902 + 2 * FOLD_TICKS));
+  expect(shown(feed)[0]).toBe('Band B chat ×2 · Nim: “Ho”');
+  // more than eight newer entries in between: a new story too
+  for (let k = 0; k < 8; k++)
+    feed = addEntry(
+      feed,
+      grouped(event('sold', 'tetsu', { line: `sale ${k}`, importance: 2 })),
+    );
+  feed = addEntry(feed, spoke('pip', 'Pip', 'Late', 903 + 2 * FOLD_TICKS));
+  expect(feed[0]).toMatchObject({ line: 'Pip: “Late”', count: 1 });
+  // speech that matters (importance 2+) and anyone without a known group never fold
+  const loud = spoke('nim', 'Nim', 'Wolves!', 904 + 2 * FOLD_TICKS);
+  expect(
+    grouped(event('said', 'nim', { line: 'Nim: “Wolves!”', importance: 2 }))
+      .chatter,
+  ).toBeNull();
+  expect(loud.chatter).toBe('band_b');
+  expect(entry(said('nim', 'Nim', 'Hi')).chatter).toBeNull();
+  expect(
+    grouped(event('sold', 'nim', { line: 'Nim sells', importance: 1 })).chatter,
+  ).toBeNull();
+});
+
 test('filters: People, Danger, Economy; All shows everything', () => {
   const kinds = (type: string) =>
     (['all', 'people', 'danger', 'economy'] as const).filter((filter) =>
@@ -278,6 +406,63 @@ const queue = (
       ),
     { type, actor, payload, told },
   );
+
+test('a band’s greetings show as one folded line in the page, the newest words after it', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  await openHeld(page, errors);
+  const feed = page.getByTestId('event-feed');
+  await queue(
+    page,
+    'gestured',
+    'pip',
+    { kind: 'wave', to: 'brak' },
+    {
+      line: 'Pip waves to Brak',
+      importance: 1,
+    },
+  );
+  await queue(
+    page,
+    'said',
+    'brak',
+    { words: 'Pip! You’re up.' },
+    {
+      line: 'Brak: “Pip! You’re up.”',
+      importance: 1,
+    },
+  );
+  await queue(
+    page,
+    'gestured',
+    'sela',
+    { kind: 'bow', to: 'brak' },
+    {
+      line: 'Sela bows to Brak',
+      importance: 1,
+    },
+  );
+  await page.evaluate(() =>
+    (globalThis as unknown as MockLiveWindow).__pebbleMockLive.setClock({
+      speed: 60,
+      paused: false,
+    }),
+  );
+  // (the mock world chats too: only band B's fold is looked at)
+  const folded = feed
+    .locator('[data-event-type="chatter"]')
+    .filter({ hasText: 'Band B' });
+  await expect(folded).toHaveCount(1, { timeout: 3_000 });
+  await expect(folded).toContainText('Band B greet each other and chat ×3');
+  await expect(folded.getByTestId('fold-detail')).toHaveText(
+    ' · Brak: “Pip! You’re up.”',
+  );
+  await expect(feed.getByText('Pip waves to Brak')).toHaveCount(0);
+  await page.getByRole('button', { name: 'People', exact: true }).click();
+  await expect(folded).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
 
 test('▶ lets go of a followed citizen; an animal’s entry flies to the animal as drawn', async ({
   page,
