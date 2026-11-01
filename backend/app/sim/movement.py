@@ -160,8 +160,9 @@ def walk_gait(core: SimCore, citizen: Citizen, walk: ActionState) -> Gait:
 
 def lead_held(core: SimCore) -> None:
     """Tick-end hook (after slots settle): everyone held follows their seizer's step this minute to the first free spot
-    of LEAD_RADII_M behind them, drawn walking at the seizer's times; next to a seizer standing still they stay put.
-    The spot is claimed (a ring spot), so nobody is stepped aside onto it."""
+    of LEAD_RADII_M behind them (right behind, a metre off, when none is free: never left out of reach), drawn
+    walking at the seizer's times; next to a seizer standing still they stay put. The spot is claimed (a ring spot),
+    so nobody is stepped aside onto it."""
     for person_id, keeper_id in justice.held_pairs(core):
         held, keeper = core.state.citizens[person_id], core.state.citizens[keeper_id]
         stride = core.strides.get(keeper.id)
@@ -172,9 +173,9 @@ def lead_held(core: SimCore) -> None:
         bearing = bearing_deg(keeper.position, behind)
         spot = next(
             (s for r in LEAD_RADII_M if (s := slots.free_round(core, held, keeper.position, r, bearing)) is not None),
-            None,
+            step_towards(keeper.position, bearing, LEAD_RADII_M[0], core.world.radius_m),  # crowded: right behind
         )
-        if spot is None or core.distance_m(held.position, spot) < SAME_SPOT_M:
+        if core.distance_m(held.position, spot) < SAME_SPOT_M:
             continue
         end_s = (
             walked[-1][1] if len(walked) >= 2 else core.distance_m(held.position, spot) / ground_mps(core, held, "walk")

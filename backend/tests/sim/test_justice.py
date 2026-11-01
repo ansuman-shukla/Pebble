@@ -719,6 +719,19 @@ def test_the_one_accused_before_hears_it_and_stops_what_they_do(new_sim: Callabl
     assert [deed.doer for deed in society.known_deeds(sim.core, "goro")] == ["kaz"]
 
 
+def test_the_deeds_are_said_once_each_in_order(new_sim: Callable[..., Simulation]) -> None:
+    sim = _theft_scene(new_sim)
+    first = society.Deed(1, 0, "theft", "kaz", "town", owner="farmhouse-1")
+    JUSTICE.of(sim.state).losses[1] = JUSTICE.of(sim.state).losses[2] = justice.Loss("farmhouse-1", "rice", 4.0)
+    again = society.Deed(2, 0, "theft", "kaz", "town", owner="farmhouse-1")
+    night = society.Deed(3, 0, "trespass", "kaz", "town")
+    struck = society.Deed(4, 0, "assault", "kaz", "town", victim="genzo")
+    assert justice._deeds_words(sim.core, [first, again]) == "stole rice"
+    assert justice._deeds_words(sim.core, [first, night, again]) == "stole rice and trespassed at night"
+    words = justice._deeds_words(sim.core, [first, night, struck])
+    assert words == "stole rice, trespassed at night and struck Genzo"
+
+
 # --- tend ---
 
 
@@ -859,7 +872,28 @@ def test_the_held_hold_their_spot_behind_the_seizer_along_the_seizer_s_corners(
         assert all(point in led for point, _ in sim.core.strides["goro"].walked[1:-1])
         claim = slots.claim_of(sim.core, sim.citizen("kaz"))
         assert claim is not None and claim.position == sim.citizen("kaz").position
+        held = justice.custody_of(sim.core, "kaz")
+        if held is not None and held.keeper == "goro":  # (not once seated in the gaol)
+            assert _distance(sim, "goro", "kaz") == pytest.approx(1.0, abs=0.01)  # a metre behind
     assert corners > 0  # the walk turned some corners on the way
+
+
+def test_with_no_free_spot_the_held_walk_right_behind_the_seizer(
+    new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sim = _theft_scene(new_sim)
+    _seize(sim, "goro", "kaz", monkeypatch)
+    monkeypatch.setattr(slots, "free_round", lambda *_: None)
+    walk = WorldApi(sim, "goro").walk_to_place("gaol")
+    while not walk.done:
+        sim.step()
+        goro, kaz = sim.citizen("goro"), sim.citizen("kaz")
+        held = justice.custody_of(sim.core, "kaz")
+        if held is None or held.keeper is None:  # seated in the gaol
+            break
+        assert _distance(sim, "goro", "kaz") == pytest.approx(1.0, abs=0.01)
+        behind = sim.core.strides["goro"].walked[-2][0]
+        assert sim.core.distance_m(kaz.position, behind) < sim.core.distance_m(goro.position, behind)
 
 
 def test_a_full_gaol_takes_nobody(new_sim: Callable[..., Simulation], monkeypatch: pytest.MonkeyPatch) -> None:
