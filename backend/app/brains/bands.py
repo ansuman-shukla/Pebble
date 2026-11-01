@@ -35,7 +35,7 @@ from app.brains.senses import (
 )
 from app.brains.town import _tend
 from app.world_api.facade import ActionHandle
-from app.world_api.models import Compass, Driver, Fine, Perception, RoughDistance, Seen
+from app.world_api.models import ActionResult, Compass, Driver, Fine, Perception, RoughDistance, Seen
 
 FOODS = ("roots", "nuts", "berries")  # wild food, most filling first
 OUTING_FOOD = 150.0  # bands head back to camp carrying about this much (a day and a half of food)
@@ -96,6 +96,8 @@ RAID_CHANCE = 0.6  # Barro's boldness and temper (10 §3.1)
 COUNSEL = 0.3  # Vesa counsels against raids (10 §3.1: −0.3)
 RAID = 75.0  # the night's raid: over sleep (70), under danger and real need
 FIELDS = "the rice fields"
+RICE_RACK = "a rice rack"  # the town's hasa racks by the paddies, where the day's rice dries overnight
+NIGHT_SHARE = "take the night's strip"
 PANS = 3  # pans at the falls pool a trip (each finds a grain half the time)
 JUDGE = 60.0  # a leader's justice at the fire: over the day's work
 JUDGE_TRIES = 4  # seizing and judging tries a day
@@ -145,7 +147,7 @@ def _forage(ctx: Context, style: Forager) -> list[Option]:
     if hunger_choice:
         return hunger_choice
     if ctx.phase == "dusk":
-        return _evening_chores(ctx) + _keep_fire(ctx, 48.0)
+        return _night_share(ctx) + _evening_chores(ctx) + _keep_fire(ctx, 48.0)
     if not _daytime(ctx) and not hungry_empty:
         return _keep_fire(ctx, 72.0, only_failing=True)
     score = 90.0 if hungry_empty else WORK
@@ -745,10 +747,12 @@ def _reckon_lean(ctx: Context, food: dict[str, int]) -> None:
     it a lean one (`lean`: lean days running; the camp's food ran short)."""
     if ctx.needs.hunger >= 2 and not ctx.done_today("went hungry"):
         ctx.mark_done("went hungry")
-    if ctx.phase != "dusk" or ctx.done_today("reckoned"):
+    if ctx.phase not in ("dusk", "night") or ctx.done_today("reckoned"):
         return
+    if ctx.profile.region == "band_b" and ctx.phase == "dusk" and not ctx.done_today(NIGHT_SHARE):
+        return  # the night's share from the rack first: a bare rack is a lean day
     ctx.mark_done("reckoned")
-    lean = ctx.done_today("went hungry") or food_value(food) < LEAN_FOOD
+    lean = ctx.done_today("went hungry") or food_value(food) < LEAN_FOOD or ctx.done_today("rack bare")
     _set(ctx, "lean", ctx.counter("lean") + 1 if lean else 0)
 
 
@@ -768,6 +772,38 @@ def _band_roll(words: str) -> float:
     return int.from_bytes(digest[:8], "big") / 2**64
 
 
+def _night_share(ctx: Context) -> list[Option]:
+    """At dusk a band B member takes a strip from the camp's rack for the night; a bare rack tells the camp's food ran
+    short (a lean day, 10 §3.6)."""
+    if ctx.profile.region != "band_b" or ctx.phase != "dusk" or ctx.done_today(NIGHT_SHARE):
+        return []
+    rack = _by_rack(ctx)
+    if rack is None:
+        return []
+    if _refused(ctx, NIGHT_SHARE):
+        ctx.mark_done("rack bare")
+        ctx.mark_done(NIGHT_SHARE)
+        return []
+    aim = "Take a strip from the rack for the night"
+    if not _at_rack(ctx, rack):
+        return [Option(47.0, f"go to {RACK}", partial(ctx.api.walk_to_thing, RACK), aim)]
+
+    def take() -> ActionResult:
+        result = ctx.api.pick_up("1 dried meat")
+        if result.outcome == "failed":
+            ctx.mark_done("rack bare")
+        ctx.mark_done(NIGHT_SHARE)
+        return result
+
+    return [Option(47.0, NIGHT_SHARE, lambda: _instant(ctx, take), aim)]
+
+
+def _instant(ctx: Context, act: Callable[[], ActionResult]) -> ActionHandle:
+    """An instant action, then a moment's rest (an option starts something that runs)."""
+    act()
+    return ctx.api.rest(5)
+
+
 def _raid(ctx: Context) -> list[Option]:
     """The raiders go to the rice fields in band B's evening (the town's night) and take rice from the racks, then
     home (a theft, and a night trespass inside the walls: Goro's watch may catch them)."""
@@ -777,7 +813,10 @@ def _raid(ctx: Context) -> list[Option]:
     if ctx.phase not in ("dusk", "night") or p.time_of_day == "pre-dawn":
         return []
     aim = "Take rice from the town's racks"
-    if at(p, FIELDS) or ctx.finished(f"go to {FIELDS}"):
+    rack = next((t for t in p.things if "rice rack" in t.label and DISTANCE[t.nearness] != "far"), None)
+    if rack is not None and rack.nearness != "right beside you" and not ctx.finished(f"go to {RICE_RACK}"):
+        return [Option(RAID, f"go to {RICE_RACK}", partial(api.walk_to_thing, "rack"), aim, "hunger")]
+    if rack is not None or at(p, FIELDS) or ctx.finished(f"go to {FIELDS}"):
 
         def take() -> ActionHandle:
             ctx.mark_done("raided")
@@ -806,10 +845,10 @@ def _gold_trip(ctx: Context) -> list[Option]:
         return [Option(ERRAND, f"go to {MARKET}", _walk_to(ctx, MARKET), aim)]
     if pool is None:
         return []
-    if not at(p, pool):
-        if ctx.done_today("panned") or p.time_of_day not in TRIP_TIMES:
+    if not at(p, pool):  # on the way (a walk cut short goes on), unless refused or the pans are done
+        if _count_today(ctx, "pan") or _refused(ctx, f"go to {pool}") or p.time_of_day not in TRIP_TIMES:
             return []
-        return [Option(ERRAND, f"go to {pool}", _then(lambda: ctx.mark_done("panned"), _walk_to(ctx, pool)), aim)]
+        return [Option(ERRAND, f"go to {pool}", _walk_to(ctx, pool), aim)]
     seen = [r for r in resources_in_view(p) if r.kind == "gold"]
     if _count_today(ctx, "pan") < PANS and seen:
         if seen[0].distance == "here":

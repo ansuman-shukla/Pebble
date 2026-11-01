@@ -357,13 +357,13 @@ def test_two_lean_days_running_make_band_b_choose_a_raid_or_gold_alike_for_all()
     from app.brains import bands
 
     barro = _band("barro", "band leader", "band_b")
-    notes: dict[str, JsonValue] = {"night": False, "days": 5, "chores": [], "lean": 1}
+    notes: dict[str, JsonValue] = {"night": False, "days": 5, "chores": [bands.NIGHT_SHARE], "lean": 1}
     dusk = _look("at your home, at Band B camp", "dusk", ())  # nothing carried: a lean day
     bands._reckon_lean(_ctx(dusk, barro, notes), {})
     assert notes["lean"] == 2
     choices = {bands._hungry_choice(_ctx(dusk, _band(who, "x", "band_b"), dict(notes))) for who in ("barro", "nim")}
     assert len(choices) == 1 and choices <= {"raid", "gold"}  # one choice for the band that day
-    fed: dict[str, JsonValue] = {"night": False, "days": 5, "chores": [], "lean": 1}
+    fed: dict[str, JsonValue] = {"night": False, "days": 5, "chores": [bands.NIGHT_SHARE], "lean": 1}
     bands._reckon_lean(
         _ctx(_look("at your home, at Band B camp", "dusk", ("plenty of roots",)), barro, fed), {"roots": 25}
     )

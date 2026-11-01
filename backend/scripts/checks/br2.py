@@ -129,7 +129,7 @@ class BandBDeeds(_OverSeeds):
     and at least one nobody saw (10 §3.3, §3.6)."""
 
     name = "br2.deeds"
-    pending = "BR2 follow-up: raids seen by the watch and judged (the racks hold no rice yet)"
+    pending = "BR2 follow-up: a raid seen by the watch and judged (raiders and Goro's beat rarely meet)"
     least = 6
 
     @override
@@ -169,7 +169,6 @@ class GoldTrips(_OverSeeds):
     """Days band B took gold from the falls pool or sold it at the stall, over the seeds (≥ 2)."""
 
     name = "br2.gold_trips"
-    pending = "BR2 follow-up: band B rarely goes hungry two days running now that the rack feeds it"
     least = 2
 
     @override
