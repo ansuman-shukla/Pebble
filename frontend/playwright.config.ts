@@ -24,10 +24,27 @@ export default defineConfig({
     {
       name: 'smoke',
       testDir: './tests/smoke',
+      // the audit runs after the smoke tests, passed or failed (a teardown: a smoke flake can't skip it)
+      teardown: 'audit',
       testMatch: '**/*.spec.ts',
       use: {
         ...devices['Desktop Chrome'],
         // headless Chrome renders WebGL in software (~4 fps for the town); on a Mac, use the real GPU
+        launchOptions: {
+          args:
+            process.platform === 'darwin'
+              ? ['--use-angle=metal', '--ignore-gpu-blocklist']
+              : [],
+        },
+      },
+    },
+    {
+      // the world audit drives the engine's clock, so it waits for the smoke tests that read the real feed
+      name: 'audit',
+      testMatch: 'audit.spec.ts',
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
         launchOptions: {
           args:
             process.platform === 'darwin'
