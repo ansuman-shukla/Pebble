@@ -169,7 +169,7 @@ citizens:
     site: town
     at: [-78, 93]
     home: farmhouse-1
-    knows_places: [town, rice-fields, well, west-gate, main-gate, storehouses, market, temple]
+    knows_places: [town, rice-fields, well, west-gate, main-gate, storehouses, market, temple, south_marsh]
     knows_people: [masanori, kenji, goro, fumiko, genzo, hana, tokuji, tetsu, daisuke, ennen]
     inventory: {coins: 60}
     traits: {honesty: 0.7, generosity: 0.6, boldness: 0.4, temper: 0.3}
@@ -263,7 +263,7 @@ citizens:
     site: town
     at: [36, 60]
     home: cross-n-8
-    knows_places: [town, forge, market, well, main-gate, west-gate, storehouses, rice-fields]
+    knows_places: [town, forge, market, well, main-gate, west-gate, storehouses, rice-fields, south_marsh, north_woods, falls_pool]
     knows_people: [masanori, kenji, goro, fumiko, genzo, aiko, hana, tokuji, tetsu, ennen]
     inventory: {coins: 60}
     traits: {honesty: 0.5, generosity: 0.4, boldness: 0.7, temper: 0.6}

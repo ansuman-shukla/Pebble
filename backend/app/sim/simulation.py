@@ -381,8 +381,11 @@ class Simulation:
         return {ids[row]: {ids[column] for column in np.flatnonzero(within[row])} for row in range(len(living))}
 
     def _visit(self, citizen: Citizen) -> None:
+        """Standing in a place makes it visited; a hotspot only once its name is known (nobody reads it off land)."""
         for place_id in sorted(self.core.world.places):
             place = self.core.world.places[place_id]
+            if place.kind == "hotspot" and place_id not in citizen.places:
+                continue
             if self.core.distance_m(citizen.position, place.centre) <= place.radius_m:
                 self.core.learn_place(citizen, place_id, "visited")
 

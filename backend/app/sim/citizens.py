@@ -234,8 +234,10 @@ def store_ids() -> frozenset[str]:
 
 @cache
 def _place_ids() -> frozenset[str]:
-    """Places someone can know: the sites and the named town places."""
-    return frozenset({site.id for site in load_world_spec().sites} | {place.id for place in load_town_places().places})
+    """Places someone can know: the sites, the named town places and the hotspots."""
+    spec = load_world_spec()
+    hotspots = {hotspot.id for hotspot in spec.hotspots.hotspots}
+    return frozenset({site.id for site in spec.sites} | {place.id for place in load_town_places().places} | hotspots)
 
 
 @cache
