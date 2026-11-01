@@ -918,9 +918,9 @@ def _top_up(ctx: Context) -> list[Option]:
 
 
 def _keep_goods(ctx: Context) -> list[Option]:
-    """Back at the keep at dusk, the gold and cloth bought go into the treasury."""
+    """Back at the keep at dusk, the gold and cloth bought and the tools ordered go into the treasury (the armoury)."""
     p = ctx.perception
-    goods = [item for item in (GOLD, CLOTH) if carrying(p, item)]
+    goods = [item for item in (GOLD, CLOTH, *TOOLS) if carrying(p, item)]
     if not goods or not at_home(p):
         return []
 
@@ -929,7 +929,7 @@ def _keep_goods(ctx: Context) -> list[Option]:
             ctx.api.stash(item, 99)
         return ctx.api.rest(10)
 
-    return [Option(41, "put away the goods", stash, "Put the gold and cloth in the treasury", "night")]
+    return [Option(41, "put away the goods", stash, "Put the goods in the treasury", "night")]
 
 
 def _market_round(ctx: Context) -> list[Option]:
