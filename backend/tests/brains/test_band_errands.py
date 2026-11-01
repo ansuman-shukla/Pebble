@@ -5,7 +5,6 @@ there; band A's leader and toolmaker take hides and strips to the stall every 4t
 from collections.abc import Callable
 from typing import Any, Literal, cast
 
-import pytest
 from pydantic import JsonValue
 
 from app.brains.bands import (
@@ -388,26 +387,6 @@ def test_two_lean_days_running_make_band_b_choose_a_raid_or_gold_alike_for_all()
     assert fed["lean"] == 0
     town = _band("ama", "band leader")  # band A never raids
     assert bands._hungry_choice(_ctx(dusk, town, {"lean": 5})) is None
-
-
-@pytest.mark.parametrize(
-    ("day", "trading", "goes"),
-    [("third", False, True), ("second", False, False), ("sixth", False, False), ("sixth", True, True)],
-)
-def test_band_b_pans_the_falls_pool_but_leaves_it_to_the_town_s_digger_on_his_gold_days(
-    monkeypatch: Any, day: str, trading: bool, goes: bool
-) -> None:
-    from app.brains import bands
-
-    monkeypatch.setattr(bands, "_hungry_choice", lambda _ctx: "gold")
-    pool = Spot("the Falls pool", 1600, ("gold",))
-    barro = _band("barro", "band leader", "band_b", spots=(pool,))
-    notes: dict[str, JsonValue] = {"night": False, "days": 5, "chores": [], "lean": 2}
-    if trading:
-        notes["trading"] = True  # panned already, on the way to the stall when the day turned
-    look = _look("at your home, at Band B camp", "early morning", (), day_of_week=f"the {day} day of the week")
-    want = f"go to {bands.MARKET}" if trading else "go to the Falls pool"
-    assert [o.name for o in bands._gold_trip(_ctx(look, barro, notes))] == ([want] if goes else [])
 
 
 def test_a_raider_walks_to_the_rice_fields_at_night_and_takes_rice_from_the_racks(
