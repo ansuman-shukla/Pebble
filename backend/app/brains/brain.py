@@ -300,6 +300,8 @@ class UtilityBrain:
             if at(p, STOREHOUSES) and not failed:
                 return option(score, "eat", lambda: self.api.eat("rice"))
             return option(score - 2, "go eat", lambda: self.api.walk_to_place(STOREHOUSES, pace))
+        if p.chest is not None:  # at the chest: what it holds is seen (someone of the house may have filled it)
+            self.api.notes["chest empty"] = not any(line.endswith("rice") for line in p.chest.holds)
         if at_home(p) and failed:
             self.api.notes["chest empty"] = True  # nothing to eat at home today
         starving = needs.hunger >= 3 and not carries(p, "coins") and self.api.notes.get("chest empty") is True

@@ -284,6 +284,22 @@ def test_a_hungry_townsman_whose_chest_is_empty_does_not_walk_home_to_eat_again(
     assert brain.hunger_option(look, needs, "midday") is None  # the routine buys rice or earns the coins for it
 
 
+def test_a_hungry_townsman_at_home_eats_from_the_chest_someone_of_the_house_filled_since_it_was_empty(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    sim = _scene(new_sim, ("aiko", "farmhouse-1", "farmhouse-1"))
+    sim.state.stores["farmhouse-1-chest"] = {"coins": 5}
+    sim.citizen("aiko").body.hunger = 70.0
+    brain = _brain(sim, "aiko", honesty=1.0)
+    brain.api.notes["chest empty"] = True  # this morning's meal at home failed
+    look, needs = brain.api.look_around(), Needs(2, 0, 0)
+    assert look.chest is not None and brain.hunger_option(look, needs, "midday") is None  # still empty: no meal
+    sim.stock_store("farmhouse-1-chest", "rice", 13)  # the house's farmer brought rice home since
+    look = brain.api.look_around()
+    option = brain.hunger_option(look, needs, "midday")
+    assert option is not None and option.name == "eat" and brain.api.notes["chest empty"] is False
+
+
 @pytest.mark.parametrize(
     ("inventory", "honesty", "hunger"),
     [
