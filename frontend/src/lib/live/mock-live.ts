@@ -19,6 +19,7 @@ import {
   type LiveEventMessage,
   type LiveFrame,
   type LiveMessage,
+  type LiveStack,
   TICK_SECONDS,
   tickMs,
 } from './live-contract';
@@ -706,6 +707,8 @@ export class MockLiveServer {
   private feelings = new Map<string, string[]>();
   /** What a test made someone do (`perform`), over their plan. */
   private performing = new Map<string, Partial<LiveCitizen> & FedBody>();
+  /** What lies on the ground (`setStacks`; tests): nothing unless a test puts something down. */
+  private stacks: LiveStack[] = [];
   /** Homes and plans a test scene gives some (`crowdCamp`); everyone else lives their own. */
   private scene: Record<string, Pick<MockPerson, 'home' | 'plan'>> = {};
   /** Connections so far (tests read it to see a reconnect). */
@@ -757,6 +760,7 @@ export class MockLiveServer {
       citizens: this.citizens(),
       animals: this.wild.animals(isDark(this.tick)),
       fires: this.wild.fires(isDark(this.tick)),
+      stacks: this.stacks,
     };
   }
 
@@ -807,6 +811,13 @@ export class MockLiveServer {
   perform(actor: string, doing: (Partial<LiveCitizen> & FedBody) | null) {
     if (doing) this.performing.set(actor, doing);
     else this.performing.delete(actor);
+    const frame = this.frame('snapshot');
+    for (const socket of this.sockets) socket.deliver(frame);
+  }
+
+  /** The ground now holds `stacks` (tests: logs land, are carried off): a snapshot carries them at once. */
+  setStacks(stacks: LiveStack[]) {
+    this.stacks = stacks;
     const frame = this.frame('snapshot');
     for (const socket of this.sockets) socket.deliver(frame);
   }
@@ -882,6 +893,7 @@ export class MockLiveServer {
     this.wild = new MockWild(this.world);
     this.feelings.clear();
     this.performing.clear();
+    this.stacks = [];
     this.dropConnections(LIVE_CLOSE.resync);
   }
 
@@ -1012,6 +1024,7 @@ export class MockLiveServer {
       citizens: this.citizens(),
       animals: this.wild.animals(isDark(this.tick)),
       fires: this.wild.fires(isDark(this.tick)),
+      stacks: this.stacks,
     };
   }
 

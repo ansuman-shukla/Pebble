@@ -66,7 +66,7 @@ export async function stillWorld(page: Page) {
     const entities = (await response.json()) as Record<string, unknown>;
     await route.fulfill({
       response,
-      json: { ...entities, citizens: [], animals: [], fires: [] },
+      json: { ...entities, citizens: [], animals: [], fires: [], stacks: [] },
     });
   });
 }

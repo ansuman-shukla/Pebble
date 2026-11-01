@@ -6,6 +6,7 @@ import type {
   LiveCitizen,
   LiveFire,
   LiveFrame,
+  LiveStack,
 } from '../../src/lib/live/live-contract';
 import {
   applyEntities,
@@ -75,7 +76,7 @@ function frame(
   tick: number,
   citizens: LiveCitizen[],
   run = 'run-1',
-  wild: Pick<LiveFrame, 'animals' | 'fires'> = { animals: [], fires: [] },
+  wild: Partial<Pick<LiveFrame, 'animals' | 'fires' | 'stacks'>> = {},
 ): LiveFrame {
   return {
     type,
@@ -87,6 +88,9 @@ function frame(
     speed: 1,
     paused: false,
     citizens,
+    animals: [],
+    fires: [],
+    stacks: [],
     ...wild,
   };
 }
@@ -142,6 +146,7 @@ test('frames replace the citizens; stale ticks are ignored; a snapshot or a new 
     tick_elapsed_s: 0,
     animals: [],
     fires: [],
+    stacks: [],
   };
   expect(applyEntities(state, { ...answer, citizens: [entity()] }, 0)).toBe(
     state,
@@ -158,7 +163,7 @@ test('frames replace the citizens; stale ticks are ignored; a snapshot or a new 
   expect(later.citizens[0].activity).toBe('eating');
 });
 
-test('frames carry the animals and the fires', () => {
+test('frames carry the animals, the fires and the ground stacks', () => {
   const deer: LiveAnimal = {
     id: 'deer:1',
     kind: 'deer',
@@ -179,22 +184,45 @@ test('frames carry the animals and the fires', () => {
     lit: true,
     strength: 1,
   };
+  const logs: LiveStack = {
+    id: 'stack-38',
+    item: 'wood',
+    count: 10,
+    unit: deer.position.unit,
+    cell: 1,
+  };
   let state = applyMessage(
     EMPTY_LIVE,
-    frame('snapshot', 1, [], 'run-1', { animals: [deer], fires: [pit] }),
+    frame('snapshot', 1, [], 'run-1', {
+      animals: [deer],
+      fires: [pit],
+      stacks: [logs],
+    }),
     0,
   );
   expect(state.animals).toEqual([deer]);
   expect(state.fires).toEqual([pit]);
+  expect(state.stacks).toEqual([logs]);
   const running = { ...deer, activity: 'running' as const };
   const out = { ...pit, lit: false, strength: 0 };
+  const fewer = { ...logs, count: 6 };
   state = applyMessage(
     state,
-    frame('tick', 2, [], 'run-1', { animals: [running], fires: [out] }),
+    frame('tick', 2, [], 'run-1', {
+      animals: [running],
+      fires: [out],
+      stacks: [fewer],
+    }),
     0,
   );
   expect(state.animals[0].activity).toBe('running');
   expect(state.fires[0].lit).toBe(false);
+  expect(state.stacks).toEqual([fewer]);
+  // carried off: the next tick has no stack there
+  expect(
+    applyMessage(state, frame('tick', 3, [], 'run-1', { stacks: [] }), 0)
+      .stacks,
+  ).toEqual([]);
   expect(applyMessage(state, frame('tick', 1, []), 0)).toBe(state); // stale
 });
 

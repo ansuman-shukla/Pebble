@@ -9,6 +9,7 @@ import type {
   LiveEvent,
   LiveLiveSchemaResponse,
   LiveState,
+  StackEntity,
 } from '@/lib/client/types.gen';
 
 export type LiveCitizen = CitizenEntity;
@@ -20,6 +21,9 @@ export type AnimalActivity = AnimalEntity['activity'];
 
 /** A camp's fire pit, a town fire basket or a campfire made anywhere. */
 export type LiveFire = FireEntity;
+
+/** Things lying on the ground (an item kind, how many): a felled tree's logs, meat left at remains, goods put down. */
+export type LiveStack = StackEntity;
 
 export type Activity = CitizenEntity['activity'];
 

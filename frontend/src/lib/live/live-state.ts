@@ -1,13 +1,14 @@
 /*
- * What the client knows of the live world: the latest frame of citizens, animals, fires and the clock, the recent
- * speech, and the recent gestures and blows bodies show (cues). Pure: the hook feeds it the entities answer and every
- * feed message.
+ * What the client knows of the live world: the latest frame of citizens, animals, fires, ground stacks and the clock,
+ * the recent speech, and the recent gestures and blows bodies show (cues). Pure: the hook feeds it the entities answer
+ * and every feed message.
  */
 import {
   type LiveAnimal,
   type LiveCitizen,
   type LiveFire,
   type LiveMessage,
+  type LiveStack,
   TICK_SECONDS,
 } from './live-contract';
 import { GESTURES, type GestureKind } from './motion';
@@ -55,6 +56,7 @@ export interface LiveState {
   citizens: LiveCitizen[];
   animals: LiveAnimal[];
   fires: LiveFire[];
+  stacks: LiveStack[];
   speech: Speech[];
   cues: Cue[];
 }
@@ -70,6 +72,7 @@ export const EMPTY_LIVE: LiveState = {
   citizens: [],
   animals: [],
   fires: [],
+  stacks: [],
   speech: [],
   cues: [],
 };
@@ -83,6 +86,7 @@ export interface EntitiesAnswer {
   citizens: LiveCitizen[];
   animals: LiveAnimal[];
   fires: LiveFire[];
+  stacks: LiveStack[];
 }
 
 /** `GET /api/v1/entities` (the first load, before the socket's snapshot). */
@@ -103,6 +107,7 @@ export function applyEntities(
     citizens: view.citizens,
     animals: view.animals,
     fires: view.fires,
+    stacks: view.stacks,
     speech: sameRun ? state.speech : [],
     cues: sameRun ? state.cues : [],
   };
@@ -171,6 +176,7 @@ export function applyMessage(
     citizens: message.citizens,
     animals: message.animals,
     fires: message.fires,
+    stacks: message.stacks,
     speech: sameRun ? state.speech : [],
     cues: sameRun ? state.cues : [],
   };
