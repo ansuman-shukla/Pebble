@@ -29,6 +29,7 @@ def test_activity_follows_the_action() -> None:
         "eat": "eating",
         "drink": "drinking",
         "work": "working",
+        "craft": "working",  # "making an iron axe" (its label), not "standing about" for hours at the forge
         "rest": "resting",
         "wait": "idle",
         None: "idle",

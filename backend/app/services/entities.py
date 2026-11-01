@@ -53,6 +53,7 @@ ACTIVITIES: dict[str, Activity] = {
     "eat": "eating",
     "drink": "drinking",
     "work": "working",
+    "craft": "working",  # told by its label ("making an iron axe")
 }
 TALKING_TICKS = 3  # someone who just spoke (and isn't busy with something else) shows as talking this long
 
