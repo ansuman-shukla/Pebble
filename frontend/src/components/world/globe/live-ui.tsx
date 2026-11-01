@@ -1,8 +1,10 @@
 import {
+  memo,
   type RefObject,
   useEffect,
   useMemo,
   useRef,
+  useState,
   useSyncExternalStore,
 } from 'react';
 import type { Vector3 } from 'three';
@@ -12,7 +14,12 @@ import { Button } from '@/components/ui/button';
 import type { ClockChange, LiveStatus } from '@/hooks/use-live-citizens';
 import { CLOCK_SPEEDS } from '@/lib/live/clock-speeds';
 import type { LiveCitizen } from '@/lib/live/live-contract';
-import { type LiveState, type Speech, speedWords } from '@/lib/live/live-state';
+import {
+  keepUnchanged,
+  type LiveState,
+  type Speech,
+  speedWords,
+} from '@/lib/live/live-state';
 import { activityWords } from '@/lib/live/npc-activity';
 import type { ShownDoings } from '@/lib/live/shown-doings';
 import type { Region } from '@/lib/world/citizen-looks';
@@ -215,26 +222,47 @@ export function CitizenLabels({
   speech: Speech[];
 }) {
   const shown = useSyncExternalStore(doings.subscribe, doings.getSnapshot);
-  const contents = useMemo(
+  const labels = useMemo(
     () => citizenLabels(citizens, shown, speech),
     [citizens, shown, speech],
   );
+  // every tick brings new citizens (their needs move), but their labels seldom change: unchanged labels stay the
+  // same objects, so only the chips that changed are drawn again
+  const [described, setDescribed] = useState(labels);
+  const [contents, setContents] = useState(labels);
+  if (labels !== described) {
+    setDescribed(labels);
+    setContents(keepUnchanged(contents, labels));
+  }
   useEffect(() => store.describe('citizens', contents), [store, contents]);
   return null;
 }
 
 const fixed = (value: number) => value.toFixed(2);
 
-/** Hidden: the drawn citizens as data attributes for the browser tests, refreshed ten times a second. */
-export function NpcHooks({
-  citizens,
-  views,
-  focusRef,
-}: {
+type NpcHooksProps = {
   citizens: LiveCitizen[];
   views: NpcViews;
   focusRef: RefObject<Vector3>;
-}) {
+};
+
+/** The hooks list each citizen's id and action label: every tick brings new citizen objects, seldom new labels. */
+const sameHooks = (before: NpcHooksProps, after: NpcHooksProps) =>
+  before.views === after.views &&
+  before.focusRef === after.focusRef &&
+  before.citizens.length === after.citizens.length &&
+  before.citizens.every(
+    ({ id, action_label }, index) =>
+      id === after.citizens[index].id &&
+      action_label === after.citizens[index].action_label,
+  );
+
+/** Hidden: the drawn citizens as data attributes for the browser tests, refreshed ten times a second. */
+export const NpcHooks = memo(function NpcHooks({
+  citizens,
+  views,
+  focusRef,
+}: NpcHooksProps) {
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -284,4 +312,4 @@ export function NpcHooks({
       ))}
     </div>
   );
-}
+}, sameHooks);

@@ -1,6 +1,7 @@
 import { useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import {
+  memo,
   Suspense,
   useEffect,
   useEffectEvent,
@@ -124,7 +125,8 @@ function Bones({ length }: { length: number }) {
   return <primitive object={model} scale={scale} />;
 }
 
-function Animal({
+// memo: a tick keeps an unchanged animal's object (`live-state.ts`), so only the animals it changed render again
+const Animal = memo(function Animal({
   animal,
   terrain,
   rate,
@@ -266,7 +268,44 @@ function Animal({
       )}
     </group>
   );
+});
+
+/** The animals are drawn in this many groups (each animal always in the same one, by its id). */
+const GROUPS = 64;
+
+function groupOf(id: string) {
+  let hash = 0;
+  for (let k = 0; k < id.length; k++) hash = (hash * 31 + id.charCodeAt(k)) | 0;
+  return Math.abs(hash) % GROUPS;
 }
+
+interface GroupProps {
+  animals: LiveAnimal[];
+  terrain: GlobeTerrain;
+  rate: number;
+  routeless: boolean;
+  replay: boolean;
+  views: AnimalViews;
+}
+
+const sameGroup = (before: GroupProps, after: GroupProps) =>
+  before.animals.length === after.animals.length &&
+  before.animals.every((animal, index) => animal === after.animals[index]) &&
+  before.terrain === after.terrain &&
+  before.rate === after.rate &&
+  before.routeless === after.routeless &&
+  before.replay === after.replay &&
+  before.views === after.views;
+
+// a group none of whose animals a tick changed (`live-state.ts` keeps their objects) isn't drawn again at all
+const AnimalGroup = memo(function AnimalGroup({
+  animals,
+  ...props
+}: GroupProps) {
+  return animals.map((animal) => (
+    <Animal key={animal.id} animal={animal} {...props} />
+  ));
+}, sameGroup);
 
 /** Inside the Canvas: every live animal, drawn where the feed says (models only near the camera). */
 export function GlobeAnimals({
@@ -291,21 +330,22 @@ export function GlobeAnimals({
   const [routed, setRouted] = useState(false);
   if (!routed && animals.some((animal) => animal.route.length > 1))
     setRouted(true);
-  return (
-    <>
-      {animals.map((animal) => (
-        <Animal
-          key={animal.id}
-          animal={animal}
-          terrain={terrain}
-          rate={clockRate(speed, paused)}
-          routeless={!routed}
-          replay={replay}
-          views={views}
-        />
-      ))}
-    </>
-  );
+  const groups = useMemo(() => {
+    const grouped = Array.from({ length: GROUPS }, (): LiveAnimal[] => []);
+    for (const animal of animals) grouped[groupOf(animal.id)].push(animal);
+    return grouped;
+  }, [animals]);
+  return groups.map((group, index) => (
+    <AnimalGroup
+      key={index}
+      animals={group}
+      terrain={terrain}
+      rate={clockRate(speed, paused)}
+      routeless={!routed}
+      replay={replay}
+      views={views}
+    />
+  ));
 }
 
 const fixed = (value: number, digits = 2) => value.toFixed(digits);

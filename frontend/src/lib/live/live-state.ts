@@ -168,12 +168,56 @@ export function applyMessage(
     speed: message.speed,
     paused: message.paused,
     tickClock: { elapsed: message.tick_elapsed_s, at: now },
-    citizens: message.citizens,
-    animals: message.animals,
-    fires: message.fires,
+    citizens: sameRun
+      ? keepUnchanged(state.citizens, message.citizens)
+      : message.citizens,
+    animals: sameRun
+      ? keepUnchanged(state.animals, message.animals)
+      : message.animals,
+    fires: sameRun ? keepUnchanged(state.fires, message.fires) : message.fires,
     speech: sameRun ? state.speech : [],
     cues: sameRun ? state.cues : [],
   };
+}
+
+/** Whether two values parsed from JSON are equal, deeply. */
+function sameJson(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || !a || !b) return false;
+  if (Array.isArray(a)) {
+    if (!Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((item, index) => sameJson(item, b[index]));
+  }
+  if (Array.isArray(b)) return false;
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every(
+    (key) =>
+      key in b &&
+      sameJson(
+        (a as Record<string, unknown>)[key],
+        (b as Record<string, unknown>)[key],
+      ),
+  );
+}
+
+/**
+ * `next`, each item equal to the one with its id in `before` kept as that object (and `before` itself when nothing
+ * changed), so only what a tick changed is drawn anew: most animals stand still from tick to tick.
+ */
+export function keepUnchanged<T extends { id: string }>(
+  before: readonly T[],
+  next: T[],
+): T[] {
+  const old = new Map(before.map((entity) => [entity.id, entity]));
+  const kept = next.map((entity) => {
+    const previous = old.get(entity.id);
+    return previous && sameJson(previous, entity) ? previous : entity;
+  });
+  return kept.length === before.length &&
+    kept.every((entity, index) => entity === before[index])
+    ? (before as T[])
+    : kept;
 }
 
 /** Game seconds into the current tick at client time `now` (ms): what the feed said, plus what passed since at the
