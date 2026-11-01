@@ -413,6 +413,42 @@ export function bridgeSpans(
   return spans;
 }
 
+/**
+ * The network's middle lines as drawn: each chain of cell steps (routeChains) and each gate's lead (shared by
+ * every road leaving that gate: from the gate to the road's first cell) as a centripetal Catmull-Rom curve sampled
+ * every STEP metres. Decor keeps off them, and the backend's flora off the same curves.
+ */
+export function routeLines(
+  globe: Globe,
+  roads: Pick<Road, 'kind' | 'cells' | 'lead'>[],
+) {
+  const { radius } = globe;
+  const cell = (index: number) => cellDirection(globe, index, new Vector3());
+  const { chains, ends } = routeChains(roads);
+  const lines = chains.map((chain) => ({
+    kind: chain.kind,
+    points: sampleCurve(chain.cells.map(cell), chain.closed, radius),
+    closed: chain.closed,
+  }));
+  const leads = new Set<string>();
+  for (const road of roads) {
+    const lead = road.lead ?? [];
+    const key = JSON.stringify(lead);
+    if (lead.length === 0 || leads.has(key)) continue;
+    leads.add(key);
+    const points = [
+      ...lead.map((point) => new Vector3(...point)),
+      cell(road.cells[0]),
+    ];
+    lines.push({
+      kind: road.kind,
+      points: sampleCurve(points, false, radius),
+      closed: false,
+    });
+  }
+  return { lines, ends };
+}
+
 /** The marks the world view lays outside the town's areas (directions only: draping happens in `buildMarks`). */
 export function planetMarks({
   globe,
@@ -452,34 +488,15 @@ export function planetMarks({
     );
   };
   const cell = (index: number) => cellDirection(globe, index, new Vector3());
-  const { chains, ends } = routeChains(places.roads);
+  const { lines, ends } = routeLines(globe, places.roads);
   const ribbon = (
     kind: RouteKind,
     points: Vector3[],
     { width = ROUTE_WIDTH[kind], closed = false } = {},
   ): Ribbon => ({ kind, width, points, closed });
-  const ribbons: Ribbon[] = chains.map((chain) =>
-    ribbon(
-      chain.kind,
-      sampleCurve(chain.cells.map(cell), chain.closed, radius),
-      {
-        closed: chain.closed,
-      },
-    ),
+  const ribbons: Ribbon[] = lines.map(({ kind, points, closed }) =>
+    ribbon(kind, points, { closed }),
   );
-  // a gate's lead (shared by every road leaving that gate) runs from the gate to the road's first cell
-  const leads = new Map<string, Ribbon>();
-  for (const road of places.roads) {
-    const lead = road.lead ?? [];
-    const key = JSON.stringify(lead);
-    if (lead.length === 0 || leads.has(key)) continue;
-    const points = [
-      ...lead.map((point) => new Vector3(...point)),
-      cell(road.cells[0]),
-    ];
-    leads.set(key, ribbon(road.kind, sampleCurve(points, false, radius)));
-  }
-  ribbons.push(...leads.values());
   const patches: Patch[] = [...ends].map(([index, kind]) => ({
     kind,
     centre: cell(index),

@@ -10,7 +10,12 @@ import {
   Vector3,
 } from 'three';
 
-import { type GlobeTerrain, WATER_BIOMES, WATER_SURFACE } from './globe';
+import {
+  type Globe,
+  type GlobeTerrain,
+  WATER_BIOMES,
+  WATER_SURFACE,
+} from './globe';
 import type { RiverLayout, Waterfall } from './river-courses';
 import { BANK_EDGE } from './water-material';
 
@@ -67,11 +72,29 @@ export const LAKE_LIFT = 0.25;
 const LAKE_STEP = 2.5;
 const LAKE_DEPTH_MAX = 9;
 
+/** A water cell above the sea's surface: a lake. */
+const isLakeCell = ({ biomes, heights }: Globe, cell: number) =>
+  WATER_BIOMES.has(biomes[cell]) && heights[cell] > WATER_SURFACE;
+
+/**
+ * The height (above sea level) of the lake water drawn over a grid triangle: its lowest lake corner's bed +
+ * LAKE_LIFT, over the whole triangle (the ground above it hides it); -Infinity without a lake corner. Nothing may
+ * stand where the ground lies under it (the backend's flora keeps the same rule).
+ */
+export function lakeSurface(globe: Globe, triangle: number) {
+  let level = Infinity;
+  for (let k = 0; k < 3; k++) {
+    const cell = globe.triangles[triangle * 3 + k];
+    if (isLakeCell(globe, cell)) level = Math.min(level, globe.heights[cell]);
+  }
+  return level === Infinity ? -Infinity : level + LAKE_LIFT;
+}
+
 /** How deep each lake cell's water is taken to be: LAKE_STEP per cell from the nearest dry cell. */
 function lakeDepths(terrain: GlobeTerrain) {
-  const { biomes, heights, cellCount } = terrain.globe;
-  const isLake = (cell: number) =>
-    WATER_BIOMES.has(biomes[cell]) && heights[cell] > WATER_SURFACE;
+  const { globe } = terrain;
+  const { cellCount } = globe;
+  const isLake = (cell: number) => isLakeCell(globe, cell);
   const depth = new Float32Array(cellCount);
   let frontier: number[] = [];
   for (let cell = 0; cell < cellCount; cell++) {
@@ -168,9 +191,9 @@ export function stillWaterGeometry(terrain: GlobeTerrain) {
     }
 
     // a lake: at its surface height, refined, on the sphere
-    const lakeCorners = cells.filter((cell) => lakes.isLake(cell));
-    if (lakeCorners.length > 0) {
-      const level = Math.min(...lakeCorners.map((cell) => heights[cell]));
+    const surfaceHeight = lakeSurface(globe, t);
+    if (surfaceHeight > -Infinity) {
+      const level = surfaceHeight - LAKE_LIFT;
       const bedDepths = cells.map((cell) =>
         lakes.isLake(cell) ? lakes.depth[cell] : 0,
       );

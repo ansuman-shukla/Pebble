@@ -15,11 +15,15 @@ import {
   packFlora,
 } from '../../src/lib/world/flora';
 import {
+  buildTerrain,
   cellDirection,
   decodeWorld,
   type Globe,
   tangentFrame,
 } from '../../src/lib/world/globe';
+import { ROUTE_WIDTH, routeLines } from '../../src/lib/world/ground-marks';
+import { lakeSurface } from '../../src/lib/world/water-mesh';
+import { WATERHOLE_BANK_M } from '../../src/lib/world/waterholes';
 import backend from './fixtures/flora-points.json' with { type: 'json' };
 import { FLORA_URL, floraOf, WORLD_URL } from './globe-helpers';
 
@@ -180,6 +184,55 @@ test.describe('on the real world', () => {
       if (off > 0.05) faults.push(`${id} ${off.toFixed(3)} m off`);
     }
     expect(faults).toEqual([]);
+  });
+
+  test('nothing stands on a road or path as drawn, in a lake as drawn or in a waterhole pool', () => {
+    // critic round 1: trees on the North woods road and a bridge, oaks in the falls pool's lake
+    const faults: string[] = [];
+    const at = new Vector3();
+    // ribbon samples bucketed by 8 m cubes of planet space
+    const BUCKET = 8;
+    const key = (v: Vector3) =>
+      [v.x, v.y, v.z]
+        .map((c) => Math.floor((c * globe.radius) / BUCKET))
+        .join(',');
+    const buckets = new Map<string, [Vector3, number][]>();
+    for (const { kind, points } of routeLines(globe, view.places.roads).lines)
+      for (const point of points) {
+        const list = buckets.get(key(point)) ?? [];
+        list.push([point, ROUTE_WIDTH[kind] / 2]);
+        buckets.set(key(point), list);
+      }
+    const terrain = buildTerrain(globe);
+    const pools = view.places.features
+      .filter((feature) => feature.pool)
+      .map((feature) => new Vector3(...feature.position).normalize());
+    expect(pools.length).toBeGreaterThan(0);
+    for (let i = 0; i < flora.count; i++) {
+      const node = flora.nodes[flora.kind[i]];
+      floraDirection(globe, flora, i, at);
+      const [x, y, z] = [at.x, at.y, at.z].map((c) =>
+        Math.floor((c * globe.radius) / BUCKET),
+      );
+      for (let dx = -1; dx <= 1; dx++)
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dz = -1; dz <= 1; dz++)
+            for (const [point, half] of buckets.get(
+              `${x + dx},${y + dy},${z + dz}`,
+            ) ?? [])
+              // the ribbon plus a step between its samples
+              if (at.angleTo(point) * globe.radius < half + 0.5)
+                faults.push(`${floraNodeId(i)} (${node}) on a road or path`);
+      if (
+        pools.some((pool) => at.angleTo(pool) * globe.radius < WATERHOLE_BANK_M)
+      )
+        faults.push(`${floraNodeId(i)} (${node}) in a waterhole's pool`);
+      if (node === 'reed_bed') continue; // reeds stand in the shallows
+      const hit = terrain.locate(at);
+      if (hit.height < lakeSurface(globe, hit.triangle))
+        faults.push(`${floraNodeId(i)} (${node}) in a lake`);
+    }
+    expect([...new Set(faults)]).toEqual([]);
   });
 
   test('the Elder grove holds exactly its 25 berry bushes and 10 nut trees', () => {
