@@ -129,7 +129,7 @@ class BandBDeeds(_OverSeeds):
     and at least one nobody saw (10 §3.3, §3.6)."""
 
     name = "br2.deeds"
-    pending = "BR2 follow-up: a raid seen by the watch and judged (raiders and Goro's beat rarely meet)"
+    pending = "witnessed-and-judged raid needs Q1 tuning"
     least = 6
 
     @override

@@ -468,10 +468,13 @@ def _hunt(ctx: Context) -> list[Option]:
     if sharing or ctx.done_today("hunt"):
         return sharing
     tries = _count_today(ctx, "hunt-try")
-    if (
-        carried_food(p.you).get("meat") and tries
-    ):  # today's kill (yesterday's meat is dried at camp, and the hunt goes on)
+    if carried_food(p.you).get("meat") and tries:  # today's kill (yesterday's meat is dried at camp, the hunt goes on)
         ctx.mark_done("hunt")
+        grounds_known = ctx.profile.hunting_grounds
+        if grounds_known:
+            for ground_name in grounds_known:
+                if at(p, ground_name):
+                    ctx.notes["kill ground"] = [ground_name, _today(ctx)]
         home = Option(WORK + 5, "bring the meat home", lambda: api.walk_to_place("home"), "Bring the meat home")
         return [] if at_home(p) else [home]
     if tries >= HUNT_TRIES:
@@ -482,6 +485,10 @@ def _hunt(ctx: Context) -> list[Option]:
     if not grounds and day % of != turn:
         return []  # another hunter's day on the grass round camp
     ground = grounds[(day - 1) % len(grounds)] if grounds else None
+    if ground is not None and ctx.notes.get("kill ground") == [ground, day - 1]:  # yesterday's herd is spared today
+        ground = grounds[day % len(grounds)] if len(grounds) > 1 and grounds[day % len(grounds)] != ground else None
+        if ground is None:
+            return []
     poach = _poach_spot(ctx)
     where_allowed = ground is None or at(p, ground) or _about_camp(ctx)  # the day's ground, or about camp
     where_allowed = where_allowed or (poach is not None and at(p, poach))
