@@ -3,6 +3,7 @@
 import math
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -24,6 +25,7 @@ from app.sim.vec import lat_lon_deg
 from app.sim.world import SimWorld
 from app.world.store import WorldKey
 from app.world_api.facade import WorldApi
+from tests.sim_helpers import stand_at_node, without_animals
 
 API = settings.API_V1_STR
 KEY = WorldKey(seed=20261028, generator_version="test", spec_hash="1" * 64)
@@ -167,6 +169,49 @@ def test_entities_carry_the_streamed_route_even_at_a_snapshot_tick(
     loop.run_ticks(1, headless=True)
     after = next(c for c in client.get(f"{API}/entities").json()["citizens"] if c["id"] == "dev-aiko")
     assert (after["activity"], after["route"], after["speed_mps"]) == ("resting", [], 0.0)
+
+
+def test_entities_show_a_felled_trees_logs_on_the_ground_until_they_are_carried_off(
+    client: TestClient, api_session: Session, sim_world: SimWorld
+) -> None:
+    loop = open_loop(api_session, sim_world, KEY, new_run=True, citizens=DEV_CITIZENS, clock=Clock(), brains=False)
+    sim = without_animals(loop.sim)
+    woodpiles = {s["id"]: s for s in client.get(f"{API}/entities").json()["stacks"]}
+    assert {(s["item"], s["count"]) for s in woodpiles.values()} == {("wood", 12)}  # each camp's, by its fire pit
+    assert set(woodpiles) == set(sim.state.ground) and len(woodpiles) == 2
+    for stack_id, stack in woodpiles.items():
+        assert tuple(stack["unit"]) == pytest.approx(sim.state.ground[stack_id].position, abs=1e-12)
+        assert stack["cell"] == sim.state.ground[stack_id].cell
+
+    table = sim.world.nodes
+    tree = table.kinds.index("tree")
+    trunk = table.unit(tree)
+    feller = stand_at_node(sim, "dev-genzo", tree)
+    feller.inventory["iron axe"] = 1
+    api = WorldApi(sim, feller.id)
+    felling = api.gather("wood")
+    while felling.result is None and sim.tick < 120:
+        loop.run_ticks(1, headless=True)
+    assert felling.result is not None and felling.result.outcome == "done"
+    felled_at = sim.tick
+
+    def logs(**params: int) -> list[dict[str, Any]]:
+        stacks = client.get(f"{API}/entities", params=params).json()["stacks"]
+        return [s for s in stacks if s["id"] not in woodpiles]
+
+    (fallen,) = logs()
+    assert (fallen["item"], fallen["count"]) == ("wood", 10)
+    assert sim.world.distance_m(tuple(fallen["unit"]), trunk) < 0.01  # at the trunk, where the tree came down
+    assert logs(at=felled_at - 1) == []  # replayed: not there before the tree fell
+
+    assert api.pick_up("4 wood").outcome == "done"
+    loop.run_ticks(2, headless=True)
+    (left,) = logs()
+    assert (left["id"], left["count"]) == (fallen["id"], 6)
+    assert api.pick_up("wood").outcome == "done"
+    loop.run_ticks(1, headless=True)
+    assert logs() == []  # carried off: gone from the ground
+    assert [s["count"] for s in logs(at=felled_at + 1)] == [6]
 
 
 @pytest.mark.usefixtures("loop")

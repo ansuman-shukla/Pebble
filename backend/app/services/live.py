@@ -8,7 +8,7 @@ LISTENs on that channel, keeps a replayed state per followed run (latest snapsho
  engine ── NOTIFY {run, tick, seqs} ──▶ listener thread ── fetch events after the last seq ──▶ replay per tick
                                               │                                                     │
              WebSocket /api/v1/live ◀── queue ◀── "event" messages (public events with a line worth telling)
-                                              ◀── one "tick" message per tick (citizens, animals, fires)
+                                              ◀── one "tick" message per tick (citizens, animals, fires, stacks)
 ```
 
 On connect a client gets a `snapshot` message; when the clock's speed or pause changes without a tick, a `tick`
@@ -41,7 +41,9 @@ from app.services.entities import (
     CitizenEntity,
     FireEntity,
     Position,
+    StackEntity,
     citizen_entity,
+    ground_stacks,
     position,
     snapshot_before,
     tick_elapsed,
@@ -80,6 +82,7 @@ class LiveState(BaseModel):
     citizens: list[CitizenEntity]
     animals: list[AnimalEntity]
     fires: list[FireEntity]
+    stacks: list[StackEntity]  # what lies on the ground now, every message (appears, shrinks, goes)
     # every node that differs from full (10-world-v1 §1.1: a picked bush, a stump, a paddy short of ripe), in
     # `snapshot` messages only; after it each change comes as a `node_changed` event (its `stage` and `after`)
     nodes: list[NodeEntity] = []
@@ -144,6 +147,7 @@ class RunFeed:
             citizens=citizens,
             animals=animals,
             fires=fires,
+            stacks=ground_stacks(self.state),
             nodes=[NodeEntity(id=node_id, **view.model_dump()) for node_id, view in sorted(self.state.nodes.items())]
             if kind == "snapshot"
             else [],

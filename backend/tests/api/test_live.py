@@ -217,6 +217,29 @@ def test_the_snapshot_carries_every_node_that_differs_from_full(client: TestClie
                       "stage": "fruit-3"}  # fmt: skip
 
 
+def test_every_message_carries_the_ground_stacks_as_they_appear_shrink_and_go(
+    client: TestClient, committed_run: EngineLoop
+) -> None:
+    loop = committed_run
+    kenji = loop.sim.citizen("kenji")
+    with client.websocket_connect(f"{API}/live?run_id={loop.run.id}") as ws:
+        snapshot = LiveState.model_validate(_receive(ws))
+        assert {(s.id, s.item, s.count) for s in snapshot.stacks} == {
+            (s.id, s.item, s.count) for s in loop.sim.state.ground.values()
+        }
+        assert {s.item for s in snapshot.stacks} == {"wood"}  # the camps' woodpiles
+        api = WorldApi(loop.sim, "kenji")
+        assert api.drop("5 coins").outcome == "done"
+        loop.run_ticks(1, headless=True)
+        assert api.pick_up("2 coins").outcome == "done"
+        loop.run_ticks(1, headless=True)
+        assert api.pick_up("coins").outcome == "done"
+        loop.run_ticks(1, headless=True)
+        ticks = [LiveState.model_validate(m) for m in _until_tick(ws, 3) if m["type"] == "tick"]
+    dropped = [[(s.item, s.count, s.unit) for s in t.stacks if s.item != "wood"] for t in ticks]
+    assert dropped == [[("coins", 5, kenji.position)], [("coins", 3, kenji.position)], []]
+
+
 def test_a_page_opened_mid_tick_learns_how_far_into_the_tick_the_world_is(
     client: TestClient, committed_run: EngineLoop
 ) -> None:
