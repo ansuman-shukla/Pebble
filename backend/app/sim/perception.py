@@ -56,6 +56,9 @@ FIRE_TOLD_M = 15.0  # every fire within a few paces is told (someone tending a p
 WATCHING_M = 60.0  # an awake predator this close is "watching you"
 SIGHT_WORDS = 120  # people, animals and things seen are listed in about this many words (D63)
 COUNT_WORDS = {2: "two", 3: "three", 4: "four", 5: "five"}  # then "several", and "many" from ten
+RICE_RACK = STRUCTURE_LABELS["drying_rack"]  # a farm household's hasa rack by the paddies (10 §2.6)
+YOUR_RICE_RACK = "your rice rack"
+LADEN = "hung with rice"  # a rice rack with rice drying on it, told as what it is doing
 GROUP_NOUNS: dict[str, str] = {  # structure kinds seen in numbers
     "storehouse": "storehouses",
     "townhouse": "houses",
@@ -367,6 +370,13 @@ def things_in_view(core: SimCore, citizen: Citizen) -> list[Thing]:
                 structure.id,
                 at=structure.centre,
             )
+        elif structure.label == RICE_RACK:  # a farm household's hasa rack: whose, and whether rice dries on it
+            laden = state.stores.get(structure.id, {}).get("rice", 0) > 0
+            yours = ownership.owns(world, citizen, structure.id)
+            keywords = STRUCTURE_KEYWORDS[structure.kind] | ({"hung"} if laden else set())
+            label = YOUR_RICE_RACK if yours else structure.label
+            spot = structure.spot(seat)
+            add(label, keywords, spot, "structure", structure.id, at=structure.centre, burning=LADEN if laden else None)
         else:
             water: Literal["fresh"] | None = "fresh" if structure.kind == "well" else None
             pit_fire = state.fires.get(structure.id)
@@ -482,6 +492,8 @@ def match_thing(core: SimCore, citizen: Citizen, what: str) -> Thing | None:
         matches = fresh or matches
     exact = [thing for thing in matches if normalize(thing.label) == query]  # "the fire pit", not any fire
     matches = exact or matches
+    if {"your", "my"} & set(what.lower().split()):  # "your rice rack": yours before anyone else's
+        matches = [thing for thing in matches if thing.label.startswith("your ")] or matches
     # the best fit first ("the cold fire basket" over a burning one), then the nearest
     return (
         min(matches, key=lambda thing: (-len(thing.keywords & words), thing.distance_m, thing.ref)) if matches else None
@@ -914,9 +926,9 @@ class Sight:
 def _group_key(core: SimCore, citizen: Citizen, thing: Thing) -> str:
     if thing.kind == "structure":
         structure = core.world.structures[thing.ref]
-        if structure.id == citizen.home or structure.label.startswith("the "):  # your home, named ones: on their own
+        if structure.id == citizen.home or thing.label.startswith(("the ", "your ")):  # yours, named ones: on their own
             return thing.ref
-        return f"structure:{structure.kind}"
+        return f"structure:{structure.kind}:{thing.state or ''}"  # a bare rack apart from one hung with rice
     if thing.kind == "ground":
         return f"ground:{thing.item}"
     if thing.kind == "fire":
@@ -942,12 +954,14 @@ def _kind(core: SimCore, citizen: Citizen, thing: Thing) -> ThingKind:
 
 
 def _tier(core: SimCore, thing: Thing, kind: ThingKind) -> int:
-    """How important it is to mention; food on the ground and the storehouses count as food."""
+    """How important it is to mention; food on the ground, the storehouses and the rice racks count as food."""
     if thing.kind == "ground" and thing.item is not None and ITEMS[thing.item].food > 0:
         return TIERS["food"]
     if thing.kind == "node":  # a node that feeds you is told like food, the rest like materials
         return TIERS["food"] if thing.item in FOOD_PLANTS else TIERS["material"]
     if thing.kind == "structure" and core.world.structures[thing.ref].kind == "storehouse":
+        return TIERS["food"]
+    if thing.kind == "structure" and thing.label in (RICE_RACK, YOUR_RICE_RACK):  # where the day's rice dries
         return TIERS["food"]
     return TIERS[kind]
 
@@ -996,9 +1010,9 @@ def words(seen: Seen) -> int:
 
 def fit_to_budget(people: list[Seen], animals: list[Seen], found: list[Sight]) -> list[Seen]:
     """The things to tell, most important first. People and animals are always told and spend the budget first;
-    every water, your home, the nearest food and shelter and every fire within a few paces are always told; the
-    rest follow by importance,
-    nearest first, while SIGHT_WORDS last (the first that doesn't fit ends the list)."""
+    every water, your home and rice rack, the nearest food and shelter and every fire within a few paces are always
+    told; the rest follow by importance, nearest first, while SIGHT_WORDS last (the first that doesn't fit ends the
+    list)."""
     ranked = sorted(found, key=lambda sight: (sight.tier, sight.distance_m, sight.seen.label))
     must = {
         index
@@ -1006,6 +1020,7 @@ def fit_to_budget(people: list[Seen], animals: list[Seen], found: list[Sight]) -
         if sight.tier == TIERS["water"]
         or (sight.tier < IMPORTANT and (index == 0 or ranked[index - 1].tier != sight.tier))
         or (sight.seen.kind == "fire" and sight.distance_m < FIRE_TOLD_M)
+        or sight.seen.label == YOUR_RICE_RACK  # where your household's rice dries is always in mind
     }
     spare = SIGHT_WORDS - sum(words(seen) for seen in [*people, *animals]) - sum(words(ranked[i].seen) for i in must)
     chosen = set(must)
