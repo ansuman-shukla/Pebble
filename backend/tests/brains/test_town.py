@@ -696,3 +696,19 @@ def test_in_the_town_the_farmers_rice_dries_on_their_own_racks_overnight_and_com
         night = first + (tick - first) // DAY_MINUTES * DAY_MINUTES + DAY_MINUTES
         assert midnights[(night - first) // DAY_MINUTES][rack] > 4, (tick, rack)  # the racks start with 4
         assert any(night < when < night + 12 * 60 and where == rack for when, where in off), (tick, rack)
+
+
+def test_on_the_rack_beat_the_watchman_walks_up_to_the_racks_looks_them_over_and_goes_back_to_the_gate() -> None:
+    notes: dict[str, JsonValue] = {"beat": "racks"}
+    near = Seen(label="two rice racks", where="the nearest a few paces to the south", nearness="a few paces")
+    ctx, api = _ctx(_at_racks("night", (), near), GORO, Recorder(notes), phase="night")
+    [walk] = town.night_watch(ctx)
+    walk.start()
+    assert walk.name == "go to a rice rack" and ("walk_to_thing", "rack") in api.calls  # night sight is short
+    beside = near.model_copy(update={"nearness": "right beside you"})
+    ctx, api = _ctx(_at_racks("night", (), beside), GORO, Recorder(notes), phase="night")
+    [look] = town.night_watch(ctx)
+    look.start()
+    assert look.name == "look over the racks" and ("wait", 15) in api.calls and notes["beat"] == "gate"
+    ctx, _ = _ctx(_at_racks("night", (), beside), GORO, Recorder(notes), phase="night")
+    assert [o.name for o in town.night_watch(ctx)] == ["go to the west gate"]
