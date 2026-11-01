@@ -257,6 +257,23 @@ def test_the_ledger_tells_coins_wealth_flows_and_debts_at_midnight(new_sim: Call
     assert again["hana"].income_24h == 0  # counted afresh after each ledger
 
 
+def test_someone_walking_east_across_their_midnight_still_gets_the_day_s_ledger(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    sim = _scene(new_sim, ("genzo", "farmhouse-1", "farmhouse-1"))
+    sim.drain()
+    tax.ledger_at_midnight(sim.core, lambda _unit: True)
+    assert [e.actor_id for e in sim.drain() if isinstance(e.payload, Ledger)] == ["genzo"]
+    sim.state.tick += (
+        DAY_MINUTES + 5
+    )  # walking east, their next midnight fell on no tick of theirs
+    tax.ledger_at_midnight(sim.core, lambda _unit: False)
+    assert [e.actor_id for e in sim.drain() if isinstance(e.payload, Ledger)] == ["genzo"]
+    sim.state.tick += 60
+    tax.ledger_at_midnight(sim.core, lambda _unit: False)  # and only once
+    assert not [e for e in sim.drain() if isinstance(e.payload, Ledger)]
+
+
 def test_the_tax_block_round_trips_a_snapshot(new_sim: Callable[..., Simulation]) -> None:
     sim = _scene(new_sim, ("genzo", "farmhouse-1", "farmhouse-1"), genzo={"inventory": {"coins": 3}})
     tax.assess_harvest(sim.core, sim.citizen("genzo"), 12)
