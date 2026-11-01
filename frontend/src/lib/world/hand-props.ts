@@ -187,12 +187,34 @@ export function holderOf(character: Object3D, at: HeldProp['at']): Object3D {
 }
 
 /**
- * Hides what the look itself carries in a hand (a cane, a coin pouch, a spear) while it holds a prop in that hand,
- * and shows it again otherwise; call after `showWorn` (which shows or hides everything in hand by posture).
+ * What the look itself carries in its `hands` (a spear, a cane, a coin pouch: the garments under the root-level
+ * `attach-*hand` groups), not the props held for a motion.
  */
-export function freeHand(character: Object3D, held: HeldProp | null) {
-  if (!held || held.at === 'back') return;
-  const name = `attach-${held.at}hand`;
-  for (const worn of character.getObjectsByProperty('name', name))
-    if (!(worn.parent as Bone | null)?.isBone) worn.visible = false;
+export function wornInHand(
+  character: Object3D,
+  hands: readonly HeldProp['at'][] = ['left', 'right'],
+): Object3D[] {
+  return hands.flatMap((hand) =>
+    character
+      .getObjectsByProperty('name', `attach-${hand}hand`)
+      .filter((worn) => !(worn.parent as Bone | null)?.isBone),
+  );
+}
+
+/**
+ * Hides what the look itself carries in a hand (a cane, a coin pouch, a spear) while it holds a prop in that hand,
+ * or in both hands while it `stow`s them for work, and shows it again otherwise; call after `showWorn` (which shows
+ * or hides everything in hand by posture).
+ */
+export function freeHand(
+  character: Object3D,
+  held: HeldProp | null,
+  stow = false,
+) {
+  const hands = stow
+    ? (['left', 'right'] as const)
+    : held && held.at !== 'back'
+      ? [held.at]
+      : [];
+  for (const worn of wornInHand(character, hands)) worn.visible = false;
 }

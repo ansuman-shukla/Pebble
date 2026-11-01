@@ -84,12 +84,12 @@ export type NpcClip =
   | 'Walk formal'
   | 'Run'
   | 'Sitting'
-  | 'Sitting talking'
   | 'Sit down'
   | 'Stand up'
   | 'Opening'
   | 'Crouch'
   | 'Planting'
+  | 'Harvesting'
   | 'Pick up'
   | 'Chopping wood'
   | 'Holding torch'
@@ -134,18 +134,10 @@ export type BodyPose =
 
 /**
  * A procedural motion layered over the clip (`poses.ts`): the hunter's creep, a bow in prayer with the hands together,
- * a hand reaching to the ground and back (picking, tending a fire, knapping) or up into a bush (picking berries) or
- * swirling a pan, both hands at work ahead passing the shuttle (weaving seated), a gesture.
+ * a hand reaching to the ground and back (picking, tending a fire, knapping) or swirling a pan, both hands at work ahead passing the shuttle (weaving seated), a gesture.
  */
 export type Layer =
-  | 'stalk'
-  | 'laden'
-  | 'pray'
-  | 'reach'
-  | 'reach_high'
-  | 'swirl'
-  | 'weave'
-  | GestureKind;
+  'stalk' | 'laden' | 'pray' | 'reach' | 'swirl' | 'weave' | GestureKind;
 
 /** Things held that the asset pack has no model for, drawn from code (D133's stand-ins). */
 type MadeProp = 'pan' | 'stone' | 'cup' | 'food' | 'pick' | 'rod';
@@ -169,6 +161,11 @@ export interface MotionLook {
   seat: number | null;
   prop: HeldProp | null;
   layer: Layer | null;
+  /**
+   * Whether the look's own things in hand (a hunter's spear, a guard's yari, a cane) are put away: work with both
+   * hands (picking, digging, farming, hammering) puts them down; walking, talking or keeping watch keeps them.
+   */
+  stow: boolean;
 }
 
 /** Who a body is, for the motions that differ by person (a smith's craft is not a toolmaker's). */
@@ -218,26 +215,31 @@ const TABLE: Record<Motion, Entry> = {
   sit_ground: { clip: 'Sitting', pose: 'sitting' },
   lie: { clip: 'Idle', pose: 'sleeping', still: true },
   inside: { clip: 'Opening', pose: 'inside' },
-  gather_low: { clip: 'Crouch', prop: left('basket'), layer: 'reach' },
-  // berries are picked standing, the right hand reaching up into the bush
-  gather_high: { clip: 'Idle', prop: left('basket'), layer: 'reach_high' },
-  pick_up: { clip: 'Pick up' },
-  chop: { clip: 'Chopping wood', prop: right('axe') },
-  mine: { clip: 'Chopping wood', pace: 0.8, prop: right('pick') },
-  pan: { clip: 'Crouch', prop: right('pan'), layer: 'swirl' },
-  farm: { clip: 'Planting', prop: right('hoe') },
+  gather_low: {
+    clip: 'Crouch',
+    prop: left('basket'),
+    layer: 'reach',
+    stow: true,
+  },
+  // berries and nuts are picked bent over the bush, both hands in it (a bush stands about waist high)
+  gather_high: { clip: 'Harvesting', prop: left('basket'), stow: true },
+  pick_up: { clip: 'Pick up', stow: true },
+  chop: { clip: 'Chopping wood', prop: right('axe'), stow: true },
+  mine: { clip: 'Chopping wood', pace: 0.8, prop: right('pick'), stow: true },
+  pan: { clip: 'Crouch', prop: right('pan'), layer: 'swirl', stow: true },
+  farm: { clip: 'Planting', prop: right('hoe'), stow: true },
   fish: { clip: 'Holding torch', prop: right('rod') },
-  craft: { clip: 'Fixing' },
+  craft: { clip: 'Fixing', stow: true },
   eat: { clip: 'Eating', prop: right('food') },
   drink: { clip: 'Drinking', prop: right('cup') },
   talk: { clip: 'Talking' },
   trade: { clip: 'Interact', prop: left('coin_pouch') },
   gesture: { clip: 'Idle', layer: 'wave' },
   attack: { clip: 'Punch' },
-  tend: { clip: 'Crouch', layer: 'reach' },
+  tend: { clip: 'Crouch', layer: 'reach', stow: true },
   // kneeling upright, bowing a little with the hands together before the chest
   pray: { clip: 'Idle', pose: 'kneeling', layer: 'pray' },
-  ring_bell: { clip: 'Pushing' },
+  ring_bell: { clip: 'Pushing', stow: true },
 };
 
 /**
@@ -263,11 +265,11 @@ const REST_CLIPS: Record<BodyPose, NpcClip> = {
   inside: 'Opening',
 };
 /**
- * Work that goes on seated (10 §4.5): the lord holding court talks from his seat, the weaver at the loom's stool
- * passes the shuttle; any other motion seated rests with the pose's plain clip.
+ * Work that goes on seated (10 §4.5): the weaver at the loom's stool passes the shuttle; any other motion seated
+ * rests with the pose's plain clip. The lord holding court (`talk` on his seat) sits upright and waits: the feed's
+ * `talk` there is his task, said whether or not anyone stands before him, so his seat shows no talking to nobody.
  */
 const SEATED: Partial<Record<Motion, Entry>> = {
-  talk: { clip: 'Sitting talking' },
   craft: { clip: 'Sitting', layer: 'weave' },
 };
 
@@ -277,8 +279,8 @@ const SEATED: Partial<Record<Motion, Entry>> = {
  * anvil, the merchant talks a sale, a spear-bearer thrusts instead of punching (and keeps its own spear), the dead
  * lie straight, a gesture names its kind. The feed's `posture` says where the body rests (on a seat at the slot's
  * height, on the ground, lying, inside): a motion the table rests some other way rests the feed's way, with that
- * pose's plain clip, unless it is work that goes on seated (the weaver at the loom weaves on its stool, the lord
- * talks from his seat).
+ * pose's plain clip, unless it is work that goes on seated (the weaver at the loom weaves on its stool). Work with
+ * both hands stows what the look itself holds (`stow`).
  */
 export function motionLook(
   motion: Motion,
@@ -341,6 +343,7 @@ export function motionLook(
     seat: pose === 'seated' ? (options.seat ?? SEAT_HEIGHT) : null,
     prop: entry.prop ?? null,
     layer: entry.layer ?? null,
+    stow: entry.stow ?? false,
   };
 }
 

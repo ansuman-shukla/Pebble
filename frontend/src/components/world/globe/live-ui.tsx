@@ -256,6 +256,7 @@ export function NpcHooks({
         node.dataset.npcMotion = view.motion;
         node.dataset.npcProp = view.prop;
         node.dataset.npcLayer = view.layer;
+        node.dataset.npcStowed = String(view.stowed);
         node.dataset.npcHidden = String(view.hidden);
         node.dataset.npcClip = view.clip;
         node.dataset.npcLoaded = String(view.loaded);

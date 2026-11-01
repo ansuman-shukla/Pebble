@@ -141,10 +141,7 @@ function envelope(t: number, length: number, edge: number) {
 
 /** How long one gesture lasts (s) before it repeats, and the pause after it. */
 export const GESTURE_LENGTH: Record<
-  Exclude<
-    Layer,
-    'stalk' | 'laden' | 'pray' | 'reach' | 'reach_high' | 'swirl' | 'weave'
-  >,
+  Exclude<Layer, 'stalk' | 'laden' | 'pray' | 'reach' | 'swirl' | 'weave'>,
   number
 > = {
   wave: 2.2,
@@ -219,10 +216,9 @@ function bendKnees(rig: Rig, amount: number) {
   rig.hips.updateMatrixWorld(true);
 }
 
-/** A hand reaching down to the ground ahead and back up, every REACH_S seconds (or up ahead, into a bush). */
+/** A hand reaching down to the ground ahead and back up, every REACH_S seconds. */
 const REACH_S = 1.7;
 const REACH = new Vector3(-0.15, -0.75, 0.65);
-const REACH_HIGH = new Vector3(-0.2, 0.45, 0.85);
 /** Praying, the hands meet this far ahead of the chest and above it (m, the character's frame), this far apart. */
 const PRAY_HANDS = new Vector3(0, 0.02, 0.26);
 const PALM_GAP = 0.03;
@@ -276,13 +272,11 @@ export function layer(
       turnAbout(rig, rig.head, X, -15 * DEG);
       bendKnees(rig, 22 * DEG);
       return 0;
-    case 'reach':
-    case 'reach_high': {
+    case 'reach': {
       const weight = Math.sin((t / REACH_S) * Math.PI) ** 2;
       const { arm, fore, hand } = rig.arms.right;
-      const to = kind === 'reach' ? REACH : REACH_HIGH;
-      aimAt(rig, arm, fore, to, 0.7 * weight);
-      aimAt(rig, fore, hand, to, 0.8 * weight);
+      aimAt(rig, arm, fore, REACH, 0.7 * weight);
+      aimAt(rig, fore, hand, REACH, 0.8 * weight);
       return 0;
     }
     case 'swirl': {
