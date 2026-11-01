@@ -172,7 +172,7 @@ def reach_point(core: SimCore, store_id: str) -> Vec3:
     it), else where the store stands."""
     world = core.world
     structure = world.structures.get(store_id)
-    if structure is not None:
+    if structure is not None and structure.kind == GRANARY_KIND:  # a rack is a structure too, reached where it stands
         return structure.door
     home = world.structures.get(store_id.removesuffix(CHEST)) if store_id.endswith(CHEST) else None
     return home.door if home is not None else store_spot(world, store_id)
