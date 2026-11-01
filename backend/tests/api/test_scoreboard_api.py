@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.engine import EngineLoop
 from app.sim.society import SOCIETY
-from app.sim.tax import chest_share, wealth_mon
+from app.sim.tax import chest_share, household_goods, wealth_mon
 from tests.api.spectator import API
 
 
@@ -23,7 +23,8 @@ def test_the_board_reads_the_run_now_and_at_a_past_tick(client: TestClient, cast
     residents = {"castle-keep": 2, "farmhouse-1": 3}  # the lord and his samurai; Genzo's household
     for row in board["citizens"]:
         citizen = state.citizens[row["id"]]
-        share = chest_share(state.stores.get(f"{citizen.home}-chest", {}), residents.get(citizen.home or "", 1))
+        goods = household_goods(state.stores, citizen.home) if citizen.home else {}  # its chest and field racks
+        share = chest_share(goods, residents.get(citizen.home or "", 1))
         assert row["coins"] == citizen.inventory.get("coins", 0)
         assert row["wealth_mon"] == wealth_mon(citizen.inventory, citizen.region, share)
         assert (row["rank"], row["titles"]) == (society.members[citizen.id].rank, society.members[citizen.id].titles)

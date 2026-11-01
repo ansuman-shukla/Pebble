@@ -178,6 +178,12 @@ def reach_point(core: SimCore, store_id: str) -> Vec3:
     return home.door if home is not None else store_spot(world, store_id)
 
 
+def field_racks(home: str) -> tuple[str, ...]:
+    """A farm household's hasa racks (the rice drying on them is still theirs)."""
+    kinds = _store_kinds()
+    return tuple(store for store, owner in PLACED_OWNERS.items() if owner == home and kinds[store] == "drying_rack")
+
+
 def store_words(store_id: str) -> str:
     """What the citizen calls a store ("the chest", "the storehouse")."""
     return STORE_WORDS.get(_store_kinds().get(store_id, ""), "the store")

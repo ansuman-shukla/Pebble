@@ -241,6 +241,15 @@ def chest_share(chest: Mapping[str, int], residents: int) -> float:
     return sum(value_of(item, "town") * count for item, count in chest.items()) / residents
 
 
+def household_goods(stores: Mapping[str, Mapping[str, int]], home: str) -> dict[str, int]:
+    """What a household has put by: its chest and the rice drying on its field racks overnight."""
+    goods = dict(stores.get(home + CHEST, {}))
+    for rack in ownership.field_racks(home):
+        for item, count in stores.get(rack, {}).items():
+            goods[item] = goods.get(item, 0) + count
+    return goods
+
+
 def count_coins(core: SimCore, event: EventDraft) -> None:
     """Event hook: coins moving into or out of a citizen's inventory count as their income or spending (not when they
     come from or go to their own household's store)."""
@@ -257,12 +266,13 @@ def count_coins(core: SimCore, event: EventDraft) -> None:
 
 
 def _chest_shares(core: SimCore) -> dict[str, float]:
-    """Household -> each living resident's equal share of the town value of its chest."""
+    """Household -> each living resident's equal share of the town value of its chest and field racks."""
     residents: dict[str, int] = {}
     for citizen in core.living():
         if citizen.home is not None:
             residents[citizen.home] = residents.get(citizen.home, 0) + 1
-    return {home: chest_share(core.state.stores.get(home + CHEST, {}), count) for home, count in residents.items()}
+    stores = core.state.stores
+    return {home: chest_share(household_goods(stores, home), count) for home, count in residents.items()}
 
 
 def _food(citizen: Citizen) -> list[str]:

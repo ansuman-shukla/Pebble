@@ -257,6 +257,21 @@ def test_the_ledger_tells_coins_wealth_flows_and_debts_at_midnight(new_sim: Call
     assert again["hana"].income_24h == 0  # counted afresh after each ledger
 
 
+def test_rice_drying_on_the_household_s_rack_overnight_still_counts_in_its_wealth(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    sim = _scene(new_sim, ("tokuji", "farmhouse-2", "farmhouse-2"))
+    for rack in ("field-rack-1", "field-rack-2", "farm-rack"):
+        sim.state.stores[rack] = {}
+    sim.stock_store("field-rack-1", "rice", 10)  # the neighbour's: none of his
+    sim.stock_store("field-rack-2", "rice", 6)  # 12 mon
+    sim.stock_store("farm-rack", "rice", 1)  # his household's other rack, by the house: 2 mon
+    sim.drain()
+    tax.ledger_at_midnight(sim.core, lambda _unit: True)
+    [ledger] = [e.payload for e in sim.drain() if isinstance(e.payload, Ledger)]
+    assert ledger.wealth_mon == 14
+
+
 @pytest.mark.parametrize("site", ["town", "band_a_camp", "band_b_camp"])  # clocks up to hours off the town's
 def test_someone_walking_east_across_their_midnight_still_gets_the_day_s_ledger(
     new_sim: Callable[..., Simulation], site: str
