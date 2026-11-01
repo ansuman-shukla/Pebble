@@ -5,22 +5,42 @@ import { Vector3 } from 'three';
 import type { NpcViews } from './globe-npcs';
 import { Bar } from '@/components/spectator/charts';
 import { Button } from '@/components/ui/button';
-import { useCitizen } from '@/hooks/use-spectator';
+import { useCitizen, useScoreboard } from '@/hooks/use-spectator';
+import type { CitizenScore } from '@/lib/client/types.gen';
 import type { LiveCitizen } from '@/lib/live/live-contract';
 import { activityWords } from '@/lib/live/npc-activity';
-import { NEED_COLORS, REGION_NAMES } from '@/lib/spectator/words';
+import { NEED_COLORS, REGION_NAMES, titled } from '@/lib/spectator/words';
 
 /*
- * The inspector (10-world-v1 §5.4): who the selected citizen is and what they are doing now, from the live feed,
- * plus their needs, what they carry, home, people they know and their last events from the citizen profile.
- * Why (goal, driver), coins, standing and ambition join as the feed and the scoreboard carry them. Also the
- * scene-side picker that turns a click on a body into a selection.
+ * The inspector (10-world-v1 §5.4): who the selected citizen is, what they are doing now and why (goal and driver),
+ * their purse, rank and standing, from the live feed; plus their wealth, standing word, ambition and its progress,
+ * needs, what they carry, home, warmest bonds and last events from the citizen profile and their scoreboard row
+ * (spectators only, D95). Also the scene-side picker that turns a click on a body into a selection.
  */
 
 /** How many of the citizen's own events show. */
 const LAST_EVENTS = 6;
-/** How many known people show (the bonds, once they are tracked). */
+/** How many known people show when they have no warm bond yet. */
 const KNOWN = 3;
+/** How a driver reads after the goal ("Tend the rice fields, out of duty"). */
+const DRIVER_WORDS: Record<NonNullable<LiveCitizen['driver']>, string> = {
+  hunger: 'hungry',
+  thirst: 'thirsty',
+  rest: 'to rest',
+  danger: 'danger',
+  duty: 'duty',
+  ambition: 'ambition',
+  social: 'company',
+  night: 'nightfall',
+};
+/** Rank in words (10 §3.2: 1 child .. 5 lord). */
+const RANK_WORDS: Record<number, string> = {
+  1: 'child',
+  2: 'commoner',
+  3: 'notable',
+  4: 'high',
+  5: 'lord',
+};
 /** A click this close (px) to a citizen's drawn chest picks them. */
 const PICK_PX = 28;
 /** The picked point: this far above the feet (m). */
@@ -88,9 +108,91 @@ function Section({
   );
 }
 
-/** The profile half: needs, carrying, home, people known, last events (the backend's citizen profile). */
-function Details({ id, at }: { id: string; at: number | null }) {
+/** What they are after and why, from the feed (their latest goal). */
+function Why({ citizen }: { citizen: LiveCitizen }) {
+  return (
+    <Section title="Why">
+      <p data-testid="inspector-why">
+        {citizen.goal ? (
+          <>
+            {citizen.goal}
+            {citizen.driver && (
+              <span className="text-muted-foreground">
+                {' '}
+                · {DRIVER_WORDS[citizen.driver]}
+              </span>
+            )}
+          </>
+        ) : (
+          <span className="text-muted-foreground">not said</span>
+        )}
+      </p>
+    </Section>
+  );
+}
+
+/** Purse, rank and standing from the feed; worth and the standing's word from the scoreboard row once loaded. */
+function Status({
+  citizen,
+  score,
+}: {
+  citizen: LiveCitizen;
+  score: CitizenScore | undefined;
+}) {
+  const rank = citizen.rank ?? score?.rank;
+  return (
+    <Section title="Purse and standing">
+      <p data-testid="inspector-status">
+        {citizen.coins} {citizen.coins === 1 ? 'coin' : 'coins'}
+        {score && (
+          <span className="text-muted-foreground">
+            {' '}
+            · worth {score.wealth_mon} mon
+          </span>
+        )}
+      </p>
+      <p>
+        {rank !== null && rank !== undefined && (
+          <>
+            rank {rank} ({RANK_WORDS[rank] ?? '?'})
+          </>
+        )}
+        {citizen.standing !== null && (
+          <span className="text-muted-foreground">
+            {' '}
+            · {score?.standing_word || 'standing'} ({citizen.standing})
+          </span>
+        )}
+      </p>
+    </Section>
+  );
+}
+
+/** Their ambition and how far the world says they are (the scoreboard row). */
+function Ambition({ score }: { score: CitizenScore | undefined }) {
+  const ambition = score?.ambition;
+  if (!ambition) return null;
+  return (
+    <Section title="Ambition">
+      <div data-testid="inspector-ambition" className="flex flex-col gap-1">
+        <Bar
+          label={ambition.text}
+          value={ambition.done ? 'done' : `${ambition.progress}%`}
+          fraction={ambition.progress / 100}
+          color={ambition.done ? '#16a34a' : '#7c3aed'}
+        />
+      </div>
+    </Section>
+  );
+}
+
+/** The profile half: worth, ambition, needs, carrying, home, bonds, last events (the backend's citizen profile). */
+function Details({ citizen, at }: { citizen: LiveCitizen; at: number | null }) {
+  const { id } = citizen;
   const { data: profile, error } = useCitizen(id, at);
+  // the row comes from the scoreboard (refreshed every few seconds), so the profile, polled every tick, stays cheap
+  const { data: board } = useScoreboard(at);
+  const score = board?.citizens.find((row) => row.id === id);
   if (error)
     return (
       <p className="text-muted-foreground text-xs">
@@ -102,8 +204,11 @@ function Details({ id, at }: { id: string; at: number | null }) {
   const events = profile.recent
     .filter((entry) => entry.type !== 'tick_summary')
     .slice(0, LAST_EVENTS);
+  const bonds = score?.bonds_top3 ?? [];
   return (
     <>
+      <Status citizen={citizen} score={score} />
+      <Ambition score={score} />
       {profile.alive && (
         <Section title="Needs">
           <div className="flex flex-col gap-1" data-testid="inspector-needs">
@@ -129,7 +234,14 @@ function Details({ id, at }: { id: string; at: number | null }) {
       <Section title="Home">
         <p>{profile.home?.name ?? 'none'}</p>
       </Section>
-      {profile.known_people.length > 0 && (
+      {bonds.length > 0 && (
+        <Section title="Closest">
+          <p data-testid="inspector-bonds">
+            {bonds.map((bond) => bond.name).join(', ')}
+          </p>
+        </Section>
+      )}
+      {bonds.length === 0 && profile.known_people.length > 0 && (
         <Section title="Knows">
           <p>
             {profile.known_people
@@ -193,7 +305,7 @@ export function Inspector({
     >
       <header className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-semibold">{citizen.name}</h2>
+          <h2 className="text-sm font-semibold">{titled(citizen)}</h2>
           <p className="text-muted-foreground">
             {citizen.role} · {REGION_NAMES[citizen.region]}
           </p>
@@ -218,7 +330,12 @@ export function Inspector({
           )}
         </p>
       </Section>
-      {details && <Details id={citizen.id} at={at} />}
+      <Why citizen={citizen} />
+      {details ? (
+        <Details citizen={citizen} at={at} />
+      ) : (
+        <Status citizen={citizen} score={undefined} />
+      )}
       <footer className="flex gap-2">
         <Button
           size="sm"

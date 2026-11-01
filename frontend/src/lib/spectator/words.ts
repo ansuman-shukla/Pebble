@@ -33,3 +33,13 @@ export const NEED_COLORS: Record<Need, string> = {
   energy: '#65a30d',
   health: '#dc2626',
 };
+
+/** The name with their first title before it ("Lord Masanori", 10 §5.4), unless the name already says it. */
+export function titled(citizen: { name: string; titles: string[] }): string {
+  const [title] = citizen.titles;
+  if (!title) return citizen.name;
+  const word = `${title[0].toUpperCase()}${title.slice(1)}`;
+  return citizen.name.startsWith(`${word} `)
+    ? citizen.name
+    : `${word} ${citizen.name}`;
+}
