@@ -70,16 +70,20 @@ def test_a_brain_sets_a_goal_when_its_aim_changes_and_only_then(new_sim: Callabl
 
 
 def test_betters_are_bowed_to_and_everyone_else_waved_to() -> None:
-    town = known_titles([("Masanori", "lord of the castle"), ("Kenji", "samurai retainer"), ("Goro", "ashigaru")])
-    town += known_titles([("Fumiko", "merchant")])
+    town = known_titles([("Masanori", ["lord"]), ("Kenji", ["samurai"]), ("Goro", ["ashigaru"])])
+    town += known_titles([("Fumiko", [])])
     hana = BrainProfile("hana", "Hana", "the farmer's child", "town", "The castle town", titled=town)
     assert [name for name in ("Masanori", "Kenji", "Goro", "Fumiko") if hana.bows_to(name)] == ["Masanori", "Kenji"]
-    kenji = BrainProfile("kenji", "Kenji", "samurai retainer", "town", "The castle town", titled=town)
+    kenji = BrainProfile(
+        "kenji", "Kenji", "samurai retainer", "town", "The castle town", titled=town, titles=("samurai",)
+    )
     assert kenji.bows_to("Masanori") and not kenji.bows_to("Goro")
     assert not kenji.bows_to("Kenji")  # nor to a fellow samurai: the same rank
-    lord = BrainProfile("masanori", "Masanori", "lord of the castle", "town", "The castle town", titled=town)
+    lord = BrainProfile(
+        "masanori", "Masanori", "lord of the castle", "town", "The castle town", titled=town, titles=("lord",)
+    )
     assert not any(lord.bows_to(name) for name in ("Kenji", "Goro", "Fumiko"))
-    band = known_titles([("Ama", "band leader"), ("Bo", "toolmaker and hunter")])
+    band = known_titles([("Ama", ["leader"]), ("Bo", [])])
     lia = BrainProfile("lia", "Lia", "teen gatherer", "band_a", "Band A camp", titled=band)
     assert lia.bows_to("Ama") and not lia.bows_to("Bo")
     assert [hana.officer(name) for name in ("Masanori", "Goro", "Fumiko")] == [True, True, False]
@@ -92,7 +96,7 @@ def three(new_sim: Callable[..., Simulation]) -> tuple[Simulation, UtilityBrain]
     aiko = sim.add_citizen(make_spec("aiko", name="Aiko", at=ROAD, knows_people=["masanori", "bo"]))
     sim.add_citizen(make_spec("masanori", name="Masanori", at=(ROAD[0], ROAD[1] - 3), knows_people=["aiko"]))
     sim.add_citizen(make_spec("bo", name="Bo", at=(ROAD[0], ROAD[1] - 6), knows_people=["aiko"]))
-    titled = known_titles([("Masanori", "lord of the castle"), ("Bo", "rice farmer")])
+    titled = known_titles([("Masanori", ["lord"]), ("Bo", [])])
     brain = _brain(sim, aiko.id, "weaver", titled=titled)
     sim.drain()
     return sim, brain

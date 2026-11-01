@@ -15,7 +15,6 @@ the rules never fire.
 
 from pydantic import JsonValue
 
-from app.brains.profile import title_of
 from app.brains.routines import Context, Option
 from app.brains.senses import at_home, beside
 from app.world_api.facade import ActionHandle
@@ -30,6 +29,12 @@ def known_deed(person: Seen) -> str | None:
     regard = person.regard or ""
     start = regard.find("who ")
     return regard[start + len("who ") :] if start >= 0 else None
+
+
+def first_person(deed: str) -> str:
+    """A wrong done to the one who shouts it, as they shout it ("struck you" -> "struck me", "your chest" -> "my
+    chest"): the words a look gives are said to the looker."""
+    return " ".join({"you": "me", "your": "my"}.get(word, word) for word in deed.split(" "))
 
 
 def options(ctx: Context) -> list[Option]:
@@ -56,7 +61,7 @@ def _culprit(ctx: Context) -> list[Option]:
 
 def _witness(ctx: Context) -> list[Option]:
     """Shout out a wrong seen in someone (once each), then bring it to an officer; the accusation waits for one."""
-    if title_of(ctx.profile.role) is not None:
+    if ctx.profile.titles:
         return []  # officers seize the wrongdoer themselves
     notes = ctx.notes
     known = notes.setdefault("deeds", [])  # [who, deed] seen and shouted out
@@ -71,7 +76,7 @@ def _witness(ctx: Context) -> list[Option]:
             def shout(entry: list[JsonValue] = seen) -> ActionHandle:
                 known.append(entry)
                 pending.append(entry)
-                ctx.api.say(f"{entry[0]} {entry[1]}!", "shout")
+                ctx.api.say(f"{entry[0]} {first_person(str(entry[1]))}!", "shout")
                 return ctx.api.wait(1)
 
             return [Option(WITNESS, f"shout about {person.label}", shout, f"Make known what {person.label} did")]

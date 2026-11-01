@@ -15,7 +15,7 @@ from typing import cast
 from pydantic import JsonValue
 
 from app.sim import custody, slots
-from app.sim.acting import VERB, begin, settled
+from app.sim.acting import VERB, begin, capital, settled
 from app.sim.clock import SECONDS_PER_TICK
 from app.sim.core import WALK_AHEAD_TICKS, SimCore, Stride, TimedPoint
 from app.sim.destinations import beside, resolve
@@ -114,6 +114,9 @@ def advance_walk(core: SimCore, citizen: Citizen, walk: ActionState) -> None:
             return
         if distance <= ARRIVE_M:
             beside(core, citizen, walk, person)
+            return
+        if walk.kind == "follow" and person.body.asleep:  # stopped for good, maybe behind a door: no waiting there
+            core.end_action(citizen, "done", f"{capital(walk.destination)} lies down to sleep.")
             return
         if walk.goal is None or core.distance_m(person.position, walk.goal) > FOLLOW_REPLAN_M:
             route = core.planner.plan(citizen.position, person.position, citizen.cell)

@@ -41,6 +41,7 @@ FIELD_DUES = 6  # mon a day for each paddy a farm household farms
 PADDIES: Mapping[str, int] = {"farmhouse-1": 4, "farmhouse-2": 2}  # farm household -> paddies (§1.4)
 NO_DUES = frozenset({KEEP, "temple-hall"})
 COURT_DAY = 7  # dues still owed when it ends (at the household's local midnight) are in arrears
+LEDGER_GAP = DAY_MINUTES // 2  # ticks between one citizen's ledgers at the least
 
 
 @dataclass
@@ -58,6 +59,7 @@ class Books:
     accounts: dict[str, Account] = field(default_factory=dict)  # household -> account
     income: dict[str, int] = field(default_factory=dict)  # citizen -> coins received since their last ledger
     spent: dict[str, int] = field(default_factory=dict)  # citizen -> coins paid out since their last ledger
+    ledgered: dict[str, int] = field(default_factory=dict)  # citizen -> tick of their last ledger
 
 
 _BLOCK = TypeAdapter(Books)
@@ -194,12 +196,15 @@ def _local_day_ended(core: SimCore, unit: Vec3) -> int:
 
 
 def ledger_at_midnight(core: SimCore, now: LocalTest) -> None:
-    """Midnight hook: every living citizen whose local midnight it is gets their `ledger` for the day."""
+    """Midnight hook: every living citizen whose local midnight it is gets their `ledger` for the day, once: someone
+    walking west across their midnight (a few minutes a hundred metres) meets it again."""
     books = TAX.of(core.state)
     chests = _chest_shares(core)
     for citizen in core.living():
-        if not now(citizen.position):
+        last = books.ledgered.get(citizen.id)
+        if not now(citizen.position) or (last is not None and core.state.tick - last < LEDGER_GAP):
             continue
+        books.ledgered[citizen.id] = core.state.tick
         owed = books.accounts.get(citizen.home or "", Account())
         payload = Ledger(
             coins=citizen.inventory.get("coins", 0),

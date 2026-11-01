@@ -13,9 +13,8 @@ from scripts.checks.base import Check, Outcome
 
 REACH_M = 3.2  # the most a worker may stand from the spot (and a gatherer from the node) they work at
 NODE_ACTIONS = frozenset({"gather", "fish"})
-# the tuned paddies' harvest (D152: 78 rice, +65 a day's tending; 5-seed sweep 148-156 a day over days 4-14); the
-# bible's is 120 (six paddies × 60 ÷ a 3-day cycle, 10 §1.4): re-tune to it when BR1 removes the D156 rations
-RICE_A_DAY = 152.0
+# the bible's harvest: six paddies × 60 ÷ a 3-day cycle (10 §1.4; back from N1's tuned 152 with BR1, D180)
+RICE_A_DAY = 120.0
 RICE_BAND = 0.15
 RICE_DAYS = (4, 14)  # the balance is judged once the start's ripe paddies are in
 HOME_RING_M = 400.0
@@ -124,7 +123,7 @@ class Regrowing(Check):
 
 class Rice(Check):
     """Rice harvested from the paddies a game day over days 4-14: RICE_A_DAY ±15 % over all seeds together (the
-    tuned paddies of D152; the bible's balance of §1.4 is 120)."""
+    bible's balance of §1.4)."""
 
     name = "n1.rice"
 

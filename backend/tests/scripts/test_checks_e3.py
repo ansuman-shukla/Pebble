@@ -33,7 +33,12 @@ def test_sales_count_bought_and_sold_events_a_day(new_sim: Callable[..., Simulat
         9.0, True, "9.0/day a seed (≥ 9)"
     )
     assert {e3.Sales, e3.RicePrice, e3.Recipes} <= set(CHECKS)
-    assert {check.pending for check in e3.CHECKS} == {"BR1/BR2 trade and craft"}  # until the brains trade
+    # the town trades (BR1); the band recipes and the rice shock wait for BR2
+    assert {check.name: check.pending for check in e3.CHECKS} == {
+        "e3.sales": None,
+        "e3.rice_price": "BR2 raids on the racks: the shock",
+        "e3.recipes": "BR2 band crafts",
+    }
 
 
 def _rice(new_sim: Callable[..., Simulation]) -> tuple[Simulation, e3.RicePrice]:

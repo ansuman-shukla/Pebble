@@ -201,7 +201,7 @@ def test_the_snapshot_carries_every_node_that_differs_from_full(client: TestClie
         first = _receive(ws)
         assert first["type"] == "snapshot"
         assert [node["id"] for node in first["nodes"]] == ["paddy-1", "paddy-2", "paddy-3", "paddy-4"]  # growing
-        assert first["nodes"][2] == {"id": "paddy-3", "kind": "rice_paddy", "item": "rice", "cap": 78, "stock": 0,
+        assert first["nodes"][2] == {"id": "paddy-3", "kind": "rice_paddy", "item": "rice", "cap": 60, "stock": 0,
                                      "stage": "green"}  # fmt: skip
         nodes.change(loop.sim.core, bush, 5, None)
         loop.run_ticks(1, headless=True)

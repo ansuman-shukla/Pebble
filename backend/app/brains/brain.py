@@ -47,6 +47,7 @@ from app.brains.senses import (
     water_in_view,
     water_way,
 )
+from app.brains.town import TOWN_ROUTINES
 from app.core.rng import Rng
 from app.world_api.facade import ActionHandle, WorldApi
 from app.world_api.models import GestureKind, Pace, Perception
@@ -209,7 +210,8 @@ class UtilityBrain:
             if need is not None:
                 options.append(self.before_bed(need, needs, now))
         options += self.rest_options(p, needs, now, pace)
-        options += ROUTINES[self.profile.routine](ctx)
+        routine = TOWN_ROUTINES.get(self.profile.routine) or ROUTINES[self.profile.routine]
+        options += routine(ctx)
         return options
 
     def pace(self, p: Perception, needs: Needs) -> Pace:

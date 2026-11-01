@@ -161,12 +161,12 @@ kinds:
     words: {0: "a pool where gold once glinted", 1: "{noun}, a few glints left", 3: "{noun}"}
   rice_paddy:
     item: rice
-    cap: 78 # the bible's 60 + 30 % (D152: E2's granary feeds D156's temporary rations; back to 60 when BR1 removes them)
+    cap: 60 # the bible's (10 §1.4; D180: back from N1's 78 once BR1 removed D156's rations)
     take: [10, 10] # a sickle 15 (the paddies' own numbers live in app/sim/paddies.py)
     minutes: 20
     spots: 4
     paddy_spot_m: [3.0, 4.0]
-    start_growth: [0, 0, 50, 50, 100, 100] # paddy-1 ... paddy-6 (100 = ripe, 60 rice standing)
+    start_growth: [0, 0, 50, 50, 100, 100] # paddy-1 ... paddy-6 (100 = ripe, its cap of rice standing)
     one: a rice paddy
     many: rice paddies
     words: {seedlings: "{noun} of young seedlings", green: "{noun}, green and growing", gold: "{noun}, gold and ripe", stubble: "{noun}, harvested to stubble"}

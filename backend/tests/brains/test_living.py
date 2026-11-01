@@ -37,6 +37,7 @@ PROGRESS = frozenset({"walk_to", "gather", "eat", "drink", "work", "sleep"})
 DRAWN_M = 0.01  # a spectator draws every move from where the last one ended, to where the sim has them
 MAX_STALL_TICKS = 6 * 60  # awake, nobody stands about (only waiting or resting) longer than this
 STORE = "store-2"
+WATCHMAN = "goro"  # keeps the night watch, sleeps the morning after (BR1)
 
 
 @dataclass
@@ -70,12 +71,7 @@ class Life:
 @pytest.fixture(scope="module")
 def life(sim_world: SimWorld, planner: Planner) -> Life:
     sim = Simulation.new(sim_world, seed=SEED, planner=planner)
-    cast = load_citizens(CITIZENS)
-    for store_id, items in cast.stores.items():
-        for item, count in items.items():
-            sim.stock_store(store_id, item, count)
-    for spec in cast.citizens:
-        sim.add_citizen(spec)
+    sim.add_cast(load_citizens(CITIZENS))  # stores, household chests (the treasury too) and citizens, as a run starts
     brains = citizen_brains(sim, SEED)
     sim.drain()
     checks: list[Check] = [kind() for kind in br0.CHECKS]
@@ -151,7 +147,7 @@ def life(sim_world: SimWorld, planner: Planner) -> Life:
             if citizen.region != "town" and small_hours:
                 home = sim_world.structures[str(citizen.home)]
                 out.night[citizen.id].append((citizen.body.asleep, sim_world.distance_m(citizen.position, home.door)))
-            if small_hours and citizen.body.asleep:
+            if citizen.body.asleep and (small_hours or citizen.id == WATCHMAN):  # he sleeps by day
                 bed = held_slot(sim.core, citizen)
                 out.beds[f"{citizen.id}:{bed.kind if bed is not None else 'ground'}"] += 1
         for camp in ("band_a_camp:fire-pit", "band_b_camp:fire-pit"):
@@ -279,13 +275,13 @@ def test_town_folk_sleep_at_home_and_work_their_roles(life: Life) -> None:
 
 
 def test_the_farmers_rice_tax_fills_the_granary(life: Life) -> None:
-    """The granary gets 40 % of each harvest and feeds seven (10-world-v1 §2.6-2.7): it ends above its start and is
-    never drawn down more than 30. 5-seed sweep (N1's tuned paddies, D152, 10 days): +37, +78, +30, +75, +74, never
-    below the start. The bar asks for no more while D156's rations for four households (~63 a day out against ~48-60
-    of tax in) last: raise it again when BR1 removes them (the stall feeds those households)."""
+    """The granary gets 40 % of each harvest and feeds the keep and the temple (10-world-v1 §2.6-2.7), and the lord
+    sells it at the stall only while rice is dear or fair: it ends 10 days more than 50 above its start and is never
+    drawn down more than 30. 5-seed sweep (BR1: the D156 rations gone, the bible's paddies, D180; seeds 20261028, 7,
+    1, 2, 3): +106, +131, +132, +125, +131, never below the start."""
     rice = life.rice
     assert len(rice) == DAYS + 1
-    assert rice[-1] > rice[0]
+    assert rice[-1] > rice[0] + 50
     assert min(rice) >= rice[0] - 30  # never drawn down
 
 

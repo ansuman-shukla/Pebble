@@ -6,14 +6,14 @@ from typing import Any, cast
 from pydantic import JsonValue
 
 from app.brains import justice
-from app.brains.profile import BrainProfile, known_titles
+from app.brains.profile import BrainProfile, Title, known_titles
 from app.brains.routines import Context, Option
 from app.brains.senses import Needs
 from app.world_api.facade import WorldApi
 from app.world_api.models import Nearness, Perception, Seen, SelfView
 
 THIEF = "who stole rice from the racks"
-TOWN_TITLES = known_titles([("Kenji", "samurai retainer"), ("Masanori", "lord of the castle")])
+TOWN_TITLES = known_titles([("Kenji", ["samurai"]), ("Masanori", ["lord"])])
 
 
 class Recorder:
@@ -42,9 +42,11 @@ def _look(*people: Seen, wanted: str | None = None, place: str = "at the market,
     )  # fmt: skip
 
 
-def _ctx(look: Perception, role: str = "rice farmer", api: Recorder | None = None) -> tuple[Context, Recorder]:
+def _ctx(
+    look: Perception, role: str = "rice farmer", api: Recorder | None = None, titles: tuple[Title, ...] = ()
+) -> tuple[Context, Recorder]:
     recorder = api or Recorder()
-    profile = BrainProfile("genzo", "Genzo", role, "town", "The castle town", titled=TOWN_TITLES)
+    profile = BrainProfile("genzo", "Genzo", role, "town", "The castle town", titled=TOWN_TITLES, titles=titles)
     ctx = Context(cast(WorldApi, recorder), profile, look, Needs(0, 0, 0), "day", lambda _p: False, lambda _n: 0)
     return ctx, recorder
 
@@ -95,8 +97,8 @@ def test_with_no_officer_about_the_accusation_waits_then_the_witness_walks_up_to
 
 def test_officers_seize_rather_than_accuse() -> None:
     look = _look(_person("Kaz", regard=THIEF), _person("Masanori"))
-    assert justice.options(_ctx(look, role="samurai retainer")[0]) == []
-    assert justice.options(_ctx(look, role="ashigaru of the night watch")[0]) == []
+    assert justice.options(_ctx(look, role="samurai retainer", titles=("samurai",))[0]) == []
+    assert justice.options(_ctx(look, role="ashigaru of the night watch", titles=("ashigaru",))[0]) == []
 
 
 def test_someone_wanted_runs_home_when_an_officer_comes_into_view() -> None:
@@ -115,3 +117,11 @@ def test_someone_wanted_runs_home_when_an_officer_comes_into_view() -> None:
 def test_someone_wanted_runs_rather_than_bring_a_wrong_to_an_officer() -> None:
     look = _look(_person("Kaz", regard=THIEF), _person("Kenji"), wanted="You are wanted in the castle town for theft.")
     assert _one(justice.options(_ctx(look)[0])).name == "run home"
+
+
+def test_a_victim_shouts_the_wrong_done_to_them_in_the_first_person() -> None:
+    """Regression (K1): the look says "who struck you"; shouted out it is "Kaz struck me!", not "Kaz struck you!"."""
+    ctx, api = _ctx(_look(_person("Kaz", regard="who struck you and stole rice from your chest")))
+    _one(justice.options(ctx)).start()
+    assert ("say", "Kaz struck me and stole rice from my chest!", "shout") in api.calls
+    assert justice.first_person("stole rice from the racks") == "stole rice from the racks"

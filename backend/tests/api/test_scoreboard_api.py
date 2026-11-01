@@ -33,7 +33,8 @@ def test_the_board_reads_the_run_now_and_at_a_past_tick(client: TestClient, cast
     assert rows["masanori"]["titles"] == ["lord"] and rows["masanori"]["wealth_mon"] > 1000  # half the treasury
     assert rows["fumiko"]["ambition"]["done"]  # 500 coins of the 300 she wants
     (stall,) = board["stalls"]
-    assert stall["keeper"] == "Fumiko" and {g["item"]: g["stock"] for g in stall["goods"]}["rice"] == 120
+    rice = state.stores["market-stall"].get("rice", 0)  # the town buys and sells from the first hour (BR1)
+    assert stall["keeper"] == "Fumiko" and {g["item"]: g["stock"] for g in stall["goods"]}["rice"] == rice
 
     first = client.get(f"{API}/scoreboard", params={"at": 0}).json()
     assert first["tick"] == 0 and all(row["income_24h"] == 0 for row in first["citizens"])

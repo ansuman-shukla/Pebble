@@ -1,8 +1,9 @@
 """E3's run checks (10-world-v1 §2.3, §2.5; the plan's money and rice lines): the stall sells every day, the rice
 price answers a shock and settles back to fair, and every recipe gets made.
 
-They read what the scripted citizens do, so they pass only once the town and band brains trade and craft (BR1, BR2);
-until then they are pending: reported, not counted in `world_run`'s exit code.
+They read what the scripted citizens do: the town's brains trade and craft (BR1); the band recipes wait for BR2 and the
+rice price's peak for a shock (BR2's raids on the racks; `tests/brains/test_town.py` proves the price rule on a
+scripted shock), so those two are pending: reported, not counted in `world_run`'s exit code.
 """
 
 from collections import Counter
@@ -24,7 +25,8 @@ MIN_RICE_PEAK = 1.2  # the factor a shock lifts rice to (the rice-shock scenario
 MAX_DEAR_DAYS = 3.0  # and fair again within this
 MIN_FAIR_SHARE = 0.8  # of days 4-14 on which rice is mostly fair
 FAIR_FROM_DAY = 4
-WAITS_FOR = "BR1/BR2 trade and craft"  # the brains that make these flows; until then the checks only report
+SHOCK = "BR2 raids on the racks: the shock"  # until then the check only reports
+BAND_CRAFTS = "BR2 band crafts"
 RECIPES = get_args(RecipeName)
 
 
@@ -32,7 +34,6 @@ class Sales(Check):
     """Sales a game day (one `bought` or `sold` each, however many lots)."""
 
     name = "e3.sales"
-    pending = WAITS_FOR
 
     @override
     def start(self, sim: Simulation) -> None:
@@ -61,7 +62,7 @@ class RicePrice(Check):
     which it was mostly fair."""
 
     name = "e3.rice_price"
-    pending = WAITS_FOR
+    pending = SHOCK
 
     @override
     def start(self, sim: Simulation) -> None:
@@ -106,7 +107,7 @@ class Recipes(Check):
     """Recipes crafted (each counted once); over all seeds every recipe must have been made."""
 
     name = "e3.recipes"
-    pending = WAITS_FOR
+    pending = BAND_CRAFTS
 
     @override
     def start(self, sim: Simulation) -> None:

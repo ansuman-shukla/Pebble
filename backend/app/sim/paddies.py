@@ -4,16 +4,15 @@
  work("farm") at a paddy spot (the farmer goes to the paddy that needs it most: ripe, then stubble, then growing):
    work goes in 20-minute sessions (an elder tends 30), so a cut-short session loses no more than itself:
    ripe ─▶ harvest: ≤ 10 rice a session (15 with a sickle)
-   stubble ─▶ replant: seedlings, growth 0 (the day's tending)        ┐ a day's tending of a paddy adds 65:
-   growing ─▶ tend: +22 a session, at most +65 a day; 100 = ripe, 78  ┘ three sessions, an hour (an elder's 1.5 h)
+   stubble ─▶ replant: seedlings, growth 0 (the day's tending)        ┐ a day's tending of a paddy adds 50:
+   growing ─▶ tend: +17 a session, at most +50 a day; 100 = ripe, 60  ┘ three sessions, an hour (an elder's 1.5 h)
  gather("rice") at a ripe paddy's spot ─▶ one 20-minute harvest session
  local midnight ─▶ a ripe paddy left standing loses 2
 ```
 
-So each paddy runs harvest and replant, tend, tend: 78 measures every three days, at most 156 a day from the six
-(~152 harvested over days 4-14 on 5 seeds). These are the bible's 60 and +50 tuned up 30 % (D152) while E2's granary
-feeds D156's temporary rations; the bible's 60, +50 and 120 a day come back when BR1 removes them. The paddies'
-state (stock, growth) lives in the `nodes` system; the day each paddy was last tended in its `tended`.
+So each paddy runs harvest and replant, tend, tend: 60 measures every three days, at most 120 a day from the six (the
+bible's balance; N1 ran them 30 % higher while the granary fed D156's temporary rations, which BR1 removed: D180).
+The paddies' state (stock, growth) lives in the `nodes` system; the day each paddy was last tended in its `tended`.
 """
 
 from collections.abc import Callable
@@ -28,8 +27,8 @@ from app.sim.state import ActionState, Citizen
 from app.sim.vec import Vec3
 
 FIELDS = "rice-fields"  # the place the paddies lie in
-TEND_GROWTH = 65  # a day's tending of a paddy, an hour's work: the bible's 50 + 30 % (D152, balance)
-TEND_SESSION = 22  # a 20-minute session's share of it (the last one of a day tops it up)
+TEND_GROWTH = 50  # a day's tending of a paddy, an hour's work (10 §1.4; D180)
+TEND_SESSION = 17  # a 20-minute session's share of it (the last one of a day tops it up)
 SESSION_MINUTES = 20
 ELDER_SESSION_MINUTES = 30
 HARVEST = 10  # a session's rice by hand

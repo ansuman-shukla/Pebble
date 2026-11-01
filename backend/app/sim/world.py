@@ -119,7 +119,7 @@ class TownChart:
 class Place:
     id: str
     name: str
-    kind: Literal["site", "town"]
+    kind: Literal["site", "town", "hotspot"]
     centre: Vec3
     stand: Vec3  # where someone walking there goes
     radius_m: float
@@ -344,6 +344,13 @@ def build_sim_world(
         unit = chart.to_unit(*spec.at)
         places[spec.id] = Place(
             id=spec.id, name=spec.name, kind="town", centre=unit, stand=unit, radius_m=spec.radius_m
+        )
+    for hotspot in view.places.hotspots:  # named as said mid-sentence, like the town's places ("the Elder grove")
+        if hotspot.id in places:
+            raise ValueError(f"hotspot {hotspot.id} clashes with a place id")
+        centre = as_vec(hotspot.centre)
+        places[hotspot.id] = Place(
+            id=hotspot.id, name=hotspot.called, kind="hotspot", centre=centre, stand=centre, radius_m=hotspot.radius_m
         )
 
     structures: dict[str, Structure] = {}

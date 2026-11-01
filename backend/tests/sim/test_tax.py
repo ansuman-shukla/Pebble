@@ -248,6 +248,10 @@ def test_the_ledger_tells_coins_wealth_flows_and_debts_at_midnight(new_sim: Call
         coins=10, wealth_mon=10 + 6 + 13, income_24h=0, spent_24h=4, owed_rice=2, owed_coins=0
     )  # 10 coins + 3 rice (6) + half the chest (10 rice and 6 coins = 26)
     assert ledgers["hana"] == Ledger(coins=9, wealth_mon=9 + 13, income_24h=4, spent_24h=0, owed_rice=2)
+    sim.state.tick += 60
+    tax.ledger_at_midnight(sim.core, lambda _unit: True)  # walked west across midnight: met again an hour on
+    assert not [e for e in sim.drain() if isinstance(e.payload, Ledger)]
+    sim.state.tick += DAY_MINUTES
     tax.ledger_at_midnight(sim.core, lambda _unit: True)
     again = {e.actor_id: e.payload for e in sim.drain() if isinstance(e.payload, Ledger)}
     assert again["hana"].income_24h == 0  # counted afresh after each ledger
