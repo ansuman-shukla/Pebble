@@ -11,6 +11,7 @@ import {
   flightTarget,
   shows,
 } from '../../src/lib/live/event-feed';
+import { openGlobe } from './globe-helpers';
 import { cameraOf, landed, type MockLiveWindow, openHeld } from './ui-helpers';
 
 /* The event feed: lines and importance, merged repeats, filters (no browser); a mock death in the page. */
@@ -375,5 +376,49 @@ test('▶ lets go of a followed citizen; an animal’s entry flies to the animal
   expect(
     new Vector3(...at).angleTo((await cameraOf(world)).normalize()),
   ).toBeLessThan(60 / 2000);
+  expect(errors).toEqual([]);
+});
+
+test('the feed opens with what was told before the page opened, not empty', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  // the test plays the engine's feed: a snapshot of a run already 10 hours in, with its recent events
+  const recent = [
+    event('bought', 'genzo', {
+      line: 'Genzo buys 4 rice for 8 mon',
+      importance: 2,
+    }),
+    event('goal_set', 'genzo', { line: 'Genzo wants to rest', importance: 0 }),
+    said('genzo', 'Genzo', 'Good rice today'),
+    said('genzo', 'Genzo', 'Good rice today'),
+    event('died', 'genzo', { line: 'Kaz kills Genzo', importance: 3 }),
+  ].map((told, index) => ({ ...told, tick: 590 + index }));
+  await page.routeWebSocket(/\/api\/v1\/live$/, (socket) => {
+    socket.send(
+      JSON.stringify({
+        type: 'snapshot',
+        run_id: 'run-1',
+        tick: 600,
+        day: 0,
+        time: '18:00',
+        speed: 1,
+        paused: true,
+        tick_elapsed_s: 0,
+        citizens: [],
+        animals: [],
+        fires: [],
+        nodes: [],
+        recent,
+      }),
+    );
+  });
+  await openGlobe(page, errors);
+  // newest first, repeats merged, importance 0 hidden
+  await expect(page.getByTestId('event-feed').locator('li')).toHaveText([
+    /17:54\s*Kaz kills Genzo/,
+    /17:53\s*Genzo: “Good rice today” ×2/,
+    /17:50\s*Genzo buys 4 rice for 8 mon/,
+  ]);
   expect(errors).toEqual([]);
 });
