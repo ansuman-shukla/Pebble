@@ -118,7 +118,9 @@ PURSE_TOP_UP = 150
 PURSE_HEAVY = 300  # and puts what is over the day's needs into it when his purse holds this much
 GOLD = "gold"
 GOLD_TREASURY = 1800  # the lord buys gold for his hoard while the treasury holds more than this (10 §2.2)
-GOLD_A_WEEK = 7  # grains at most, one a round, so neither the treasury nor the digger swings far
+GOLD_A_WEEK = 7  # grains a week, a round's at a time, with the treasury at its start (scaled by `treasury_lean`)
+TREASURY_START = 2015  # the treasury's coins at the start (10 §2.1): the level the lord keeps it at
+TREASURY_SWING = 300  # coins off that level at which his spending leans fully one way
 GOLD_DEAREST = 30  # coins a grain: dearer means the stall holds a grain or none (its price runs 20 at 5 to 40 at 0)
 CLOTH = "cloth"
 CLOTH_DAYS = (1, 5)  # week days the lord buys a length of cloth for the keep (≈ one every 4 days)
@@ -969,16 +971,19 @@ def _market_round(ctx: Context) -> list[Option]:
     if carried_food(p.you).get(RICE) and price is not None and price.word in GRANARY_SALE:
         deals.append(("sell granary rice", partial(ctx.api.sell, RICE, 99)))
     chest = ctx.notes.get("treasury")
-    treasury = purse(p) + (chest if isinstance(chest, int) else GOLD_TREASURY)  # his purse is the treasury's too
+    treasury = purse(p) + (chest if isinstance(chest, int) else TREASURY_START)  # his purse is the treasury's too
+    lean = treasury_lean(treasury)
     if weekday(p) == 1 and not ctx.done_today("a new week"):
         ctx.mark_done("a new week")
         ctx.notes["gold this week"] = 0
     gold, bought = _price(p, GOLD), ctx.counter("gold this week")
     stocked = gold is not None and 0 < price_of(gold) <= GOLD_DEAREST  # not while the stall runs short of it
-    if stocked and purse(p) >= PURSE_LOW and treasury > GOLD_TREASURY and bought < GOLD_A_WEEK:
+    a_week = round(GOLD_A_WEEK * (1 + lean))  # 0-14: more while the treasury is above its start, none well below
+    grains = 1 + round(2 * max(0.0, lean))
+    if stocked and purse(p) >= PURSE_LOW and treasury > GOLD_TREASURY and bought < a_week:
 
         def buy_gold() -> ActionResult:
-            result = ctx.api.buy(GOLD, 1)
+            result = ctx.api.buy(GOLD, grains)
             if result.outcome == "done":
                 ctx.notes["gold this week"] = bought + 1
             return result
@@ -991,9 +996,10 @@ def _market_round(ctx: Context) -> list[Option]:
             return [Option(WORK, name, partial(_once, ctx, name, deal), aim)]
     if price is not None and price.word in GRANARY_SALE and not ctx.done_today("granary rice"):
         due = price.word == "dear" or (weekday(p) or 0) % 2 == 0
+        amount = round(GRANARY_SALE[price.word] * (1 - lean))  # less while the treasury is above its start, more below
         ctx.mark_done("granary rice")
-        if due:
-            _set(ctx, "fetch rice", GRANARY_SALE[price.word])
+        if due and amount >= 2:
+            _set(ctx, "fetch rice", amount)
             return [_go(ctx, STOREHOUSES, aim=aim)]
     if p.market is None:  # not at the open stall yet
         option = _to_stall(ctx, WORK, aim)
@@ -1001,6 +1007,13 @@ def _market_round(ctx: Context) -> list[Option]:
             return [option]
     ctx.mark_done("market round")
     return []
+
+
+def treasury_lean(treasury: int) -> float:
+    """How far the treasury (chest and purse) stands from where it started, −1 (TREASURY_SWING below) to 1 (as far
+    above): the lord's spending follows it (more gold and less granary rice sold while above, the reverse below), so
+    neither the treasury nor the merchant's till drifts (D180)."""
+    return max(-1.0, min(1.0, (treasury - TREASURY_START) / TREASURY_SWING))
 
 
 def _once(ctx: Context, name: str, deal: Callable[[], ActionResult]) -> ActionHandle:
