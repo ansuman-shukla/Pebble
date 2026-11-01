@@ -31,6 +31,7 @@ from app.brains.routines import (
     _daytime,
     _go,
     _on_spot,
+    _refused,
     _set,
     _then,
     _work_at,
@@ -180,12 +181,6 @@ SELL_RICE = "Sell our spare rice at the stall"
 def _result(ctx: Context) -> ActionResult | None:
     number = ctx.notes.get("chosen")
     return ctx.api.handle(number).result if isinstance(number, int) else None
-
-
-def _refused(ctx: Context, name: str) -> bool:
-    """The option chosen last was this one and the world refused it at once."""
-    result = _result(ctx)
-    return ctx.notes.get("last") == name and result is not None and result.outcome == "failed"
 
 
 def weekday(p: Perception) -> int | None:
