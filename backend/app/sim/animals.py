@@ -1094,7 +1094,8 @@ def wound(
 def _pack(core: SimCore, group: AnimalGroup, life: Wildlife, start: float) -> None:
     """Pack mates keep by their leader: in line beside it (ESCORT_M to a side, 3 m back per place, by the way it
     faces as the tick begins) along its course, doing what it does, never faster than it went on each leg (a mate
-    that falls behind keeps its lag); asleep or still beside it."""
+    that falls behind keeps its lag); asleep or still beside it (a mate away from a still leader trots back and
+    stands, `idle`, before it lies down too: a trot never ends at rest)."""
     species = SPECIES[group.kind]
     members = [core.state.animals[m] for m in group.members if core.state.animals[m].alive]
     if not species.predator or len(members) < 2:
@@ -1109,8 +1110,8 @@ def _pack(core: SimCore, group: AnimalGroup, life: Wildlife, start: float) -> No
         if lead is None or lead.end_s <= start:
             slot = _beside(core, leader.position, leader.heading_deg, side, back)
             if core.distance_m(mate.position, slot) > SPREAD_M:
-                if mate.id not in life.courses:
-                    _walk(core, mate, slot, species.trot_mps, "trot", leader.activity, start)
+                if mate.id not in life.courses:  # it trots back to its place, then does what its leader does
+                    _walk(core, mate, slot, species.trot_mps, "trot", "idle", start)
             else:
                 life.courses.pop(mate.id, None)
                 mate.activity, mate.until = leader.activity, leader.until

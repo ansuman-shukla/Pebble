@@ -397,6 +397,21 @@ def test_a_person_near_a_kill_drives_off_a_lone_feeder_but_not_a_pack(
         assert all(w.target == deer.id for w in pack) and not dropped
 
 
+def test_a_pack_mate_trots_back_to_its_sleeping_leader_and_stands_before_it_lies_down(
+    new_sim: Callable[..., Simulation],
+) -> None:
+    """Regression: a mate away from its sleeping leader trotted back and arrived asleep, so it was shown sleeping at
+    both ends of a 248 m tick (wolf:302)."""
+    sim, centre = _open_ground(new_sim, night=False)
+    leader, mate = _herd(sim, "wolf", [centre, step_towards(centre, 90.0, 200.0, R)], activity="sleeping",
+                         until=10**9, hunger=0.0)  # fmt: skip
+    pose = _summary(_step(sim)).animals[mate.id]
+    assert pose.gait == "trot" and sim.world.distance_m(mate.position, leader.position) <= animal_life.SPREAD_M
+    assert mate.activity == "idle"
+    sim.step()
+    assert mate.activity == leader.activity == "sleeping"
+
+
 # --- herds: wandering ---
 
 
