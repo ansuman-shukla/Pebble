@@ -172,6 +172,10 @@ UNPAID = Confinement(hours=6)
 EXHAUSTED = 91.0  # over sleeping where he stands (90): the watchman worn out goes home to bed
 STORE_RICE = "Bring the rice into the storehouse"
 TAKE_RICE_HOME = "Take the rice home to the chest"
+RACK_RICE = "Leave rice on the rack to dry"
+TAKE_IN_RICE = "Take in the rice from the rack"
+RICE_RACK = "a rice rack"
+RACK_SHARE = 0.5  # of the day's rice (after tax) left on the rack overnight
 SELL_RICE = "Sell our spare rice at the stall"
 
 
@@ -441,6 +445,9 @@ def _store_rice(ctx: Context, score: float = WORK + 1) -> Option:
     while it is kept, then take the rest home to the chest."""
     if ctx.notes.get("taxed") is False:
         return _work_at(ctx, STOREHOUSES, "store food", score, STORE_RICE)
+    racking = _rack_rice(ctx, score)
+    if racking is not None:
+        return racking
     selling = _sell_rice(ctx, score)
     if selling is not None:
         return selling
@@ -474,6 +481,47 @@ def _sell_rice(ctx: Context, score: float) -> Option | None:
     if option is None:
         ctx.notes["harvested"] = 0
     return option
+
+
+def _rack_rice(ctx: Context, score: float) -> Option | None:
+    """At dusk, the tax paid, a farmer leaves a share of the day's rice on the household's hasa rack by the paddies to
+    dry overnight (10 §2.6: the raid target), and takes it in next morning."""
+    p = ctx.perception
+    rice = carried_food(p.you).get(RICE, 0)
+    if ctx.phase != "dusk" or ctx.done_today("racked") or rice < 2:
+        return None
+    rack = next((t for t in p.things if "rice rack" in t.label and DISTANCE[t.nearness] != "far"), None)
+    if rack is None or _refused(ctx, "rack rice"):
+        return None
+    if rack.nearness != "right beside you" and not ctx.finished(f"go to {RICE_RACK}"):
+        return Option(score, f"go to {RICE_RACK}", partial(ctx.api.walk_to_thing, "rack"), RACK_RICE)
+
+    def leave() -> ActionHandle:
+        ctx.mark_done("racked")
+        if ctx.api.stash(RICE, max(1, round(rice * RACK_SHARE))).outcome == "done":
+            ctx.notes["on the rack"] = True
+        return ctx.api.rest(5)
+
+    return Option(score, "rack rice", leave, RACK_RICE)
+
+
+def _take_in_rice(ctx: Context) -> list[Option]:
+    """The morning after, the rice left on the rack comes in (it goes home with the day's harvest)."""
+    p = ctx.perception
+    if not ctx.notes.get("on the rack") or not _daytime(ctx):
+        return []
+    rack = next((t for t in p.things if "rice rack" in t.label and DISTANCE[t.nearness] != "far"), None)
+    if rack is None:
+        return [] if not at(p, FIELDS) else [_go(ctx, FIELDS, aim=TAKE_IN_RICE)]
+    if rack.nearness != "right beside you" and not ctx.finished(f"go to {RICE_RACK}"):
+        return [Option(WORK + 1, f"go to {RICE_RACK}", partial(ctx.api.walk_to_thing, "rack"), TAKE_IN_RICE)]
+
+    def take() -> ActionHandle:
+        ctx.notes.pop("on the rack", None)
+        ctx.api.pick_up(RICE)  # what is left of it: a raid may have taken some
+        return ctx.api.rest(5)
+
+    return [Option(WORK + 1, "take in the rice", take, TAKE_IN_RICE)]
 
 
 def _stash_rice(ctx: Context) -> ActionHandle:
@@ -519,6 +567,9 @@ def _farm(ctx: Context) -> list[Option]:
         return [_store_rice(ctx, 46)]  # bring the day's harvest in before supper
     if not _daytime(ctx):
         return []
+    taking_in = _take_in_rice(ctx)
+    if taking_in:
+        return taking_in
     if rice >= 25 or (rice and p.time_of_day == "late afternoon"):  # and in before the dusk bell and the stall shuts
         return [_store_rice(ctx)]
     sickle = _buy_sickle(ctx)

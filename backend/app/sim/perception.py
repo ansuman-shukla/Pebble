@@ -62,6 +62,7 @@ GROUP_NOUNS: dict[str, str] = {  # structure kinds seen in numbers
     "farmhouse": "farmhouses",
     "castle_gatehouse": "gatehouses",
     "lean_to": "lean-tos",
+    "drying_rack": "rice racks",
 }
 FOOD_PLANTS = frozenset({"berries", "roots", "nuts", "rice", "fish"})
 # importance of what's seen; every water and the nearest of each other tier below IMPORTANT are always told

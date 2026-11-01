@@ -21,6 +21,8 @@
 
 stores:
   store-2: {rice: 400, wood: 300} # the granary's stand: about six days of rice, firewood for the gate baskets
+  field-rack-1: {rice: 4} # each farm household's hasa rack: the day's rice left to dry overnight (BR2 follow-up)
+  field-rack-2: {rice: 4}
   band_a_camp:drying-rack: {dried meat: 6} # each camp's rack: the band's store of strips and hides (BR2)
   band_b_camp:drying-rack: {dried meat: 4}
   market-stall: # every good it trades at its target stock (data/economy.yaml), so prices open at the values; gold
