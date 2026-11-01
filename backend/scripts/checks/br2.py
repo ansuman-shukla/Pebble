@@ -129,7 +129,7 @@ class BandBDeeds(_OverSeeds):
     its doer judged after, and at least one no outsider saw (10 §3.3, §3.6)."""
 
     name = "br2.deeds"
-    pending = "raids steal from the racks unseen: Goro looks them over 15 min a round, 20 m night sight, ≥ 37 m off"
+    pending = "raids steal rice from the racks, but Goro's beat has him 37 m or more off at raid time: 1 seen, 0 seized"
     least = 6
 
     @override
