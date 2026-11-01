@@ -1169,7 +1169,7 @@ def _walk(
     elif room < distance - 1e-6:
         goal = step_towards(origin, bearing, room, core.world.radius_m)
     walking: AnimalActivity = moving or _moving_word(gait)
-    _set(core, animal, seconds, [(goal, seconds + min(room, distance) / mps)], gait, walking, arrive)
+    _set(core, animal, seconds, [(goal, seconds + core.distance_m(origin, goal) / mps)], gait, walking, arrive)
 
 
 def _moving_word(gait: AnimalGait) -> AnimalActivity:
