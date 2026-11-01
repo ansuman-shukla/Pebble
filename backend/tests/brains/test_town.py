@@ -637,6 +637,9 @@ def test_a_farmer_leaving_the_paddies_in_the_afternoon_hangs_half_the_rice_on_th
     late, api = _ctx(_at_racks("late afternoon", ("plenty of rice",), beside), GENZO)  # the day's last trip
     town.farmer(late)[0].start()
     assert ("stash", "rice", 12) in api.calls
+    aiko = _profile("Aiko", "weaver, the farmer's wife", household=3, paddies=4, dues=12)
+    helping, _ = _ctx(_at_racks("late afternoon", ("plenty of rice",), beside), aiko)
+    assert not [o for o in town.weaver(helping) if "rack" in o.name]  # who only helps takes the harvest straight in
 
 
 def test_next_morning_a_farmer_takes_in_rice_only_from_the_household_s_own_rack_while_rice_hangs_on_it() -> None:
