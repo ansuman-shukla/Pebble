@@ -202,7 +202,7 @@ def test_the_v1_fields_are_told_in_words_when_set() -> None:
             "held": "Kenji holds you fast.",
             "confined": "You are confined in the gaol.",
         },
-        day_of_week="the seventh day of the week; court day",
+        day_of_week="the seventh day of the week, court day",
         ground="the Lord's woods",
         safety="exposed",
         people=[
@@ -215,19 +215,29 @@ def test_the_v1_fields_are_told_in_words_when_set() -> None:
                 "regard": "well regarded",
             }
         ],
-        market={"items": [{"item": "rice", "price": "four coins for two measures", "word": "fair"}]},
+        market={
+            "items": [
+                {"item": "rice", "price": "four coins for two measures; it pays three coins", "word": "fair"},
+                {"item": "hide", "price": "fifteen coins each", "word": "dear"},
+            ]
+        },
         chest={"holds": ["twenty measures of rice", "a sickle"]},
+        noticed=["Kenji bows to you.", "The temple bell rings."],
     )
     assert look.text() == (
-        "You are at the well. It is midday. It is the seventh day of the week; court day.\n"
+        "You are at the well. It is midday. It is the seventh day of the week, court day.\n"
         "You feel a little hungry. You carry two fish. You are resting. You have seven coins. You are carrying a heavy"
         " load. You are the lord. People here regard you well. You are wanted in the castle town for theft. Kenji holds"
         " you fast. You are confined in the gaol.\n"
         "This is the Lord's woods. You are exposed.\n"
         "You see Genzo, your father, well regarded, a few paces to the north (farming).\n"
-        "At the stall: rice at four coins for two measures (fair).\n"
-        "Your chest holds twenty measures of rice and a sickle."
+        "At the stall: rice, four coins for two measures; it pays three coins (fair)."
+        " Hide, fifteen coins each (dear).\n"
+        "Your chest holds twenty measures of rice and a sickle.\n"
+        "Kenji bows to you. The temple bell rings."
     )
+    purse_only = _look(you={"carrying": [], "purse": "seven coins"}).you.text()
+    assert purse_only == "You feel a little hungry. You are resting. You have seven coins."  # not "You carry nothing."
     assert (
         _look(chest={"holds": []}, market={"items": []})
         .text()

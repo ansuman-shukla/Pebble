@@ -1153,6 +1153,10 @@
     {
       "change": "buy, sell and stash say that amount counts units as the mind counts them (measures, strips, pieces), not lots",
       "contract": "ad51b181b6d1d3a8"
+    },
+    {
+      "change": "perception: noticed (gestures seen, the temple bell, spoiled food, a worn-out pack, missing goods) told once; v1 fields filled (K1)",
+      "contract": "7511d37d5ab25cd5"
     }
   ],
   "perception_schema": {
@@ -1545,6 +1549,14 @@
           }
         ],
         "default": null
+      },
+      "noticed": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "title": "Noticed",
+        "type": "array"
       },
       "people": {
         "items": {
