@@ -3,9 +3,9 @@
  * the remains, wood brought to a camp, goods put down. Stacks of one item on one spot draw as one pile of their total;
  * a pile's size follows its count (by volume), so taking some shrinks it and taking the last makes it go. Wood lying
  * on a felled tree's trunk is that tree's logs: a fallen log beside the stump along the fall, its ends on the ground
- * (felled-logs.ts; shorter as logs are carried off), shown once the tree has landed. Piles are drawn within REACH of
- * the camera's focus, instanced per look (one draw call per look part with anything in it); a pile grows in when it
- * appears and shrinks away when it goes.
+ * (felled-logs.ts; shorter as logs are carried off), shown once the tree has landed. A stack is placed once, when it
+ * first appears (only its count ever changes), and a frame whose stacks and counts are unchanged costs nothing. Piles are drawn within REACH of the camera's focus, instanced per look
+ * (one draw call per look part with anything in it); a pile grows in when it appears and shrinks away when it goes.
  */
 import { InstancedMesh, Matrix4, Quaternion, Vector3 } from 'three';
 
@@ -28,8 +28,8 @@ export type StackLook = PropKind | DrawnStackProp;
 export const REACH = 300;
 /** Re-pick the piles in reach when the focus moved this far. */
 const RESPLIT = 20;
-/** Stacks of one item closer than this draw as one pile. */
-const SAME_SPOT_M = 0.3;
+/** Stacks of one item on one spot (rounded to this many metres) draw as one pile. */
+const SPOT_M = 0.5;
 /** A flat look tilts with the ground sampled this far either side of it. */
 const SLOPE_M = 0.4;
 /** Wood within this of a tree's trunk is that tree's logs. */
@@ -127,6 +127,14 @@ export interface DrawnStack {
   scale: number;
 }
 
+/** A stack's spot as first seen (a stack's item and place never change): the pile it belongs to. */
+interface StackSpot {
+  item: string;
+  /** Its pile's key: the item and the spot rounded to SPOT_M. */
+  pile: string;
+  unit: Vector3;
+}
+
 /** A pile as laid out: everything but its size, which eases. */
 interface Pile {
   key: string;
@@ -147,21 +155,24 @@ const yAxis = new Vector3(0, 1, 0);
 const stretch = new Matrix4();
 const scratch = new Vector3();
 
-/** A stable number in 0..1 from an id (a pile's turn on its spot). */
-function hashOf(id: string) {
+/** A stable number in 0..1 from a key (a pile's turn on its spot). */
+function hashOf(key: string) {
   let hash = 2166136261;
-  for (const char of id) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+  for (const char of key) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
   return (hash >>> 0) / 4294967296;
 }
 
 export class StackField {
   private looks: Map<StackLook, StackLookMeshes>;
   private stacks: readonly LiveStack[] = [];
+  /** Every stack's spot (sampled once) and count as last set, by id. */
+  private spots = new Map<string, StackSpot>();
+  private counts = new Map<string, number>();
   private piles = new Map<string, Pile>();
   private leaving: Pile[] = [];
   private shown: { pile: Pile; scale: number }[] = [];
   private splitAt: Vector3 | null = null;
-  private seen = -1;
+  private seen = 0;
   private dirty = true;
   private easing = false;
   /** The client time the next tree in reach lands (its logs then show). */
@@ -175,13 +186,20 @@ export class StackField {
     private readonly place: PlaceOnGround,
   ) {
     this.looks = new Map(looks.map((look) => [look.look, look]));
+    this.seen = stages.version;
   }
 
-  /** The feed's stacks now (`now`: client seconds, like the node stages' clock). */
+  /**
+   * The feed's stacks now (`now`: client seconds, like the node stages' clock). Only counts can change for a stack
+   * id, so a frame with the same ids and counts changes nothing, and a new stack is the only one placed.
+   */
   set(stacks: readonly LiveStack[], now: number) {
     if (stacks === this.stacks) return;
     this.stacks = stacks;
-    this.layout(now);
+    const same =
+      stacks.length === this.counts.size &&
+      stacks.every((stack) => this.counts.get(stack.id) === stack.count);
+    if (!same) this.layout(now);
   }
 
   /** The tree standing (or felled) on this trunk, if any. */
@@ -197,65 +215,50 @@ export class StackField {
     return null;
   }
 
-  /** Stacks of one item on one spot, as one pile each (keyed by its first stack's id). */
-  private gather() {
-    const groups: {
-      ids: string[];
-      item: string;
-      count: number;
-      unit: Vector3;
-    }[] = [];
-    for (const stack of this.stacks) {
-      const unit = new Vector3(...stack.unit).normalize();
-      const same = groups.find(
-        (group) =>
-          group.item === stack.item &&
-          group.unit.angleTo(unit) * this.radius(unit) < SAME_SPOT_M,
-      );
-      if (same) {
-        same.ids.push(stack.id);
-        same.count += stack.count;
-      } else
-        groups.push({
-          ids: [stack.id],
-          item: stack.item,
-          count: stack.count,
-          unit,
-        });
-    }
-    return groups;
+  private spotOf(stack: LiveStack): StackSpot {
+    const known = this.spots.get(stack.id);
+    if (known) return known;
+    const unit = new Vector3(...stack.unit).normalize();
+    const { x, y, z } = this.place(unit, scratch).divideScalar(SPOT_M);
+    const spot = {
+      item: stack.item,
+      pile: `${stack.item}|${Math.round(x)},${Math.round(y)},${Math.round(z)}`,
+      unit,
+    };
+    this.spots.set(stack.id, spot);
+    return spot;
   }
 
-  private radius(unit: Vector3) {
-    return this.place(unit, scratch).length();
-  }
-
-  /** Lays the piles out from the stacks: new ones grow in, changed ones resize, gone ones shrink away. */
+  /** The piles from the stacks: new ones grow in, changed ones resize, gone ones shrink away. */
   private layout(now: number) {
+    this.counts = new Map(this.stacks.map((stack) => [stack.id, stack.count]));
+    for (const id of this.spots.keys())
+      if (!this.counts.has(id)) this.spots.delete(id);
+    const groups = new Map<
+      string,
+      { ids: string[]; count: number; spot: StackSpot }
+    >();
+    for (const stack of this.stacks) {
+      const spot = this.spotOf(stack);
+      const group = groups.get(spot.pile);
+      if (group) {
+        group.ids.push(stack.id);
+        group.count += stack.count;
+      } else
+        groups.set(spot.pile, { ids: [stack.id], count: stack.count, spot });
+    }
     const next = new Map<string, Pile>();
-    for (const { ids, item, count, unit } of this.gather()) {
-      const tree = item === 'wood' ? this.treeAt(unit) : null;
-      const { look, full } = tree
-        ? { look: LOGS_LOOK, full: TREE_LOGS }
-        : itemLook(item);
-      const key = `${ids[0]}|${look}`;
-      const target = tree
-        ? Math.min(Math.max(count / full, SHORTEST_LOGS), 1)
-        : pileScale(count, full);
+    for (const [key, { ids, count, spot }] of groups) {
       const known = this.piles.get(key);
-      const steady = known !== undefined && known.target === target;
-      next.set(key, {
-        key,
-        ids,
-        item,
-        count,
-        look,
-        tree,
-        base: tree ? this.logsBase(tree) : this.pileBase(unit, look, key),
-        target,
-        from: steady ? known.from : known ? this.sizeOf(known, now) : 0,
-        since: steady ? known.since : now,
-      });
+      const pile = known ? { ...known, ids, count } : this.newPile(key, spot);
+      const target = pile.tree
+        ? Math.min(Math.max(count / TREE_LOGS, SHORTEST_LOGS), 1)
+        : pileScale(count, itemLook(spot.item).full);
+      if (!known || known.target !== target) {
+        pile.from = known ? this.sizeOf(known, now) : 0;
+        pile.since = now;
+      }
+      next.set(key, { ...pile, ids, count, target });
     }
     for (const [key, pile] of this.piles)
       if (!next.has(key))
@@ -267,6 +270,24 @@ export class StackField {
         });
     this.piles = next;
     this.dirty = true;
+  }
+
+  /** A pile first seen: its look, the tree whose logs it is (wood on a trunk) and where it is drawn. */
+  private newPile(key: string, spot: StackSpot): Pile {
+    const tree = spot.item === 'wood' ? this.treeAt(spot.unit) : null;
+    const look = tree ? LOGS_LOOK : itemLook(spot.item).look;
+    return {
+      key,
+      ids: [],
+      item: spot.item,
+      count: 0,
+      look,
+      tree,
+      base: tree ? this.logsBase(tree) : this.pileBase(spot.unit, look, key),
+      target: 0,
+      from: 0,
+      since: 0,
+    };
   }
 
   /** A felled tree's logs on the ground beside its stump, along the way it fell (felled-logs.ts). */
@@ -288,7 +309,7 @@ export class StackField {
         .clone()
         .multiplyScalar(Math.cos(turn))
         .addScaledVector(north, Math.sin(turn));
-      const radius = this.radius(unit);
+      const radius = this.place(unit, new Vector3()).length();
       point.addScaledVector(aside, MEAT_ASIDE_M / radius).normalize();
     }
     const position = this.place(point, new Vector3());
@@ -335,12 +356,20 @@ export class StackField {
 
   private matrixOf(pile: Pile, scale: number, target: Matrix4) {
     // logs shorten along their length (model x); a pile shrinks every way
-    if (pile.tree)
-      return target.multiplyMatrices(pile.base, stretch.makeScale(scale, 1, 1));
-    return target.multiplyMatrices(
-      pile.base,
-      stretch.makeScale(scale, scale, scale),
-    );
+    const [x, y] = pile.tree ? [scale, 1] : [scale, scale];
+    return target.multiplyMatrices(pile.base, stretch.makeScale(x, y, y));
+  }
+
+  /** A tree felled or grown back: its logs lie along the way the feed says it fell. */
+  private refell() {
+    const changed = this.stages.changedSince(this.seen);
+    this.seen = this.stages.version;
+    if (changed !== null && changed.length === 0) return;
+    const trees = changed === null ? null : new Set(changed);
+    for (const [key, pile] of this.piles)
+      if (pile.tree && (trees === null || trees.has(pile.tree.id)))
+        this.piles.set(key, { ...pile, base: this.logsBase(pile.tree) });
+    this.dirty = true;
   }
 
   private draw(focus: Vector3, now: number) {
@@ -378,11 +407,7 @@ export class StackField {
       this.shown = [];
       return;
     }
-    if (this.stages.version !== this.seen) {
-      // a tree felled or grown back: its logs' fall and its stump change
-      this.seen = this.stages.version;
-      this.layout(now);
-    }
+    if (this.stages.version !== this.seen) this.refell();
     if (
       this.hidden ||
       this.dirty ||

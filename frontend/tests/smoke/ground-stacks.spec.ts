@@ -330,6 +330,63 @@ test('flat looks lie along the slope, models stand up off the planet', () => {
   );
 });
 
+test('a frame with the same stacks and counts lays nothing out; only new stacks are placed', () => {
+  const oak = tree('flora:1', 30, 0);
+  const { field: f, asked, meshes } = field([oak]);
+  const ground = [
+    stack('stack-1', 'wood', 12, at(5, 5)),
+    stack('stack-2', 'meat', 4, at(-5, 5)),
+    stack('stack-3', 'wood', 10, oak.position),
+  ];
+  f.set(ground, 0);
+  f.frame(FOCUS, false, EASE_SECONDS);
+  expect(asked.trees).toBe(2); // the two wood piles look for a trunk
+  const drawn = f.drawn();
+  // every tick brings a new list: the same stacks and counts change nothing, not even the instance matrices
+  const before = { ...asked };
+  const written = meshes.get('firewood')!.instanceMatrix.version;
+  f.set(
+    ground.map((one) => ({ ...one })),
+    1,
+  );
+  f.frame(FOCUS, false, 1 + EASE_SECONDS);
+  expect(asked).toEqual(before);
+  expect(f.drawn()).toEqual(drawn);
+  expect(meshes.get('firewood')!.instanceMatrix.version).toBe(written);
+  // a count changes: no ground sampled, no trunk searched, the pile resizes
+  f.set([ground[0], { ...ground[1], count: 2 }, ground[2]], 2);
+  f.frame(FOCUS, false, 2 + EASE_SECONDS);
+  expect(asked).toEqual(before);
+  expect(f.drawn().find((pile) => pile.item === 'meat')!.count).toBe(2);
+  // a new stack: only it is placed
+  f.set([...ground, stack('stack-4', 'flint', 3, at(0, -6))], 3);
+  f.frame(FOCUS, false, 3 + EASE_SECONDS);
+  expect(asked.trees).toBe(before.trees);
+  expect(asked.ground - before.ground).toBeLessThanOrEqual(2);
+  expect(meshes.get('small_rock')!.count).toBe(1);
+});
+
+test('a pile of several stacks resizes as one of them is carried off, it does not pop', () => {
+  const camp = at(5, 5);
+  const { field: f } = field();
+  f.set(
+    [stack('stack-5', 'wood', 6, camp), stack('stack-6', 'wood', 6, camp)],
+    0,
+  );
+  f.frame(FOCUS, false, EASE_SECONDS);
+  expect(f.drawn()[0].scale).toBeCloseTo(1, 6);
+  // the first load is burned: the pile of the second stays and shrinks from where it was
+  f.set([stack('stack-6', 'wood', 6, camp)], 1);
+  f.frame(FOCUS, false, 1 + EASE_SECONDS / 4);
+  const [pile] = f.drawn();
+  expect(pile.ids).toEqual(['stack-6']);
+  expect(pile.scale).toBeLessThan(1);
+  expect(pile.scale).toBeGreaterThan(Math.cbrt(0.5));
+  f.frame(FOCUS, false, 1 + EASE_SECONDS);
+  expect(f.drawn()[0].scale).toBeCloseTo(Math.cbrt(0.5), 6);
+  expect(f.drawn()).toHaveLength(1);
+});
+
 type StacksWindow = {
   __pebbleStacks?: {
     drawn: () => {
