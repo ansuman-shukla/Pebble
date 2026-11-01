@@ -34,6 +34,7 @@ from app.db.models import Run
 from app.db.schemas import MAX_SPEED, ClockChange
 from app.lib.ulid import UlidFactory
 from app.observability.store import EventStore, create_run, discard_after, latest_run, latest_snapshot, pending_commands
+from app.sim import society
 from app.sim.citizens import CITIZENS, load_citizens
 from app.sim.clock import SECONDS_PER_TICK, TICKS_PER_HOUR
 from app.sim.grounds import forage_grounds
@@ -83,8 +84,11 @@ def citizen_brains(sim: Simulation, seed: int) -> CitizenBrains:
                     home_area=places[HOME_AREAS[citizen.region]].name,
                     skills=citizen.skills,
                     titled=known_titles(
-                        (cast[other].name, cast[other].role) for other in sorted(citizen.people) if other in cast
+                        (cast[other].name, society.titles(sim.core, other))
+                        for other in sorted(citizen.people)
+                        if other in cast
                     ),
+                    titles=society.titles(sim.core, citizen.id),
                     granary=citizen.region == "town" and fed_by_granary(citizen),
                     honesty=traits[citizen.id].honesty if citizen.id in traits else 0.5,
                     grounds=grounds.get(citizen.region, ()),

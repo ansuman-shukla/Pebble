@@ -15,7 +15,6 @@ the rules never fire.
 
 from pydantic import JsonValue
 
-from app.brains.profile import title_of
 from app.brains.routines import Context, Option
 from app.brains.senses import at_home, beside
 from app.world_api.facade import ActionHandle
@@ -56,7 +55,7 @@ def _culprit(ctx: Context) -> list[Option]:
 
 def _witness(ctx: Context) -> list[Option]:
     """Shout out a wrong seen in someone (once each), then bring it to an officer; the accusation waits for one."""
-    if title_of(ctx.profile.role) is not None:
+    if ctx.profile.titles:
         return []  # officers seize the wrongdoer themselves
     notes = ctx.notes
     known = notes.setdefault("deeds", [])  # [who, deed] seen and shouted out

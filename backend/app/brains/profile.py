@@ -43,15 +43,13 @@ TITLES: dict[Title, int] = {"lord": 5, "samurai": 4, "leader": 4, "ashigaru": 3}
 BOW_RANK = 4  # the lord, samurai and band leaders are bowed to by those they outrank
 
 
-def title_of(role: str) -> Title | None:
-    """The title a role holds, by its words ("samurai retainer" -> samurai, "band leader" -> leader)."""
-    words = role.lower()
-    return next((title for title in TITLES if title in words), None)
+def highest(titles: Iterable[Title]) -> Title | None:
+    return max(titles, key=TITLES.__getitem__, default=None)
 
 
-def known_titles(people: Iterable[tuple[str, str]]) -> tuple[tuple[str, Title], ...]:
-    """Of the people someone knows, (name, role), those who hold a title, by name."""
-    return tuple(sorted((name, title) for name, role in people if (title := title_of(role)) is not None))
+def known_titles(people: Iterable[tuple[str, Iterable[Title]]]) -> tuple[tuple[str, Title], ...]:
+    """Of the people someone knows, (name, the titles they hold), those who hold one, by name, with its highest."""
+    return tuple(sorted((name, title) for name, held in people if (title := highest(held)) is not None))
 
 
 @dataclass(frozen=True)
@@ -72,6 +70,7 @@ class BrainProfile:
     home_area: str  # the name of their home ground as they know it ("The castle town", "Band A camp")
     skills: tuple[str, ...] = ()  # what they know how to do ("hunting", "fire")
     titled: tuple[tuple[str, Title], ...] = ()  # people they know who hold a title ("Masanori", "lord")
+    titles: tuple[Title, ...] = ()  # the titles they hold themselves
     granary: bool = False  # town folk the lord's granary feeds (his household, and those he grants rice, §2.6)
     honesty: float = 0.5  # 0-1 (§3.1 traits): an honest starving soul is slower to take what isn't theirs
     # bands: the ways from camp their land's food lies, beyond the thin home ring (10 §1.2), most first
@@ -80,7 +79,7 @@ class BrainProfile:
     def bows_to(self, name: str) -> bool:
         """They hold a title bowed to (lord, samurai, band leader) that outranks yours."""
         theirs = dict(self.titled).get(name)
-        own = title_of(self.role)
+        own = highest(self.titles)
         return theirs is not None and TITLES[theirs] >= BOW_RANK and TITLES[theirs] > (TITLES[own] if own else 0)
 
     def officer(self, name: str) -> bool:
