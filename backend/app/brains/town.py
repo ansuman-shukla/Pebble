@@ -812,12 +812,14 @@ def _watch(ctx: Context, score: float) -> list[Option]:
         watch = _then(lambda: _set(ctx, "beat", "racks"), lambda: ctx.api.work("guard"))
         return [Option(score, "guard", watch, aim)]
     rack = next((t for t in p.things if "rice rack" in t.label and DISTANCE[t.nearness] != "far"), None)
-    if rack is None:  # the racks stand by the paddies, out of sight from the gate: to the fields first
-        return [_go(ctx, FIELDS, score, aim)]
-    near_rack = rack.nearness == "right beside you" or ctx.finished(f"go to {RICE_RACK}")
-    if not near_rack and not _refused(ctx, f"go to {RICE_RACK}"):  # night sight is 20 m: stand by the racks
-        return [Option(score, f"go to {RICE_RACK}", partial(ctx.api.walk_to_thing, "rack"), aim)]
     look = _then(lambda: _set(ctx, "beat", "gate"), lambda: ctx.api.wait(15))
+    to_rack = Option(score, f"go to {RICE_RACK}", partial(ctx.api.walk_to_thing, "rack"), aim)
+    tried = _refused(ctx, f"go to {RICE_RACK}")  # not in sight even from the fields: look over them from here
+    if rack is None and not at(p, FIELDS):  # the racks stand by the paddies, out of sight from the gate
+        return [_go(ctx, FIELDS, score, aim)]
+    near_rack = rack is not None and (rack.nearness == "right beside you" or ctx.finished(f"go to {RICE_RACK}"))
+    if not near_rack and not tried and not ctx.finished(f"go to {RICE_RACK}"):  # night sight is 20 m: stand by them
+        return [to_rack]
     return [Option(score, "look over the racks", look, aim)]
 
 
