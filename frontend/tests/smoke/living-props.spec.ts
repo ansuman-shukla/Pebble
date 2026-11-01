@@ -82,9 +82,12 @@ test('cold fires hide their fuel; burning ones smoke and spark, and the gate sta
   await expect
     .poll(() => props(page, 'hidden'), { timeout: 30_000 })
     .toBe('main-gate-fire-e:fuel,main-gate-fire-w:fuel');
-  expect(await props(page, 'puffs')).toBe(
-    (await props(page, 'hearths')) === 'forge:1.00' ? '10' : '0',
-  );
+  await expect
+    .poll(async () => {
+      const forgeBurns = (await props(page, 'hearths')) !== 'forge:0.00';
+      return (await props(page, 'puffs')) === (forgeBurns ? '10' : '0');
+    })
+    .toBe(true);
   await expect(world).toHaveAttribute('data-draw-calls', /\d+/);
   expect(
     Number(await world.getAttribute('data-draw-calls')),
@@ -99,8 +102,12 @@ test('cold fires hide their fuel; burning ones smoke and spark, and the gate sta
   await expect
     .poll(async () => Number(await props(page, 'puffs')))
     .toBeGreaterThanOrEqual(20);
-  const forgeBurns = (await props(page, 'hearths')) !== 'forge:0.00';
-  expect(await props(page, 'sparks')).toBe(forgeBurns ? '24' : '16');
+  await expect
+    .poll(async () => {
+      const forgeBurns = (await props(page, 'hearths')) !== 'forge:0.00';
+      return (await props(page, 'sparks')) === (forgeBurns ? '24' : '16');
+    })
+    .toBe(true);
   await page.waitForTimeout(1500);
   expect(
     Number(await world.getAttribute('data-draw-calls')),

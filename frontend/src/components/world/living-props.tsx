@@ -80,8 +80,11 @@ export function PropHooks() {
         .join(' ');
       element.dataset.openDoors = [...propViews.openDoors].sort().join(',');
       element.dataset.hidden = [...propViews.hidden].sort().join(',');
+      // rounded up: a hearth still warm never reads 0
       element.dataset.hearths = [...propViews.hearths]
-        .map(([id, heat]) => `${id}:${heat.toFixed(2)}`)
+        .map(
+          ([id, heat]) => `${id}:${(Math.ceil(heat * 100) / 100).toFixed(2)}`,
+        )
         .sort()
         .join(' ');
       element.dataset.puffs = String(propViews.puffs);
